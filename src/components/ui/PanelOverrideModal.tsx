@@ -1,0 +1,195 @@
+/**
+ * PanelConfigModal - Per-Panel Material Override
+ * 
+ * Allows users to override materials for individual panels:
+ * - Core material
+ * - Surface A/B materials
+ * - Edge banding per side (Top/Bottom/Left/Right)
+ */
+
+import React, { useState, useEffect } from 'react';
+import { useCabinetStore, useCabinet } from '../../core/store/useCabinetStore';
+
+interface PanelConfigModalProps {
+  panelId: string | null;
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export function PanelConfigModal({ panelId, isOpen, onClose }: PanelConfigModalProps) {
+  const cabinet = useCabinet();
+  const coreMaterials = useCabinetStore((s) => s.coreMaterials);
+  const surfaceMaterials = useCabinetStore((s) => s.surfaceMaterials);
+  const edgeMaterials = useCabinetStore((s) => s.edgeMaterials);
+  const updatePanelMaterial = useCabinetStore((s) => s.updatePanelMaterial);
+  const updatePanelEdge = useCabinetStore((s) => s.updatePanelEdge);
+  
+  if (!isOpen || !panelId || !cabinet) return null;
+  
+  // Find the panel
+  const panel = cabinet.panels.find(p => p.id === panelId);
+  if (!panel) return null;
+  
+  // Get current materials (use override or default)
+  const currentCore = panel.coreMaterialId || cabinet.materials.defaultCore;
+  const currentSurfaceA = panel.faces?.faceA || cabinet.materials.defaultSurface;
+  const currentSurfaceB = panel.faces?.faceB || cabinet.materials.defaultSurface;
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-[500px] max-h-[80vh] overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Panel Configuration</h2>
+            <p className="text-sm text-zinc-400">{panel.name || panel.role}</p>
+          </div>
+          <button 
+            onClick={onClose}
+            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        {/* Content */}
+        <div className="p-6 space-y-6 overflow-y-auto max-h-[60vh]">
+          {/* Panel Info */}
+          <div className="p-4 bg-zinc-800/50 rounded-lg">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-zinc-500">Dimensions:</span>
+                <span className="ml-2 text-white">{panel.finishWidth} × {panel.finishHeight} mm</span>
+              </div>
+              <div>
+                <span className="text-zinc-500">Role:</span>
+                <span className="ml-2 text-white">{panel.role}</span>
+              </div>
+            </div>
+          </div>
+          
+          {/* Core Material */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-300 mb-2">Core Material</label>
+            <select
+              value={currentCore}
+              onChange={(e) => updatePanelMaterial(panelId, 'core', e.target.value)}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500"
+            >
+              <option value="">Use Default ({coreMaterials[cabinet.materials.defaultCore]?.name})</option>
+              {Object.values(coreMaterials).map((mat) => (
+                <option key={mat.id} value={mat.id}>{mat.name} ({mat.thickness}mm)</option>
+              ))}
+            </select>
+          </div>
+          
+          {/* Surface Materials */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">Surface A (Front)</label>
+              <select
+                value={currentSurfaceA || ''}
+                onChange={(e) => updatePanelMaterial(panelId, 'faceA', e.target.value || null)}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500"
+              >
+                <option value="">Use Default</option>
+                {Object.values(surfaceMaterials).map((mat) => (
+                  <option key={mat.id} value={mat.id}>{mat.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">Surface B (Back)</label>
+              <select
+                value={currentSurfaceB || ''}
+                onChange={(e) => updatePanelMaterial(panelId, 'faceB', e.target.value || null)}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500"
+              >
+                <option value="">None / Backing</option>
+                {Object.values(surfaceMaterials).map((mat) => (
+                  <option key={mat.id} value={mat.id}>{mat.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          
+          {/* Edge Banding */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-300 mb-3">Edge Banding</label>
+            <div className="grid grid-cols-2 gap-3">
+              {(['top', 'bottom', 'left', 'right'] as const).map((side) => {
+                const edgeId = panel.edges?.[side];
+                const sideLabels = {
+                  top: 'Front Edge',
+                  bottom: 'Back Edge', 
+                  left: 'Left Edge',
+                  right: 'Right Edge'
+                };
+                
+                return (
+                  <div key={side} className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-400 w-20">{sideLabels[side]}:</span>
+                    <select
+                      value={edgeId || ''}
+                      onChange={(e) => updatePanelEdge(panelId, side, e.target.value || null)}
+                      className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="">None</option>
+                      {Object.values(edgeMaterials).map((mat) => (
+                        <option key={mat.id} value={mat.id}>{mat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          
+          {/* Computed Values */}
+          <div className="p-4 bg-zinc-800/30 rounded-lg border border-zinc-700/50">
+            <h4 className="text-sm font-medium text-zinc-300 mb-2">Computed Values</h4>
+            <div className="grid grid-cols-3 gap-4 text-xs">
+              <div>
+                <span className="text-zinc-500">Cut Size:</span>
+                <div className="text-white">{panel.computed?.cutWidth || panel.finishWidth} × {panel.computed?.cutHeight || panel.finishHeight}</div>
+              </div>
+              <div>
+                <span className="text-zinc-500">Thickness:</span>
+                <div className="text-white">{panel.computed?.realThickness || 18}mm</div>
+              </div>
+              <div>
+                <span className="text-zinc-500">Area:</span>
+                <div className="text-white">{((panel.computed?.surfaceArea || 0) / 1000000).toFixed(3)} m²</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-800 bg-zinc-900/50">
+          <button
+            onClick={() => {
+              // Reset to defaults
+              updatePanelMaterial(panelId, 'core', cabinet.materials.defaultCore);
+              updatePanelMaterial(panelId, 'faceA', cabinet.materials.defaultSurface);
+              updatePanelMaterial(panelId, 'faceB', null);
+            }}
+            className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
+          >
+            Reset to Defaults
+          </button>
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default PanelConfigModal;
