@@ -12,6 +12,7 @@
  * - Hardware System
  * - Gate & Export System
  * - Safety & Gate Page (Manufacturing OS Theme)
+ * - Save/Load Project System
  */
 
 import React, { useState, Suspense, useEffect, useRef } from 'react';
@@ -24,8 +25,12 @@ import { Cabinet3D } from './components/canvas/Cabinet3D';
 import { InfiniteGrid } from './components/canvas/InfiniteGrid';
 import { CameraController, ViewType, VIEW_PRESETS } from './components/canvas/ViewportController';
 import { PanelConfigModal } from './components/ui/PanelOverrideModal';
+import { ProjectToolbar } from './components/ui/ProjectToolbar';
+import { GateToolbar } from './components/ui/GateToolbar';
 import { SafetyGatePage } from './components/pages/SafetyGatePage';
 import { useCabinetStore } from './core/store/useCabinetStore';
+import { useProjectStore } from './core/store/useProjectStore';
+import { useSpecStore, useSpecState, useGateStatus } from './core/store/useSpecStore';
 
 // App modes
 type AppMode = 'designer' | 'safety-gate';
@@ -119,22 +124,41 @@ function Viewport({ currentView }: ViewportProps) {
 }
 
 export function App() {
-  const [specState, setSpecState] = useState<SpecState>('DRAFT');
   const [currentView, setCurrentView] = useState<ViewType>('Perspective');
   const [showPanelModal, setShowPanelModal] = useState(false);
   const [appMode, setAppMode] = useState<AppMode>('designer');
   
-  const createCabinet = useCabinetStore((s) => s.createCabinet);
   const cabinet = useCabinetStore((s) => s.cabinet);
   const selectedPanelId = useCabinetStore((s) => s.selectedPanelId);
   
-  // Initialize cabinet on first load
+  // Spec store - Gate & Validation
+  const specState = useSpecState();
+  const gateStatus = useGateStatus();
+  const runValidation = useSpecStore((s) => s.runValidation);
+  const freezeSpec = useSpecStore((s) => s.freezeSpec);
+  const releaseSpec = useSpecStore((s) => s.releaseSpec);
+  const unfreezeSpec = useSpecStore((s) => s.unfreezeSpec);
+  
+  // Project store
+  const initializeProject = useProjectStore((s) => s.initialize);
+  const saveProject = useProjectStore((s) => s.saveProject);
+  const markDirty = useProjectStore((s) => s.markDirty);
+  
+  // Initialize project on first load
   useEffect(() => {
-    if (!cabinet) {
-      console.log('[App] Creating default cabinet...');
-      createCabinet('BASE', 'Kitchen Base Cabinet');
+    initializeProject();
+    // Run initial validation
+    setTimeout(() => runValidation(), 500);
+  }, []);
+  
+  // Mark dirty when cabinet changes (for auto-save)
+  useEffect(() => {
+    if (cabinet) {
+      markDirty();
+      // Re-run validation when cabinet changes
+      runValidation();
     }
-  }, [cabinet, createCabinet]);
+  }, [cabinet?.updatedAt]);
   
   // Keyboard shortcuts
   useEffect(() => {
@@ -151,11 +175,16 @@ export function App() {
       if (e.key === 'g' && !e.ctrlKey && !e.metaKey) {
         setAppMode(prev => prev === 'designer' ? 'safety-gate' : 'designer');
       }
+      // Ctrl+S to save
+      if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        saveProject();
+      }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedPanelId, appMode]);
+  }, [selectedPanelId, appMode, saveProject]);
   
   // If in Safety & Gate mode, show that page
   if (appMode === 'safety-gate') {
@@ -172,13 +201,6 @@ export function App() {
       </div>
     );
   }
-  
-  // Calculate gate status based on spec state and validation
-  const gateStatus: GateStatus = specState === 'DRAFT' ? 'WARNING' : specState === 'FROZEN' ? 'OK' : 'OK';
-  const gateErrors: string[] = [];
-  const gateWarnings: string[] = specState === 'DRAFT' 
-    ? ['Spec is in DRAFT state - cannot export CNC'] 
-    : [];
 
   const handleExport = () => {
     console.log('Exporting to CNC...');
@@ -188,6 +210,13 @@ export function App() {
   // Viewport with view toolbar overlay
   const viewportWithToolbar = (
     <div className="relative w-full h-full">
+      {/* Project Toolbar - Top Left */}
+      <div className="absolute top-4 left-4 z-10">
+        <div className="bg-zinc-900/90 backdrop-blur-sm border border-zinc-700 rounded-lg px-3 py-2">
+          <ProjectToolbar />
+        </div>
+      </div>
+      
       {/* View Toolbar - Top Center */}
       <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
         <div className="bg-zinc-900/90 backdrop-blur-sm border border-zinc-700 rounded-lg p-1">
@@ -195,14 +224,19 @@ export function App() {
         </div>
       </div>
       
-      {/* Safety & Gate Button - Top Right */}
+      {/* Gate Toolbar - Top Right */}
       <div className="absolute top-4 right-4 z-10">
-        <button
-          onClick={() => setAppMode('safety-gate')}
-          className="px-4 py-2 bg-zinc-900/90 backdrop-blur-sm border border-zinc-700 rounded-lg text-sm text-zinc-300 hover:text-white hover:border-emerald-500/50 transition-colors"
-        >
-          🛡️ Safety & Gate (G)
-        </button>
+        <div className="bg-zinc-900/90 backdrop-blur-sm border border-zinc-700 rounded-lg px-3 py-2 flex items-center gap-2">
+          <GateToolbar />
+          <div className="w-px h-6 bg-zinc-700" />
+          <button
+            onClick={() => setAppMode('safety-gate')}
+            className="px-3 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-700 rounded transition-colors"
+            title="Open Safety & Gate Page (G)"
+          >
+            🛡️ Details
+          </button>
+        </div>
       </div>
       
       {/* Selected Panel Info */}
@@ -230,15 +264,14 @@ export function App() {
           name: cabinet?.name || 'Kitchen Base Cabinet',
           version: '1.2',
           specState,
-          gateStatus,
-          gateErrors,
-          gateWarnings,
+          gateStatus: gateStatus.canExport ? 'OK' : 'WARNING',
+          gateErrors: gateStatus.blockers.filter(b => b.includes('error')),
+          gateWarnings: gateStatus.blockers.filter(b => !b.includes('error')),
         }}
         leftPanel={<DesignerIntentPanel />}
         viewport={viewportWithToolbar}
         rightPanel={<ParametricContractPanel />}
         onExport={handleExport}
-        onSpecStateChange={setSpecState}
       />
       
       {/* Panel Config Modal */}
