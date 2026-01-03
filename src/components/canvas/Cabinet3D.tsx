@@ -86,7 +86,12 @@ function useDataTexture(dataUrl: string | null) {
   return texture;
 }
 
-export function Cabinet3D() {
+interface Cabinet3DProps {
+  showDimensions?: boolean;
+  hideTooltip?: boolean;
+}
+
+export function Cabinet3D({ showDimensions = false, hideTooltip = false }: Cabinet3DProps) {
   const cabinet = useCabinet();
   const selectedPanelId = useCabinetStore((s) => s.selectedPanelId);
   const selectPanel = useCabinetStore((s) => s.selectPanel);
@@ -118,10 +123,11 @@ export function Cabinet3D() {
         edgeTextureUrl={edgeTextureUrl}
         selectedPanelId={selectedPanelId}
         onSelectPanel={selectPanel}
+        hideTooltip={hideTooltip}
       />
       
-      {/* Dimension labels */}
-      <DimensionLabels cabinet={cabinet} />
+      {/* Dimension labels - controlled by prop */}
+      {showDimensions && <DimensionLabels cabinet={cabinet} />}
     </group>
   );
 }
@@ -136,9 +142,10 @@ interface PanelsWithTextureProps {
   edgeTextureUrl: string | null;
   selectedPanelId: string | null;
   onSelectPanel: (id: string) => void;
+  hideTooltip?: boolean;
 }
 
-function PanelsWithTexture({ panels, baseColor, textureUrl, edgeColor, edgeThickness, edgeTextureUrl, selectedPanelId, onSelectPanel }: PanelsWithTextureProps) {
+function PanelsWithTexture({ panels, baseColor, textureUrl, edgeColor, edgeThickness, edgeTextureUrl, selectedPanelId, onSelectPanel, hideTooltip }: PanelsWithTextureProps) {
   const texture = useDataTexture(textureUrl);
   const edgeTexture = useDataTexture(edgeTextureUrl);
   
@@ -155,6 +162,7 @@ function PanelsWithTexture({ panels, baseColor, textureUrl, edgeColor, edgeThick
           edgeTexture={edgeTexture}
           isSelected={selectedPanelId === panel.id}
           onSelect={() => onSelectPanel(panel.id)}
+          hideTooltip={hideTooltip}
         />
       ))}
     </>
@@ -170,9 +178,10 @@ interface Panel3DProps {
   edgeTexture: CanvasTexture | null;
   isSelected: boolean;
   onSelect: () => void;
+  hideTooltip?: boolean;
 }
 
-function Panel3DComponent({ panel, baseColor, texture, edgeColor, edgeThickness, edgeTexture, isSelected, onSelect }: Panel3DProps) {
+function Panel3DComponent({ panel, baseColor, texture, edgeColor, edgeThickness, edgeTexture, isSelected, onSelect, hideTooltip }: Panel3DProps) {
   const meshRef = useRef<Mesh>(null);
   const [hovered, setHovered] = useState(false);
   const [panelTexture, setPanelTexture] = useState<CanvasTexture | null>(null);
@@ -461,7 +470,7 @@ function Panel3DComponent({ panel, baseColor, texture, edgeColor, edgeThickness,
         </mesh>
       )}
       
-      {(hovered || isSelected) && (
+      {!hideTooltip && (hovered || isSelected) && (
         <Html
           position={[0, sizeY/2 + 30, 0]}
           center
@@ -488,21 +497,138 @@ interface DimensionLabelsProps {
   cabinet: { dimensions: { width: number; height: number; depth: number; toeKickHeight: number } };
 }
 
+// Editable Dimension Label Component
+interface EditableDimLabelProps {
+  value: number;
+  dimension: 'width' | 'height' | 'depth' | 'toeKickHeight';
+  position: [number, number, number];
+  color?: string;
+  small?: boolean;
+}
+
+function EditableDimLabel({ value, dimension, position, color = 'bg-blue-500', small = false }: EditableDimLabelProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [inputValue, setInputValue] = useState(value.toString());
+  const setDimension = useCabinetStore((s) => s.setDimension);
+  
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setInputValue(value.toString());
+    setIsEditing(true);
+  };
+  
+  const handleSubmit = () => {
+    const newValue = parseInt(inputValue, 10);
+    if (!isNaN(newValue) && newValue > 0) {
+      setDimension(dimension, newValue);
+    }
+    setIsEditing(false);
+  };
+  
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSubmit();
+    } else if (e.key === 'Escape') {
+      setIsEditing(false);
+    }
+  };
+  
+  return (
+    <Html position={position} center style={{ pointerEvents: 'auto' }}>
+      {isEditing ? (
+        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+          <input
+            type="number"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleSubmit}
+            autoFocus
+            className={`${small ? 'w-14 text-[10px]' : 'w-16 text-xs'} bg-zinc-800 border border-blue-400 rounded px-1 py-0.5 text-white text-center focus:outline-none focus:border-blue-300`}
+            min={1}
+          />
+          <span className={`${small ? 'text-[10px]' : 'text-xs'} text-blue-300`}>mm</span>
+        </div>
+      ) : (
+        <button
+          onClick={handleClick}
+          className={`${color} hover:bg-blue-400 text-white ${small ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5'} rounded font-bold shadow-lg cursor-pointer transition-colors`}
+          title="Click to edit"
+        >
+          {value} mm
+        </button>
+      )}
+    </Html>
+  );
+}
+
 function DimensionLabels({ cabinet }: DimensionLabelsProps) {
   const { width: W, height: H, depth: D, toeKickHeight: Leg } = cabinet.dimensions;
   const bodyH = H - Leg;
   
+  // Line material for dimension lines
+  const lineColor = '#0088ff';
+  const lineOffset = 50; // Distance from cabinet
+  
+  // Use key to force re-render when dimensions change
+  const dimKey = `${W}-${H}-${D}-${Leg}`;
+  
   return (
-    <group name="dimension-labels">
-      <Html position={[0, Leg + bodyH + 80, 0]} center style={{ pointerEvents: 'none' }}>
-        <div className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded font-medium">{W}</div>
-      </Html>
-      <Html position={[-W/2 - 80, Leg + bodyH/2, 0]} center style={{ pointerEvents: 'none' }}>
-        <div className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded font-medium">{H}</div>
-      </Html>
-      <Html position={[W/2 + 80, Leg + bodyH/2, -D/2]} center style={{ pointerEvents: 'none' }}>
-        <div className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded font-medium">{D}</div>
-      </Html>
+    <group name="dimension-labels" key={dimKey}>
+      {/* Width dimension - Top */}
+      <group position={[0, Leg + bodyH + lineOffset, D/2]}>
+        <DimensionLine points={[[-W/2, 0, 0], [W/2, 0, 0]]} color={lineColor} />
+        <DimensionLine points={[[-W/2, -15, 0], [-W/2, 15, 0]]} color={lineColor} />
+        <DimensionLine points={[[W/2, -15, 0], [W/2, 15, 0]]} color={lineColor} />
+        <EditableDimLabel value={W} dimension="width" position={[0, 25, 0]} />
+      </group>
+      
+      {/* Height dimension - Left side */}
+      <group position={[-W/2 - lineOffset, Leg, D/2]}>
+        <DimensionLine points={[[0, 0, 0], [0, bodyH, 0]]} color={lineColor} />
+        <DimensionLine points={[[-15, 0, 0], [15, 0, 0]]} color={lineColor} />
+        <DimensionLine points={[[-15, bodyH, 0], [15, bodyH, 0]]} color={lineColor} />
+        <EditableDimLabel value={H} dimension="height" position={[-30, bodyH/2, 0]} />
+      </group>
+      
+      {/* Depth dimension - Right side */}
+      <group position={[W/2 + lineOffset, Leg + bodyH/2, 0]}>
+        <DimensionLine points={[[0, 0, D/2], [0, 0, -D/2]]} color={lineColor} />
+        <DimensionLine points={[[-15, 0, D/2], [15, 0, D/2]]} color={lineColor} />
+        <DimensionLine points={[[-15, 0, -D/2], [15, 0, -D/2]]} color={lineColor} />
+        <EditableDimLabel value={D} dimension="depth" position={[30, 0, 0]} />
+      </group>
+      
+      {/* Toe Kick dimension - if exists */}
+      {Leg > 0 && (
+        <group position={[-W/2 - lineOffset - 40, 0, D/2]}>
+          <DimensionLine points={[[0, 0, 0], [0, Leg, 0]]} color={lineColor} />
+          <DimensionLine points={[[-15, 0, 0], [15, 0, 0]]} color={lineColor} />
+          <DimensionLine points={[[-15, Leg, 0], [15, Leg, 0]]} color={lineColor} />
+          <EditableDimLabel value={Leg} dimension="toeKickHeight" position={[-25, Leg/2, 0]} color="bg-blue-400" small />
+        </group>
+      )}
     </group>
+  );
+}
+
+// Simple line component that re-renders properly
+function DimensionLine({ points, color }: { points: [number, number, number][]; color: string }) {
+  const positions = useMemo(() => {
+    return new Float32Array(points.flat());
+  }, [points[0][0], points[0][1], points[0][2], points[1][0], points[1][1], points[1][2]]);
+  
+  return (
+    <line>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          count={2}
+          array={positions}
+          itemSize={3}
+        />
+      </bufferGeometry>
+      <lineBasicMaterial color={color} />
+    </line>
   );
 }

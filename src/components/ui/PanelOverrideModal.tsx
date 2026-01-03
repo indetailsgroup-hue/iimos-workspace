@@ -5,9 +5,10 @@
  * - Core material
  * - Surface A/B materials
  * - Edge banding per side (Top/Bottom/Left/Right)
+ * - Draggable/Movable modal
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useCabinetStore, useCabinet } from '../../core/store/useCabinetStore';
 
 interface PanelConfigModalProps {
@@ -24,6 +25,55 @@ export function PanelConfigModal({ panelId, isOpen, onClose }: PanelConfigModalP
   const updatePanelMaterial = useCabinetStore((s) => s.updatePanelMaterial);
   const updatePanelEdge = useCabinetStore((s) => s.updatePanelEdge);
   
+  // Draggable state
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
+  
+  // Reset position when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setPosition({ x: 0, y: 0 });
+    }
+  }, [isOpen, panelId]);
+  
+  // Drag handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.drag-handle')) {
+      setIsDragging(true);
+      dragOffset.current = {
+        x: e.clientX - position.x,
+        y: e.clientY - position.y,
+      };
+      e.preventDefault();
+    }
+  };
+  
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDragging) {
+        setPosition({
+          x: e.clientX - dragOffset.current.x,
+          y: e.clientY - dragOffset.current.y,
+        });
+      }
+    };
+    
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+    
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
+  
   if (!isOpen || !panelId || !cabinet) return null;
   
   // Find the panel
@@ -36,13 +86,25 @@ export function PanelConfigModal({ panelId, isOpen, onClose }: PanelConfigModalP
   const currentSurfaceB = panel.faces?.faceB || cabinet.materials.defaultSurface;
   
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-[500px] max-h-[80vh] overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-          <div>
-            <h2 className="text-lg font-semibold text-white">Panel Configuration</h2>
-            <p className="text-sm text-zinc-400">{panel.name || panel.role}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div 
+        className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-[500px] max-h-[80vh] overflow-hidden select-none"
+        style={{ 
+          transform: `translate(${position.x}px, ${position.y}px)`,
+          cursor: isDragging ? 'grabbing' : 'default'
+        }}
+        onMouseDown={handleMouseDown}
+      >
+        {/* Header - Draggable */}
+        <div className="drag-handle flex items-center justify-between px-6 py-4 border-b border-zinc-800 cursor-grab active:cursor-grabbing">
+          <div className="flex items-center gap-3">
+            <svg className="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+            </svg>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Panel Configuration</h2>
+              <p className="text-sm text-zinc-400">{panel.name || panel.role}</p>
+            </div>
           </div>
           <button 
             onClick={onClose}

@@ -68,9 +68,11 @@ function ViewToolbar({
 // R3F Viewport Component with View System
 interface ViewportProps {
   currentView: ViewType;
+  showDimensions?: boolean;
+  hideTooltip?: boolean;
 }
 
-function Viewport({ currentView }: ViewportProps) {
+function Viewport({ currentView, showDimensions = false, hideTooltip = false }: ViewportProps) {
   return (
     <Canvas
       shadows
@@ -104,7 +106,7 @@ function Viewport({ currentView }: ViewportProps) {
         <Environment preset="studio" />
         
         {/* Cabinet */}
-        <Cabinet3D />
+        <Cabinet3D showDimensions={showDimensions} hideTooltip={hideTooltip} />
         
         {/* Infinite Grid */}
         <InfiniteGrid />
@@ -126,6 +128,7 @@ function Viewport({ currentView }: ViewportProps) {
 export function App() {
   const [currentView, setCurrentView] = useState<ViewType>('Perspective');
   const [showPanelModal, setShowPanelModal] = useState(false);
+  const [showDimensions, setShowDimensions] = useState(false);
   const [appMode, setAppMode] = useState<AppMode>('designer');
   
   const cabinet = useCabinetStore((s) => s.cabinet);
@@ -167,13 +170,21 @@ export function App() {
       if (e.key === 'e' && selectedPanelId && appMode === 'designer') {
         setShowPanelModal(true);
       }
-      // Press 'Escape' to close modal
+      // Press 'Escape' to close modal or deselect panel
       if (e.key === 'Escape') {
-        setShowPanelModal(false);
+        if (showPanelModal) {
+          setShowPanelModal(false);
+        } else if (selectedPanelId) {
+          useCabinetStore.getState().selectPanel(null);
+        }
       }
       // Press 'G' to toggle Safety & Gate page
       if (e.key === 'g' && !e.ctrlKey && !e.metaKey) {
         setAppMode(prev => prev === 'designer' ? 'safety-gate' : 'designer');
+      }
+      // Press 'D' to toggle dimensions
+      if (e.key === 'd' && !e.ctrlKey && !e.metaKey && appMode === 'designer') {
+        setShowDimensions(prev => !prev);
       }
       // Ctrl+S to save
       if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
@@ -184,7 +195,7 @@ export function App() {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedPanelId, appMode, saveProject]);
+  }, [selectedPanelId, appMode, saveProject, showPanelModal]);
   
   // If in Safety & Gate mode, show that page
   if (appMode === 'safety-gate') {
@@ -219,8 +230,20 @@ export function App() {
       
       {/* View Toolbar - Top Center */}
       <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
-        <div className="bg-zinc-900/90 backdrop-blur-sm border border-zinc-700 rounded-lg p-1">
+        <div className="bg-zinc-900/90 backdrop-blur-sm border border-zinc-700 rounded-lg p-1 flex items-center gap-1">
           <ViewToolbar currentView={currentView} onViewChange={setCurrentView} />
+          <div className="w-px h-6 bg-zinc-700 mx-1" />
+          <button
+            onClick={() => setShowDimensions(!showDimensions)}
+            className={`px-3 py-1.5 text-xs font-medium transition-colors rounded
+              ${showDimensions 
+                ? 'bg-blue-500 text-white' 
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
+              }`}
+            title="Toggle Dimensions (D)"
+          >
+            📏 Dims
+          </button>
         </div>
       </div>
       
@@ -243,17 +266,28 @@ export function App() {
       {selectedPanelId && (
         <div className="absolute bottom-4 left-4 z-10">
           <div className="bg-zinc-900/90 backdrop-blur-sm border border-zinc-700 rounded-lg px-4 py-2">
-            <div className="text-xs text-zinc-400">Selected Panel</div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-xs text-zinc-400">Selected Panel</div>
+              <button
+                onClick={() => useCabinetStore.getState().selectPanel(null)}
+                className="text-zinc-500 hover:text-white transition-colors p-0.5 -mr-1"
+                title="Deselect (Esc)"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
             <div className="text-sm text-white">
               {cabinet?.panels.find(p => p.id === selectedPanelId)?.name || 'Unknown'}
             </div>
-            <div className="text-xs text-emerald-400 mt-1">Press E to edit</div>
+            <div className="text-xs text-emerald-400 mt-1">Press E to edit • Esc to deselect</div>
           </div>
         </div>
       )}
       
       {/* Viewport */}
-      <Viewport currentView={currentView} />
+      <Viewport currentView={currentView} showDimensions={showDimensions} hideTooltip={showPanelModal} />
     </div>
   );
 
