@@ -76,6 +76,10 @@ function ContractContent() {
   const surfaceMaterials = useCabinetStore((s) => s.surfaceMaterials);
   const edgeMaterials = useCabinetStore((s) => s.edgeMaterials);
   
+  // DEBUG: Log computed values
+  console.log('[ContractContent] cabinet.computed:', cabinet?.computed);
+  console.log('[ContractContent] panels surfaceArea:', cabinet?.panels?.map(p => ({ role: p.role, area: p.computed?.surfaceArea })));
+  
   if (!cabinet) return <div className="p-4 text-zinc-500">Loading...</div>;
   
   const currentCore = coreMaterials[cabinet.materials.defaultCore];
@@ -142,7 +146,7 @@ function ContractContent() {
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="p-2 bg-zinc-800/50 rounded">
             <div className="text-zinc-500">Total Area</div>
-            <div className="text-white font-medium">{((cabinet.computed?.totalSurfaceArea || 0) / 1000000).toFixed(2)} m²</div>
+            <div className="text-white font-medium">{(cabinet.computed?.totalSurfaceArea || 0).toFixed(2)} m²</div>
           </div>
           <div className="p-2 bg-zinc-800/50 rounded">
             <div className="text-zinc-500">Est. Cost</div>
