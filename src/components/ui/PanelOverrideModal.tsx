@@ -150,7 +150,7 @@ export function PanelConfigModal({ panelId, isOpen, onClose }: PanelConfigModalP
           {/* Computed Values */}
           <div className="p-4 bg-zinc-800/30 rounded-lg border border-zinc-700/50">
             <h4 className="text-sm font-medium text-zinc-300 mb-2">Computed Values</h4>
-            <div className="grid grid-cols-3 gap-4 text-xs">
+            <div className="grid grid-cols-4 gap-4 text-xs">
               <div>
                 <span className="text-zinc-500">Cut Size:</span>
                 <div className="text-white">{panel.computed?.cutWidth || panel.finishWidth} × {panel.computed?.cutHeight || panel.finishHeight}</div>
@@ -161,7 +161,11 @@ export function PanelConfigModal({ panelId, isOpen, onClose }: PanelConfigModalP
               </div>
               <div>
                 <span className="text-zinc-500">Area:</span>
-                <div className="text-white">{((panel.computed?.surfaceArea || 0) / 1000000).toFixed(3)} m²</div>
+                <div className="text-white">{(panel.computed?.surfaceArea || 0).toFixed(3)} m²</div>
+              </div>
+              <div>
+                <span className="text-zinc-500">Edge Length:</span>
+                <div className="text-emerald-400">{((panel.computed?.edgeLength || 0) * 1000).toFixed(0)} mm</div>
               </div>
             </div>
           </div>
