@@ -11,7 +11,10 @@
   "dependencies": {
     "@react-three/drei": "^9.88.0",
     "@react-three/fiber": "^8.15.0",
+    "framer-motion": "^12.23.26",
     "immer": "^10.0.3",
+    "lucide-react": "^0.562.0",
+    "motion": "^12.23.26",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "three": "^0.158.0",

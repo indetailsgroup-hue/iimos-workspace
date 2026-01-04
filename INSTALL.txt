@@ -1,0 +1,4 @@
+# Install framer-motion first:
+npm install framer-motion
+
+# Then copy files to your project

@@ -112,7 +112,11 @@ const CORE_MATERIALS_CATALOG = {
 };
 
 // === SURFACE MATERIALS ===
+// Texture Size: 1523 x 3070 mm (real-world laminate sheet size)
+const TEXTURE_SIZE_MM = { width: 1523, height: 3070 };
+
 const SURFACE_MATERIALS_CATALOG = {
+  // --- SOLID COLORS ---
   'surf-mel-white': {
     id: 'surf-mel-white',
     name: 'Melamine White',
@@ -143,65 +147,159 @@ const SURFACE_MATERIALS_CATALOG = {
     color: '#1A1A1A',
     textureUrl: undefined as string | undefined,
   },
-  'surf-hpl-oak': {
-    id: 'surf-hpl-oak',
-    name: 'HPL Natural Oak',
+  // --- DARK TONES ---
+  'surf-hpl-black-oak': {
+    id: 'surf-hpl-black-oak',
+    name: 'HPL Black Oak',
     type: 'HPL',
     thickness: 0.8,
-    costPerSqm: 450,
+    costPerSqm: 580,
     co2PerSqm: 1.2,
-    color: '#C4A77D',
-    textureUrl: '/textures/materials/9880503b9bc4fab08417c0ce7c618301.jpg',
+    color: '#2a2a2a',
+    textureUrl: '/textures/wood/black-oak.jpg',
   },
-  'surf-hpl-walnut': {
-    id: 'surf-hpl-walnut',
-    name: 'HPL Natural Walnut',
+  'surf-hpl-dark-grey-oak': {
+    id: 'surf-hpl-dark-grey-oak',
+    name: 'HPL Dark Grey Oak',
     type: 'HPL',
     thickness: 0.8,
     costPerSqm: 520,
     co2PerSqm: 1.2,
-    color: '#5D4037',
-    textureUrl: '/textures/materials/6ca1ee6c8d4e09b967824c7580f4471b.jpg',
+    color: '#4a4a4a',
+    textureUrl: '/textures/wood/dark-grey-oak.jpg',
   },
-  'surf-hpl-walnut-grey': {
-    id: 'surf-hpl-walnut-grey',
+  'surf-hpl-charcoal-oak': {
+    id: 'surf-hpl-charcoal-oak',
+    name: 'HPL Charcoal Oak',
+    type: 'HPL',
+    thickness: 0.8,
+    costPerSqm: 550,
+    co2PerSqm: 1.2,
+    color: '#5a5a5a',
+    textureUrl: '/textures/wood/charcoal-oak.jpg',
+  },
+  'surf-hpl-dark-elm': {
+    id: 'surf-hpl-dark-elm',
+    name: 'HPL Dark Elm',
+    type: 'HPL',
+    thickness: 0.8,
+    costPerSqm: 560,
+    co2PerSqm: 1.2,
+    color: '#5a5a52',
+    textureUrl: '/textures/wood/dark-elm.jpg',
+  },
+  // --- GREY TONES ---
+  'surf-hpl-grey-oak': {
+    id: 'surf-hpl-grey-oak',
+    name: 'HPL Grey Oak',
+    type: 'HPL',
+    thickness: 0.8,
+    costPerSqm: 550,
+    co2PerSqm: 1.2,
+    color: '#7a7a72',
+    textureUrl: '/textures/wood/grey-oak.jpg',
+  },
+  'surf-hpl-grey-walnut': {
+    id: 'surf-hpl-grey-walnut',
     name: 'HPL Grey Walnut',
     type: 'HPL',
     thickness: 0.8,
     costPerSqm: 580,
     co2PerSqm: 1.2,
     color: '#9a8b7a',
-    textureUrl: '/textures/materials/c524e72250b3ddd648c1f317165c7f79.jpg',
+    textureUrl: '/textures/wood/grey-walnut.jpg',
   },
-  'surf-hpl-oak-grey': {
-    id: 'surf-hpl-oak-grey',
-    name: 'HPL Grey Wash Oak',
-    type: 'HPL',
-    thickness: 0.8,
-    costPerSqm: 550,
-    co2PerSqm: 1.2,
-    color: '#7a7a72',
-    textureUrl: '/textures/materials/428c5e7db15f9ac1df0adaa31089124a.jpg',
-  },
-  'surf-hpl-ash-silver': {
-    id: 'surf-hpl-ash-silver',
-    name: 'HPL Silver Ash',
-    type: 'HPL',
-    thickness: 0.8,
-    costPerSqm: 520,
-    co2PerSqm: 1.2,
-    color: '#8a8a8a',
-    textureUrl: '/textures/materials/ae7ac17779fa6e250256872104665661.jpg',
-  },
-  'surf-hpl-walnut-dark': {
-    id: 'surf-hpl-walnut-dark',
+  'surf-hpl-dark-walnut': {
+    id: 'surf-hpl-dark-walnut',
     name: 'HPL Dark Walnut',
     type: 'HPL',
     thickness: 0.8,
     costPerSqm: 620,
     co2PerSqm: 1.2,
     color: '#5a4a3a',
-    textureUrl: '/textures/materials/6ec338abc60c08cd95f6fc5c011f60d5.jpg',
+    textureUrl: '/textures/wood/dark-walnut.jpg',
+  },
+  // --- WARM TONES ---
+  'surf-hpl-natural-walnut': {
+    id: 'surf-hpl-natural-walnut',
+    name: 'HPL Natural Walnut',
+    type: 'HPL',
+    thickness: 0.8,
+    costPerSqm: 520,
+    co2PerSqm: 1.2,
+    color: '#9a856d',
+    textureUrl: '/textures/wood/natural-walnut.jpg',
+  },
+  'surf-hpl-light-ash': {
+    id: 'surf-hpl-light-ash',
+    name: 'HPL Light Ash',
+    type: 'HPL',
+    thickness: 0.8,
+    costPerSqm: 480,
+    co2PerSqm: 1.2,
+    color: '#b5a896',
+    textureUrl: '/textures/wood/light-ash.jpg',
+  },
+  'surf-hpl-light-walnut': {
+    id: 'surf-hpl-light-walnut',
+    name: 'HPL Light Walnut',
+    type: 'HPL',
+    thickness: 0.8,
+    costPerSqm: 500,
+    co2PerSqm: 1.2,
+    color: '#a08878',
+    textureUrl: '/textures/wood/light-walnut.jpg',
+  },
+  // --- BROWN TONES ---
+  'surf-hpl-brown-oak': {
+    id: 'surf-hpl-brown-oak',
+    name: 'HPL Brown Oak',
+    type: 'HPL',
+    thickness: 0.8,
+    costPerSqm: 550,
+    co2PerSqm: 1.2,
+    color: '#6a5a4a',
+    textureUrl: '/textures/wood/brown-oak.jpg',
+  },
+  'surf-hpl-brown-walnut': {
+    id: 'surf-hpl-brown-walnut',
+    name: 'HPL Brown Walnut',
+    type: 'HPL',
+    thickness: 0.8,
+    costPerSqm: 560,
+    co2PerSqm: 1.2,
+    color: '#7a5a4a',
+    textureUrl: '/textures/wood/brown-walnut.jpg',
+  },
+  'surf-hpl-cherry-walnut': {
+    id: 'surf-hpl-cherry-walnut',
+    name: 'HPL Cherry Walnut',
+    type: 'HPL',
+    thickness: 0.8,
+    costPerSqm: 580,
+    co2PerSqm: 1.2,
+    color: '#8a5a4a',
+    textureUrl: '/textures/wood/cherry-walnut.jpg',
+  },
+  'surf-hpl-dark-cherry': {
+    id: 'surf-hpl-dark-cherry',
+    name: 'HPL Dark Cherry',
+    type: 'HPL',
+    thickness: 0.8,
+    costPerSqm: 600,
+    co2PerSqm: 1.2,
+    color: '#5a3a2a',
+    textureUrl: '/textures/wood/dark-cherry.jpg',
+  },
+  'surf-hpl-teak': {
+    id: 'surf-hpl-teak',
+    name: 'HPL Teak',
+    type: 'HPL',
+    thickness: 0.8,
+    costPerSqm: 650,
+    co2PerSqm: 1.2,
+    color: '#9a7a5a',
+    textureUrl: '/textures/wood/teak.jpg',
   },
 };
 
@@ -819,9 +917,9 @@ export const useCabinetStore = create<CabinetStore>()(
     
     // ========== CABINET CRUD ==========
     createCabinet: (type = 'BASE', name = 'Base Cabinet') => {
-      const defaultCoreId = 'core-pb-16';
-      const defaultSurfaceId = 'surf-mel-white';
-      const defaultEdgeId = 'edge-pvc-white-10';
+      const defaultCoreId = 'core-hmr-18';
+      const defaultSurfaceId = 'surf-hpl-grey-oak';
+      const defaultEdgeId = 'edge-pvc-grey-10';
       
       const panels = generatePanels(
         DEFAULT_DIMENSIONS,

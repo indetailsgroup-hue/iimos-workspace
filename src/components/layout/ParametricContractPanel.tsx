@@ -3,9 +3,11 @@
  * Tabs: Contract | Export
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useCabinetStore, useCabinet } from '../../core/store/useCabinetStore';
 import { ExportPanel } from '../ui/ExportPanel';
+import { PanelSortableList } from '../ui/SortableList';
+import { SpringAnimatedNumber } from '../ui/AnimatedNumber';
 
 type TabId = 'contract' | 'export';
 type GateStatus = 'DRAFT' | 'FROZEN' | 'RELEASED';
@@ -14,22 +16,44 @@ function Section({ title, children, status, defaultOpen = true }: {
   title: string; children: React.ReactNode; status?: 'OK' | 'WARNING' | 'ERROR'; defaultOpen?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [contentHeight, setContentHeight] = useState<number | 'auto'>('auto');
   const statusColors = { OK: 'bg-emerald-500', WARNING: 'bg-amber-500', ERROR: 'bg-red-500' };
+  
+  useEffect(() => {
+    if (contentRef.current) {
+      if (isOpen) {
+        setContentHeight(contentRef.current.scrollHeight);
+        const timer = setTimeout(() => setContentHeight('auto'), 300);
+        return () => clearTimeout(timer);
+      } else {
+        setContentHeight(contentRef.current.scrollHeight);
+        requestAnimationFrame(() => setContentHeight(0));
+      }
+    }
+  }, [isOpen]);
   
   return (
     <div className="border-b border-zinc-800">
       <button onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-zinc-800/50">
+        className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-zinc-800/50 transition-colors">
         <div className="flex items-center gap-2">
+          <svg 
+            className={`w-3 h-3 text-zinc-500 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
           <span className="text-sm font-medium text-zinc-300">{title}</span>
           {status && <div className={`w-2 h-2 rounded-full ${statusColors[status]}`} />}
         </div>
-        <svg className={`w-4 h-4 text-zinc-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-          fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
       </button>
-      {isOpen && <div className="px-4 pb-4">{children}</div>}
+      <div 
+        className="overflow-hidden transition-all duration-300 ease-out"
+        style={{ height: contentHeight }}
+      >
+        <div ref={contentRef} className="px-4 pb-4">{children}</div>
+      </div>
     </div>
   );
 }
@@ -146,33 +170,45 @@ function ContractContent() {
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="p-2 bg-zinc-800/50 rounded">
             <div className="text-zinc-500">Total Area</div>
-            <div className="text-white font-medium">{(cabinet.computed?.totalSurfaceArea || 0).toFixed(2)} m²</div>
+            <div className="text-white font-medium">
+              <SpringAnimatedNumber value={cabinet.computed?.totalSurfaceArea || 0} decimals={2} suffix=" m²" />
+            </div>
           </div>
           <div className="p-2 bg-zinc-800/50 rounded">
             <div className="text-zinc-500">Est. Cost</div>
-            <div className="text-emerald-400 font-medium">฿{(cabinet.computed?.totalCost || 0).toFixed(0)}</div>
+            <div className="text-emerald-400 font-medium">
+              ฿<SpringAnimatedNumber value={cabinet.computed?.totalCost || 0} />
+            </div>
           </div>
           <div className="p-2 bg-zinc-800/50 rounded">
             <div className="text-zinc-500">Panel Count</div>
-            <div className="text-white font-medium">{cabinet.panels?.length || 0}</div>
+            <div className="text-white font-medium">
+              <SpringAnimatedNumber value={cabinet.panels?.length || 0} />
+            </div>
           </div>
           <div className="p-2 bg-zinc-800/50 rounded">
             <div className="text-zinc-500">CO₂</div>
-            <div className="text-amber-400 font-medium">{(cabinet.computed?.totalCO2 || 0).toFixed(1)} kg</div>
+            <div className="text-amber-400 font-medium">
+              <SpringAnimatedNumber value={cabinet.computed?.totalCO2 || 0} decimals={1} suffix=" kg" />
+            </div>
           </div>
         </div>
       </Section>
       
       <Section title="Panel List" status="OK" defaultOpen={false}>
-        <div className="space-y-1 max-h-48 overflow-y-auto">
-          {(cabinet.panels || []).map((panel) => (
-            <div key={panel.id} onClick={() => selectPanel(panel.id)}
-              className={`flex items-center justify-between p-2 rounded text-xs cursor-pointer transition-colors
-                ${selectedPanelId === panel.id ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-zinc-800/30 hover:bg-zinc-700/50'}`}>
-              <span className="text-zinc-300">{panel.name || panel.role}</span>
-              <span className="text-zinc-500">{panel.finishWidth}×{panel.finishHeight}</span>
-            </div>
-          ))}
+        <div className="max-h-64 overflow-y-auto pr-1">
+          <PanelSortableList
+            panels={(cabinet.panels || []).map(p => ({
+              id: p.id,
+              name: p.name || p.role,
+              role: p.role,
+              finishWidth: p.finishWidth,
+              finishHeight: p.finishHeight,
+              thickness: p.computed?.realThickness
+            }))}
+            selectedId={selectedPanelId}
+            onSelectPanel={selectPanel}
+          />
         </div>
       </Section>
     </>

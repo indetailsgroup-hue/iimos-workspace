@@ -14,6 +14,7 @@ import { Edges, Html } from '@react-three/drei';
 // NO ALIAS IMPORTS - Use relative paths only (North Star Rule #3)
 import { useCabinetStore, useCabinet } from '../../core/store/useCabinetStore';
 import { CabinetPanel } from '../../core/types/Cabinet';
+import { SpringAnimatedNumber } from '../ui/AnimatedNumber';
 
 // Custom hook to load texture from data URL
 function useDataTexture(dataUrl: string | null) {
@@ -555,7 +556,12 @@ function EditableDimLabel({ value, dimension, position, color = 'bg-blue-500', s
           className={`${color} hover:bg-blue-400 text-white ${small ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5'} rounded font-bold shadow-lg cursor-pointer transition-colors`}
           title="Click to edit"
         >
-          {value} mm
+          <SpringAnimatedNumber 
+            value={value} 
+            suffix=" mm"
+            stiffness={120}
+            damping={18}
+          />
         </button>
       )}
     </Html>
