@@ -8,7 +8,6 @@
 import { useState } from 'react';
 import { useCabinetStore, useCabinet } from '../../core/store/useCabinetStore';
 import { HardwarePanel } from '../ui/HardwarePanel';
-import { DirectionAwareTabs } from '../ui/DirectionAwareTabs';
 import { MaterialSelector } from '../ui/MaterialSelector';
 import { 
   CoreStructureIcon, 
@@ -85,7 +84,6 @@ function MaterialsContent() {
 
   const currentCore = coreMaterials[currentCoreId as keyof typeof coreMaterials];
   const currentSurface = surfaceMaterials[currentSurfaceId as keyof typeof surfaceMaterials];
-  const currentEdge = edgeMaterials[currentEdgeId as keyof typeof edgeMaterials];
   
   return (
     <div className="p-2">
