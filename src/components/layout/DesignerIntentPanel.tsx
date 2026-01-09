@@ -5,8 +5,7 @@
  * DesignerIntentPanel component.
  */
 
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useState } from 'react';
 import { useCabinetStore, useCabinet } from '../../core/store/useCabinetStore';
 import { HardwarePanel } from '../ui/HardwarePanel';
 import { DirectionAwareTabs } from '../ui/DirectionAwareTabs';
