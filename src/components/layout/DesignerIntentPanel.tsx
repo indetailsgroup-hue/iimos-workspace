@@ -40,9 +40,22 @@ const TABS: Tab[] = [
 // ============================================
 function MaterialsContent() {
   const cabinet = useCabinet();
-  const coreMaterials = useCabinetStore((s) => s.coreMaterials);
+  const coreMaterialsRaw = useCabinetStore((s) => s.coreMaterials);
   const surfaceMaterials = useCabinetStore((s) => s.surfaceMaterials);
   const edgeMaterialsOnly = useCabinetStore((s) => s.edgeMaterials);
+
+  // Add 'type' property to core materials to match Material interface
+  const coreMaterials = Object.fromEntries(
+    Object.entries(coreMaterialsRaw).map(([id, material]) => [
+      id,
+      {
+        ...material,
+        type: material.id.includes('pb') ? 'PARTICLEBOARD' :
+              material.id.includes('mdf') ? 'MDF' :
+              material.id.includes('ply') ? 'PLYWOOD' : 'CORE'
+      }
+    ])
+  );
 
   // Edge Banding should combine Surface Finish materials + Edge-specific materials (PVC, ABS, Veneer, Wood, Aluminum)
   // Add 'type' property to edge-only materials to match Material interface
