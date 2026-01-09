@@ -125,7 +125,7 @@ const SURFACE_MATERIALS_CATALOG = {
     costPerSqm: 120,
     co2PerSqm: 0.5,
     color: '#F5F5F5',
-    textureUrl: undefined as string | undefined,
+    textureUrl: '/textures/solid/melamine-white.svg',
   },
   'surf-mel-grey': {
     id: 'surf-mel-grey',
@@ -135,7 +135,7 @@ const SURFACE_MATERIALS_CATALOG = {
     costPerSqm: 140,
     co2PerSqm: 0.5,
     color: '#6B6B6B',
-    textureUrl: undefined as string | undefined,
+    textureUrl: '/textures/solid/melamine-stone-grey.svg',
   },
   'surf-mel-black': {
     id: 'surf-mel-black',
@@ -145,7 +145,118 @@ const SURFACE_MATERIALS_CATALOG = {
     costPerSqm: 140,
     co2PerSqm: 0.5,
     color: '#1A1A1A',
-    textureUrl: undefined as string | undefined,
+    textureUrl: '/textures/solid/melamine-black.svg',
+  },
+  // --- SOLID COLOR COLLECTION ---
+  'surf-789-rosso-namib': {
+    id: 'surf-789-rosso-namib',
+    name: 'Rosso Namib',
+    category: 'Red/Terracotta',
+    type: 'MELAMINE',
+    thickness: 0.3,
+    costPerSqm: 150,
+    co2PerSqm: 0.5,
+    color: '#9A4635',
+    textureUrl: '/textures/solid/0789-rosso-namib.svg',
+  },
+  'surf-790-viola-orissa': {
+    id: 'surf-790-viola-orissa',
+    name: 'Viola Orissa',
+    category: 'Purple/Black',
+    type: 'MELAMINE',
+    thickness: 0.3,
+    costPerSqm: 160,
+    co2PerSqm: 0.5,
+    color: '#2E272C',
+    textureUrl: '/textures/solid/0790-viola-orissa.svg',
+  },
+  'surf-771-azzurro-naxos': {
+    id: 'surf-771-azzurro-naxos',
+    name: 'Azzurro Naxos',
+    category: 'Blue/Grey',
+    type: 'MELAMINE',
+    thickness: 0.3,
+    costPerSqm: 140,
+    co2PerSqm: 0.5,
+    color: '#526372',
+    textureUrl: '/textures/solid/0771-azzurro-naxos.svg',
+  },
+  'surf-770-rosso-askja': {
+    id: 'surf-770-rosso-askja',
+    name: 'Rosso Askja',
+    category: 'Red/Burgundy',
+    type: 'MELAMINE',
+    thickness: 0.3,
+    costPerSqm: 155,
+    co2PerSqm: 0.5,
+    color: '#674445',
+    textureUrl: '/textures/solid/0770-rosso-askja.svg',
+  },
+  'surf-791-giallo-evora': {
+    id: 'surf-791-giallo-evora',
+    name: 'Giallo Evora',
+    category: 'Yellow/Orange',
+    type: 'MELAMINE',
+    thickness: 0.3,
+    costPerSqm: 160,
+    co2PerSqm: 0.5,
+    color: '#C48D63',
+    textureUrl: '/textures/solid/0791-giallo-evora.svg',
+  },
+  'surf-792-blu-shaba': {
+    id: 'surf-792-blu-shaba',
+    name: 'Blu Shaba',
+    category: 'Blue/Dark',
+    type: 'MELAMINE',
+    thickness: 0.3,
+    costPerSqm: 165,
+    co2PerSqm: 0.5,
+    color: '#2B3842',
+    textureUrl: '/textures/solid/0792-blu-shaba.svg',
+  },
+  'surf-773-verde-brac': {
+    id: 'surf-773-verde-brac',
+    name: 'Verde Brac',
+    category: 'Green',
+    type: 'MELAMINE',
+    thickness: 0.3,
+    costPerSqm: 145,
+    co2PerSqm: 0.5,
+    color: '#566A5D',
+    textureUrl: '/textures/solid/0773-verde-brac.svg',
+  },
+  'surf-772-giallo-kashmir': {
+    id: 'surf-772-giallo-kashmir',
+    name: 'Giallo Kashmir',
+    category: 'Yellow/Mustard',
+    type: 'MELAMINE',
+    thickness: 0.3,
+    costPerSqm: 155,
+    co2PerSqm: 0.5,
+    color: '#CC9E50',
+    textureUrl: '/textures/solid/0772-giallo-kashmir.svg',
+  },
+  'surf-793-grigio-aragona': {
+    id: 'surf-793-grigio-aragona',
+    name: 'Grigio Aragona',
+    category: 'Grey/Dark',
+    type: 'MELAMINE',
+    thickness: 0.3,
+    costPerSqm: 130,
+    co2PerSqm: 0.5,
+    color: '#413D3B',
+    textureUrl: '/textures/solid/0793-grigio-aragona.svg',
+  },
+  'surf-794-verde-kitami': {
+    id: 'surf-794-verde-kitami',
+    name: 'Verde Kitami',
+    category: 'Green/Light Grey',
+    type: 'MELAMINE',
+    thickness: 0.3,
+    costPerSqm: 135,
+    co2PerSqm: 0.5,
+    color: '#8C958C',
+    textureUrl: '/textures/solid/0794-verde-kitami.svg',
   },
   // --- DARK TONES ---
   'surf-hpl-black-oak': {
@@ -301,11 +412,325 @@ const SURFACE_MATERIALS_CATALOG = {
     color: '#9a7a5a',
     textureUrl: '/textures/wood/teak.jpg',
   },
+
+// === FENIX NTM (Super Matte) ===
+  'fenix-0757-bianco-dover': {
+    id: 'fenix-0757-bianco-dover',
+    name: 'Bianco Dover',
+    category: 'White',
+    type: 'FENIX_NTM',
+    thickness: 12,
+    costPerSqm: 2800,
+    co2PerSqm: 3.5,
+    color: '#F5F5F5',
+    textureUrl: '/textures/solid/0757-bianco-dover.svg',
+  },
+  'fenix-0030-bianco-alaska': {
+    id: 'fenix-0030-bianco-alaska',
+    name: 'Bianco Alaska',
+    category: 'White',
+    type: 'FENIX_NTM',
+    thickness: 12,
+    costPerSqm: 3000,
+    co2PerSqm: 3.8,
+    color: '#FFFFFF',
+    textureUrl: '/textures/solid/0030-bianco-alaska.svg',
+  },
+  'fenix-0032-bianco-kos': {
+    id: 'fenix-0032-bianco-kos',
+    name: 'Bianco Kos',
+    category: 'White',
+    type: 'FENIX_NTM',
+    thickness: 12,
+    costPerSqm: 2850,
+    co2PerSqm: 3.6,
+    color: '#F2F2F2',
+    textureUrl: '/textures/solid/0032-bianco-kos.svg',
+  },
+  'fenix-0029-bianco-male': {
+    id: 'fenix-0029-bianco-male',
+    name: 'Bianco Malè',
+    category: 'White/Warm',
+    type: 'FENIX_NTM',
+    thickness: 12,
+    costPerSqm: 2900,
+    co2PerSqm: 3.7,
+    color: '#F9F6EF',
+    textureUrl: '/textures/solid/0029-bianco-male.svg',
+  },
+  'fenix-0719-beige-luxor': {
+    id: 'fenix-0719-beige-luxor',
+    name: 'Beige Luxor',
+    category: 'Beige',
+    type: 'FENIX_NTM',
+    thickness: 12,
+    costPerSqm: 2650,
+    co2PerSqm: 3.3,
+    color: '#D5C7B6',
+    textureUrl: '/textures/solid/0719-beige-luxor.svg',
+  },
+  'fenix-0717-castoro-ottawa': {
+    id: 'fenix-0717-castoro-ottawa',
+    name: 'Castoro Ottawa',
+    category: 'Brown/Taupe',
+    type: 'FENIX_NTM',
+    thickness: 12,
+    costPerSqm: 2600,
+    co2PerSqm: 3.2,
+    color: '#93857B',
+    textureUrl: '/textures/solid/0717-castoro-ottawa.svg',
+  },
+  'fenix-0748-beige-arizona': {
+    id: 'fenix-0748-beige-arizona',
+    name: 'Beige Arizona',
+    category: 'Beige/Greige',
+    type: 'FENIX_NTM',
+    thickness: 12,
+    costPerSqm: 2700,
+    co2PerSqm: 3.4,
+    color: '#B1A192',
+    textureUrl: '/textures/solid/0748-beige-arizona.svg',
+  },
+  'fenix-0725-grigio-efeso': {
+    id: 'fenix-0725-grigio-efeso',
+    name: 'Grigio Efeso',
+    category: 'Grey/Light',
+    type: 'FENIX_NTM',
+    thickness: 12,
+    costPerSqm: 2550,
+    co2PerSqm: 3.1,
+    color: '#CFCFD0',
+    textureUrl: '/textures/solid/0725-grigio-efeso.svg',
+  },
+  'fenix-0718-grigio-londra': {
+    id: 'fenix-0718-grigio-londra',
+    name: 'Grigio Londra',
+    category: 'Grey/Medium',
+    type: 'FENIX_NTM',
+    thickness: 12,
+    costPerSqm: 2500,
+    co2PerSqm: 3.0,
+    color: '#757271',
+    textureUrl: '/textures/solid/0718-grigio-londra.svg',
+  },
+  'fenix-0752-grigio-antrim': {
+    id: 'fenix-0752-grigio-antrim',
+    name: 'Grigio Antrim',
+    category: 'Grey/Cool',
+    type: 'FENIX_NTM',
+    thickness: 12,
+    costPerSqm: 2580,
+    co2PerSqm: 3.2,
+    color: '#A0A19F',
+    textureUrl: '/textures/solid/0752-grigio-antrim.svg',
+  },
+  'fenix-0720-nero-ingo': {
+    id: 'fenix-0720-nero-ingo',
+    name: 'Nero Ingo',
+    category: 'Black',
+    type: 'FENIX_NTM',
+    thickness: 12,
+    costPerSqm: 2450,
+    co2PerSqm: 2.9,
+    color: '#2D2D2D',
+    textureUrl: '/textures/solid/0720-nero-ingo.svg',
+  },
+  'fenix-0724-grigio-bromo': {
+    id: 'fenix-0724-grigio-bromo',
+    name: 'Grigio Bromo',
+    category: 'Grey/Dark',
+    type: 'FENIX_NTM',
+    thickness: 12,
+    costPerSqm: 2480,
+    co2PerSqm: 3.0,
+    color: '#505255',
+    textureUrl: '/textures/solid/0724-grigio-bromo.svg',
+  },
+
+// === FENIX NTA (Metal Surfaces) ===
+  'fenix-5000-acciaio-hamilton': {
+    id: 'fenix-5000-acciaio-hamilton',
+    name: 'Acciaio Hamilton',
+    category: 'Metal/Steel',
+    type: 'FENIX_NTA',
+    thickness: 12,
+    costPerSqm: 3800,
+    co2PerSqm: 4.5,
+    color: '#A8A5A1',
+    textureUrl: '/textures/solid/5000-acciaio-hamilton.svg',
+  },
+  'fenix-5001-argento-dukat': {
+    id: 'fenix-5001-argento-dukat',
+    name: 'Argento Dukat',
+    category: 'Metal/Silver',
+    type: 'FENIX_NTA',
+    thickness: 12,
+    costPerSqm: 4200,
+    co2PerSqm: 5.0,
+    color: '#BEBEC0',
+    textureUrl: '/textures/solid/5001-argento-dukat.svg',
+  },
+  'fenix-5003-oro-cortez': {
+    id: 'fenix-5003-oro-cortez',
+    name: 'Oro Cortez',
+    category: 'Metal/Gold',
+    type: 'FENIX_NTA',
+    thickness: 12,
+    costPerSqm: 5500,
+    co2PerSqm: 6.5,
+    color: '#C4B5A0',
+    textureUrl: '/textures/solid/5003-oro-cortez.svg',
+  },
 };
 
 // === EDGE MATERIALS ===
 const EDGE_MATERIALS_CATALOG = {
-  // PVC Solid Colors
+  // FENIX NTM (Super Matte - share texture with Melamine)
+  'edge-fenixntm-melamine-white': {
+    id: 'edge-fenixntm-melamine-white',
+    name: 'ABS Melamine White 1.0mm',
+    code: 'ABS-MW-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 15,
+    color: '#F5F5F5',
+    type: 'ABS',
+    textureUrl: '/textures/solid/fenixntm-melamine-white.svg', // Share with Melamine
+  },
+  'edge-fenixntm-melamine-stone-grey': {
+    id: 'edge-fenixntm-melamine-stone-grey',
+    name: 'ABS Melamine Grey 1.0mm',
+    code: 'ABS-MG-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 16,
+    color: '#6B6B6B',
+    type: 'ABS',
+    textureUrl: '/textures/solid/fenixntm-melamine-stone-grey.svg', // Share with Melamine
+  },
+  'edge-fenixntm-melamine-black': {
+    id: 'edge-fenixntm-melamine-black',
+    name: 'ABS Melamine Black 1.0mm',
+    code: 'ABS-MK-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 18,
+    color: '#1A1A1A',
+    type: 'ABS',
+    textureUrl: '/textures/solid/fenixntm-melamine-black.svg', // Share with Melamine
+  },
+  'edge-fenixntm-rosso-namib': {
+    id: 'edge-fenixntm-rosso-namib',
+    name: 'ABS Rosso Namib 1.0mm',
+    code: 'ABS-RN-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 20,
+    color: '#9A4635',
+    type: 'ABS',
+    textureUrl: '/textures/solid/fenixntm-rosso-namib.svg', // Share with Solid Color
+  },
+  'edge-fenixntm-viola-orissa': {
+    id: 'edge-fenixntm-viola-orissa',
+    name: 'ABS Viola Orissa 1.0mm',
+    code: 'ABS-VO-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 21,
+    color: '#2E272C',
+    type: 'ABS',
+    textureUrl: '/textures/solid/fenixntm-viola-orissa.svg', // Share with Solid Color
+  },
+  'edge-fenixntm-azzurro-naxos': {
+    id: 'edge-fenixntm-azzurro-naxos',
+    name: 'ABS Azzurro Naxos 1.0mm',
+    code: 'ABS-AN-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 19,
+    color: '#526372',
+    type: 'ABS',
+    textureUrl: '/textures/solid/fenixntm-azzurro-naxos.svg', // Share with Solid Color
+  },
+  'edge-fenixntm-rosso-askja': {
+    id: 'edge-fenixntm-rosso-askja',
+    name: 'ABS Rosso Askja 1.0mm',
+    code: 'ABS-RS-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 22,
+    color: '#674445',
+    type: 'ABS',
+    textureUrl: '/textures/solid/fenixntm-rosso-askja.svg', // Share with Solid Color
+  },
+  'edge-fenixntm-giallo-evora': {
+    id: 'edge-fenixntm-giallo-evora',
+    name: 'ABS Giallo Evora 1.0mm',
+    code: 'ABS-GE-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 23,
+    color: '#C48D63',
+    type: 'ABS',
+    textureUrl: '/textures/solid/fenixntm-giallo-evora.svg', // Share with Solid Color
+  },
+  'edge-fenixntm-blu-shaba': {
+    id: 'edge-fenixntm-blu-shaba',
+    name: 'ABS Blu Shaba 1.0mm',
+    code: 'ABS-BS-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 24,
+    color: '#2B3842',
+    type: 'ABS',
+    textureUrl: '/textures/solid/fenixntm-blu-shaba.svg', // Share with Solid Color
+  },
+  'edge-fenixntm-verde-brac': {
+    id: 'edge-fenixntm-verde-brac',
+    name: 'ABS Verde Brac 1.0mm',
+    code: 'ABS-VB-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 21,
+    color: '#566A5D',
+    type: 'ABS',
+    textureUrl: '/textures/solid/fenixntm-verde-brac.svg', // Share with Solid Color
+  },
+  'edge-fenixntm-giallo-kashmir': {
+    id: 'edge-fenixntm-giallo-kashmir',
+    name: 'ABS Giallo Kashmir 1.0mm',
+    code: 'ABS-GK-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 22,
+    color: '#CC9E50',
+    type: 'ABS',
+    textureUrl: '/textures/solid/fenixntm-giallo-kashmir.svg', // Share with Solid Color
+  },
+  'edge-fenixntm-grigio-aragona': {
+    id: 'edge-fenixntm-grigio-aragona',
+    name: 'ABS Grigio Aragona 1.0mm',
+    code: 'ABS-GA-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 20,
+    color: '#413D3B',
+    type: 'ABS',
+    textureUrl: '/textures/solid/fenixntm-grigio-aragona.svg', // Share with Solid Color
+  },
+  'edge-fenixntm-verde-kitami': {
+    id: 'edge-fenixntm-verde-kitami',
+    name: 'ABS Verde Kitami 1.0mm',
+    code: 'ABS-VK-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 19,
+    color: '#8C958C',
+    type: 'ABS',
+    textureUrl: '/textures/solid/fenixntm-verde-kitami.svg', // Share with Solid Color
+  },
+
+  // PVC Solid Colors (share texture with Melamine solid colors)
   'edge-pvc-white-04': {
     id: 'edge-pvc-white-04',
     name: 'PVC White 0.4mm',
@@ -314,7 +739,8 @@ const EDGE_MATERIALS_CATALOG = {
     height: 23,
     costPerMeter: 5,
     color: '#FFFFFF',
-    textureUrl: undefined as string | undefined,
+    type: 'PVC',
+    textureUrl: '/textures/solid/melamine-white.svg', // Match with Surface Materials
   },
   'edge-pvc-white-05': {
     id: 'edge-pvc-white-05',
@@ -324,7 +750,8 @@ const EDGE_MATERIALS_CATALOG = {
     height: 23,
     costPerMeter: 6,
     color: '#FFFFFF',
-    textureUrl: undefined as string | undefined,
+    type: 'PVC',
+    textureUrl: '/textures/solid/melamine-white.svg', // Match with Surface Materials
   },
   'edge-pvc-white-10': {
     id: 'edge-pvc-white-10',
@@ -334,7 +761,8 @@ const EDGE_MATERIALS_CATALOG = {
     height: 23,
     costPerMeter: 12,
     color: '#FFFFFF',
-    textureUrl: undefined as string | undefined,
+    type: 'PVC',
+    textureUrl: '/textures/solid/melamine-white.svg', // Match with Surface Materials
   },
   'edge-pvc-white-20': {
     id: 'edge-pvc-white-20',
@@ -344,7 +772,8 @@ const EDGE_MATERIALS_CATALOG = {
     height: 23,
     costPerMeter: 22,
     color: '#FFFFFF',
-    textureUrl: undefined as string | undefined,
+    type: 'PVC',
+    textureUrl: '/textures/solid/melamine-white.svg', // Match with Surface Materials
   },
   'edge-pvc-grey-10': {
     id: 'edge-pvc-grey-10',
@@ -354,7 +783,8 @@ const EDGE_MATERIALS_CATALOG = {
     height: 23,
     costPerMeter: 12,
     color: '#6B6B6B',
-    textureUrl: undefined as string | undefined,
+    type: 'PVC',
+    textureUrl: '/textures/solid/melamine-stone-grey.svg', // Match with Surface Materials
   },
   'edge-pvc-black-10': {
     id: 'edge-pvc-black-10',
@@ -364,9 +794,314 @@ const EDGE_MATERIALS_CATALOG = {
     height: 23,
     costPerMeter: 14,
     color: '#1A1A1A',
-    textureUrl: undefined as string | undefined,
+    type: 'PVC',
+    textureUrl: '/textures/solid/melamine-black.svg', // Match with Surface Materials
   },
-  // ABS Wood Grain
+  // PVC Solid Color Collection (share texture with Surface Materials)
+  'edge-789-rosso-namib': {
+    id: 'edge-789-rosso-namib',
+    name: 'PVC Rosso Namib 1.0mm',
+    code: 'PVC-789-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 18,
+    color: '#9A4635',
+    type: 'PVC',
+    category: 'Red/Terracotta',
+    textureUrl: '/textures/solid/0789-rosso-namib.svg', // Match with Surface Materials
+  },
+  'edge-790-viola-orissa': {
+    id: 'edge-790-viola-orissa',
+    name: 'PVC Viola Orissa 1.0mm',
+    code: 'PVC-790-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 20,
+    color: '#2E272C',
+    type: 'PVC',
+    category: 'Purple/Black',
+    textureUrl: '/textures/solid/0790-viola-orissa.svg', // Match with Surface Materials
+  },
+  'edge-771-azzurro-naxos': {
+    id: 'edge-771-azzurro-naxos',
+    name: 'PVC Azzurro Naxos 1.0mm',
+    code: 'PVC-771-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 17,
+    color: '#526372',
+    type: 'PVC',
+    category: 'Blue/Grey',
+    textureUrl: '/textures/solid/0771-azzurro-naxos.svg', // Match with Surface Materials
+  },
+  'edge-770-rosso-askja': {
+    id: 'edge-770-rosso-askja',
+    name: 'PVC Rosso Askja 1.0mm',
+    code: 'PVC-770-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 19,
+    color: '#674445',
+    type: 'PVC',
+    category: 'Red/Burgundy',
+    textureUrl: '/textures/solid/0770-rosso-askja.svg', // Match with Surface Materials
+  },
+  'edge-791-giallo-evora': {
+    id: 'edge-791-giallo-evora',
+    name: 'PVC Giallo Evora 1.0mm',
+    code: 'PVC-791-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 20,
+    color: '#C48D63',
+    type: 'PVC',
+    category: 'Yellow/Orange',
+    textureUrl: '/textures/solid/0791-giallo-evora.svg', // Match with Surface Materials
+  },
+  'edge-792-blu-shaba': {
+    id: 'edge-792-blu-shaba',
+    name: 'PVC Blu Shaba 1.0mm',
+    code: 'PVC-792-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 21,
+    color: '#2B3842',
+    type: 'PVC',
+    category: 'Blue/Dark',
+    textureUrl: '/textures/solid/0792-blu-shaba.svg', // Match with Surface Materials
+  },
+  'edge-773-verde-brac': {
+    id: 'edge-773-verde-brac',
+    name: 'PVC Verde Brac 1.0mm',
+    code: 'PVC-773-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 18,
+    color: '#566A5D',
+    type: 'PVC',
+    category: 'Green',
+    textureUrl: '/textures/solid/0773-verde-brac.svg', // Match with Surface Materials
+  },
+  'edge-772-giallo-kashmir': {
+    id: 'edge-772-giallo-kashmir',
+    name: 'PVC Giallo Kashmir 1.0mm',
+    code: 'PVC-772-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 19,
+    color: '#CC9E50',
+    type: 'PVC',
+    category: 'Yellow/Mustard',
+    textureUrl: '/textures/solid/0772-giallo-kashmir.svg', // Match with Surface Materials
+  },
+  'edge-793-grigio-aragona': {
+    id: 'edge-793-grigio-aragona',
+    name: 'PVC Grigio Aragona 1.0mm',
+    code: 'PVC-793-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 16,
+    color: '#413D3B',
+    type: 'PVC',
+    category: 'Grey/Dark',
+    textureUrl: '/textures/solid/0793-grigio-aragona.svg', // Match with Surface Materials
+  },
+  'edge-794-verde-kitami': {
+    id: 'edge-794-verde-kitami',
+    name: 'PVC Verde Kitami 1.0mm',
+    code: 'PVC-794-1.0',
+    thickness: 1.0,
+    height: 23,
+    costPerMeter: 17,
+    color: '#8C958C',
+    type: 'PVC',
+    category: 'Green/Light Grey',
+    textureUrl: '/textures/solid/0794-verde-kitami.svg', // Match with Surface Materials
+  },
+  // === FENIX NTM (Super Matte) Edge Materials ===
+  'edge-fenix-0757-bianco-dover': {
+    id: 'edge-fenix-0757-bianco-dover',
+    name: 'ABS Bianco Dover 2.0mm',
+    code: 'ABS-757-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 45,
+    color: '#F5F5F5',
+    type: 'ABS',
+    category: 'White',
+    textureUrl: '/textures/solid/0757-bianco-dover.svg', // Match with Surface Materials
+  },
+  'edge-fenix-0030-bianco-alaska': {
+    id: 'edge-fenix-0030-bianco-alaska',
+    name: 'ABS Bianco Alaska 2.0mm',
+    code: 'ABS-030-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 48,
+    color: '#FFFFFF',
+    type: 'ABS',
+    category: 'White',
+    textureUrl: '/textures/solid/0030-bianco-alaska.svg', // Match with Surface Materials
+  },
+  'edge-fenix-0032-bianco-kos': {
+    id: 'edge-fenix-0032-bianco-kos',
+    name: 'ABS Bianco Kos 2.0mm',
+    code: 'ABS-032-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 46,
+    color: '#F2F2F2',
+    type: 'ABS',
+    category: 'White',
+    textureUrl: '/textures/solid/0032-bianco-kos.svg', // Match with Surface Materials
+  },
+  'edge-fenix-0029-bianco-male': {
+    id: 'edge-fenix-0029-bianco-male',
+    name: 'ABS Bianco Malè 2.0mm',
+    code: 'ABS-029-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 47,
+    color: '#F9F6EF',
+    type: 'ABS',
+    category: 'White/Warm',
+    textureUrl: '/textures/solid/0029-bianco-male.svg', // Match with Surface Materials
+  },
+  'edge-fenix-0719-beige-luxor': {
+    id: 'edge-fenix-0719-beige-luxor',
+    name: 'ABS Beige Luxor 2.0mm',
+    code: 'ABS-719-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 43,
+    color: '#D5C7B6',
+    type: 'ABS',
+    category: 'Beige',
+    textureUrl: '/textures/solid/0719-beige-luxor.svg', // Match with Surface Materials
+  },
+  'edge-fenix-0717-castoro-ottawa': {
+    id: 'edge-fenix-0717-castoro-ottawa',
+    name: 'ABS Castoro Ottawa 2.0mm',
+    code: 'ABS-717-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 42,
+    color: '#93857B',
+    type: 'ABS',
+    category: 'Brown/Taupe',
+    textureUrl: '/textures/solid/0717-castoro-ottawa.svg', // Match with Surface Materials
+  },
+  'edge-fenix-0748-beige-arizona': {
+    id: 'edge-fenix-0748-beige-arizona',
+    name: 'ABS Beige Arizona 2.0mm',
+    code: 'ABS-748-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 44,
+    color: '#B1A192',
+    type: 'ABS',
+    category: 'Beige/Greige',
+    textureUrl: '/textures/solid/0748-beige-arizona.svg', // Match with Surface Materials
+  },
+  'edge-fenix-0725-grigio-efeso': {
+    id: 'edge-fenix-0725-grigio-efeso',
+    name: 'ABS Grigio Efeso 2.0mm',
+    code: 'ABS-725-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 41,
+    color: '#CFCFD0',
+    type: 'ABS',
+    category: 'Grey/Light',
+    textureUrl: '/textures/solid/0725-grigio-efeso.svg', // Match with Surface Materials
+  },
+  'edge-fenix-0718-grigio-londra': {
+    id: 'edge-fenix-0718-grigio-londra',
+    name: 'ABS Grigio Londra 2.0mm',
+    code: 'ABS-718-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 40,
+    color: '#757271',
+    type: 'ABS',
+    category: 'Grey/Medium',
+    textureUrl: '/textures/solid/0718-grigio-londra.svg', // Match with Surface Materials
+  },
+  'edge-fenix-0752-grigio-antrim': {
+    id: 'edge-fenix-0752-grigio-antrim',
+    name: 'ABS Grigio Antrim 2.0mm',
+    code: 'ABS-752-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 41,
+    color: '#A0A19F',
+    type: 'ABS',
+    category: 'Grey/Cool',
+    textureUrl: '/textures/solid/0752-grigio-antrim.svg', // Match with Surface Materials
+  },
+  'edge-fenix-0720-nero-ingo': {
+    id: 'edge-fenix-0720-nero-ingo',
+    name: 'ABS Nero Ingo 2.0mm',
+    code: 'ABS-720-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 39,
+    color: '#2D2D2D',
+    type: 'ABS',
+    category: 'Black',
+    textureUrl: '/textures/solid/0720-nero-ingo.svg', // Match with Surface Materials
+  },
+  'edge-fenix-0724-grigio-bromo': {
+    id: 'edge-fenix-0724-grigio-bromo',
+    name: 'ABS Grigio Bromo 2.0mm',
+    code: 'ABS-724-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 40,
+    color: '#505255',
+    type: 'ABS',
+    category: 'Grey/Dark',
+    textureUrl: '/textures/solid/0724-grigio-bromo.svg', // Match with Surface Materials
+  },
+
+  // === FENIX NTA (Metal Surfaces) Edge Materials ===
+  'edge-fenix-5000-acciaio-hamilton': {
+    id: 'edge-fenix-5000-acciaio-hamilton',
+    name: 'ABS Acciaio Hamilton 2.0mm',
+    code: 'ABS-5000-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 65,
+    color: '#A8A5A1',
+    type: 'ABS',
+    category: 'Metal/Steel',
+    textureUrl: '/textures/solid/5000-acciaio-hamilton.svg', // Match with Surface Materials
+  },
+  'edge-fenix-5001-argento-dukat': {
+    id: 'edge-fenix-5001-argento-dukat',
+    name: 'ABS Argento Dukat 2.0mm',
+    code: 'ABS-5001-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 72,
+    color: '#BEBEC0',
+    type: 'ABS',
+    category: 'Metal/Silver',
+    textureUrl: '/textures/solid/5001-argento-dukat.svg', // Match with Surface Materials
+  },
+  'edge-fenix-5003-oro-cortez': {
+    id: 'edge-fenix-5003-oro-cortez',
+    name: 'ABS Oro Cortez 2.0mm',
+    code: 'ABS-5003-2.0',
+    thickness: 2.0,
+    height: 23,
+    costPerMeter: 95,
+    color: '#C4B5A0',
+    type: 'ABS',
+    category: 'Metal/Gold',
+    textureUrl: '/textures/solid/5003-oro-cortez.svg', // Match with Surface Materials
+  },
+  // ABS Wood Grain (share texture with HPL Surface Materials)
   'edge-abs-oak-10': {
     id: 'edge-abs-oak-10',
     name: 'ABS Oak 1.0mm',
@@ -375,7 +1110,8 @@ const EDGE_MATERIALS_CATALOG = {
     height: 23,
     costPerMeter: 22,
     color: '#C4A77D',
-    textureUrl: '/textures/materials/9880503b9bc4fab08417c0ce7c618301.jpg',
+    type: 'ABS',
+    textureUrl: '/textures/wood/grey-oak.jpg', // Match with Surface Materials HPL Grey Oak
   },
   'edge-abs-walnut-10': {
     id: 'edge-abs-walnut-10',
@@ -385,7 +1121,8 @@ const EDGE_MATERIALS_CATALOG = {
     height: 23,
     costPerMeter: 24,
     color: '#5D4037',
-    textureUrl: '/textures/materials/6ca1ee6c8d4e09b967824c7580f4471b.jpg',
+    type: 'ABS',
+    textureUrl: '/textures/wood/dark-walnut.jpg', // Match with Surface Materials HPL Dark Walnut
   },
   'edge-abs-walnut-grey-10': {
     id: 'edge-abs-walnut-grey-10',
@@ -395,7 +1132,8 @@ const EDGE_MATERIALS_CATALOG = {
     height: 23,
     costPerMeter: 26,
     color: '#9a8b7a',
-    textureUrl: '/textures/materials/c524e72250b3ddd648c1f317165c7f79.jpg',
+    type: 'ABS',
+    textureUrl: '/textures/wood/grey-walnut.jpg', // Match with Surface Materials HPL Grey Walnut
   },
   'edge-abs-oak-grey-10': {
     id: 'edge-abs-oak-grey-10',
@@ -559,18 +1297,18 @@ function generatePanels(
     // 4. FINISH TO CUT transformation
     const cutW = calculateCutSize(finishW, edgeLeft, edgeRight, MANUFACTURING_PARAMS.preMilling);
     const cutH = calculateCutSize(finishH, edgeTop, edgeBottom, MANUFACTURING_PARAMS.preMilling);
-    const area = (finishW * finishH) / 1000000; // m²
-    const edgeLen = ((edgeTop > 0 ? finishW : 0) + (edgeBottom > 0 ? finishW : 0) + 
+    const area = (finishW * finishH) / 1000000; // m² (single face)
+    const edgeLen = ((edgeTop > 0 ? finishW : 0) + (edgeBottom > 0 ? finishW : 0) +
                      (edgeLeft > 0 ? finishH : 0) + (edgeRight > 0 ? finishH : 0)) / 1000; // meters
-    
+
     const cost = (area * core.costPerSqm) + (area * 2 * surface.costPerSqm) + (edgeLen * edge.costPerMeter);
     const co2 = (area * core.co2PerSqm) + (area * 2 * surface.co2PerSqm);
-    
+
     return {
       realThickness: T_real,
       cutWidth: cutW,
       cutHeight: cutH,
-      surfaceArea: area,
+      surfaceArea: area * 2, // Total surface area (both faces)
       edgeLength: edgeLen,
       cost,
       co2,
@@ -755,7 +1493,7 @@ function generatePanels(
         realThickness: backT,
         cutWidth: backW,
         cutHeight: backH,
-        surfaceArea: (backW * backH) / 1000000,
+        surfaceArea: (backW * backH) / 1000000 * 2, // Total surface area (both faces)
         edgeLength: 0,
         cost: (backW * backH / 1000000) * backCore.costPerSqm,
         co2: (backW * backH / 1000000) * backCore.co2PerSqm,
@@ -1025,6 +1763,20 @@ export const useCabinetStore = create<CabinetStore>()(
       set((state) => {
         if (!state.cabinet) return;
         state.cabinet.materials.defaultEdge = materialId;
+
+        // Force apply edge material to ALL panels (except back panel)
+        state.cabinet.panels.forEach(panel => {
+          if (panel.role === 'BACK') return; // Skip back panel
+
+          // Force assign edge material to all sides
+          panel.edges = {
+            top: materialId,
+            bottom: materialId,
+            left: materialId,
+            right: materialId
+          };
+        });
+
         state.cabinet.updatedAt = Date.now();
       });
       get().recalculate();

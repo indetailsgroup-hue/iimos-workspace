@@ -97,16 +97,20 @@ export function Cabinet3D({ showDimensions = false, hideTooltip = false }: Cabin
   const selectedPanelId = useCabinetStore((s) => s.selectedPanelId);
   const selectPanel = useCabinetStore((s) => s.selectPanel);
   const surfaceMaterials = useCabinetStore((s) => s.surfaceMaterials);
-  const edgeMaterials = useCabinetStore((s) => s.edgeMaterials);
-  
+  const edgeMaterialsOnly = useCabinetStore((s) => s.edgeMaterials);
+
   if (!cabinet) return null;
-  
+
   // Get default surface material
   const defaultSurface = surfaceMaterials[cabinet.materials.defaultSurface as keyof typeof surfaceMaterials];
   const baseColor = defaultSurface?.color || '#888888';
   const textureUrl = defaultSurface?.textureUrl || null;
-  
-  // Get default edge material
+
+  // Edge materials: Combine surface materials + edge-specific materials
+  // This matches what DesignerIntentPanel does for the material selector
+  const edgeMaterials = { ...surfaceMaterials, ...edgeMaterialsOnly };
+
+  // Get default edge material - look in combined materials
   const defaultEdge = edgeMaterials[cabinet.materials.defaultEdge as keyof typeof edgeMaterials];
   const edgeColor = defaultEdge?.color || '#FFFFFF';
   const edgeThickness = defaultEdge?.thickness || 1.0;
