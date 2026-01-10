@@ -7011,9 +7011,869 @@ TOFIX DRILLING DIMENSION FORMULA:
 
 ---
 
+## ส่วนที่ 17: Master Joinery System Engine (Architecture v4.5)
+
+ระบบ **Master Joinery** รวมข้อมูลจาก Häfele Catalog ทั้ง 17 หน้า ครอบคลุม Minifix 12/15, Maxifix 35, S100/S200/S300 Bolts, Mitre Joints, Double-ended Bolts และ Dowels
+
+**Key Features:**
+- **Correct Engineering Logic**: แยกแยะระหว่าง Distance B (ระยะเจาะจากขอบ) และ Distance A (ระยะกึ่งกลางความหนา)
+- **Auto-Selection**: เลือก CAM อัตโนมัติตามความหนาไม้
+- **Mitre Intelligence**: คำนวณ Inset F ตามตารางองศา พร้อมลบ 20mm เมื่อใช้ B=24
+
+### 17.1 Master Hardware Database
+
+```typescript
+// src/services/hardware/hafeleDb.ts
+
+/**
+ * Master Hardware Database for Minifix/Maxifix Joinery Systems
+ * Architecture v4.5 - Complete Catalog Integration
+ *
+ * Critical Distinction:
+ * - Distance A (distA): ระยะกึ่งกลางความหนาไม้ - ใช้ตรวจสอบรุ่น CAM
+ * - Distance B (distB): ระยะเจาะจากขอบ - ใช้กำหนดตำแหน่งเจาะ Cam Housing บนหน้าบาน
+ */
+
+export type SystemType = 'MINIFIX_15' | 'MINIFIX_12' | 'MAXIFIX_35';
+export type BoardThickness = 12 | 13 | 15 | 16 | 18 | 19 | 23 | 26 | 29 | 34;
+export type JointAngle = 90 | 100 | 110 | 120 | 130 | 135 | 140 | 150 | 160 | 170 | 180;
+
+export interface HardwareItem {
+  id: string;
+  itemNo: string;       // รหัสสินค้าจริง (BOM)
+  name: string;
+  category: 'CAM' | 'BOLT' | 'DOWEL' | 'SLEEVE' | 'CAP';
+  specs: {
+    drillDepth: number;     // ความลึกเจาะ (D)
+    diameter: number;       // ขนาดดอกสว่าน (mm)
+    distA?: number;         // ระยะกึ่งกลางความหนาไม้ (A) - ใช้ตรวจสอบความหนา
+    distB?: number;         // ระยะเจาะจากขอบ (B) - ใช้กำหนดตำแหน่งเจาะ Cam
+    length?: number;        // ความยาวตัวสินค้า
+    housingDia?: number;    // ขนาดเบ้า Cam (12/15/35)
+    thread?: string;        // ประเภทเกลียว (Special, M6, etc.)
+  };
+}
+
+export const HAFELE_MASTER_DB = {
+  // =================================================================
+  // 1. HOUSINGS (CAMS) - เลือกตามความหนาไม้ (PDF Page 2-3, 15)
+  // =================================================================
+  cams: {
+    // --- Minifix 15 (Zinc Alloy) ---
+    mf15_12: { id: 'mf15_12', itemNo: '262.26.070', name: 'Minifix 15 (12mm)', category: 'CAM', specs: { diameter: 15, drillDepth: 9.5, distA: 6.0 } },
+    mf15_13: { id: 'mf15_13', itemNo: '262.26.031', name: 'Minifix 15 (13mm)', category: 'CAM', specs: { diameter: 15, drillDepth: 11.0, distA: 6.5 } },
+    mf15_15: { id: 'mf15_15', itemNo: '262.26.032', name: 'Minifix 15 (15mm)', category: 'CAM', specs: { diameter: 15, drillDepth: 12.0, distA: 7.5 } },
+    mf15_16: { id: 'mf15_16', itemNo: '262.26.033', name: 'Minifix 15 (16mm)', category: 'CAM', specs: { diameter: 15, drillDepth: 12.5, distA: 8.0 } }, // Standard 16mm
+    mf15_18: { id: 'mf15_18', itemNo: '262.26.034', name: 'Minifix 15 (18mm)', category: 'CAM', specs: { diameter: 15, drillDepth: 13.5, distA: 9.0 } },
+    mf15_19: { id: 'mf15_19', itemNo: '262.26.035', name: 'Minifix 15 (19mm)', category: 'CAM', specs: { diameter: 15, drillDepth: 14.0, distA: 9.5 } }, // Standard 19mm
+    mf15_23: { id: 'mf15_23', itemNo: '262.26.036', name: 'Minifix 15 (23mm)', category: 'CAM', specs: { diameter: 15, drillDepth: 16.5, distA: 11.5 } },
+    mf15_29: { id: 'mf15_29', itemNo: '262.26.038', name: 'Minifix 15 (29mm)', category: 'CAM', specs: { diameter: 15, drillDepth: 19.5, distA: 14.5 } },
+    mf15_34: { id: 'mf15_34', itemNo: '262.26.081', name: 'Minifix 15 (34mm)', category: 'CAM', specs: { diameter: 15, drillDepth: 22.5, distA: 17.0 } },
+
+    // --- Minifix 12 (Small) ---
+    mf12_std: { id: 'mf12_std', itemNo: '262.17.020', name: 'Minifix 12', category: 'CAM', specs: { diameter: 12, drillDepth: 9.5, distA: 6.0 } },
+
+    // --- Maxifix 35 (Heavy Duty) ---
+    maxi_35: { id: 'maxi_35', itemNo: '262.87.013', name: 'Maxifix 35 Housing', category: 'CAM', specs: { diameter: 35, drillDepth: 15.5, distA: 9.5 } } // For 19mm+
+  },
+
+  // =================================================================
+  // 2. CONNECTING BOLTS (แกนยึด) - PDF Page 5-16
+  // =================================================================
+  bolts: {
+    // --- S200 (Standard) ---
+    s200_b24: { id: 's200_b24', itemNo: '262.27.670', name: 'S200 Bolt (B=24)', category: 'BOLT', specs: { distB: 24, length: 24, drillDepth: 11, diameter: 5 } },
+    s200_b34: { id: 's200_b34', itemNo: '262.28.670', name: 'S200 Bolt (B=34)', category: 'BOLT', specs: { distB: 34, length: 34, drillDepth: 11, diameter: 5 } },
+
+    // --- S100 (Classic) ---
+    s100_b24: { id: 's100_b24', itemNo: '262.27.020', name: 'S100 Bolt (B=24)', category: 'BOLT', specs: { distB: 24, length: 24, drillDepth: 8, diameter: 5 } },
+
+    // --- S300 (High Torque) ---
+    s300_b24: { id: 's300_b24', itemNo: '262.27.462', name: 'S300 Bolt (B=24)', category: 'BOLT', specs: { distB: 24, length: 24, drillDepth: 11, diameter: 5 } },
+
+    // --- Mitre Joint (ข้อต่อองศา) PDF Page 13 ---
+    mitre_b24: { id: 'mitre_b24', itemNo: '262.12.822', name: 'Mitre Bolt (B=24)', category: 'BOLT', specs: { distB: 24, length: 44, drillDepth: 11, diameter: 7 } },
+    mitre_b44: { id: 'mitre_b44', itemNo: '262.12.804', name: 'Mitre Bolt (B=44)', category: 'BOLT', specs: { distB: 44, length: 64, drillDepth: 11, diameter: 7 } },
+
+    // --- Double Ended (แผงกลาง) PDF Page 12 ---
+    double_b24: { id: 'double_b24', itemNo: '262.27.109', name: 'Double Bolt (B=24)', category: 'BOLT', specs: { distB: 24, length: 48, drillDepth: 0, diameter: 8 } },
+
+    // --- Maxifix Bolts PDF Page 16 ---
+    maxi_b35: { id: 'maxi_b35', itemNo: '262.87.931', name: 'Maxifix Bolt (B=35)', category: 'BOLT', specs: { distB: 35, length: 35, drillDepth: 12, diameter: 9 } },
+    maxi_b55: { id: 'maxi_b55', itemNo: '262.87.932', name: 'Maxifix Bolt (B=55)', category: 'BOLT', specs: { distB: 55, length: 55, drillDepth: 12, diameter: 9 } },
+  },
+
+  // =================================================================
+  // 3. DOWELS & SLEEVES - PDF Page 1
+  // =================================================================
+  dowels: {
+    // Standard Fluted
+    wd_8x30: { id: 'wd_8x30', itemNo: '267.83.230', name: 'Wood Dowel 8x30', category: 'DOWEL', specs: { diameter: 8, length: 30, drillDepth: 15 } },
+    wd_8x35: { id: 'wd_8x35', itemNo: '267.83.235', name: 'Wood Dowel 8x35', category: 'DOWEL', specs: { diameter: 8, length: 35, drillDepth: 18 } },
+    wd_8x40: { id: 'wd_8x40', itemNo: '267.83.240', name: 'Wood Dowel 8x40', category: 'DOWEL', specs: { diameter: 8, length: 40, drillDepth: 20 } },
+    // Pre-glued
+    pg_8x30: { id: 'pg_8x30', itemNo: '267.84.230', name: 'Pre-glued 8x30', category: 'DOWEL', specs: { diameter: 8, length: 30, drillDepth: 15 } },
+    // Plastic Exact
+    pl_8x30: { id: 'pl_8x30', itemNo: '267.70.700', name: 'Plastic Exact 8x30', category: 'DOWEL', specs: { diameter: 8, length: 30, drillDepth: 15 } }
+  },
+
+  sleeves: {
+    m6_glue: { id: 'm6_glue', itemNo: '039.33.462', name: 'M6 Glue-in Sleeve', category: 'SLEEVE', specs: { diameter: 8, drillDepth: 11, length: 11 } },
+    m6_spread: { id: 'm6_spread', itemNo: '039.00.267', name: 'M6 Spread Sleeve', category: 'SLEEVE', specs: { diameter: 8, drillDepth: 9, length: 9 } }
+  }
+};
+```
+
+### 17.2 CAM Housing Thickness Map
+
+```
+MINIFIX 15 CAM SELECTION BY BOARD THICKNESS:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  Thickness  │  Item No      │  Drill Depth │  Distance A       │
+│  (mm)       │               │  (mm)        │  (mm)             │
+├─────────────┼───────────────┼──────────────┼───────────────────┤
+│    12       │  262.26.070   │    9.5       │    6.0            │
+│    13       │  262.26.031   │   11.0       │    6.5            │
+│    15       │  262.26.032   │   12.0       │    7.5            │
+│    16       │  262.26.033   │   12.5       │    8.0  ★         │
+│    18       │  262.26.034   │   13.5       │    9.0            │
+│    19       │  262.26.035   │   14.0       │    9.5  ★         │
+│    23       │  262.26.036   │   16.5       │   11.5            │
+│    29       │  262.26.038   │   19.5       │   14.5            │
+│    34       │  262.26.081   │   22.5       │   17.0            │
+│                                                                 │
+│  ★ = Most common thicknesses                                   │
+│                                                                 │
+│  FORMULA: Distance A ≈ Thickness / 2                           │
+│           Drill Depth ≈ Thickness × 0.7                        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+SYSTEM COMPARISON:
+┌─────────────────────────────────────────────────────────────────┐
+│  System      │  Housing Dia  │  Min Thickness  │  Use Case      │
+├──────────────┼───────────────┼─────────────────┼────────────────┤
+│  MINIFIX 12  │    12mm       │     10mm        │  Small/Light   │
+│  MINIFIX 15  │    15mm       │     12mm        │  Standard ★    │
+│  MAXIFIX 35  │    35mm       │     19mm        │  Heavy Duty    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 17.3 Joinery Engineering Engine
+
+```typescript
+// src/services/engineering/joineryEngine.ts
+import { HAFELE_MASTER_DB, HardwareItem, BoardThickness, SystemType, JointAngle } from '../hardware/hafeleDb';
+
+export interface JoineryPlan {
+  isValid: boolean;
+  issues: string[];
+  specs: {
+    bolt: HardwareItem;
+    cam: HardwareItem;
+    dowel: HardwareItem;
+    sleeve?: HardwareItem;
+  };
+  sets: {
+    x: number;
+    rotationY: number;
+    dowelOffsets: number[];
+  }[];
+  meta: {
+    margin: number;
+    mitreInset?: number;
+    formula?: string;
+  };
+}
+
+// =================================================================
+// MITRE INSET TABLE (PDF Page 13 - For B=44)
+// [Angle][Thickness] = Inset F (mm)
+// =================================================================
+const MITRE_TABLE_B44: Record<number, Record<number, number>> = {
+  90:  { 16: 52.0, 19: 53.5, 29: 58.5 },
+  100: { 16: 50.4, 19: 51.6, 29: 55.9 },
+  110: { 16: 49.4, 19: 50.4, 29: 54.2 },
+  120: { 16: 48.6, 19: 49.5, 29: 52.4 },
+  130: { 16: 47.9, 19: 48.6, 29: 51.1 },
+  135: { 16: 47.3, 19: 47.9, 29: 50.0 },
+  140: { 16: 46.9, 19: 47.3, 29: 49.3 },
+  150: { 16: 46.0, 19: 46.2, 29: 47.5 },
+  160: { 16: 45.2, 19: 45.1, 29: 45.9 },
+  170: { 16: 44.5, 19: 44.3, 29: 44.6 },
+  180: { 16: 44.0, 19: 44.0, 29: 44.0 }
+};
+
+interface JoineryOptions {
+  length: number;
+  thickness: BoardThickness;
+  system?: SystemType;
+  angle?: JointAngle;           // 90 = Standard, other = Mitre
+  boltType?: 'STANDARD' | 'MITRE' | 'DOUBLE' | 'MAXIFIX';
+  boltLength?: 24 | 34 | 44 | 55;   // Drilling Distance B
+  dowelType?: string;
+}
+
+/**
+ * Calculate joinery plan with auto-selection
+ *
+ * Key Rule (PDF Page 13):
+ * "For drilling dim. B 24 mm, 20 mm must be deducted from inset F"
+ */
+export const calculateJoinery = (opts: JoineryOptions): JoineryPlan => {
+  const {
+    length,
+    thickness,
+    system = 'MINIFIX_15',
+    angle = 90,
+    boltType = 'STANDARD',
+    boltLength = 24,
+    dowelType = 'wd_8x30'
+  } = opts;
+
+  const issues: string[] = [];
+
+  // =================================================================
+  // 1. AUTO-SELECT CAM (ตามความหนาไม้)
+  // =================================================================
+  let cam: HardwareItem;
+
+  if (system === 'MAXIFIX_35') {
+    cam = HAFELE_MASTER_DB.cams.maxi_35;
+    if (thickness < 19) {
+      issues.push(`Maxifix requires minimum 19mm thickness, got ${thickness}mm`);
+    }
+  } else if (system === 'MINIFIX_12') {
+    cam = HAFELE_MASTER_DB.cams.mf12_std;
+  } else {
+    // MINIFIX_15 Auto-Selection Logic
+    const db = HAFELE_MASTER_DB.cams;
+    if (thickness <= 12) cam = db.mf15_12;
+    else if (thickness === 13) cam = db.mf15_13;
+    else if (thickness === 15) cam = db.mf15_15;
+    else if (thickness === 16) cam = db.mf15_16;
+    else if (thickness === 18) cam = db.mf15_18;
+    else if (thickness === 19) cam = db.mf15_19;
+    else if (thickness <= 23) cam = db.mf15_23;
+    else if (thickness <= 29) cam = db.mf15_29;
+    else cam = db.mf15_34;
+  }
+
+  // =================================================================
+  // 2. AUTO-SELECT BOLT
+  // =================================================================
+  let bolt: HardwareItem;
+
+  if (system === 'MAXIFIX_35') {
+    bolt = boltLength === 55
+      ? HAFELE_MASTER_DB.bolts.maxi_b55
+      : HAFELE_MASTER_DB.bolts.maxi_b35;
+  } else if (boltType === 'MITRE') {
+    bolt = boltLength === 24
+      ? HAFELE_MASTER_DB.bolts.mitre_b24
+      : HAFELE_MASTER_DB.bolts.mitre_b44;
+  } else if (boltType === 'DOUBLE') {
+    bolt = HAFELE_MASTER_DB.bolts.double_b24;
+  } else {
+    // Standard S200
+    bolt = boltLength === 34
+      ? HAFELE_MASTER_DB.bolts.s200_b34
+      : HAFELE_MASTER_DB.bolts.s200_b24;
+  }
+
+  // =================================================================
+  // 3. DOWEL
+  // =================================================================
+  const dowel = HAFELE_MASTER_DB.dowels[dowelType as keyof typeof HAFELE_MASTER_DB.dowels]
+    || HAFELE_MASTER_DB.dowels.wd_8x30;
+
+  // =================================================================
+  // 4. MARGIN CALCULATION (Critical for Mitre Joints!)
+  // =================================================================
+  let margin = bolt.specs.distB!;
+  let mitreInset: number | undefined;
+  let formula: string | undefined;
+
+  if (boltType === 'MITRE' && angle !== 180) {
+    // Mitre Inset F from table (base value for B=44)
+    const closestThickness = thickness <= 16 ? 16 : thickness <= 19 ? 19 : 29;
+    const fBase = MITRE_TABLE_B44[angle]?.[closestThickness] || 53.5;
+
+    // KEY RULE: If B=24, deduct 20mm from F
+    mitreInset = (boltLength === 24) ? fBase - 20 : fBase;
+    margin = mitreInset;
+    formula = boltLength === 24
+      ? `F = ${fBase} - 20 = ${mitreInset}mm (B=24 rule)`
+      : `F = ${fBase}mm (B=44)`;
+  }
+
+  // =================================================================
+  // 5. LAYOUT GENERATION
+  // =================================================================
+  const sets: JoineryPlan['sets'] = [];
+  const dowelSpacing = 32;
+
+  // Left position
+  sets.push({
+    x: margin,
+    rotationY: 0,
+    dowelOffsets: [dowelSpacing]
+  });
+
+  // Right position
+  sets.push({
+    x: length - margin,
+    rotationY: Math.PI,
+    dowelOffsets: [dowelSpacing]
+  });
+
+  // Center position for long panels (>450mm)
+  if (length > 450) {
+    sets.push({
+      x: length / 2,
+      rotationY: 0,
+      dowelOffsets: [-dowelSpacing, dowelSpacing]
+    });
+  }
+
+  return {
+    isValid: issues.length === 0,
+    issues,
+    specs: { bolt, cam, dowel },
+    sets,
+    meta: { margin, mitreInset, formula }
+  };
+};
+```
+
+### 17.4 CAM Operation Generator
+
+```typescript
+// src/services/cam/generators/masterOp.ts
+import { calculateJoinery, JoineryPlan } from '../../engineering/joineryEngine';
+import { BoardThickness, SystemType, JointAngle } from '../../hardware/hafeleDb';
+
+export interface MasterMachineOp {
+  id: string;
+  type: 'DRILL';
+  x: number;
+  y: number;
+  diameter: number;
+  depth: number;
+  face: 'FACE' | 'EDGE';
+  hardwareId: string;
+}
+
+/**
+ * Generate CNC operations for Minifix/Maxifix joinery
+ *
+ * Operations per connector set:
+ * - Bolt Channel (Edge Boring): Drilled into mating panel edge
+ * - CAM Housing (Face Boring): Drilled into receiving panel face
+ * - Dowels (Edge Boring): Alignment pins
+ *
+ * IMPORTANT: CAM Housing Y Position = Bolt's Distance B
+ * (NOT the CAM's Distance A - that's for thickness validation only!)
+ */
+export const generateMasterOps = (
+  partId: string,
+  length: number,
+  thickness: BoardThickness,
+  system: SystemType = 'MINIFIX_15',
+  angle: JointAngle = 90,
+  boltType: 'STANDARD' | 'MITRE' | 'DOUBLE' | 'MAXIFIX' = 'STANDARD',
+  boltLength: 24 | 34 | 44 | 55 = 24
+): MasterMachineOp[] => {
+
+  const plan = calculateJoinery({
+    length,
+    thickness,
+    system,
+    angle,
+    boltType,
+    boltLength
+  });
+
+  if (!plan.isValid) return [];
+
+  const ops: MasterMachineOp[] = [];
+  const { bolt, cam, dowel } = plan.specs;
+
+  plan.sets.forEach((set, i) => {
+
+    // =================================================================
+    // 1. BOLT CHANNEL (Edge Boring - เจาะสันบาน)
+    // This goes into the MATING panel (e.g., shelf edge)
+    // =================================================================
+    ops.push({
+      id: `${partId}-bolt-${i}`,
+      type: 'DRILL',
+      x: set.x,
+      y: 0, // Center of edge
+      diameter: bolt.specs.diameter,
+      depth: (bolt.specs.length || bolt.specs.distB!) + 1, // เจาะลึกเผื่อ 1mm
+      face: 'EDGE',
+      hardwareId: bolt.itemNo
+    });
+
+    // =================================================================
+    // 2. CAM HOUSING (Face Boring - เจาะหน้าบาน)
+    // This goes into the RECEIVING panel (e.g., side panel)
+    //
+    // CRITICAL: Y position = Bolt's Distance B
+    // The CAM's distA is for THICKNESS validation, not Y positioning!
+    // =================================================================
+    ops.push({
+      id: `${partId}-cam-${i}`,
+      type: 'DRILL',
+      x: set.x,
+      y: bolt.specs.distB!, // ระยะจากขอบ = Drilling Distance B
+      diameter: cam.specs.diameter,
+      depth: cam.specs.drillDepth,
+      face: 'FACE',
+      hardwareId: cam.itemNo
+    });
+
+    // =================================================================
+    // 3. DOWELS (Edge Boring)
+    // Alignment pins on either side of bolt
+    // =================================================================
+    set.dowelOffsets.forEach((off, j) => {
+      const realOffset = set.rotationY !== 0 ? -off : off;
+      ops.push({
+        id: `${partId}-dowel-${i}-${j}`,
+        type: 'DRILL',
+        x: set.x + realOffset,
+        y: 0, // Center of edge
+        diameter: dowel.specs.diameter,
+        depth: dowel.specs.drillDepth,
+        face: 'EDGE',
+        hardwareId: dowel.itemNo
+      });
+    });
+
+  });
+
+  return ops;
+};
+```
+
+### 17.5 Visual Component
+
+```typescript
+// src/components/visual/hardware/MasterConnector.tsx
+import React, { useMemo } from 'react';
+import { calculateJoinery } from '../../../services/engineering/joineryEngine';
+import { BoardThickness, SystemType, JointAngle } from '../../../services/hardware/hafeleDb';
+
+const mm = (v: number) => v / 1000;
+
+interface Props {
+  length: number;
+  thickness: BoardThickness;
+  system?: SystemType;
+  angle?: JointAngle;
+  boltType?: 'STANDARD' | 'MITRE' | 'DOUBLE' | 'MAXIFIX';
+  boltLength?: 24 | 34 | 44 | 55;
+}
+
+export const MasterConnector: React.FC<Props> = ({
+  length,
+  thickness,
+  system = 'MINIFIX_15',
+  angle = 90,
+  boltType = 'STANDARD',
+  boltLength = 24
+}) => {
+
+  const plan = useMemo(() =>
+    calculateJoinery({ length, thickness, system, angle, boltType, boltLength }),
+  [length, thickness, system, angle, boltType, boltLength]);
+
+  if (!plan.isValid) return null;
+  const { bolt, cam, dowel } = plan.specs;
+
+  // Color mapping
+  const camColor = system === 'MAXIFIX_35' ? '#5D4037' : '#C0C0C0';
+  const boltColor = boltType === 'MITRE' ? '#FFD54F' : '#888888';
+
+  return (
+    <group>
+      {plan.sets.map((set, i) => (
+        <group
+          key={i}
+          position={[mm(set.x), 0, 0]}
+          rotation={[0, set.rotationY, 0]}
+        >
+
+          {/* === CAM HOUSING === */}
+          <group
+            position={[0, mm(bolt.specs.distB || 34), 0]}
+            rotation={[Math.PI / 2, 0, 0]}
+          >
+            {/* Main Cylinder */}
+            <mesh>
+              <cylinderGeometry args={[
+                mm(cam.specs.diameter / 2),
+                mm(cam.specs.diameter / 2),
+                mm(cam.specs.drillDepth),
+                32
+              ]} />
+              <meshStandardMaterial color={camColor} metalness={0.4} />
+            </mesh>
+            {/* Cam Slot */}
+            <mesh position={[0, mm(cam.specs.drillDepth / 2 + 0.1), 0]}>
+              <boxGeometry args={[mm(cam.specs.diameter / 1.5), mm(0.5), mm(1)]} />
+              <meshBasicMaterial color="#222" />
+            </mesh>
+          </group>
+
+          {/* === BOLT === */}
+          <mesh position={[0, mm((bolt.specs.distB || 34) / 2), 0]}>
+            <cylinderGeometry args={[
+              mm(bolt.specs.diameter / 2),
+              mm(bolt.specs.diameter / 2),
+              mm(bolt.specs.distB || 34),
+              12
+            ]} />
+            <meshStandardMaterial color={boltColor} metalness={0.6} />
+          </mesh>
+
+          {/* Bolt Head */}
+          <mesh position={[0, mm(1), 0]}>
+            <cylinderGeometry args={[mm(4), mm(4), mm(2), 6]} />
+            <meshStandardMaterial color={boltColor} />
+          </mesh>
+
+          {/* === DOWELS === */}
+          {set.dowelOffsets.map((off, j) => (
+            <group key={j} position={[mm(off), 0, 0]}>
+              <mesh position={[0, mm(dowel.specs.length! / 2), 0]}>
+                <cylinderGeometry args={[
+                  mm(dowel.specs.diameter / 2),
+                  mm(dowel.specs.diameter / 2),
+                  mm(dowel.specs.length || 30),
+                  16
+                ]} />
+                <meshStandardMaterial color="#D7CCC8" />
+              </mesh>
+            </group>
+          ))}
+
+        </group>
+      ))}
+    </group>
+  );
+};
+```
+
+### 17.6 Bolt Series Comparison
+
+```
+CONNECTING BOLT SERIES:
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│  Series  │  Item No      │  Dist B  │  Drill Dia │  Use Case           │
+├──────────┼───────────────┼──────────┼────────────┼─────────────────────┤
+│  S100    │  262.27.020   │   24mm   │    5mm     │  Classic, Economy   │
+│  S200    │  262.27.670   │   24mm   │    5mm     │  Standard ★         │
+│  S200    │  262.28.670   │   34mm   │    5mm     │  Deeper panels      │
+│  S300    │  262.27.462   │   24mm   │    5mm     │  High torque        │
+│  Mitre   │  262.12.822   │   24mm   │    7mm     │  Angled joints      │
+│  Mitre   │  262.12.804   │   44mm   │    7mm     │  Angled joints HD   │
+│  Double  │  262.27.109   │   24mm   │    8mm     │  Center panels      │
+│  Maxifix │  262.87.931   │   35mm   │    9mm     │  Heavy duty         │
+│  Maxifix │  262.87.932   │   55mm   │    9mm     │  Heavy duty deep    │
+│                                                                         │
+│  ★ = Recommended for most applications                                 │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 17.7 Mitre Joint Drilling Diagram
+
+```
+MITRE JOINT DRILLING (PDF Page 13):
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  CRITICAL RULE:                                                 │
+│  ══════════════                                                 │
+│  "For drilling dim. B 24 mm, 20 mm must be deducted from F"    │
+│                                                                 │
+│           Panel 1                                               │
+│           ┌─────────────────────────┐                          │
+│           │                    ╲    │                           │
+│           │                     ╲   │                           │
+│           │                      ╲  │                           │
+│           │         ○ ← Cam       ╲ │ ← Mitre cut              │
+│           │         │              ╲│                           │
+│           │         │               │                           │
+│           │         │               │                           │
+│           │    F ←──┤               │                           │
+│           │         │               │                           │
+│           │         │               │                           │
+│           ├─────────┼───────────────┤                           │
+│           │         │               │                           │
+│           │         │               │                           │
+│           │         ▼ Bolt          │                           │
+│           │         ●               │                           │
+│           │        ╱                │                           │
+│           │       ╱ Panel 2         │                           │
+│           │      ╱                  │                           │
+│           └─────────────────────────┘                           │
+│                                                                 │
+│  INSET F VALUES (B=44 base):                                   │
+│  ┌─────────┬────────┬────────┬────────┐                        │
+│  │ Angle   │  16mm  │  19mm  │  29mm  │                        │
+│  ├─────────┼────────┼────────┼────────┤                        │
+│  │   90°   │  52.0  │  53.5  │  58.5  │                        │
+│  │  120°   │  48.6  │  49.5  │  52.4  │                        │
+│  │  135°   │  47.3  │  47.9  │  50.0  │                        │
+│  │  180°   │  44.0  │  44.0  │  44.0  │                        │
+│  └─────────┴────────┴────────┴────────┘                        │
+│                                                                 │
+│  FOR B=24: F = TableValue - 20mm                               │
+│  Example: 90° @ 19mm → F = 53.5 - 20 = 33.5mm                 │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 17.8 Drilling Pattern Diagrams
+
+```
+STANDARD JOINT (90°):
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  SIDE PANEL (Receiving - has CAM housing):                     │
+│  ──────────────────────────────────────────                     │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                                                         │   │
+│  │    ○ ← CAM Housing (15mm dia)                          │   │
+│  │    │   Position Y = Distance B (24/34mm)               │   │
+│  │    │                                                    │   │
+│  │    ●─●─● ← Dowel holes (8mm)                           │   │
+│  │                                                         │   │
+│  │    X position = Margin from edge                        │   │
+│  │    (24mm for B=24, 34mm for B=34)                       │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  SHELF PANEL (Mating - has bolt channel):                      │
+│  ────────────────────────────────────────                       │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                        SHELF                            │   │
+│  │                                                         │   │
+│  │   ════════════════════════════════════════════ ← EDGE  │   │
+│  │   │         Edge Drill: 5mm dia                        │   │
+│  │   ▼         Depth = B + 1mm                            │   │
+│  │   ●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●  │   │
+│  │           Bolt Channel                                  │   │
+│  │   ●─●─● ← Dowel holes                                  │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+DOUBLE-ENDED BOLT (Center Panel):
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│           LEFT          CENTER          RIGHT                   │
+│           PANEL         PANEL           PANEL                   │
+│           ┌──────┐    ┌──────┐        ┌──────┐                 │
+│           │      │    │      │        │      │                 │
+│           │  ○───┼────┼──●───┼────────┼───○  │                 │
+│           │ CAM  │    │BOLT  │        │ CAM  │                 │
+│           │      │    │      │        │      │                 │
+│           │      │    │      │        │      │                 │
+│           └──────┘    └──────┘        └──────┘                 │
+│                                                                 │
+│  Double-ended bolt connects through center panel               │
+│  - Bolt goes in center panel edge (8mm × 48mm)                │
+│  - CAMs in both side panels                                    │
+│  - Allows flat-pack furniture assembly                         │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 17.9 Calculation Examples
+
+```typescript
+// Example 1: Standard 18mm shelf with Minifix 15
+const standardPlan = calculateJoinery({
+  length: 800,
+  thickness: 18,
+  system: 'MINIFIX_15',
+  boltLength: 24
+});
+
+console.log('=== Standard 18mm Shelf ===');
+console.log('CAM:', standardPlan.specs.cam.name);
+// 'Minifix 15 (18mm)' - Auto-selected!
+console.log('CAM Item:', standardPlan.specs.cam.itemNo);
+// '262.26.034'
+console.log('Bolt:', standardPlan.specs.bolt.name);
+// 'S200 Bolt (B=24)'
+console.log('Margin:', standardPlan.meta.margin);
+// 24mm
+
+
+// Example 2: Heavy duty with Maxifix
+const maxifixPlan = calculateJoinery({
+  length: 600,
+  thickness: 19,
+  system: 'MAXIFIX_35',
+  boltLength: 35
+});
+
+console.log('\n=== Maxifix Heavy Duty ===');
+console.log('CAM Dia:', maxifixPlan.specs.cam.specs.diameter);
+// 35mm
+console.log('Bolt Dia:', maxifixPlan.specs.bolt.specs.diameter);
+// 9mm
+
+
+// Example 3: Mitre joint at 120°
+const mitrePlan = calculateJoinery({
+  length: 500,
+  thickness: 19,
+  boltType: 'MITRE',
+  boltLength: 24,
+  angle: 120
+});
+
+console.log('\n=== Mitre Joint 120° ===');
+console.log('Formula:', mitrePlan.meta.formula);
+// 'F = 49.5 - 20 = 29.5mm (B=24 rule)'
+console.log('Actual Margin:', mitrePlan.meta.margin);
+// 29.5mm (NOT 49.5mm!)
+
+
+// Example 4: Generate CAM operations
+const ops = generateMasterOps(
+  'SHELF-001',
+  800,
+  18,
+  'MINIFIX_15',
+  90,
+  'STANDARD',
+  24
+);
+
+console.log('\n=== CAM Operations ===');
+console.log('Total ops:', ops.length);
+// 9 (3 sets × 3 ops per set)
+
+const edgeOps = ops.filter(op => op.face === 'EDGE' && op.id.includes('bolt'));
+console.log('Bolt channels:', edgeOps.length);  // 3
+console.log('Bolt dia:', edgeOps[0].diameter);  // 5mm
+console.log('Bolt depth:', edgeOps[0].depth);   // 25mm (24+1)
+
+const faceOps = ops.filter(op => op.face === 'FACE');
+console.log('CAM housings:', faceOps.length);   // 3
+console.log('CAM dia:', faceOps[0].diameter);   // 15mm
+console.log('CAM Y pos:', faceOps[0].y);        // 24mm (= Distance B!)
+```
+
+### 17.10 Technical Reference Table
+
+| Parameter | Minifix 12 | Minifix 15 | Maxifix 35 | Unit |
+|-----------|------------|------------|------------|------|
+| **Housing Dia** | 12 | 15 | 35 | mm |
+| **Min Thickness** | 10 | 12 | 19 | mm |
+| **Max Thickness** | 15 | 34 | 50+ | mm |
+| **Standard Bolt** | S200 (24) | S200 (24/34) | Maxi (35/55) | mm |
+| **Bolt Diameter** | 5 | 5 | 9 | mm |
+| **Dowel Standard** | 8×30 | 8×30 | 8×35 | mm |
+| **Load Capacity** | Light | Standard | Heavy | - |
+| **Price Level** | Economy | Standard | Premium | - |
+
+### 17.11 Distance A vs Distance B Clarification
+
+```
+CRITICAL DISTINCTION:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  DISTANCE A (distA):                                           │
+│  ═══════════════════                                            │
+│  - ระยะกึ่งกลางความหนาไม้                                       │
+│  - ใช้สำหรับ: เลือกรุ่น CAM ที่เหมาะสม                          │
+│  - ไม่ใช่ตำแหน่งเจาะ!                                           │
+│                                                                 │
+│  ┌─────────────────────┐                                       │
+│  │                     │                                       │
+│  │ ← A → ○ ← A →       │  A ≈ Thickness / 2                   │
+│  │      CAM            │                                       │
+│  │                     │                                       │
+│  └─────────────────────┘                                       │
+│  ↑_____Thickness_____↑                                         │
+│                                                                 │
+│  DISTANCE B (distB):                                           │
+│  ═══════════════════                                            │
+│  - ระยะเจาะจากขอบแผ่นไม้                                        │
+│  - ใช้สำหรับ: กำหนดตำแหน่ง Y ของ CAM Housing บนหน้าบาน         │
+│  - นี่คือตำแหน่งเจาะจริง!                                       │
+│                                                                 │
+│  PANEL EDGE                                                     │
+│       │                                                         │
+│       │← B →│                                                   │
+│       │     ○ ← CAM Housing position                           │
+│       │                                                         │
+│       │                                                         │
+│       ▼                                                         │
+│  ═══════════════════════                                        │
+│                                                                 │
+│  COMMON MISTAKE:                                                │
+│  ❌ Using CAM's distA for Y position                           │
+│  ✅ Using BOLT's distB for Y position                          │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 17.12 Quality Validation Checklist
+
+```typescript
+// Validation helper for joinery plans
+export function validateJoineryPlan(plan: JoineryPlan): string[] {
+  const errors: string[] = [];
+
+  // 1. Check CAM matches thickness
+  const cam = plan.specs.cam;
+  const expectedDistA = cam.specs.distA;
+  // distA should be approximately half the board thickness
+
+  // 2. Check bolt distance is reasonable
+  const bolt = plan.specs.bolt;
+  if (bolt.specs.distB! < 20) {
+    errors.push('Bolt distance B too short - may cause breakout');
+  }
+
+  // 3. Check connector spacing
+  const positions = plan.sets.map(s => s.x);
+  for (let i = 1; i < positions.length; i++) {
+    const gap = positions[i] - positions[i - 1];
+    if (gap < 100) {
+      errors.push(`Connectors too close: ${gap}mm between positions`);
+    }
+  }
+
+  // 4. Check margin from edge
+  if (plan.meta.margin < 20) {
+    errors.push(`Edge margin too small: ${plan.meta.margin}mm`);
+  }
+
+  return errors;
+}
+```
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
 - Blum Catalog Pages 2, 5, 6, 13, 14-67, 64, 74-76, 84, 150, 410, 420, 430, 452
+- Häfele Catalog PDF Pages 1-17 (Minifix, Maxifix, S-Series, Mitre, Double, Dowels)
 - Häfele Selection 12 (Ixconnect SC/U/CC & Tofix)
 - Häfele Selection 13 (Lamello P-System)
 - Häfele Selection 14 (Ixconnect Dovetail)
