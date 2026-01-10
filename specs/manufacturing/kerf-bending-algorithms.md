@@ -8,6 +8,14 @@
 
 ---
 
+> **Cross-References:**
+> - [Formula Reference](../reference/formula-reference.md) - Kerf width values (§2) - clarifies kerf width differences
+> - [Cross-Reference Index](../reference/cross-reference-index.md) - Document navigation
+> - [Cut Optimization Algorithms](./cut-optimization-algorithms.md) - Sheet nesting (include kerf waste)
+> - [Parametric Cabinet Calculations](../technical/parametric-cabinet-calculations.md) - Curved component design
+
+---
+
 ## บทคัดย่อผู้บริหาร (Executive Summary)
 
 รายงานนี้เป็นคู่มืออ้างอิงทางวิศวกรรมสำหรับการพัฒนา **ระบบ Kerf Bending** ภายในองค์กร ครอบคลุม:

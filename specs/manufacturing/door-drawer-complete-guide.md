@@ -8,6 +8,17 @@
 
 ---
 
+> **Cross-References:**
+> - [Master Hardware Database](../reference/master-hardware-database.md) - Hardware SKUs & specifications (Single Source of Truth)
+> - [Formula Reference](../reference/formula-reference.md) - Calculation formulas (resolves drawer width conflict)
+> - [Cross-Reference Index](../reference/cross-reference-index.md) - Document navigation
+> - [Hardware Drilling Specifications](./hardware-drilling-specifications.md) - Drilling patterns for hardware
+> - [Parametric Cabinet Calculations](../technical/parametric-cabinet-calculations.md) - Cabinet dimensions
+>
+> **Important:** สำหรับสูตร Drawer Width ที่ถูกต้อง ดู [Formula Reference §1](../reference/formula-reference.md) ซึ่งอธิบายความแตกต่างระหว่าง 42mm (MOVENTO/TANDEM) vs 26mm (Standard)
+
+---
+
 ## บทนำ (Introduction)
 
 เอกสารนี้เป็นคู่มือทางวิศวกรรมสำหรับ **ระบบประตูและลิ้นชัก** ครอบคลุมการคำนวณขนาด, การเลือกอุปกรณ์, และการส่งออกไปยัง CNC

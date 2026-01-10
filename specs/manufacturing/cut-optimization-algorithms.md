@@ -8,6 +8,14 @@
 
 ---
 
+> **Cross-References:**
+> - [Formula Reference](../reference/formula-reference.md) - Kerf width clarification (§2)
+> - [Cross-Reference Index](../reference/cross-reference-index.md) - Document navigation
+> - [Parametric Cabinet Calculations](../technical/parametric-cabinet-calculations.md) - Cutlist source
+> - [Kerf Bending Algorithms](./kerf-bending-algorithms.md) - Curved panel waste
+
+---
+
 ## บทนำ (Introduction)
 
 เอกสารนี้อธิบาย **อัลกอริทึมการจัดเรียงการตัดแผ่นวัสดุ (Cut Optimization / Nesting)** สำหรับการผลิตเฟอร์นิเจอร์ เป้าหมายคือการลดเศษวัสดุ (waste) ให้น้อยที่สุด พร้อมทั้งคำนึงถึงข้อจำกัดของเครื่อง CNC

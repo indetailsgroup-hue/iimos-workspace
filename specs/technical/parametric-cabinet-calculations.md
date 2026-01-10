@@ -8,6 +8,17 @@
 
 ---
 
+> **Cross-References:**
+> - [Master Hardware Database](../reference/master-hardware-database.md) - Hardware SKUs & specifications
+> - [Formula Reference](../reference/formula-reference.md) - Consolidated calculation formulas
+> - [Cross-Reference Index](../reference/cross-reference-index.md) - Document navigation
+> - [Hardware Drilling Specifications](../manufacturing/hardware-drilling-specifications.md) - Drilling patterns
+> - [Door & Drawer Complete Guide](../manufacturing/door-drawer-complete-guide.md) - Door/Drawer engineering
+> - [Cut Optimization Algorithms](../manufacturing/cut-optimization-algorithms.md) - Sheet nesting
+> - [Kerf Bending Algorithms](../manufacturing/kerf-bending-algorithms.md) - Curved panels
+
+---
+
 ## บทนำ (Introduction)
 
 เอกสารนี้เป็นคู่มืออ้างอิงทางวิศวกรรมสำหรับการคำนวณขนาดชิ้นส่วนตู้เฟอร์นิเจอร์ในระบบพารามิเตอร์ ครอบคลุมสูตรคำนวณ อัลกอริทึม และตรรกะการตัดสินใจที่จำเป็นสำหรับการผลิตที่แม่นยำ

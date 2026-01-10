@@ -8,6 +8,15 @@
 
 ---
 
+> **Cross-References:**
+> - [Master Hardware Database](../reference/master-hardware-database.md) - Hardware SKUs & specifications (Single Source of Truth)
+> - [Formula Reference](../reference/formula-reference.md) - Calculation formulas
+> - [Cross-Reference Index](../reference/cross-reference-index.md) - Document navigation
+> - [Door & Drawer Complete Guide](./door-drawer-complete-guide.md) - Door/Drawer engineering
+> - [Parametric Cabinet Calculations](../technical/parametric-cabinet-calculations.md) - Cabinet dimensions
+
+---
+
 ## บทนำ (Introduction)
 
 เอกสารนี้เป็นคู่มืออ้างอิงทางวิศวกรรมสำหรับ **ระบบอุปกรณ์ตู้ (Hardware Systems)** และ **รูปแบบการเจาะ (Drilling Patterns)** ที่ใช้ในการผลิตตู้เฟอร์นิเจอร์ ครอบคลุมข้อมูลทางเทคนิคที่จำเป็นสำหรับการออกแบบ การคำนวณ และการส่งออกไฟล์ CNC
