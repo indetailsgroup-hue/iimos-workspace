@@ -8606,6 +8606,705 @@ DOWEL SELECTION GUIDE:
 
 ---
 
+## ส่วนที่ 19: Minifix Universal System - Consolidated Implementation (Architecture v4.0 Refactor)
+
+ส่วนนี้รวบรวม **Implementation Pattern** สำหรับระบบ Minifix & Dowel แบบครบวงจร โดยยึดหลักการ:
+
+1. **Engine as Truth**: Logic การวางตำแหน่งและการคำนวณอยู่ที่ Service Layer เท่านั้น
+2. **Visual as Consumer**: Component 3D รับผลลัพธ์มา Render ห้ามคำนวณเอง
+3. **CAM Completeness**: สร้าง Operation ครบถ้วน (Face Boring + Edge Boring)
+4. **Guard Rails**: มี Validation Result ส่งออกไปให้ Gate ตรวจสอบ
+
+### 19.1 Data Layer - Hardware Specification
+
+```typescript
+// src/services/hardware/hafeleDb.ts
+// Spec Lock: ห้าม Hardcode ตัวเลขใน Logic - ดึงจาก DB เท่านั้น
+
+export type BoltVariant = 'B24' | 'B34';
+export type BoardThickness = 16 | 19;
+
+// Contract สำหรับ Spec สินค้า
+export interface HardwareItem {
+  id: string;
+  itemNo: string;
+  name: string;
+  params: {
+    drillDepth: number;   // ความลึกเจาะ
+    diameter: number;     // ขนาดดอกสว่าน
+    length?: number;      // ความยาวตัวสินค้า (Visual)
+    sleeveH?: number;     // ความสูงปลอก (B34)
+    distA?: number;       // ระยะเจาะ Face Boring (Cam)
+  };
+}
+
+export const HAFELE_CATALOG = {
+  // =================================================================
+  // S200 Connecting Bolts
+  // =================================================================
+  bolts: {
+    B24: {
+      id: "bolt_b24",
+      itemNo: "262.27.670",
+      name: "S200 Econo S Bolt (B=24mm)",
+      params: { length: 24, drillDepth: 11, diameter: 5, sleeveH: 0 }
+    } as HardwareItem,
+    B34: {
+      id: "bolt_b34",
+      itemNo: "262.28.670",
+      name: "S200 Econo S Bolt (B=34mm)",
+      params: { length: 34, drillDepth: 11, diameter: 5, sleeveH: 10 }
+    } as HardwareItem
+  },
+
+  // =================================================================
+  // Minifix 15 Cams
+  // =================================================================
+  cams: {
+    t16: {
+      id: "cam_16mm",
+      itemNo: "262.26.033",
+      name: "Minifix 15 Cam (For 16mm)",
+      params: { drillDepth: 12.5, diameter: 15, distA: 8.0 }
+    } as HardwareItem,
+    t19: {
+      id: "cam_19mm",
+      itemNo: "262.26.035",
+      name: "Minifix 15 Cam (For 19mm)",
+      params: { drillDepth: 14.0, diameter: 15, distA: 9.5 }
+    } as HardwareItem
+  },
+
+  // =================================================================
+  // Wood Dowels
+  // =================================================================
+  dowels: {
+    standard: {
+      id: "dowel_8x30",
+      itemNo: "267.83.230",
+      name: "Wood Dowel 8x30mm (Fluted)",
+      params: { length: 30, drillDepth: 15, diameter: 8 }
+    } as HardwareItem
+  }
+};
+```
+
+### 19.2 Engineering Engine - Logic Core
+
+```typescript
+// src/services/engineering/joineryEngine.ts
+// Deterministic Resolver: คำนวณตำแหน่งเจาะและส่ง isValid ให้ Gate
+
+import { HAFELE_CATALOG, BoltVariant, BoardThickness, HardwareItem } from '../hardware/hafeleDb';
+
+export interface FittingSet {
+  x: number;              // ตำแหน่งแกน X บนแผ่น
+  rotationY: number;      // 0 หรือ PI (Visual/Machine Orientation)
+  dowelOffsets: number[]; // ตำแหน่ง Dowel เทียบกับ Bolt (+/- 32)
+}
+
+export interface JoineryPlan {
+  sets: FittingSet[];
+  specs: {
+    bolt: HardwareItem;
+    cam: HardwareItem;
+    dowel: HardwareItem;
+  };
+  isValid: boolean;
+  issues: string[]; // ส่งเข้า Report Bundle (A6)
+}
+
+/**
+ * Calculate Minifix joinery plan
+ *
+ * Layout Constants:
+ * - MARGIN_TO_BOLT: 35mm from panel edge to bolt center
+ * - BOLT_TO_DOWEL: 32mm from bolt to dowel (System 32)
+ *
+ * Placement Rules:
+ * - Left set: x = 35mm
+ * - Right set: x = length - 35mm (rotated 180°)
+ * - Center set: x = length / 2 (only if length > 400mm)
+ */
+export const calculateMinifixPlan = (
+  panelLength: number,
+  variant: BoltVariant = 'B24',
+  thickness: BoardThickness = 19
+): JoineryPlan => {
+
+  const sets: FittingSet[] = [];
+  const issues: string[] = [];
+  let isValid = true;
+
+  // =================================================================
+  // VALIDATION (Gate A5.G)
+  // =================================================================
+  if (panelLength < 100) {
+    isValid = false;
+    issues.push(`Panel length ${panelLength}mm is too short for Minifix (min 100mm)`);
+  }
+
+  // =================================================================
+  // CONSTANTS
+  // =================================================================
+  const MARGIN_TO_BOLT = 35;
+  const BOLT_TO_DOWEL = 32;
+
+  // =================================================================
+  // PLACEMENT LOGIC
+  // =================================================================
+  if (isValid) {
+    // LEFT SET
+    sets.push({
+      x: MARGIN_TO_BOLT,
+      dowelOffsets: [BOLT_TO_DOWEL], // Dowel อยู่ด้านใน (+32)
+      rotationY: 0
+    });
+
+    // RIGHT SET
+    sets.push({
+      x: panelLength - MARGIN_TO_BOLT,
+      dowelOffsets: [BOLT_TO_DOWEL], // เมื่อหมุน 180° +32 จะชี้เข้ากลาง
+      rotationY: Math.PI
+    });
+
+    // CENTER SET (Rule: > 400mm)
+    if (panelLength > 400) {
+      sets.push({
+        x: panelLength / 2,
+        dowelOffsets: [-BOLT_TO_DOWEL, BOLT_TO_DOWEL], // ประกบ 2 ข้าง
+        rotationY: 0
+      });
+    }
+  }
+
+  return {
+    sets,
+    specs: {
+      bolt: HAFELE_CATALOG.bolts[variant],
+      cam: thickness === 16 ? HAFELE_CATALOG.cams.t16 : HAFELE_CATALOG.cams.t19,
+      dowel: HAFELE_CATALOG.dowels.standard
+    },
+    isValid,
+    issues
+  };
+};
+```
+
+### 19.3 Visual Layer - Consumer Component
+
+```typescript
+// src/components/visual/hardware/MinifixSystem.tsx
+// Consumer: แสดงผล 3D ตาม Plan ที่ได้รับ - ห้ามมี Logic คำนวณ
+
+import React, { useMemo } from 'react';
+import { calculateMinifixPlan } from '../../../services/engineering/joineryEngine';
+import { BoltVariant, BoardThickness } from '../../../services/hardware/hafeleDb';
+
+const mm = (v: number) => v / 1000;
+
+interface Props {
+  length: number;
+  jointType: 'OVERLAY' | 'INSET';
+  position: 'TOP' | 'BOTTOM';
+  variant?: BoltVariant;
+  thickness?: BoardThickness;
+}
+
+export const MinifixSystem: React.FC<Props> = ({
+  length,
+  jointType,
+  position,
+  variant = 'B24',
+  thickness = 19
+}) => {
+  // =================================================================
+  // 1. RESOLVE PLAN (Single Source of Truth)
+  // =================================================================
+  const plan = useMemo(() =>
+    calculateMinifixPlan(length, variant, thickness),
+  [length, variant, thickness]);
+
+  if (!plan.isValid) return null;
+
+  const { bolt, cam, dowel } = plan.specs;
+
+  // =================================================================
+  // 2. VISUAL ORIENTATION MAPPING
+  // =================================================================
+  const getGroupRotation = () => {
+    if (jointType === 'OVERLAY') {
+      // Bolt ตั้งฉาก (Vertical)
+      return position === 'TOP' ? [Math.PI, 0, 0] : [0, 0, 0];
+    } else {
+      // Bolt นอนราบ (Inset)
+      return [0, 0, -Math.PI / 2];
+    }
+  };
+
+  return (
+    <group>
+      {plan.sets.map((set, i) => (
+        <group
+          key={i}
+          position={[mm(set.x), 0, 0]}
+          rotation={getGroupRotation() as any}
+        >
+          <group rotation={[0, set.rotationY, 0]}>
+
+            {/* === BOLT GROUP === */}
+            <group>
+              {/* Bolt Shaft */}
+              <mesh position={[0, mm(bolt.params.length! / 2), 0]}>
+                <cylinderGeometry args={[
+                  mm(3.5), mm(3.5), mm(bolt.params.length!), 16
+                ]} />
+                <meshStandardMaterial color="#888" metalness={0.7} />
+              </mesh>
+
+              {/* Cam Housing */}
+              <group
+                position={[0, mm(bolt.params.length!), 0]}
+                rotation={[Math.PI / 2, 0, 0]}
+              >
+                <mesh>
+                  <cylinderGeometry args={[
+                    mm(7.5), mm(7.5), mm(cam.params.drillDepth), 32
+                  ]} />
+                  <meshStandardMaterial color="#C0C0C0" metalness={0.5} />
+                </mesh>
+                {/* Cam Slot */}
+                <mesh
+                  position={[0, mm(cam.params.drillDepth / 2 + 0.1), 0]}
+                  rotation={[0, 0, Math.PI / 4]}
+                >
+                  <boxGeometry args={[mm(8), mm(0.5), mm(1.5)]} />
+                  <meshBasicMaterial color="#333" />
+                </mesh>
+              </group>
+
+              {/* Sleeve (B34 only) */}
+              {bolt.params.sleeveH! > 0 && (
+                <mesh position={[0, mm(bolt.params.length! - 15), 0]}>
+                  <cylinderGeometry args={[mm(4.5), mm(4.5), mm(10), 16]} />
+                  <meshStandardMaterial color="#D32F2F" />
+                </mesh>
+              )}
+            </group>
+
+            {/* === DOWEL GROUP === */}
+            {set.dowelOffsets.map((offset, j) => (
+              <group key={j} position={[mm(offset), 0, 0]}>
+                <mesh position={[0, mm(15), 0]}>
+                  <cylinderGeometry args={[
+                    mm(4), mm(4), mm(30), 16
+                  ]} />
+                  <meshStandardMaterial color="#D7CCC8" />
+                </mesh>
+              </group>
+            ))}
+
+          </group>
+        </group>
+      ))}
+    </group>
+  );
+};
+```
+
+### 19.4 CAM Pipeline - Operation Generator
+
+```typescript
+// src/services/cam/generators/minifixOpGenerator.ts
+// แปลง Plan เป็น Machine Operations
+
+import { calculateMinifixPlan, JoineryPlan } from '../../engineering/joineryEngine';
+import { BoltVariant, BoardThickness } from '../../hardware/hafeleDb';
+
+export interface DrillOperation {
+  id: string;
+  type: 'DRILL';
+  x: number;
+  y: number;
+  diameter: number;
+  depth: number;
+  face: 'FACE' | 'EDGE';
+  hardwareRef: string;
+}
+
+/**
+ * Generate CNC drilling operations for Minifix system
+ *
+ * Operations per set:
+ * - 1× Edge Boring (Bolt shaft)
+ * - 1× Face Boring (Cam housing)
+ * - N× Edge Boring (Dowels)
+ *
+ * GUARANTEE: Visual ตรงกับผลิตจริง 100% (ใช้ Engine เดียวกัน)
+ */
+export const generateMinifixOperations = (
+  partId: string,
+  length: number,
+  variant: BoltVariant,
+  thickness: BoardThickness
+): DrillOperation[] => {
+
+  // =================================================================
+  // 1. CALL SAME ENGINE AS VISUAL
+  // =================================================================
+  const plan = calculateMinifixPlan(length, variant, thickness);
+
+  if (!plan.isValid) {
+    // ส่ง Error เข้า Report Bundle
+    return [];
+  }
+
+  const ops: DrillOperation[] = [];
+  const { bolt, cam, dowel } = plan.specs;
+
+  plan.sets.forEach((set, i) => {
+    // =================================================================
+    // 2.1 EDGE BORING - Bolt Shaft
+    // =================================================================
+    ops.push({
+      id: `${partId}-bolt-${i}`,
+      type: 'DRILL',
+      x: set.x,
+      y: 0, // กึ่งกลางสันไม้
+      diameter: bolt.params.diameter,
+      depth: bolt.params.drillDepth,
+      face: 'EDGE',
+      hardwareRef: bolt.itemNo
+    });
+
+    // =================================================================
+    // 2.2 FACE BORING - Cam Housing
+    // Position: Same X as Bolt, Y = distA from edge
+    // =================================================================
+    ops.push({
+      id: `${partId}-cam-${i}`,
+      type: 'DRILL',
+      x: set.x,
+      y: cam.params.distA!, // 8.0mm (16mm) or 9.5mm (19mm)
+      diameter: cam.params.diameter,
+      depth: cam.params.drillDepth,
+      face: 'FACE',
+      hardwareRef: cam.itemNo
+    });
+
+    // =================================================================
+    // 2.3 EDGE BORING - Dowels
+    // =================================================================
+    set.dowelOffsets.forEach((offset, j) => {
+      // Calculate offset based on orientation
+      const realOffset = set.rotationY !== 0 ? -offset : offset;
+
+      ops.push({
+        id: `${partId}-dowel-${i}-${j}`,
+        type: 'DRILL',
+        x: set.x + realOffset,
+        y: 0,
+        diameter: dowel.params.diameter,
+        depth: dowel.params.drillDepth,
+        face: 'EDGE',
+        hardwareRef: dowel.itemNo
+      });
+    });
+  });
+
+  return ops;
+};
+```
+
+### 19.5 Architecture Diagram
+
+```
+MINIFIX UNIVERSAL SYSTEM - DATA FLOW:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│  ┌─────────────────┐                                                       │
+│  │  HAFELE_CATALOG │  ← Single Source of Truth (Spec Lock)                │
+│  │  (hafeleDb.ts)  │                                                       │
+│  └────────┬────────┘                                                       │
+│           │                                                                 │
+│           ▼                                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐           │
+│  │           JOINERY ENGINE (joineryEngine.ts)                  │           │
+│  │                                                              │           │
+│  │  Input: panelLength, variant, thickness                      │           │
+│  │                                                              │           │
+│  │  Output: JoineryPlan {                                       │           │
+│  │    sets: FittingSet[]                                        │           │
+│  │    specs: { bolt, cam, dowel }                               │           │
+│  │    isValid: boolean                                          │           │
+│  │    issues: string[]                                          │           │
+│  │  }                                                           │           │
+│  │                                                              │           │
+│  └────────────────────┬────────────────────────────┬────────────┘           │
+│                       │                            │                        │
+│           ┌───────────┴───────────┐    ┌───────────┴───────────┐           │
+│           ▼                       ▼    ▼                       ▼           │
+│  ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐    │
+│  │  VISUAL LAYER   │      │   CAM PIPELINE  │      │  VALIDATION     │    │
+│  │  (MinifixSystem │      │  (minifixOp     │      │  (Gate A5.G)    │    │
+│  │   .tsx)         │      │   Generator.ts) │      │                 │    │
+│  │                 │      │                 │      │  isValid →      │    │
+│  │  Consumes Plan  │      │  Converts Plan  │      │  issues →       │    │
+│  │  Renders 3D     │      │  to DrillOps    │      │  Report Bundle  │    │
+│  │                 │      │                 │      │                 │    │
+│  └─────────────────┘      └─────────────────┘      └─────────────────┘    │
+│           │                       │                        │               │
+│           ▼                       ▼                        ▼               │
+│     React Three           CNC Machine             User Feedback           │
+│     Fiber Canvas          Operations              / Error Display          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 19.6 Placement Rules Visual
+
+```
+MINIFIX PLACEMENT PATTERN:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  Panel Length = 600mm (Example)                                │
+│                                                                 │
+│  ←─────────────────── 600mm ───────────────────→               │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                                                         │   │
+│  │  ●──○     ←── Left Set (x=35mm)                        │   │
+│  │  35mm                                                   │   │
+│  │                                                         │   │
+│  │             ○──●──○  ←── Center Set (x=300mm)          │   │
+│  │             (only if length > 400mm)                    │   │
+│  │                                                         │   │
+│  │                                        ○──●  ←── Right Set  │
+│  │                                       565mm (rotated 180°)  │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ● = Bolt/Cam position                                         │
+│  ○ = Dowel position (+/- 32mm from bolt)                       │
+│                                                                 │
+│  CONSTANTS:                                                     │
+│  - MARGIN_TO_BOLT = 35mm                                       │
+│  - BOLT_TO_DOWEL = 32mm (System 32)                           │
+│  - CENTER_THRESHOLD = 400mm                                    │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+DRILLING OPERATIONS PER SET:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  For each FittingSet:                                          │
+│                                                                 │
+│  1. BOLT (Edge Boring)                                         │
+│     - Face: EDGE                                                │
+│     - X: set.x                                                  │
+│     - Y: 0 (center of edge)                                    │
+│     - Diameter: 5mm                                             │
+│     - Depth: 11mm                                               │
+│                                                                 │
+│  2. CAM (Face Boring)                                          │
+│     - Face: FACE                                                │
+│     - X: set.x                                                  │
+│     - Y: distA (8.0mm for 16mm, 9.5mm for 19mm)               │
+│     - Diameter: 15mm                                            │
+│     - Depth: 12.5mm (16mm) or 14.0mm (19mm)                   │
+│                                                                 │
+│  3. DOWELS (Edge Boring) × N                                   │
+│     - Face: EDGE                                                │
+│     - X: set.x + offset (adjusted for rotation)                │
+│     - Y: 0                                                      │
+│     - Diameter: 8mm                                             │
+│     - Depth: 15mm                                               │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 19.7 Usage Examples
+
+```typescript
+// =================================================================
+// Example 1: Generate plan for 600mm shelf
+// =================================================================
+const plan = calculateMinifixPlan(600, 'B24', 19);
+
+console.log('=== 600mm Shelf Plan ===');
+console.log('Valid:', plan.isValid);           // true
+console.log('Sets:', plan.sets.length);        // 3 (left, right, center)
+console.log('Bolt:', plan.specs.bolt.itemNo);  // '262.27.670'
+console.log('Cam:', plan.specs.cam.itemNo);    // '262.26.035' (19mm)
+
+plan.sets.forEach((set, i) => {
+  console.log(`Set ${i}: x=${set.x}mm, rotation=${set.rotationY}`);
+  console.log(`  Dowels at: ${set.dowelOffsets.map(o => set.x + o).join(', ')}mm`);
+});
+
+
+// =================================================================
+// Example 2: Short panel (no center set)
+// =================================================================
+const shortPlan = calculateMinifixPlan(350, 'B24', 16);
+
+console.log('\n=== 350mm Panel ===');
+console.log('Sets:', shortPlan.sets.length);   // 2 (left, right only)
+console.log('Cam:', shortPlan.specs.cam.itemNo); // '262.26.033' (16mm)
+
+
+// =================================================================
+// Example 3: Invalid panel (too short)
+// =================================================================
+const invalidPlan = calculateMinifixPlan(50, 'B24', 19);
+
+console.log('\n=== 50mm Invalid ===');
+console.log('Valid:', invalidPlan.isValid);    // false
+console.log('Issues:', invalidPlan.issues);    // ['Panel length 50mm is too short...']
+
+
+// =================================================================
+// Example 4: Generate CAM operations
+// =================================================================
+const ops = generateMinifixOperations('SHELF-001', 600, 'B24', 19);
+
+console.log('\n=== CAM Operations ===');
+console.log('Total:', ops.length);
+// 3 sets × (1 bolt + 1 cam + avg 1.33 dowels) ≈ 10 operations
+
+const faceOps = ops.filter(op => op.face === 'FACE');
+const edgeOps = ops.filter(op => op.face === 'EDGE');
+
+console.log('Face boring (Cam):', faceOps.length);  // 3
+console.log('Edge boring (Bolt+Dowel):', edgeOps.length);  // 7
+
+
+// =================================================================
+// Example 5: Visual component usage
+// =================================================================
+// <MinifixSystem
+//   length={600}
+//   jointType="OVERLAY"
+//   position="TOP"
+//   variant="B24"
+//   thickness={19}
+// />
+```
+
+### 19.8 Validation Gate
+
+```typescript
+// src/services/validation/joineryGate.ts
+
+import { JoineryPlan } from '../engineering/joineryEngine';
+
+export interface ValidationResult {
+  canProceed: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+/**
+ * Gate A5.G - Validate joinery plan before production
+ */
+export function validateJoineryPlan(plan: JoineryPlan): ValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // 1. Check basic validity
+  if (!plan.isValid) {
+    errors.push(...plan.issues);
+  }
+
+  // 2. Check minimum sets
+  if (plan.sets.length < 2) {
+    errors.push('Minimum 2 fitting sets required');
+  }
+
+  // 3. Check set spacing
+  if (plan.sets.length >= 2) {
+    const positions = plan.sets.map(s => s.x).sort((a, b) => a - b);
+    for (let i = 1; i < positions.length; i++) {
+      const gap = positions[i] - positions[i - 1];
+      if (gap < 100) {
+        warnings.push(`Sets ${i - 1} and ${i} are close: ${gap}mm gap`);
+      }
+      if (gap > 400) {
+        warnings.push(`Large gap between sets ${i - 1} and ${i}: ${gap}mm`);
+      }
+    }
+  }
+
+  // 4. Check hardware compatibility
+  const { bolt, cam, dowel } = plan.specs;
+  if (bolt.params.diameter > dowel.params.diameter) {
+    warnings.push('Bolt diameter larger than dowel - unusual configuration');
+  }
+
+  return {
+    canProceed: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+```
+
+### 19.9 Technical Reference
+
+| Component | Property | B24 (16mm) | B24 (19mm) | B34 (19mm) | Unit |
+|-----------|----------|------------|------------|------------|------|
+| **Bolt** | Length | 24 | 24 | 34 | mm |
+| **Bolt** | Drill Depth | 11 | 11 | 11 | mm |
+| **Bolt** | Diameter | 5 | 5 | 5 | mm |
+| **Bolt** | Sleeve | 0 | 0 | 10 | mm |
+| **Cam** | Drill Depth | 12.5 | 14.0 | 14.0 | mm |
+| **Cam** | Diameter | 15 | 15 | 15 | mm |
+| **Cam** | Distance A | 8.0 | 9.5 | 9.5 | mm |
+| **Dowel** | Length | 30 | 30 | 30 | mm |
+| **Dowel** | Drill Depth | 15 | 15 | 15 | mm |
+| **Dowel** | Diameter | 8 | 8 | 8 | mm |
+
+### 19.10 Key Principles Summary
+
+```
+ARCHITECTURE PRINCIPLES:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  1. ENGINE AS TRUTH                                            │
+│     ═══════════════                                             │
+│     - All placement logic in joineryEngine.ts                  │
+│     - No calculations in visual components                      │
+│     - CAM generator uses same engine                           │
+│                                                                 │
+│  2. VISUAL AS CONSUMER                                         │
+│     ═══════════════════                                         │
+│     - Components receive JoineryPlan                           │
+│     - Only render, never calculate                              │
+│     - useMemo for plan resolution                              │
+│                                                                 │
+│  3. CAM COMPLETENESS                                           │
+│     ═════════════════                                           │
+│     - Face boring: Cam housing                                  │
+│     - Edge boring: Bolt shaft + Dowels                         │
+│     - Hardware reference for BOM                                │
+│                                                                 │
+│  4. GUARD RAILS                                                │
+│     ═══════════                                                 │
+│     - isValid flag for gate checking                           │
+│     - issues array for error reporting                          │
+│     - Validation gate before production                         │
+│                                                                 │
+│  5. SPEC LOCK                                                  │
+│     ═════════                                                   │
+│     - All dimensions from HAFELE_CATALOG                       │
+│     - No hardcoded values in logic                              │
+│     - Easy to update when catalog changes                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
 - Blum Catalog Pages 2, 5, 6, 13, 14-67, 64, 74-76, 84, 150, 410, 420, 430, 452
