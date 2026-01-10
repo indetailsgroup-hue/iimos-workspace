@@ -882,6 +882,283 @@ const S_front = hingeProtrusion + 3 // เผื่อเพิ่ม 3mm
 
 ---
 
+## ส่วนที่ 6: การคำนวณต้นทุนและการเพิ่มประสิทธิภาพ (Cost Calculation & Optimization)
+
+### 6.1 สูตรคำนวณต้นทุนวัสดุ (Material Cost Calculation)
+
+การคำนวณต้นทุนต้องแยกตามเลเยอร์วัสดุ เพราะแต่ละส่วนมีหน่วยวัดและราคาต่างกัน
+
+#### สูตรต้นทุนต่อชิ้น (Cost per Panel)
+
+```typescript
+function calculatePanelCost(panel: PanelSpec): PanelCost {
+  // 1. คำนวณพื้นที่ตัด (ตารางเมตร)
+  const areaM2 = (panel.cutDimensions.width / 1000) *
+                 (panel.cutDimensions.depth / 1000)
+
+  // 2. ต้นทุน Core (ราคาต่อ m²)
+  const coreCost = areaM2 * panel.material.core.costPerSqm
+
+  // 3. ต้นทุน Surface (ถ้ามีการติด HPL/Veneer แยก)
+  let surfaceCost = 0
+  if (panel.material.surface.type !== "None" &&
+      panel.material.surface.type !== "Melamine") {
+    // HPL หรือ Veneer ติดทั้ง 2 ด้าน
+    surfaceCost = areaM2 * panel.material.surface.costPerSqm * 2
+  }
+
+  // 4. ต้นทุนขอบ (ราคาต่อเมตร)
+  const perimeter = 2 * (panel.cutDimensions.width + panel.cutDimensions.depth)
+  const edgeCost = calculateEdgeCost(panel.material.edgeBanding, perimeter)
+
+  // 5. ต้นทุนแรงงาน (Operation Cost)
+  const laborCost = calculateLaborCost(panel.operations)
+
+  return {
+    material: {
+      core: coreCost,
+      surface: surfaceCost,
+      edge: edgeCost
+    },
+    labor: laborCost,
+    total: coreCost + surfaceCost + edgeCost + laborCost
+  }
+}
+```
+
+#### การคำนวณต้นทุนขอบ (Edge Cost Calculation)
+
+```typescript
+function calculateEdgeCost(
+  edgeBanding: EdgeBandingSpec,
+  perimeter: number
+): number {
+  let totalEdgeLength = 0
+
+  // นับเฉพาะด้านที่มีการปิดขอบ
+  if (edgeBanding.front.type !== "None") {
+    totalEdgeLength += perimeter / 2 // สมมติว่าหน้าคือด้านกว้าง
+  }
+  if (edgeBanding.rear.type !== "None") {
+    totalEdgeLength += perimeter / 2
+  }
+  if (edgeBanding.left.type !== "None") {
+    totalEdgeLength += perimeter / 2
+  }
+  if (edgeBanding.right.type !== "None") {
+    totalEdgeLength += perimeter / 2
+  }
+
+  const edgeCostPerMeter = getEdgeCostPerMeter(edgeBanding.front.type)
+  return (totalEdgeLength / 1000) * edgeCostPerMeter
+}
+
+function getEdgeCostPerMeter(edgeType: string): number {
+  const priceMap: Record<string, number> = {
+    "PVC_0.5mm": 8,      // THB per meter
+    "PVC_1.0mm": 12,
+    "ABS_2.0mm": 25,
+    "Acrylic_3mm": 80
+  }
+  return priceMap[edgeType] || 0
+}
+```
+
+#### ตัวอย่างการคำนวณต้นทุน
+
+**แผ่นชั้น 800 × 520 × 18mm**
+```
+ขนาดตัด: 761 × 521.5mm
+พื้นที่: 0.397 m²
+
+ต้นทุน Core (PB 18mm @ 450 THB/m²):
+  = 0.397 × 450 = 178.65 THB
+
+ต้นทุนขอบ (PVC 1mm @ 12 THB/m):
+  ปิด 3 ด้าน: (761 + 521.5 + 521.5) / 1000 = 1.804 m
+  = 1.804 × 12 = 21.65 THB
+
+ต้นทุนแรงงาน (เลื่อย + ปิดขอบ):
+  = 15 + 20 = 35 THB
+
+รวมทั้งหมด: 178.65 + 21.65 + 35 = 235.30 THB
+```
+
+### 6.2 Cut Optimization (การจัดเรียงชิ้นงานบนแผ่นไม้)
+
+แผ่นไม้ขายเป็นแผ่นใหญ่ขนาดมาตรฐาน (เช่น 2440 × 1220mm) ต้องหาวิธีจัดชิ้นงานเล็กลงไปบนแผ่นใหญ่ให้เสียพื้นที่น้อยที่สุด
+
+#### อัลกอริทึม: Guillotine Cut
+
+```typescript
+interface Sheet {
+  width: number    // 2440mm
+  height: number   // 1220mm
+  material: string
+}
+
+interface CutPiece {
+  width: number
+  height: number
+  quantity: number
+  partId: string
+}
+
+function optimizeCutLayout(
+  pieces: CutPiece[],
+  sheet: Sheet
+): CutLayout {
+  // 1. เรียงชิ้นงานจากใหญ่ไปเล็ก (Largest First)
+  const sortedPieces = pieces.sort((a, b) =>
+    (b.width * b.height) - (a.width * a.height)
+  )
+
+  // 2. ใช้ Guillotine Algorithm
+  const layout = guillotineCut(sortedPieces, sheet)
+
+  // 3. คำนวณ Waste (เศษเหลือ)
+  const usedArea = layout.pieces.reduce((sum, p) =>
+    sum + (p.width * p.height * p.quantity), 0
+  )
+  const sheetArea = sheet.width * sheet.height
+  const wastePercentage = ((sheetArea - usedArea) / sheetArea) * 100
+
+  return {
+    pieces: layout.pieces,
+    wastePercentage: wastePercentage,
+    numberOfSheets: layout.numberOfSheets
+  }
+}
+
+// Simplified Guillotine Cut Algorithm
+function guillotineCut(pieces: CutPiece[], sheet: Sheet): CutLayout {
+  // คำนวณจำนวนแผ่นที่ต้องใช้
+  const totalArea = pieces.reduce((sum, p) =>
+    sum + (p.width * p.height * p.quantity), 0
+  )
+  const sheetArea = sheet.width * sheet.height
+
+  // สมมติประสิทธิภาพ 85% (15% เป็น waste ปกติ)
+  const numberOfSheets = Math.ceil(totalArea / (sheetArea * 0.85))
+
+  return {
+    pieces: pieces, // พร้อมตำแหน่ง (x, y) ของแต่ละชิ้น
+    numberOfSheets: numberOfSheets
+  }
+}
+```
+
+**หมายเหตุ:** ในการผลิตจริง มักใช้ซอฟต์แวร์เฉพาะทาง เช่น:
+- **Cut Rite** (Homag)
+- **OptiCut** (SCM)
+- **Cabinet Vision** (Hexagon)
+
+### 6.3 การแสดงผล 3D: Edge Banding Visualization
+
+การเรนเดอร์ภาพตู้พารามิเตอร์บนเว็บ (React Three Fiber) มีความท้าทายเรื่องการแสดงขอบ (Edge Banding) ที่มีสีต่างจากหน้าบาน
+
+#### ปัญหา
+
+โมเดล 3D ทั่วไป (BoxGeometry) มีพื้นผิวเดียว การจะแสดงขอบที่มีสีต่างจากหน้าบานทำได้ยาก
+
+#### วิธีแก้ปัญหาที่ 1: Multi-Material Mesh
+
+กำหนด `materialIndex` ให้กับแต่ละหน้า (Face) ของกล่องสี่เหลี่ยม
+
+```tsx
+import { useMemo } from 'react'
+import { BoxGeometry, MeshStandardMaterial } from 'three'
+
+function PanelWithEdge({
+  width,
+  depth,
+  thickness,
+  coreMaterial,
+  edgeMaterial
+}) {
+  const geometry = useMemo(() => {
+    const geo = new BoxGeometry(width, thickness, depth)
+
+    // กำหนด materialIndex สำหรับแต่ละหน้า
+    // Face 0-1: ด้านหน้า/หลัง (Core)
+    // Face 2-3: ด้านบน/ล่าง (Core)
+    // Face 4-5: ด้านซ้าย/ขวา (Edge)
+
+    const groups = geo.groups
+    groups[0].materialIndex = 0 // Front - Core
+    groups[1].materialIndex = 0 // Back - Core
+    groups[2].materialIndex = 0 // Top - Core
+    groups[3].materialIndex = 0 // Bottom - Core
+    groups[4].materialIndex = 1 // Left - Edge
+    groups[5].materialIndex = 1 // Right - Edge
+
+    return geo
+  }, [width, depth, thickness])
+
+  const materials = useMemo(() => [
+    new MeshStandardMaterial({
+      map: coreMaterial.texture,
+      color: coreMaterial.color
+    }),
+    new MeshStandardMaterial({
+      map: edgeMaterial.texture,
+      color: edgeMaterial.color
+    })
+  ], [coreMaterial, edgeMaterial])
+
+  return <mesh geometry={geometry} material={materials} />
+}
+```
+
+#### วิธีแก้ปัญหาที่ 2: Shader Technique (ประหยัด Performance)
+
+ใช้ Fragment Shader วาดเส้นขอบจำลองบนพื้นผิวเดิม เพื่อลดจำนวน Polygon
+
+```glsl
+// Fragment Shader - Edge Banding Simulation
+uniform sampler2D coreTexture;
+uniform sampler2D edgeTexture;
+uniform float edgeThickness; // 1.0mm = 0.001 in shader units
+
+varying vec2 vUv;
+varying vec3 vPosition;
+
+void main() {
+  vec3 panelSize = vec3(0.8, 0.018, 0.52); // Width, Thickness, Depth in meters
+
+  // คำนวณระยะจากขอบแผ่นไม้
+  float distFromLeftEdge = vPosition.x - (-panelSize.x / 2.0);
+  float distFromRightEdge = (panelSize.x / 2.0) - vPosition.x;
+  float distFromFrontEdge = (panelSize.z / 2.0) - vPosition.z;
+  float distFromBackEdge = vPosition.z - (-panelSize.z / 2.0);
+
+  float minDist = min(
+    min(distFromLeftEdge, distFromRightEdge),
+    min(distFromFrontEdge, distFromBackEdge)
+  );
+
+  // ถ้าอยู่ในเขต Edge Banding (ภายใน edgeThickness)
+  if (minDist < edgeThickness) {
+    // ใช้ texture ของขอบ
+    gl_FragColor = texture2D(edgeTexture, vUv);
+  } else {
+    // ใช้ texture ของ Core
+    gl_FragColor = texture2D(coreTexture, vUv);
+  }
+}
+```
+
+**ข้อดีของ Shader Technique:**
+- ✅ ประหยัด Polygon (1 Box แทน Multiple Meshes)
+- ✅ ประหยัด Draw Calls
+- ✅ ปรับความหนาขอบแบบ Real-time ได้
+
+**ข้อเสีย:**
+- ❌ ซับซ้อนกว่าการใช้ Multi-Material
+- ❌ ต้องเขียน Custom Shader
+
+---
+
 ## สรุป (Conclusion)
 
 เอกสารนี้นำเสนอสูตรคำนวณและอัลกอริทึมสำหรับการออกแบบตู้เฟอร์นิเจอร์ระบบพารามิเตอร์ โดยเฉพาะอย่างยิ่ง **ระยะถอยหลังแผ่นชั้น (Shelf Setback)** ซึ่งเป็นตัวแปรสำคัญที่มีผลต่อการประกอบและความทนทานของตู้
