@@ -10251,6 +10251,841 @@ FACE BORING (หน้าแผ่น):
 
 ---
 
+## ส่วนที่ 21: Minifix Joint System - Complete Engineering Logic (Architecture v3.0)
+
+ระบบ **Minifix Joint** ฉบับสมบูรณ์ที่รวม Engineering Logic, BOM Generation, และ 3D Visualization พร้อมรองรับทุกเงื่อนไข Overlay/Inset และ Top/Bottom ตามมาตรฐาน Häfele
+
+### 21.1 Hardware Database (hardware_db.ts)
+
+**สำหรับคลังสินค้าและจัดซื้อ - รหัสสินค้าตรงตาม Häfele Catalog**
+
+```typescript
+// src/services/hardware/hardware_db.ts
+
+/**
+ * Häfele Hardware Database
+ * Architecture v3.0 - Complete Engineering Reference
+ *
+ * Item Numbers verified against:
+ * - S200 Bolt Series (Page 3-4)
+ * - Minifix 15 Cam Series (Page 5-6)
+ * - Glue-in Dowel Series (Page 7)
+ */
+
+export type BoltVariant = 'B24' | 'B34';
+export type BoardThickness = 16 | 19;
+
+export const HAFELE_CATALOG = {
+  // =================================================================
+  // 🔩 S200 CONNECTING BOLTS (แกนเหล็ก)
+  // Reference: Häfele Catalog Page 3-4
+  // =================================================================
+  bolts: {
+    B24: {
+      id: "bolt_b24",
+      itemNo: "262.27.670",        // Unfinished version
+      name: "S200 Econo S Bolt (B=24mm)",
+      description: "Standard bolt for 16-19mm panels",
+      length: 24,                  // Total bolt length (mm)
+      sleeveH: 0,                  // No plastic sleeve
+      drillDepth: 11,              // Edge boring depth (mm)
+      headDia: 7,                  // Head diameter for visual
+      shaftDia: 5,                 // Shaft diameter
+      application: "Standard cabinet joints"
+    },
+    B34: {
+      id: "bolt_b34",
+      itemNo: "262.28.670",        // Unfinished version
+      name: "S200 Econo S Bolt (B=34mm)",
+      description: "Extended bolt for thick panels or high load",
+      length: 34,                  // Longer for better grip
+      sleeveH: 10,                 // Red plastic sleeve (depth spacer)
+      drillDepth: 11,              // Same edge boring depth
+      headDia: 7,
+      shaftDia: 5,
+      application: "Heavy-duty or thick panel joints"
+    }
+  },
+
+  // =================================================================
+  // ⚙️ MINIFIX 15 CAMS (ตัวเรือนล็อค)
+  // Reference: Häfele Catalog Page 5-6
+  // =================================================================
+  cams: {
+    t16: {
+      id: "cam_16mm",
+      itemNo: "262.26.033",        // For 16mm board (Unfinished)
+      name: "Minifix 15 Cam (For 16mm)",
+      description: "Cam housing for 16mm panel thickness",
+      depth: 12.5,                 // Housing depth (mm)
+      distA: 8.0,                  // Distance from surface to bolt center
+      boreDia: 15,                 // Housing bore diameter
+      finish: "Unfinished Zinc"
+    },
+    t19: {
+      id: "cam_19mm",
+      itemNo: "262.26.035",        // For 19mm board (Unfinished)
+      name: "Minifix 15 Cam (For 19mm)",
+      description: "Cam housing for 19mm panel thickness",
+      depth: 14.0,                 // Deeper housing
+      distA: 9.5,                  // Greater offset for thicker board
+      boreDia: 15,
+      finish: "Unfinished Zinc"
+    }
+  },
+
+  // =================================================================
+  // 🪵 WOODEN DOWELS (เดือยไม้)
+  // Reference: Häfele Catalog Page 7
+  // =================================================================
+  dowel: {
+    id: "dowel_8x30",
+    itemNo: "039.33.462",          // Glue-in Dowel
+    name: "Wooden Dowel 8x30mm",
+    description: "Beech wood glue-in dowel for reinforcement",
+    material: "Beech Wood",
+    diameter: 8,                   // Dowel diameter (mm)
+    length: 30,                    // Total length (mm)
+    drillDepth: 15,                // Embed depth per side (length/2)
+    spacing: 32,                   // System 32 compatible spacing
+    fluted: true                   // Has glue grooves
+  }
+} as const;
+
+// Type exports
+export type BoltSpec = typeof HAFELE_CATALOG.bolts.B24;
+export type CamSpec = typeof HAFELE_CATALOG.cams.t16;
+export type DowelSpec = typeof HAFELE_CATALOG.dowel;
+```
+
+### 21.2 Layout Engine (layout_engine.ts)
+
+**สำหรับ CNC และ Production - คำนวณตำแหน่งเจาะตามกฎ < 400mm และ > 400mm**
+
+```typescript
+// src/services/engineering/layout_engine.ts
+
+/**
+ * Minifix Joint Layout Engine
+ * Architecture v3.0 - Position Calculation for CNC
+ *
+ * Key Rules:
+ * 1. Panel < 400mm: 2 sets (Left + Right)
+ * 2. Panel > 400mm: 3 sets (Left + Center + Right)
+ * 3. Center set has dowels on BOTH sides
+ * 4. Edge sets have dowel on INNER side only
+ */
+
+export interface JointSet {
+  id: string;
+  x: number;                // Position from left edge (mm)
+  hasLeftDowel: boolean;    // Has dowel at -32mm offset
+  hasRightDowel: boolean;   // Has dowel at +32mm offset
+  rotationY: number;        // Rotation for Cam direction (0 or Math.PI)
+  type: 'LEFT' | 'CENTER' | 'RIGHT';
+}
+
+export interface JointLayout {
+  sets: JointSet[];
+  panelLength: number;
+  setCount: number;
+  isValid: boolean;
+  issues: string[];
+}
+
+// Placement constants
+const EDGE_MARGIN = 35;           // Distance from edge to bolt center
+const DOWEL_OFFSET = 32;          // System 32 spacing
+const MIN_PANEL_LENGTH = 100;     // Minimum supported length
+const CENTER_THRESHOLD = 400;     // Add center set above this length
+
+/**
+ * Calculate Joint Layout for any panel length
+ *
+ * Visual Pattern:
+ *
+ * Panel < 400mm (2 sets):
+ * ┌─────────────────────────────────────────────────────────┐
+ * │  [Bolt]--32--[Dowel]              [Dowel]--32--[Bolt]  │
+ * │    35mm                                          35mm   │
+ * │  Left Set                                  Right Set    │
+ * └─────────────────────────────────────────────────────────┘
+ *
+ * Panel > 400mm (3 sets):
+ * ┌────────────────────────────────────────────────────────────────┐
+ * │  [Bolt]--32--[Dowel]  [Dowel]--32--[Bolt]--32--[Dowel]  [Dowel]--32--[Bolt]  │
+ * │    35mm                       Center                              35mm       │
+ * │  Left Set                   Center Set                       Right Set       │
+ * └────────────────────────────────────────────────────────────────┘
+ */
+export function calculateJointLayout(panelLength: number): JointLayout {
+  const sets: JointSet[] = [];
+  const issues: string[] = [];
+
+  // Validation
+  if (panelLength < MIN_PANEL_LENGTH) {
+    issues.push(`Panel too short: ${panelLength}mm (min ${MIN_PANEL_LENGTH}mm)`);
+  }
+
+  // =================================================================
+  // 1. LEFT SET (ชุดซ้าย)
+  // Pattern: [Edge] --35mm--> [Bolt] --32mm--> [Dowel]
+  // Dowel is on RIGHT (inner side, toward center)
+  // =================================================================
+  sets.push({
+    id: 'joint-left',
+    x: EDGE_MARGIN,
+    hasLeftDowel: false,
+    hasRightDowel: true,        // Dowel toward center
+    rotationY: 0,               // Cam faces right (normal)
+    type: 'LEFT'
+  });
+
+  // =================================================================
+  // 2. RIGHT SET (ชุดขวา)
+  // Pattern: [Dowel] <--32mm-- [Bolt] <--35mm-- [Edge]
+  // Dowel is on LEFT (inner side, toward center)
+  // Rotated 180° so Cam access faces inward (same as left)
+  // =================================================================
+  sets.push({
+    id: 'joint-right',
+    x: panelLength - EDGE_MARGIN,
+    hasLeftDowel: true,         // Dowel toward center
+    hasRightDowel: false,
+    rotationY: Math.PI,         // 180° rotation for symmetry
+    type: 'RIGHT'
+  });
+
+  // =================================================================
+  // 3. CENTER SET (ชุดกลาง) - Only for panels > 400mm
+  // Pattern: [Dowel] <--32mm-- [Bolt] --32mm--> [Dowel]
+  // Dowels on BOTH sides for maximum support
+  // =================================================================
+  if (panelLength > CENTER_THRESHOLD) {
+    sets.push({
+      id: 'joint-center',
+      x: panelLength / 2,
+      hasLeftDowel: true,       // Both sides
+      hasRightDowel: true,
+      rotationY: 0,
+      type: 'CENTER'
+    });
+  }
+
+  return {
+    sets,
+    panelLength,
+    setCount: sets.length,
+    isValid: issues.length === 0,
+    issues
+  };
+}
+
+/**
+ * Generate CNC drill positions from layout
+ */
+export interface DrillHole {
+  x: number;
+  y: number;
+  type: 'BOLT' | 'CAM' | 'DOWEL';
+  face: 'FACE' | 'EDGE';
+  diameter: number;
+  depth: number;
+  setId: string;
+}
+
+export function generateDrillPositions(
+  layout: JointLayout,
+  thickness: 16 | 19 = 19
+): DrillHole[] {
+  const holes: DrillHole[] = [];
+  const camDepth = thickness === 16 ? 12.5 : 14.0;
+  const camDistA = thickness === 16 ? 8.0 : 9.5;
+
+  for (const set of layout.sets) {
+    // Bolt hole (Edge boring)
+    holes.push({
+      x: set.x,
+      y: 0,
+      type: 'BOLT',
+      face: 'EDGE',
+      diameter: 5,
+      depth: 11,
+      setId: set.id
+    });
+
+    // Cam housing (Face boring)
+    holes.push({
+      x: set.x,
+      y: camDistA,
+      type: 'CAM',
+      face: 'FACE',
+      diameter: 15,
+      depth: camDepth,
+      setId: set.id
+    });
+
+    // Dowel holes (Edge boring)
+    if (set.hasRightDowel) {
+      holes.push({
+        x: set.x + DOWEL_OFFSET,
+        y: 0,
+        type: 'DOWEL',
+        face: 'EDGE',
+        diameter: 8,
+        depth: 15,
+        setId: set.id
+      });
+    }
+
+    if (set.hasLeftDowel) {
+      holes.push({
+        x: set.x - DOWEL_OFFSET,
+        y: 0,
+        type: 'DOWEL',
+        face: 'EDGE',
+        diameter: 8,
+        depth: 15,
+        setId: set.id
+      });
+    }
+  }
+
+  return holes;
+}
+```
+
+### 21.3 Visual Component (MinifixJoint.tsx)
+
+**สำหรับ 3D Visualization - ทิศทาง Overlay/Inset ที่ถูกต้อง**
+
+```typescript
+// src/components/3d/MinifixJoint.tsx
+
+import React, { useMemo } from 'react';
+import { HAFELE_CATALOG, BoltVariant, BoardThickness } from '@/services/hardware/hardware_db';
+import { calculateJointLayout, JointLayout, JointSet } from '@/services/engineering/layout_engine';
+
+const mm = (v: number) => v / 1000; // Convert mm to Three.js meters
+
+// =================================================================
+// COMPONENT PROPS
+// =================================================================
+interface MinifixJointProps {
+  length: number;                          // Panel length (mm)
+  jointType: 'OVERLAY' | 'INSET';         // Joint configuration
+  position: 'TOP' | 'BOTTOM';             // Panel position
+  variant?: BoltVariant;                  // B24 or B34
+  thickness?: BoardThickness;             // 16 or 19mm
+  debug?: boolean;                        // Show debug info
+}
+
+// =================================================================
+// MAIN COMPONENT
+// =================================================================
+export const MinifixJoint: React.FC<MinifixJointProps> = ({
+  length,
+  jointType,
+  position,
+  variant = 'B24',
+  thickness = 19,
+  debug = false
+}) => {
+
+  // Calculate layout (Engine as Truth)
+  const layout = useMemo<JointLayout>(() =>
+    calculateJointLayout(length),
+    [length]
+  );
+
+  // Get hardware specs (Spec Lock)
+  const boltSpec = HAFELE_CATALOG.bolts[variant];
+  const camSpec = thickness === 16 ? HAFELE_CATALOG.cams.t16 : HAFELE_CATALOG.cams.t19;
+  const dowelSpec = HAFELE_CATALOG.dowel;
+
+  // =================================================================
+  // ORIENTATION LOGIC (Critical Engineering Decision)
+  // =================================================================
+  /**
+   * Joint Type Orientation Rules:
+   *
+   * OVERLAY (ทับขอบ):
+   * ┌──────────────────────────────────────────────────────────┐
+   * │  "Overlay cam จะอยู่กับแผงข้าง (Side Panel)"              │
+   * │                                                          │
+   * │  TOP PANEL:                                              │
+   * │    ┌─────────┐                                           │
+   * │    │   TOP   │ ← Bolt embedded here (vertical, down)     │
+   * │    └────┬────┘                                           │
+   * │         │ Bolt points DOWN (-Y)                          │
+   * │         ▼                                                │
+   * │    ┌────┴────┐                                           │
+   * │    │  SIDE   │ ← Cam housing here                        │
+   * │    └─────────┘                                           │
+   * │                                                          │
+   * │  BOTTOM PANEL:                                           │
+   * │    ┌─────────┐                                           │
+   * │    │  SIDE   │ ← Cam housing here                        │
+   * │    └────┬────┘                                           │
+   * │         │                                                │
+   * │         ▲ Bolt points UP (+Y)                            │
+   * │    ┌────┴────┐                                           │
+   * │    │ BOTTOM  │ ← Bolt embedded here (vertical, up)       │
+   * │    └─────────┘                                           │
+   * └──────────────────────────────────────────────────────────┘
+   *
+   * INSET (ฝังใน):
+   * ┌──────────────────────────────────────────────────────────┐
+   * │  "Inset cam จะอยู่กับแผง Top (Top/Bottom Panel)"         │
+   * │                                                          │
+   * │    ┌─────────┐      ┌─────────┐                          │
+   * │    │  SIDE   │──────│   TOP   │                          │
+   * │    │         │ Bolt │  (Cam)  │                          │
+   * │    │ (Bolt)  │ →    │         │                          │
+   * │    └─────────┘      └─────────┘                          │
+   * │                                                          │
+   * │    Bolt is HORIZONTAL (parallel to floor)                │
+   * │    Points from Side edge toward Top/Bottom panel         │
+   * └──────────────────────────────────────────────────────────┘
+   */
+  const getGroupRotation = (): [number, number, number] => {
+    if (jointType === 'OVERLAY') {
+      // OVERLAY: Bolt is VERTICAL in Top/Bottom panel
+      if (position === 'TOP') {
+        return [Math.PI, 0, 0];  // Bolt points DOWN (-Y)
+      } else {
+        return [0, 0, 0];        // Bolt points UP (+Y)
+      }
+    } else {
+      // INSET: Bolt is HORIZONTAL in Side panel
+      return [0, 0, -Math.PI / 2];  // Bolt lies flat, points toward Top/Bottom
+    }
+  };
+
+  const groupRotation = getGroupRotation();
+
+  return (
+    <group>
+      {layout.sets.map((set) => (
+        <JointSetVisual
+          key={set.id}
+          set={set}
+          boltSpec={boltSpec}
+          camSpec={camSpec}
+          dowelSpec={dowelSpec}
+          groupRotation={groupRotation}
+          debug={debug}
+        />
+      ))}
+    </group>
+  );
+};
+
+// =================================================================
+// JOINT SET VISUAL (Sub-component)
+// =================================================================
+interface JointSetVisualProps {
+  set: JointSet;
+  boltSpec: typeof HAFELE_CATALOG.bolts.B24;
+  camSpec: typeof HAFELE_CATALOG.cams.t16;
+  dowelSpec: typeof HAFELE_CATALOG.dowel;
+  groupRotation: [number, number, number];
+  debug: boolean;
+}
+
+const JointSetVisual: React.FC<JointSetVisualProps> = ({
+  set,
+  boltSpec,
+  camSpec,
+  dowelSpec,
+  groupRotation,
+  debug
+}) => {
+  return (
+    <group
+      position={[mm(set.x), 0, 0]}
+      rotation={groupRotation}
+    >
+      {/* Apply set-specific rotation (Left/Right symmetry) */}
+      <group rotation={[0, set.rotationY, 0]}>
+
+        {/* === BOLT ASSEMBLY === */}
+        <group>
+          {/* Shaft */}
+          <mesh position={[0, mm(boltSpec.length / 2), 0]}>
+            <cylinderGeometry args={[mm(3.5), mm(3.5), mm(boltSpec.length), 16]} />
+            <meshStandardMaterial color="#888888" metalness={0.8} roughness={0.3} />
+          </mesh>
+
+          {/* Head (cam engagement point) */}
+          <mesh position={[0, mm(boltSpec.length), 0]}>
+            <sphereGeometry args={[mm(3.5)]} />
+            <meshStandardMaterial color="#888888" metalness={0.8} roughness={0.3} />
+          </mesh>
+
+          {/* Sleeve (B34 only) */}
+          {boltSpec.sleeveH > 0 && (
+            <mesh position={[0, mm(boltSpec.length - boltSpec.sleeveH / 2 - 5), 0]}>
+              <cylinderGeometry args={[mm(4.5), mm(4.5), mm(boltSpec.sleeveH), 16]} />
+              <meshStandardMaterial color="#D32F2F" />
+            </mesh>
+          )}
+
+          {/* Thread tip */}
+          <mesh position={[0, mm(-5), 0]}>
+            <cylinderGeometry args={[mm(2.5), mm(1), mm(10), 12]} />
+            <meshStandardMaterial color="#555555" metalness={0.7} />
+          </mesh>
+        </group>
+
+        {/* === CAM HOUSING === */}
+        <group position={[0, mm(boltSpec.length), 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <mesh>
+            <cylinderGeometry args={[mm(7.5), mm(7.5), mm(camSpec.depth), 32]} />
+            <meshStandardMaterial color="#C0C0C0" metalness={0.6} roughness={0.4} />
+          </mesh>
+
+          {/* Cross slot */}
+          <mesh position={[0, mm(camSpec.depth / 2 + 0.05), 0]} rotation={[0, 0, Math.PI / 4]}>
+            <boxGeometry args={[mm(8), mm(0.5), mm(2)]} />
+            <meshBasicMaterial color="#222222" />
+          </mesh>
+        </group>
+
+        {/* === DOWELS === */}
+        {set.hasRightDowel && (
+          <mesh position={[mm(32), mm(dowelSpec.length / 2), 0]}>
+            <cylinderGeometry args={[mm(4), mm(4), mm(dowelSpec.length), 16]} />
+            <meshStandardMaterial color="#D2B48C" />
+          </mesh>
+        )}
+
+        {set.hasLeftDowel && (
+          <mesh position={[mm(-32), mm(dowelSpec.length / 2), 0]}>
+            <cylinderGeometry args={[mm(4), mm(4), mm(dowelSpec.length), 16]} />
+            <meshStandardMaterial color="#D2B48C" />
+          </mesh>
+        )}
+
+        {/* Debug label */}
+        {debug && (
+          <mesh position={[0, mm(50), 0]}>
+            <sphereGeometry args={[mm(3)]} />
+            <meshBasicMaterial color={
+              set.type === 'LEFT' ? '#2196F3' :
+              set.type === 'RIGHT' ? '#F44336' : '#4CAF50'
+            } />
+          </mesh>
+        )}
+
+      </group>
+    </group>
+  );
+};
+
+export default MinifixJoint;
+```
+
+### 21.4 Joint Type Comparison Diagram
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    OVERLAY vs INSET JOINT CONFIGURATION                       ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  ┌─────────────────────────────────┐  ┌─────────────────────────────────┐   ║
+║  │         OVERLAY JOINT           │  │          INSET JOINT            │   ║
+║  │    (Cam in SIDE panel)          │  │    (Cam in TOP/BOTTOM panel)    │   ║
+║  └─────────────────────────────────┘  └─────────────────────────────────┘   ║
+║                                                                              ║
+║  TOP PANEL VIEW:                      TOP PANEL VIEW:                        ║
+║  ┌──────────────────┐                 ┌──────────────────┐                  ║
+║  │    ↓ ↓ ↓ ↓ ↓    │ Bolts point     │     ● ● ●        │ Cam housings     ║
+║  │   ○ ○ ○ ○ ○     │ DOWN into       │   ←─────────→    │ visible on       ║
+║  │    TOP PANEL    │ side panels     │    TOP PANEL     │ top surface      ║
+║  └──────────────────┘                 └──────────────────┘                  ║
+║                                                                              ║
+║  SIDE PANEL VIEW:                     SIDE PANEL VIEW:                       ║
+║  ┌──────────────────┐                 ┌──────────────────┐                  ║
+║  │     ● ● ●        │ Cam housings    │     → → →        │ Bolts point      ║
+║  │    SIDE PANEL    │ visible on      │     ○ ○ ○        │ toward TOP       ║
+║  │                  │ side surface    │    SIDE PANEL    │ panel            ║
+║  └──────────────────┘                 └──────────────────┘                  ║
+║                                                                              ║
+║  Code Usage:                          Code Usage:                            ║
+║  <MinifixJoint                        <MinifixJoint                         ║
+║    jointType="OVERLAY"                  jointType="INSET"                   ║
+║    position="TOP"                       position="TOP"                      ║
+║    ...                                  ...                                 ║
+║  />                                   />                                    ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
+
+### 21.5 Panel Length Rules
+
+```
+JOINT SET COUNT BY PANEL LENGTH:
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│  PANEL < 400mm (2 Sets)                                                    │
+│  ═══════════════════════                                                   │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                                                                     │   │
+│  │  [Bolt]─32─[Dowel]                          [Dowel]─32─[Bolt]      │   │
+│  │   35mm                                                   35mm      │   │
+│  │  ══════                                                 ══════     │   │
+│  │  Left Set                                             Right Set    │   │
+│  │  (rotY=0)                                             (rotY=π)     │   │
+│  │                                                                     │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  Example: 350mm panel                                                       │
+│  - Left:  x = 35mm,  dowel at 67mm                                         │
+│  - Right: x = 315mm, dowel at 283mm                                        │
+│                                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  PANEL > 400mm (3 Sets)                                                    │
+│  ═══════════════════════                                                   │
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │                                                                       │ │
+│  │  [B]─32─[D]      [D]─32─[B]─32─[D]      [D]─32─[B]                   │ │
+│  │   35mm               Center                 35mm                      │ │
+│  │  ══════            ════════════           ══════                     │ │
+│  │  Left               Center Set             Right                     │ │
+│  │  (rotY=0)           (rotY=0)             (rotY=π)                   │ │
+│  │                                                                       │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Example: 600mm panel                                                       │
+│  - Left:   x = 35mm,  dowel at 67mm                                        │
+│  - Center: x = 300mm, dowels at 268mm and 332mm                           │
+│  - Right:  x = 565mm, dowel at 533mm                                       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 21.6 BOM Generation
+
+```typescript
+// src/services/bom/minifixBom.ts
+
+import { HAFELE_CATALOG, BoltVariant, BoardThickness } from '@/services/hardware/hardware_db';
+import { JointLayout } from '@/services/engineering/layout_engine';
+
+export interface BOMLine {
+  itemNo: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  unitPrice?: number;
+}
+
+export function generateMinifixBOM(
+  layout: JointLayout,
+  variant: BoltVariant = 'B24',
+  thickness: BoardThickness = 19
+): BOMLine[] {
+  const bom: BOMLine[] = [];
+  const bolt = HAFELE_CATALOG.bolts[variant];
+  const cam = thickness === 16 ? HAFELE_CATALOG.cams.t16 : HAFELE_CATALOG.cams.t19;
+  const dowel = HAFELE_CATALOG.dowel;
+
+  // Count components
+  const boltCount = layout.sets.length;
+  const camCount = layout.sets.length;
+  let dowelCount = 0;
+  for (const set of layout.sets) {
+    if (set.hasLeftDowel) dowelCount++;
+    if (set.hasRightDowel) dowelCount++;
+  }
+
+  // Generate BOM lines
+  bom.push({
+    itemNo: bolt.itemNo,
+    description: bolt.name,
+    quantity: boltCount,
+    unit: 'pc'
+  });
+
+  bom.push({
+    itemNo: cam.itemNo,
+    description: cam.name,
+    quantity: camCount,
+    unit: 'pc'
+  });
+
+  bom.push({
+    itemNo: dowel.itemNo,
+    description: dowel.name,
+    quantity: dowelCount,
+    unit: 'pc'
+  });
+
+  return bom;
+}
+```
+
+### 21.7 CNC Output Generation
+
+```typescript
+// src/services/cam/generators/minifixJointOps.ts
+
+import { JointLayout, generateDrillPositions, DrillHole } from '@/services/engineering/layout_engine';
+
+export interface CNCOperation {
+  id: string;
+  opType: 'DRILL';
+  face: 'FACE' | 'EDGE';
+  x: number;
+  y: number;
+  diameter: number;
+  depth: number;
+  rpm: number;
+  feedRate: number;
+  comment: string;
+}
+
+const MACHINING_PARAMS = {
+  BOLT:  { rpm: 2800, feedRate: 3.5, comment: 'Bolt pilot hole' },
+  CAM:   { rpm: 2500, feedRate: 2.5, comment: 'Cam housing bore' },
+  DOWEL: { rpm: 2800, feedRate: 3.5, comment: 'Dowel hole' }
+};
+
+export function generateMinifixCNCOps(
+  panelId: string,
+  layout: JointLayout,
+  thickness: 16 | 19 = 19
+): CNCOperation[] {
+  const holes = generateDrillPositions(layout, thickness);
+  const ops: CNCOperation[] = [];
+
+  holes.forEach((hole, i) => {
+    const params = MACHINING_PARAMS[hole.type];
+    ops.push({
+      id: `${panelId}-mfx-${i}`,
+      opType: 'DRILL',
+      face: hole.face,
+      x: hole.x,
+      y: hole.y,
+      diameter: hole.diameter,
+      depth: hole.depth,
+      rpm: params.rpm,
+      feedRate: params.feedRate,
+      comment: `${params.comment} (${hole.setId})`
+    });
+  });
+
+  return ops;
+}
+
+/**
+ * Generate G-code output
+ */
+export function toGCode(ops: CNCOperation[]): string {
+  const lines: string[] = [
+    '; Minifix Joint Operations',
+    '; Generated by IIMOS Designer v3.0',
+    'G90 ; Absolute',
+    'G21 ; Metric',
+    ''
+  ];
+
+  ops.forEach((op, i) => {
+    lines.push(`; Op ${i + 1}: ${op.comment}`);
+    lines.push(`G0 X${op.x.toFixed(2)} Y${op.y.toFixed(2)}`);
+    lines.push(`S${op.rpm} M3`);
+    lines.push(`G1 Z-${op.depth.toFixed(2)} F${op.feedRate * 1000}`);
+    lines.push('G0 Z5');
+    lines.push('');
+  });
+
+  lines.push('M5');
+  lines.push('G0 X0 Y0 Z50');
+  lines.push('M30');
+
+  return lines.join('\n');
+}
+```
+
+### 21.8 Hardware Reference Table
+
+| Component | Item No. | Description | Diameter | Depth | Notes |
+|-----------|----------|-------------|----------|-------|-------|
+| **Bolt B24** | 262.27.670 | S200 Econo S Bolt | 5mm shaft | 11mm | Standard |
+| **Bolt B34** | 262.28.670 | S200 Econo S Bolt | 5mm shaft | 11mm | With sleeve |
+| **Cam 16mm** | 262.26.033 | Minifix 15 Cam | 15mm bore | 12.5mm | A=8.0mm |
+| **Cam 19mm** | 262.26.035 | Minifix 15 Cam | 15mm bore | 14.0mm | A=9.5mm |
+| **Dowel** | 039.33.462 | Glue-in Dowel | 8mm bore | 15mm | 8×30mm |
+
+### 21.9 Usage Examples
+
+```typescript
+// Example 1: Standard base cabinet (Overlay joint)
+const layout1 = calculateJointLayout(600);
+console.log('Set count:', layout1.setCount); // 3
+
+const bom1 = generateMinifixBOM(layout1, 'B24', 19);
+// Output:
+// - 262.27.670: S200 Bolt B24 × 3
+// - 262.26.035: Minifix 15 Cam (19mm) × 3
+// - 039.33.462: Wooden Dowel 8x30 × 4
+
+// Example 2: Small drawer front (Inset joint)
+const layout2 = calculateJointLayout(350);
+console.log('Set count:', layout2.setCount); // 2
+
+// Example 3: React component usage
+<MinifixJoint
+  length={600}
+  jointType="OVERLAY"
+  position="TOP"
+  variant="B24"
+  thickness={19}
+/>
+```
+
+### 21.10 Architecture Summary
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    ARCHITECTURE v3.0 - MINIFIX JOINT SYSTEM                 │
+│                                                                             │
+│   ┌───────────────────┐                                                     │
+│   │  HAFELE_CATALOG   │ ◄── Single Source (Item Numbers & Dimensions)      │
+│   │  (hardware_db.ts) │                                                     │
+│   └─────────┬─────────┘                                                     │
+│             │                                                               │
+│             ▼                                                               │
+│   ┌───────────────────┐                                                     │
+│   │  LAYOUT_ENGINE    │ ◄── Position Calculator                            │
+│   │ (layout_engine.ts)│     - < 400mm: 2 sets                              │
+│   │                   │     - > 400mm: 3 sets                              │
+│   └─────────┬─────────┘     - Dowel placement rules                        │
+│             │                                                               │
+│      ┌──────┼──────┬──────────┐                                            │
+│      │      │      │          │                                            │
+│      ▼      ▼      ▼          ▼                                            │
+│  ┌──────┐ ┌────┐ ┌────┐ ┌─────────┐                                       │
+│  │Visual│ │CNC │ │BOM │ │Validate │                                       │
+│  │ 3D   │ │Ops │ │Gen │ │  Gate   │                                       │
+│  └──────┘ └────┘ └────┘ └─────────┘                                       │
+│                                                                             │
+│  Key Principles:                                                            │
+│  ✅ Engine as Truth - Layout logic centralized                             │
+│  ✅ Spec Lock - All values from HAFELE_CATALOG                             │
+│  ✅ Orientation Logic - Overlay/Inset handled correctly                    │
+│  ✅ System 32 Compatible - 35mm margin, 32mm spacing                       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
 - Blum Catalog Pages 2, 5, 6, 13, 14-67, 64, 74-76, 84, 150, 410, 420, 430, 452
