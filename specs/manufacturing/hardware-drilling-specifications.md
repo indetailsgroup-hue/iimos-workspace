@@ -7870,10 +7870,747 @@ export function validateJoineryPlan(plan: JoineryPlan): string[] {
 
 ---
 
+## ส่วนที่ 18: Wood Dowels Complete System (Architecture v4.0)
+
+ระบบ **Wood Dowels** รวบรวมข้อมูลจาก Häfele Catalog ครบถ้วนทุกรุ่น ครอบคลุม Fluted (ร่องมาตรฐาน), Pre-Glued (อัดกาวในตัว) และ Plastic Exact พร้อม Dynamic Drill Depth Logic ที่สัมพันธ์กับความยาวเดือย
+
+**Key Features:**
+- **Complete SKU Coverage**: รองรับ Dowel หลากหลายขนาด (6x30 ถึง 8x40)
+- **Dynamic Engineering**: ความลึกเจาะ (Drill Depth) คำนวณอัตโนมัติตามความยาวเดือย
+- **Category-Aware Rendering**: แสดงผล 3D ต่างกันตามชนิดวัสดุ (ไม้/กาว/พลาสติก)
+
+### 18.1 Wood Dowels Hardware Database
+
+```typescript
+// src/services/hardware/hafeleDb.ts - Dowels Section
+
+/**
+ * Wood Dowels Complete Database
+ * Architecture v4.0 - All Variants from Häfele Catalog 267-84-239
+ *
+ * Categories:
+ * - Fluted: Standard wood dowels with glue grooves
+ * - Pre-Glued: Water-activated adhesive coating
+ * - Plastic: EXACT positioning dowels
+ *
+ * Drill Depth Formula:
+ * - drillDepth = length / 2 (symmetric insertion)
+ * - Standard 8x30: 15mm per side
+ * - Standard 8x35: 18mm per side (deeper)
+ * - Standard 8x40: 20mm per side
+ */
+
+export type DowelSelector =
+  | 'STANDARD_6x30'
+  | 'STANDARD_8x30'
+  | 'STANDARD_8x35'
+  | 'STANDARD_8x40'
+  | 'PREGLUED_8x30'
+  | 'PREGLUED_8x35'
+  | 'PLASTIC_EXACT';
+
+export interface DowelItem {
+  id: string;
+  itemNo: string;       // Häfele SKU for BOM
+  name: string;
+  category: 'Standard' | 'Pre-Glued' | 'Plastic';
+  specs: {
+    diameter: number;   // Drill bit size (mm)
+    length: number;     // Total dowel length (mm)
+    drillDepth: number; // Depth per side (mm)
+  };
+}
+
+export const DOWEL_CATALOG: Record<DowelSelector, DowelItem> = {
+  // =================================================================
+  // GROUP A: Wood Dowels (Fluted) - Standard Glue Grooves
+  // Material: Kiln-dried hardwood
+  // =================================================================
+  'STANDARD_6x30': {
+    id: 'dowel_fluted_6x30',
+    itemNo: '267.83.130',
+    name: 'Wood Dowel 6x30mm (Fluted)',
+    category: 'Standard',
+    specs: { diameter: 6, length: 30, drillDepth: 15 }
+  },
+
+  'STANDARD_8x30': {
+    id: 'dowel_fluted_8x30',
+    itemNo: '267.83.230',
+    name: 'Wood Dowel 8x30mm (Fluted)',
+    category: 'Standard',
+    specs: { diameter: 8, length: 30, drillDepth: 15 }
+  },
+
+  'STANDARD_8x35': {
+    id: 'dowel_fluted_8x35',
+    itemNo: '267.83.235',
+    name: 'Wood Dowel 8x35mm (Fluted)',
+    category: 'Standard',
+    specs: { diameter: 8, length: 35, drillDepth: 18 }  // Deeper insertion
+  },
+
+  'STANDARD_8x40': {
+    id: 'dowel_fluted_8x40',
+    itemNo: '267.83.240',
+    name: 'Wood Dowel 8x40mm (Fluted)',
+    category: 'Standard',
+    specs: { diameter: 8, length: 40, drillDepth: 20 }
+  },
+
+  // =================================================================
+  // GROUP B: Pre-Glued Dowels (Water Activated)
+  // "Simply replace your glue with water"
+  // =================================================================
+  'PREGLUED_8x30': {
+    id: 'dowel_preglued_8x30',
+    itemNo: '267.84.230',
+    name: 'Pre-Glued Dowel 8x30mm (Water Activated)',
+    category: 'Pre-Glued',
+    specs: { diameter: 8, length: 30, drillDepth: 15 }
+  },
+
+  'PREGLUED_8x35': {
+    id: 'dowel_preglued_8x35',
+    itemNo: '267.84.235',
+    name: 'Pre-Glued Dowel 8x35mm (Water Activated)',
+    category: 'Pre-Glued',
+    specs: { diameter: 8, length: 35, drillDepth: 18 }
+  },
+
+  // =================================================================
+  // GROUP C: EXACT Plastic Dowel
+  // Precision positioning, no glue required
+  // =================================================================
+  'PLASTIC_EXACT': {
+    id: 'dowel_plastic_exact',
+    itemNo: '267.70.700',
+    name: 'EXACT Plastic Dowel 8x30mm (White)',
+    category: 'Plastic',
+    specs: { diameter: 8, length: 30, drillDepth: 15 }
+  }
+};
+```
+
+### 18.2 Dowel Specifications Table
+
+```
+WOOD DOWELS - COMPLETE CATALOG:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│  Category    │  Size    │  Item No      │  Drill Dia  │  Drill Depth       │
+├──────────────┼──────────┼───────────────┼─────────────┼────────────────────┤
+│              │          │               │             │                    │
+│  STANDARD    │  6×30    │  267.83.130   │    6mm      │    15mm            │
+│  (Fluted)    │  8×30 ★  │  267.83.230   │    8mm      │    15mm            │
+│              │  8×35    │  267.83.235   │    8mm      │    18mm            │
+│              │  8×40    │  267.83.240   │    8mm      │    20mm            │
+│              │          │               │             │                    │
+├──────────────┼──────────┼───────────────┼─────────────┼────────────────────┤
+│              │          │               │             │                    │
+│  PRE-GLUED   │  8×30    │  267.84.230   │    8mm      │    15mm            │
+│  (Water Act) │  8×35    │  267.84.235   │    8mm      │    18mm            │
+│              │          │               │             │                    │
+├──────────────┼──────────┼───────────────┼─────────────┼────────────────────┤
+│              │          │               │             │                    │
+│  PLASTIC     │  8×30    │  267.70.700   │    8mm      │    15mm            │
+│  (EXACT)     │          │               │             │                    │
+│              │          │               │             │                    │
+└──────────────┴──────────┴───────────────┴─────────────┴────────────────────┘
+
+★ = Most common for furniture joinery
+
+DRILL DEPTH FORMULA:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│   Drill Depth = Dowel Length / 2                               │
+│                                                                 │
+│   Examples:                                                     │
+│   - 8×30mm → 15mm per side (30 ÷ 2)                           │
+│   - 8×35mm → 18mm per side (35 ÷ 2, rounded up)               │
+│   - 8×40mm → 20mm per side (40 ÷ 2)                           │
+│                                                                 │
+│   Why not exactly half?                                         │
+│   - 8×35 uses 18mm (not 17.5) for machining convenience        │
+│   - Always round UP for secure fit                              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 18.3 Dowel Engineering Engine
+
+```typescript
+// src/services/engineering/dowelEngine.ts
+import { DOWEL_CATALOG, DowelSelector, DowelItem } from '../hardware/hafeleDb';
+
+export interface DowelPlan {
+  isValid: boolean;
+  issues: string[];
+  dowel: DowelItem;
+  positions: {
+    x: number;
+    depth: number;
+  }[];
+  meta: {
+    totalDowels: number;
+    spacing: number;
+    margin: number;
+  };
+}
+
+interface DowelOptions {
+  length: number;
+  thickness: number;
+  dowelType?: DowelSelector;
+  minSpacing?: number;      // Default: 32mm (System 32)
+  edgeMargin?: number;      // Default: 37mm
+  maxDowels?: number;       // Limit number of dowels
+}
+
+/**
+ * Calculate dowel positions for panel joinery
+ *
+ * Layout Rules:
+ * - Edge margin: 37mm from each end (System 32 compatible)
+ * - Spacing: 32mm intervals (or multiple)
+ * - Center alignment for odd positions
+ */
+export function calculateDowelPlan(opts: DowelOptions): DowelPlan {
+  const {
+    length,
+    thickness,
+    dowelType = 'STANDARD_8x30',
+    minSpacing = 32,
+    edgeMargin = 37,
+    maxDowels = 10
+  } = opts;
+
+  const issues: string[] = [];
+  const dowel = DOWEL_CATALOG[dowelType];
+
+  // =================================================================
+  // VALIDATION
+  // =================================================================
+
+  // Check thickness vs dowel diameter
+  if (thickness < dowel.specs.diameter * 2) {
+    issues.push(`Panel thickness ${thickness}mm too thin for ${dowel.specs.diameter}mm dowels`);
+  }
+
+  // Check minimum length
+  const minLength = edgeMargin * 2 + minSpacing;
+  if (length < minLength) {
+    issues.push(`Panel length ${length}mm too short (min: ${minLength}mm)`);
+  }
+
+  // Check drill depth vs thickness
+  if (dowel.specs.drillDepth > thickness - 3) {
+    issues.push(`Drill depth ${dowel.specs.drillDepth}mm too deep for ${thickness}mm panel`);
+  }
+
+  if (issues.length > 0) {
+    return {
+      isValid: false,
+      issues,
+      dowel,
+      positions: [],
+      meta: { totalDowels: 0, spacing: 0, margin: edgeMargin }
+    };
+  }
+
+  // =================================================================
+  // POSITION CALCULATION
+  // =================================================================
+  const positions: DowelPlan['positions'] = [];
+  const usableLength = length - (edgeMargin * 2);
+
+  // Calculate number of dowels
+  let numDowels = Math.floor(usableLength / minSpacing) + 1;
+  numDowels = Math.min(numDowels, maxDowels);
+  numDowels = Math.max(numDowels, 2); // Minimum 2 dowels
+
+  // Calculate actual spacing
+  const actualSpacing = usableLength / (numDowels - 1);
+
+  // Generate positions
+  for (let i = 0; i < numDowels; i++) {
+    positions.push({
+      x: edgeMargin + (i * actualSpacing),
+      depth: dowel.specs.drillDepth
+    });
+  }
+
+  return {
+    isValid: true,
+    issues: [],
+    dowel,
+    positions,
+    meta: {
+      totalDowels: numDowels,
+      spacing: actualSpacing,
+      margin: edgeMargin
+    }
+  };
+}
+
+/**
+ * Get dowel by selector with fallback
+ */
+export function getDowel(selector: DowelSelector): DowelItem {
+  return DOWEL_CATALOG[selector] || DOWEL_CATALOG['STANDARD_8x30'];
+}
+
+/**
+ * Recommend dowel based on panel thickness
+ */
+export function recommendDowel(thickness: number): DowelSelector {
+  if (thickness <= 15) return 'STANDARD_6x30';
+  if (thickness <= 18) return 'STANDARD_8x30';
+  if (thickness <= 22) return 'STANDARD_8x35';
+  return 'STANDARD_8x40';
+}
+```
+
+### 18.4 CAM Generator for Dowels
+
+```typescript
+// src/services/cam/generators/dowelOp.ts
+import { calculateDowelPlan, DowelPlan } from '../../engineering/dowelEngine';
+import { DowelSelector } from '../../hardware/hafeleDb';
+
+export interface DowelMachineOp {
+  id: string;
+  type: 'DRILL';
+  face: 'EDGE' | 'FACE';
+  x: number;
+  y: number;
+  diameter: number;
+  depth: number;
+  hardwareRef: string;
+  description?: string;
+}
+
+/**
+ * Generate CNC drilling operations for dowels
+ *
+ * Dowels require matched holes on both mating panels:
+ * - Panel A (EDGE): Dowel inserted into edge
+ * - Panel B (FACE): Mating holes on face
+ */
+export function generateDowelOps(
+  partId: string,
+  opts: {
+    length: number;
+    thickness: number;
+    dowelType?: DowelSelector;
+    face: 'EDGE' | 'FACE';
+  }
+): DowelMachineOp[] {
+  const plan = calculateDowelPlan(opts);
+  if (!plan.isValid) return [];
+
+  const ops: DowelMachineOp[] = [];
+  const { dowel, positions } = plan;
+
+  positions.forEach((pos, i) => {
+    ops.push({
+      id: `${partId}-dowel-${opts.face.toLowerCase()}-${i}`,
+      type: 'DRILL',
+      face: opts.face,
+      x: pos.x,
+      y: opts.face === 'FACE' ? plan.meta.margin : 0, // Face: distance from edge
+      diameter: dowel.specs.diameter,
+      depth: pos.depth,
+      hardwareRef: dowel.itemNo,
+      description: `${dowel.name} - Position ${i + 1}`
+    });
+  });
+
+  return ops;
+}
+
+/**
+ * Generate matched dowel operations for both panels
+ *
+ * Returns operations for:
+ * - Edge panel (e.g., shelf edge)
+ * - Face panel (e.g., cabinet side)
+ */
+export function generateMatchedDowelOps(
+  panelAId: string,
+  panelBId: string,
+  opts: {
+    length: number;
+    thickness: number;
+    dowelType?: DowelSelector;
+  }
+): {
+  panelA: DowelMachineOp[];
+  panelB: DowelMachineOp[];
+} {
+  const edgeOps = generateDowelOps(panelAId, { ...opts, face: 'EDGE' });
+  const faceOps = generateDowelOps(panelBId, { ...opts, face: 'FACE' });
+
+  return {
+    panelA: edgeOps,
+    panelB: faceOps
+  };
+}
+```
+
+### 18.5 Visual Component
+
+```typescript
+// src/components/visual/hardware/DowelSystem.tsx
+import React, { useMemo } from 'react';
+import { calculateDowelPlan } from '../../../services/engineering/dowelEngine';
+import { DowelSelector } from '../../../services/hardware/hafeleDb';
+
+const mm = (v: number) => v / 1000;
+
+interface Props {
+  length: number;
+  thickness: number;
+  dowelType?: DowelSelector;
+  showLabels?: boolean;
+}
+
+export const DowelSystem: React.FC<Props> = ({
+  length,
+  thickness,
+  dowelType = 'STANDARD_8x30',
+  showLabels = false
+}) => {
+  const plan = useMemo(() =>
+    calculateDowelPlan({ length, thickness, dowelType }),
+  [length, thickness, dowelType]);
+
+  if (!plan.isValid) return null;
+
+  const { dowel, positions } = plan;
+
+  // Color mapping by category
+  const getDowelColor = () => {
+    switch (dowel.category) {
+      case 'Plastic': return '#FFFFFF';      // White
+      case 'Pre-Glued': return '#8D6E63';    // Dark brown (adhesive)
+      default: return '#D7CCC8';             // Natural wood
+    }
+  };
+
+  // Groove texture (only for wood dowels)
+  const showGrooves = dowel.category !== 'Plastic';
+
+  return (
+    <group>
+      {positions.map((pos, i) => (
+        <group key={i} position={[mm(pos.x), 0, 0]}>
+
+          {/* Main Dowel Cylinder */}
+          <mesh position={[0, mm(dowel.specs.length / 2), 0]}>
+            <cylinderGeometry args={[
+              mm(dowel.specs.diameter / 2),
+              mm(dowel.specs.diameter / 2),
+              mm(dowel.specs.length),
+              16
+            ]} />
+            <meshStandardMaterial
+              color={getDowelColor()}
+              roughness={dowel.category === 'Plastic' ? 0.3 : 0.7}
+            />
+          </mesh>
+
+          {/* Fluting Grooves (visual detail) */}
+          {showGrooves && (
+            <>
+              {[0, Math.PI/3, 2*Math.PI/3, Math.PI, 4*Math.PI/3, 5*Math.PI/3].map((angle, j) => (
+                <mesh
+                  key={j}
+                  position={[
+                    mm(dowel.specs.diameter/2 * 0.9) * Math.cos(angle),
+                    mm(dowel.specs.length / 2),
+                    mm(dowel.specs.diameter/2 * 0.9) * Math.sin(angle)
+                  ]}
+                >
+                  <boxGeometry args={[mm(0.3), mm(dowel.specs.length * 0.8), mm(0.3)]} />
+                  <meshBasicMaterial
+                    color="#5D4037"
+                    transparent
+                    opacity={0.3}
+                  />
+                </mesh>
+              ))}
+            </>
+          )}
+
+          {/* Pre-Glued indicator (adhesive coating) */}
+          {dowel.category === 'Pre-Glued' && (
+            <mesh position={[0, mm(dowel.specs.length / 2), 0]}>
+              <cylinderGeometry args={[
+                mm(dowel.specs.diameter / 2 + 0.1),
+                mm(dowel.specs.diameter / 2 + 0.1),
+                mm(dowel.specs.length),
+                16
+              ]} />
+              <meshBasicMaterial
+                color="#FFC107"
+                transparent
+                opacity={0.2}
+                wireframe
+              />
+            </mesh>
+          )}
+
+        </group>
+      ))}
+    </group>
+  );
+};
+```
+
+### 18.6 Category Comparison
+
+| Feature | Standard (Fluted) | Pre-Glued | Plastic EXACT |
+|---------|-------------------|-----------|---------------|
+| **Material** | Kiln-dried hardwood | Hardwood + Adhesive | Polyethylene |
+| **Color** | Natural wood | Brown (coated) | White |
+| **Adhesive** | Requires PVA glue | Water-activated | None required |
+| **Best For** | General joinery | Production speed | Knockdown furniture |
+| **Strength** | High | High | Medium |
+| **Price** | $ | $$ | $ |
+| **Reusable** | No | No | Yes |
+
+### 18.7 Drilling Pattern Diagram
+
+```
+DOWEL JOINT DRILLING PATTERN:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  PANEL A (Edge - e.g., Shelf):                                 │
+│  ─────────────────────────────                                  │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │   EDGE                                                   │   │
+│  │   ═══════════════════════════════════════════════════   │   │
+│  │   │     │           │           │           │     │     │   │
+│  │   ▼     ▼           ▼           ▼           ▼     ▼     │   │
+│  │   ●     ●           ●           ●           ●     ●     │   │
+│  │   │     │           │           │           │     │     │   │
+│  │  37mm  69mm        ...         ...        L-69  L-37    │   │
+│  │                                                         │   │
+│  │   Depth: 15-20mm (depends on dowel length)             │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  PANEL B (Face - e.g., Cabinet Side):                          │
+│  ────────────────────────────────────                           │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                                                         │   │
+│  │   ●     ●           ●           ●           ●     ●     │   │
+│  │   │     │           │           │           │     │     │   │
+│  │   ▼     ▼           ▼           ▼           ▼     ▼     │   │
+│  │   ○     ○           ○           ○           ○     ○     │   │
+│  │                                                         │   │
+│  │   Same X positions as Panel A                           │   │
+│  │   Y = Distance from edge (typically 37mm)               │   │
+│  │   Depth: Same as Panel A                                │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ● = Drill position (8mm diameter)                             │
+│  ○ = Mating hole on face                                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+SPACING CALCULATION:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  Given: Panel Length = 800mm, Margin = 37mm                    │
+│                                                                 │
+│  Usable Length = 800 - (37 × 2) = 726mm                        │
+│  Desired Spacing = 32mm (System 32)                            │
+│                                                                 │
+│  Number of Dowels = floor(726 / 32) + 1 = 23 + 1 = 24          │
+│  (May be limited by maxDowels parameter)                       │
+│                                                                 │
+│  Actual Spacing = 726 / (N - 1)                                │
+│                                                                 │
+│  For N = 6 dowels: Spacing = 726 / 5 = 145.2mm                 │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 18.8 Integration with Minifix System
+
+```typescript
+// Dowels are often used alongside Minifix connectors
+// This shows how they work together in the joinery system
+
+import { calculateJoinery } from './joineryEngine';
+import { calculateDowelPlan } from './dowelEngine';
+
+/**
+ * Combined joinery plan for shelf installation
+ *
+ * Layout (for 800mm shelf):
+ * - Position 0-100mm: Minifix #1 with 1 dowel
+ * - Position 350-450mm: Center Minifix with 2 dowels
+ * - Position 700-800mm: Minifix #2 with 1 dowel
+ *
+ * The Minifix engine already includes dowels in its sets,
+ * but for dowel-only joints, use the DowelEngine directly.
+ */
+
+// Example: Minifix with integrated dowels
+const minifixPlan = calculateJoinery({
+  length: 800,
+  thickness: 18,
+  system: 'MINIFIX_15',
+  dowelType: 'wd_8x30'  // From Section 17
+});
+
+// Example: Dowel-only joint (no Minifix)
+const dowelOnlyPlan = calculateDowelPlan({
+  length: 800,
+  thickness: 18,
+  dowelType: 'STANDARD_8x30',
+  minSpacing: 64,  // Wider spacing for visual panels
+  maxDowels: 5
+});
+
+console.log('Minifix dowels:', minifixPlan.sets.flatMap(s => s.dowelOffsets).length);
+console.log('Standalone dowels:', dowelOnlyPlan.meta.totalDowels);
+```
+
+### 18.9 Calculation Examples
+
+```typescript
+// Example 1: Standard shelf with 8x30 dowels
+const shelfPlan = calculateDowelPlan({
+  length: 600,
+  thickness: 18,
+  dowelType: 'STANDARD_8x30'
+});
+
+console.log('=== Standard Shelf Dowels ===');
+console.log('Dowel:', shelfPlan.dowel.name);
+// 'Wood Dowel 8x30mm (Fluted)'
+console.log('SKU:', shelfPlan.dowel.itemNo);
+// '267.83.230'
+console.log('Drill Depth:', shelfPlan.dowel.specs.drillDepth);
+// 15mm
+console.log('Total Dowels:', shelfPlan.meta.totalDowels);
+// Calculated based on length
+
+
+// Example 2: Thick panel with 8x40 dowels
+const thickPlan = calculateDowelPlan({
+  length: 800,
+  thickness: 25,
+  dowelType: 'STANDARD_8x40'
+});
+
+console.log('\n=== Thick Panel Dowels ===');
+console.log('Drill Depth:', thickPlan.dowel.specs.drillDepth);
+// 20mm (deeper for longer dowel)
+
+
+// Example 3: Production line with Pre-Glued
+const productionPlan = calculateDowelPlan({
+  length: 500,
+  thickness: 18,
+  dowelType: 'PREGLUED_8x35'
+});
+
+console.log('\n=== Production Pre-Glued ===');
+console.log('Category:', productionPlan.dowel.category);
+// 'Pre-Glued'
+console.log('Note: Activate with water instead of glue');
+
+
+// Example 4: Generate CAM operations
+const ops = generateDowelOps('SHELF-001', {
+  length: 600,
+  thickness: 18,
+  dowelType: 'STANDARD_8x30',
+  face: 'EDGE'
+});
+
+console.log('\n=== CAM Operations ===');
+console.log('Operations:', ops.length);
+ops.forEach(op => {
+  console.log(`  ${op.id}: X=${op.x}mm, Dia=${op.diameter}mm, Depth=${op.depth}mm`);
+});
+```
+
+### 18.10 Technical Reference Table
+
+| Parameter | 6×30 | 8×30 | 8×35 | 8×40 | Unit |
+|-----------|------|------|------|------|------|
+| **Diameter** | 6 | 8 | 8 | 8 | mm |
+| **Length** | 30 | 30 | 35 | 40 | mm |
+| **Drill Depth** | 15 | 15 | 18 | 20 | mm |
+| **Min Panel Thick** | 12 | 16 | 16 | 18 | mm |
+| **Drill Bit** | 6mm | 8mm | 8mm | 8mm | - |
+| **Standard SKU** | 267.83.130 | 267.83.230 | 267.83.235 | 267.83.240 | - |
+| **Pre-Glued SKU** | - | 267.84.230 | 267.84.235 | - | - |
+
+### 18.11 Best Practices
+
+```
+DOWEL SELECTION GUIDE:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  WHEN TO USE EACH TYPE:                                        │
+│  ══════════════════════                                         │
+│                                                                 │
+│  STANDARD (Fluted):                                            │
+│  - General furniture assembly                                   │
+│  - Custom woodworking                                           │
+│  - When using PVA/wood glue                                    │
+│  - Best structural strength                                     │
+│                                                                 │
+│  PRE-GLUED:                                                    │
+│  - Production environments                                      │
+│  - Faster assembly (no glue application)                       │
+│  - Consistent bond quality                                      │
+│  - Keep dry until use!                                         │
+│                                                                 │
+│  PLASTIC EXACT:                                                │
+│  - Knockdown furniture (IKEA-style)                            │
+│  - When disassembly may be needed                              │
+│  - Positioning aids (not structural)                           │
+│  - Lower strength requirement                                   │
+│                                                                 │
+│  SIZE SELECTION:                                                │
+│  ═══════════════                                                │
+│                                                                 │
+│  Panel Thickness  │  Recommended Dowel                         │
+│  ─────────────────┼────────────────────                         │
+│  12-15mm          │  6×30                                       │
+│  16-18mm          │  8×30 (most common)                        │
+│  19-22mm          │  8×35                                       │
+│  23mm+            │  8×40                                       │
+│                                                                 │
+│  SPACING GUIDELINES:                                            │
+│  ═══════════════════                                            │
+│                                                                 │
+│  - Minimum: 32mm (System 32)                                   │
+│  - Maximum: 150mm (for structural joints)                      │
+│  - Edge margin: 37mm standard                                   │
+│  - Min 2 dowels per joint, max as needed                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
 - Blum Catalog Pages 2, 5, 6, 13, 14-67, 64, 74-76, 84, 150, 410, 420, 430, 452
 - Häfele Catalog PDF Pages 1-17 (Minifix, Maxifix, S-Series, Mitre, Double, Dowels)
+- Häfele Wood Dowels Catalog 267-84-239 (Fluted, Pre-Glued, Plastic)
 - Häfele Selection 12 (Ixconnect SC/U/CC & Tofix)
 - Häfele Selection 13 (Lamello P-System)
 - Häfele Selection 14 (Ixconnect Dovetail)
