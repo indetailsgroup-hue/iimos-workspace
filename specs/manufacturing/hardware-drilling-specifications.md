@@ -4814,9 +4814,716 @@ console.log('Angle:', drawerPlan.specs.cup.specs.openingAngle);  // 155°
 
 ---
 
+## ส่วนที่ 14: Dovetail Linear Engine (Architecture v6.0)
+
+ระบบ **Ixconnect Dovetail** ของ Häfele เป็นระบบยึดแผ่นชั้นแบบ "รางลิ้นราง" (Dovetail Slot) ที่ให้ความแข็งแรงสูงและถอดประกอบง่าย เหมาะสำหรับชั้นวางของที่รับน้ำหนักมาก
+
+### 14.1 Advanced Linear Logic
+
+ระบบ Dovetail มีความซับซ้อนกว่าระบบ Connector แบบจุด เพราะต้องจัดการ 2 มิติ:
+
+```
+DUAL INSTALLATION MODES:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  MODE 1a: RAIL SYSTEM (DOVETAIL_RAIL)                          │
+│  ─────────────────────────────────────                          │
+│  ฝังรางอลูมิเนียมในร่องที่กัดไว้                                │
+│                                                                 │
+│  ┌────────────────────────────────────┐                        │
+│  │  ╔══════════════════════════════╗  │ ← Aluminium Rail       │
+│  │  ║▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓║  │   (261.30.030)         │
+│  │  ╚══════════════════════════════╝  │                        │
+│  │           SHELF EDGE               │                        │
+│  └────────────────────────────────────┘                        │
+│                                                                 │
+│  MODE 1b: DIRECT SYSTEM (DOVETAIL_DIRECT)                      │
+│  ─────────────────────────────────────────                      │
+│  กัดร่อง Dovetail ลงบนไม้โดยตรง (ไม่ใช้ราง)                    │
+│                                                                 │
+│  ┌────────────────────────────────────┐                        │
+│  │  ╲══════════════════════════════╱  │ ← Routed Groove        │
+│  │   ╲▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓╱   │   (Direct in Wood)     │
+│  │    ╲════════════════════════╱    │                        │
+│  │           SHELF EDGE               │                        │
+│  └────────────────────────────────────┘                        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+DYNAMIC SPACING:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  1. Rail Fixing Screws: ทุก 200mm ตลอดความยาวราง               │
+│     ├──200mm──├──200mm──├──200mm──├──200mm──┤                  │
+│     ●         ●         ●         ●         ●                   │
+│                                                                 │
+│  2. Sleeve Distribution: 6 ตัว/เมตร (กระจายอัตโนมัติ)          │
+│     ├───166mm───├───166mm───├───166mm───├───166mm───┤          │
+│     ▣           ▣           ▣           ▣           ▣           │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 14.2 Hardware Database
+
+```typescript
+// src/services/hardware/hafeleDb.ts
+
+export type SystemType =
+  | 'MINIFIX_15' | 'MINIFIX_12' | 'MAXIFIX_35'
+  | 'SC_8_60' | 'U_12_10' | 'CC_8_5_30' | 'TOFIX_25'
+  | 'LAMELLO_P'
+  | 'DOVETAIL_RAIL'    // แบบฝังรางอลูมิเนียม (Installation 1a)
+  | 'DOVETAIL_DIRECT'; // แบบกัดร่องไม้โดยตรง (Installation 1b)
+
+export interface HardwareItem {
+  id: string;
+  itemNo: string;
+  name: string;
+  category: 'CONNECTOR_DOVETAIL' | 'RAIL_DOVETAIL' | string;
+  specs: {
+    drillDepth: number;
+    width?: number;          // ความกว้างร่อง/ฐาน
+    height?: number;         // ความลึกร่อง
+    length?: number;         // ความยาวตัว
+    dowelCount?: number;     // จำนวนเดือยนำศูนย์ (0, 1, 2)
+    dowelSpacing?: number;   // ระยะห่างเดือย (32mm)
+    screwInterval?: number;  // ระยะแนะนำการยิงสกรูราง (200mm)
+    isLinear?: boolean;      // เป็นสินค้าเส้นยาว
+  };
+}
+
+export const DOVETAIL_HARDWARE = {
+  // =================================================================
+  // 1. RAIL (ตัวผู้ - ฝังที่ชั้นวาง)
+  // =================================================================
+  rail_alu_raw: {
+    id: 'dt_rail_raw',
+    itemNo: '261.30.030',
+    name: 'Alu Dovetail Rail (3000mm)',
+    category: 'RAIL_DOVETAIL',
+    specs: {
+      isLinear: true,
+      width: 12,          // กว้าง 12mm
+      height: 10.5,       // ลึก 10.5mm
+      length: 3000,
+      screwInterval: 200, // ยิงสกรูทุกๆ 200mm
+      drillDepth: 10.5
+    }
+  } as HardwareItem,
+
+  // =================================================================
+  // 2. SLEEVES (ตัวเมีย - ติดที่แผงข้าง)
+  // =================================================================
+
+  // 2.1 Short Sleeve (Standard) - ยิงสกรูผิวหน้า
+  sleeve_std: {
+    id: 'dt_sleeve_std',
+    itemNo: '261.30.790',
+    name: 'Dovetail Sleeve (Short)',
+    category: 'CONNECTOR_DOVETAIL',
+    specs: {
+      length: 9,
+      width: 9,
+      drillDepth: 0,      // Surface Mount
+      dowelCount: 0
+    }
+  } as HardwareItem,
+
+  // 2.2 Long Sleeve (41mm) - Variant 1: ไม่มีเดือย
+  sleeve_long_0d: {
+    id: 'dt_long_0d',
+    itemNo: '261.30.780',
+    name: 'Long Sleeve 41mm (No Dowel)',
+    category: 'CONNECTOR_DOVETAIL',
+    specs: {
+      length: 41,
+      width: 9,
+      drillDepth: 0,
+      dowelCount: 0
+    }
+  } as HardwareItem,
+
+  // 2.3 Long Sleeve (41mm) - Variant 2: มีเดือยกลาง 1 ตัว
+  sleeve_long_1d: {
+    id: 'dt_long_1d',
+    itemNo: '261.30.781',
+    name: 'Long Sleeve 41mm (1 Dowel)',
+    category: 'CONNECTOR_DOVETAIL',
+    specs: {
+      length: 41,
+      width: 9,
+      drillDepth: 5,
+      dowelCount: 1,
+      dowelSpacing: 0
+    }
+  } as HardwareItem,
+
+  // 2.4 Long Sleeve (41mm) - Variant 3: มีเดือย 2 ตัว (นิยมสุด)
+  sleeve_long_2d: {
+    id: 'dt_long_2d',
+    itemNo: '261.30.782',
+    name: 'Long Sleeve 41mm (2 Dowels)',
+    category: 'CONNECTOR_DOVETAIL',
+    specs: {
+      length: 41,
+      width: 9,
+      drillDepth: 5,
+      dowelCount: 2,
+      dowelSpacing: 32
+    }
+  } as HardwareItem
+};
+```
+
+### 14.3 Dovetail Engineering Engine
+
+```typescript
+// src/services/engineering/dovetailEngine.ts
+import { DOVETAIL_HARDWARE, HardwareItem, SystemType } from '../hardware/hafeleDb';
+
+export interface DovetailPlan {
+  isValid: boolean;
+  system: SystemType;
+  specs: {
+    rail: HardwareItem;    // Rail (ตัวผู้)
+    sleeve: HardwareItem;  // Sleeve (ตัวเมีย)
+  };
+  sleevePositions: {
+    x: number;
+    rotationY: number;
+    dowelOffsets: number[]
+  }[];
+  meta: {
+    railLength: number;
+    railFixingPoints: number[]; // จุดยิงสกรูยึดราง
+    grooveSpec: { w: number; d: number; l: number };
+    sleeveCount: number;
+    minThickness: number;
+  };
+}
+
+export type SleeveVariant = 'SHORT' | 'LONG_0D' | 'LONG_1D' | 'LONG_2D';
+
+interface DovetailOptions {
+  length: number;           // ความยาวชั้นวาง
+  thickness: number;        // ความหนาชั้นวาง
+  system: SystemType;       // DOVETAIL_RAIL หรือ DOVETAIL_DIRECT
+  sleeveVariant?: SleeveVariant;
+}
+
+/**
+ * Dovetail Joinery Calculator
+ *
+ * Key Formulas:
+ * - Sleeve Count = ceil(length × 6 / 1000) with minimum 2
+ * - Screw Count = ceil(length / 200)
+ * - Margin = 50mm from each edge
+ */
+export function calculateDovetailPlan(opts: DovetailOptions): DovetailPlan {
+  const {
+    length,
+    thickness,
+    system,
+    sleeveVariant = 'SHORT'
+  } = opts;
+
+  // =================================================================
+  // 1. VALIDATION (Min Thickness 19mm per Häfele spec)
+  // =================================================================
+  if (thickness < 19) {
+    return {
+      isValid: false,
+      system,
+      specs: {} as any,
+      sleevePositions: [],
+      meta: {
+        railLength: 0,
+        railFixingPoints: [],
+        grooveSpec: { w: 0, d: 0, l: 0 },
+        sleeveCount: 0,
+        minThickness: 19
+      }
+    };
+  }
+
+  // =================================================================
+  // 2. HARDWARE SELECTION
+  // =================================================================
+  const rail = DOVETAIL_HARDWARE.rail_alu_raw;
+
+  let sleeve: HardwareItem;
+  switch (sleeveVariant) {
+    case 'LONG_0D': sleeve = DOVETAIL_HARDWARE.sleeve_long_0d; break;
+    case 'LONG_1D': sleeve = DOVETAIL_HARDWARE.sleeve_long_1d; break;
+    case 'LONG_2D': sleeve = DOVETAIL_HARDWARE.sleeve_long_2d; break;
+    default:        sleeve = DOVETAIL_HARDWARE.sleeve_std;
+  }
+
+  // =================================================================
+  // 3. SLEEVE DISTRIBUTION (6 Sleeves per Meter)
+  // =================================================================
+  const sleeveDensity = 6 / 1000; // 6 per meter
+  const sleeveCount = Math.max(2, Math.ceil(length * sleeveDensity));
+
+  // กระจายตำแหน่งโดยเว้นขอบ (Margin 50mm)
+  const margin = 50;
+  const workingSpan = length - (margin * 2);
+  const sleeveStep = workingSpan / (sleeveCount - 1);
+
+  const sleevePositions: DovetailPlan['sleevePositions'] = [];
+  for (let i = 0; i < sleeveCount; i++) {
+    const x = margin + (sleeveStep * i);
+
+    // Calculate dowel offsets based on variant
+    const dowelOffsets: number[] = [];
+    if (sleeve.specs.dowelCount === 2) {
+      const offset = sleeve.specs.dowelSpacing! / 2; // 16mm
+      dowelOffsets.push(-offset, offset);
+    } else if (sleeve.specs.dowelCount === 1) {
+      dowelOffsets.push(0);
+    }
+
+    sleevePositions.push({
+      x,
+      rotationY: 0,
+      dowelOffsets
+    });
+  }
+
+  // =================================================================
+  // 4. RAIL FIXING SCREWS (เฉพาะ DOVETAIL_RAIL)
+  // =================================================================
+  const railFixingPoints: number[] = [];
+  if (system === 'DOVETAIL_RAIL') {
+    const screwInterval = rail.specs.screwInterval!; // 200mm
+    const screwCount = Math.ceil(length / screwInterval);
+    const screwStep = length / (screwCount + 1);
+
+    for (let i = 1; i <= screwCount; i++) {
+      railFixingPoints.push(Math.round(screwStep * i));
+    }
+  }
+
+  return {
+    isValid: true,
+    system,
+    specs: { rail, sleeve },
+    sleevePositions,
+    meta: {
+      railLength: length,
+      railFixingPoints,
+      grooveSpec: {
+        w: rail.specs.width!,   // 12mm
+        d: rail.specs.height!,  // 10.5mm
+        l: length
+      },
+      sleeveCount,
+      minThickness: 19
+    }
+  };
+}
+```
+
+### 14.4 CAM Generator for Dovetail
+
+```typescript
+// src/services/cam/generators/dovetailOp.ts
+import { calculateDovetailPlan, DovetailPlan } from '../../engineering/dovetailEngine';
+
+export interface DovetailMachineOp {
+  id: string;
+  type: 'MILL_FULL_SLOT' | 'DRILL';
+  face: 'EDGE' | 'FACE';
+  x: number;
+  y: number;
+  params?: {
+    length: number;
+    width: number;
+    depth: number;
+    toolProfile: string;
+  };
+  diameter?: number;
+  depth?: number;
+  hardwareRef: string;
+}
+
+/**
+ * Generate CNC operations for Dovetail shelf mounting
+ *
+ * Operations:
+ * 1. SHELF EDGE: Mill dovetail groove (full length)
+ * 2. SHELF EDGE: Rail fixing screws (every 200mm)
+ * 3. SIDE PANEL: Sleeve mounting holes
+ */
+export function generateDovetailOps(
+  partId: string,
+  opts: Parameters<typeof calculateDovetailPlan>[0]
+): DovetailMachineOp[] {
+  const plan = calculateDovetailPlan(opts);
+  if (!plan.isValid) return [];
+
+  const ops: DovetailMachineOp[] = [];
+  const { rail, sleeve } = plan.specs;
+
+  // =================================================================
+  // 1. SHELF EDGE: MILL DOVETAIL GROOVE (กัดร่องยาวตลอดแนว)
+  // =================================================================
+  ops.push({
+    id: `${partId}-dt-groove`,
+    type: 'MILL_FULL_SLOT',
+    face: 'EDGE',
+    x: 0,
+    y: 0, // Center of edge
+    params: {
+      length: plan.meta.railLength,
+      width: plan.meta.grooveSpec.w,   // 12mm
+      depth: plan.meta.grooveSpec.d,   // 10.5mm
+      toolProfile: 'DOVETAIL-CUTTER-12'
+    },
+    hardwareRef: rail.itemNo
+  });
+
+  // =================================================================
+  // 2. SHELF EDGE: RAIL FIXING SCREWS (เฉพาะแบบใส่ราง)
+  // =================================================================
+  if (plan.system === 'DOVETAIL_RAIL') {
+    plan.meta.railFixingPoints.forEach((pos, i) => {
+      ops.push({
+        id: `${partId}-dt-rail-screw-${i}`,
+        type: 'DRILL',
+        face: 'EDGE',
+        x: pos,
+        y: 0,
+        diameter: 3,  // Pilot Hole 3mm
+        depth: 10,
+        hardwareRef: 'SCREW-3x13'
+      });
+    });
+  }
+
+  // =================================================================
+  // 3. SIDE PANEL: SLEEVE MOUNTING
+  // =================================================================
+  plan.sleevePositions.forEach((set, i) => {
+
+    // 3.1 Long Sleeve with 2 Dowels (รุ่นยอดนิยม 261.30.782)
+    if (sleeve.specs.dowelCount === 2) {
+      set.dowelOffsets.forEach((offset, j) => {
+        ops.push({
+          id: `${partId}-dt-sleeve-${i}-d${j}`,
+          type: 'DRILL',
+          face: 'FACE',
+          x: set.x + offset,
+          y: 37, // System 32 distance from front
+          diameter: 5,
+          depth: sleeve.specs.drillDepth,
+          hardwareRef: sleeve.itemNo
+        });
+      });
+    }
+
+    // 3.2 Long Sleeve with 1 Dowel
+    else if (sleeve.specs.dowelCount === 1) {
+      ops.push({
+        id: `${partId}-dt-sleeve-${i}-d0`,
+        type: 'DRILL',
+        face: 'FACE',
+        x: set.x,
+        y: 37,
+        diameter: 5,
+        depth: sleeve.specs.drillDepth,
+        hardwareRef: sleeve.itemNo
+      });
+    }
+
+    // 3.3 Short Sleeve / No Dowel (Screw Only)
+    else {
+      ops.push({
+        id: `${partId}-dt-sleeve-${i}-pilot`,
+        type: 'DRILL',
+        face: 'FACE',
+        x: set.x,
+        y: 37,
+        diameter: 3, // Pilot Hole
+        depth: 5,
+        hardwareRef: sleeve.itemNo
+      });
+    }
+  });
+
+  return ops;
+}
+```
+
+### 14.5 Visual Component
+
+```typescript
+// src/components/3d/hardware/DovetailConnector.tsx
+import React, { useMemo } from 'react';
+import { calculateDovetailPlan } from '../../../services/engineering/dovetailEngine';
+
+const mm = (v: number) => v / 1000;
+
+interface DovetailConnectorProps {
+  length: number;
+  thickness: number;
+  system: 'DOVETAIL_RAIL' | 'DOVETAIL_DIRECT';
+  sleeveVariant?: 'SHORT' | 'LONG_0D' | 'LONG_1D' | 'LONG_2D';
+}
+
+export const DovetailConnector: React.FC<DovetailConnectorProps> = (props) => {
+  const plan = useMemo(() => calculateDovetailPlan(props), [props]);
+
+  if (!plan.isValid) return null;
+
+  const { system, specs, meta } = plan;
+
+  return (
+    <group>
+      {/* 1. Rail / Groove (ยาวตลอดแนว) */}
+      <mesh
+        position={[mm(meta.railLength / 2), 0, 0]}
+        rotation={[0, 0, Math.PI / 2]}
+      >
+        <boxGeometry args={[
+          mm(meta.grooveSpec.d),  // 10.5mm height
+          mm(meta.railLength),    // Full length
+          mm(meta.grooveSpec.w)   // 12mm width
+        ]} />
+        {system === 'DOVETAIL_RAIL' ? (
+          // Aluminium rail appearance
+          <meshStandardMaterial
+            color="#E0E0E0"
+            metalness={0.8}
+            roughness={0.2}
+          />
+        ) : (
+          // Empty groove (wood visible)
+          <meshBasicMaterial
+            color="#3E2723"
+            wireframe
+            opacity={0.3}
+            transparent
+          />
+        )}
+      </mesh>
+
+      {/* 2. Sleeves */}
+      {plan.sleevePositions.map((set, i) => (
+        <group
+          key={i}
+          position={[mm(set.x), mm(-8), 0]}
+          rotation={[0, 0, Math.PI]}
+        >
+          <mesh>
+            {/* Shape differs by variant (Short vs Long) */}
+            {specs.sleeve.specs.length! > 20 ? (
+              <boxGeometry args={[mm(41), mm(8), mm(9)]} />
+            ) : (
+              <cylinderGeometry args={[mm(4), mm(3), mm(8), 4]} />
+            )}
+            <meshStandardMaterial color="#FFFFFF" />
+          </mesh>
+
+          {/* Visual Dowels (if 2-dowel variant) */}
+          {specs.sleeve.specs.dowelCount === 2 && (
+            <>
+              <mesh position={[mm(16), mm(4), 0]}>
+                <cylinderGeometry args={[mm(2.5), mm(2.5), mm(5)]} />
+                <meshBasicMaterial color="#333" />
+              </mesh>
+              <mesh position={[mm(-16), mm(4), 0]}>
+                <cylinderGeometry args={[mm(2.5), mm(2.5), mm(5)]} />
+                <meshBasicMaterial color="#333" />
+              </mesh>
+            </>
+          )}
+
+          {/* Visual Dowel (if 1-dowel variant) */}
+          {specs.sleeve.specs.dowelCount === 1 && (
+            <mesh position={[0, mm(4), 0]}>
+              <cylinderGeometry args={[mm(2.5), mm(2.5), mm(5)]} />
+              <meshBasicMaterial color="#333" />
+            </mesh>
+          )}
+        </group>
+      ))}
+
+      {/* 3. Rail Fixing Screw Indicators (Rail mode only) */}
+      {system === 'DOVETAIL_RAIL' && meta.railFixingPoints.map((pos, i) => (
+        <mesh key={`screw-${i}`} position={[mm(pos), mm(-2), 0]}>
+          <cylinderGeometry args={[mm(1.5), mm(1.5), mm(4)]} />
+          <meshStandardMaterial color="#666" metalness={0.6} />
+        </mesh>
+      ))}
+    </group>
+  );
+};
+```
+
+### 14.6 Sleeve Variant Comparison
+
+| Variant | Item No | Length | Dowels | Dowel Spacing | Use Case |
+|---------|---------|--------|--------|---------------|----------|
+| **Short** | 261.30.790 | 9mm | 0 | - | Quick install, screw mount |
+| **Long 0D** | 261.30.780 | 41mm | 0 | - | Extended grip, no positioning |
+| **Long 1D** | 261.30.781 | 41mm | 1 | Center | Center alignment |
+| **Long 2D** | 261.30.782 | 41mm | 2 | 32mm | System 32 compatible (recommended) |
+
+### 14.7 Installation Mode Comparison
+
+| Feature | DOVETAIL_RAIL | DOVETAIL_DIRECT |
+|---------|---------------|-----------------|
+| **Rail** | Aluminium 261.30.030 | None (routed groove) |
+| **Groove Width** | 12mm | 12mm |
+| **Groove Depth** | 10.5mm | 10.5mm |
+| **Rail Screws** | Every 200mm | N/A |
+| **Min Thickness** | 19mm | 19mm |
+| **Strength** | Higher (metal rail) | Standard |
+| **Cost** | Higher (rail + sleeves) | Lower (sleeves only) |
+| **Removable** | Yes | Yes |
+| **Best For** | Heavy-duty shelving | Standard shelving |
+
+### 14.8 Drilling Pattern Diagram
+
+```
+SHELF EDGE (Side View):
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│    ╔══════════════════════════════════════════════════════╗    │
+│    ║  DOVETAIL GROOVE (12mm W × 10.5mm D)                 ║    │
+│    ╚══════════════════════════════════════════════════════╝    │
+│         ↑         ↑         ↑         ↑         ↑              │
+│       Screw     Screw     Screw     Screw     Screw            │
+│       (200mm intervals - RAIL mode only)                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+SIDE PANEL (Face View):
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  50mm    166mm    166mm    166mm    166mm    166mm    50mm     │
+│   ├───────┼────────┼────────┼────────┼────────┼───────┤        │
+│   ▣       ▣        ▣        ▣        ▣        ▣       ▣        │
+│   │       │        │        │        │        │       │        │
+│   └───────┴────────┴────────┴────────┴────────┴───────┘        │
+│              ↑ SLEEVE POSITIONS (6 per meter)                  │
+│                                                                 │
+│              Y = 37mm from front edge (System 32)              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+SLEEVE DETAIL (2-Dowel Variant):
+┌─────────────────────────────────────┐
+│                                     │
+│      ●────── 32mm ──────●          │
+│     5mm                 5mm         │
+│     dia                 dia         │
+│                                     │
+│   ┌─────────────────────────┐      │
+│   │        SLEEVE           │      │ 41mm length
+│   │       (261.30.782)      │      │
+│   └─────────────────────────┘      │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+### 14.9 Calculation Examples
+
+```typescript
+// Example 1: Standard shelf 600mm with Rail System
+const shelfPlan = calculateDovetailPlan({
+  length: 600,
+  thickness: 19,
+  system: 'DOVETAIL_RAIL',
+  sleeveVariant: 'LONG_2D'
+});
+
+console.log('=== Dovetail Plan (600mm Shelf) ===');
+console.log('Valid:', shelfPlan.isValid);           // true
+console.log('Sleeve Count:', shelfPlan.meta.sleeveCount);  // 4
+console.log('Sleeve Positions:', shelfPlan.sleevePositions.map(s => s.x));
+// [50, 216.67, 383.33, 550]
+
+console.log('Rail Screws:', shelfPlan.meta.railFixingPoints);
+// [150, 300, 450] (every 200mm, distributed)
+
+console.log('Groove:', shelfPlan.meta.grooveSpec);
+// { w: 12, d: 10.5, l: 600 }
+
+
+// Example 2: Long shelf 1200mm with Direct System
+const longShelfPlan = calculateDovetailPlan({
+  length: 1200,
+  thickness: 25,
+  system: 'DOVETAIL_DIRECT',
+  sleeveVariant: 'SHORT'
+});
+
+console.log('\n=== Dovetail Plan (1200mm Shelf) ===');
+console.log('Sleeve Count:', longShelfPlan.meta.sleeveCount);  // 8
+console.log('Rail Screws:', longShelfPlan.meta.railFixingPoints);
+// [] (empty - Direct mode has no rail screws)
+
+
+// Example 3: Invalid - Too thin
+const thinPlan = calculateDovetailPlan({
+  length: 600,
+  thickness: 16,  // < 19mm minimum!
+  system: 'DOVETAIL_RAIL'
+});
+
+console.log('\n=== Thin Panel Plan ===');
+console.log('Valid:', thinPlan.isValid);  // false
+console.log('Min Thickness:', thinPlan.meta.minThickness);  // 19mm
+
+
+// Example 4: Generate CAM operations
+const ops = generateDovetailOps('SHELF-001', {
+  length: 600,
+  thickness: 19,
+  system: 'DOVETAIL_RAIL',
+  sleeveVariant: 'LONG_2D'
+});
+
+console.log('\n=== CAM Operations ===');
+console.log('Total operations:', ops.length);
+// 1 groove + 3 rail screws + 8 dowel holes = 12 operations
+
+const grooveOp = ops.find(op => op.type === 'MILL_FULL_SLOT');
+console.log('Groove tool:', grooveOp?.params?.toolProfile);
+// 'DOVETAIL-CUTTER-12'
+
+const screwOps = ops.filter(op => op.id.includes('rail-screw'));
+console.log('Rail screws:', screwOps.length);  // 3
+
+const dowelOps = ops.filter(op => op.id.includes('sleeve'));
+console.log('Sleeve dowel holes:', dowelOps.length);  // 8 (4 sleeves × 2 dowels)
+```
+
+### 14.10 Technical Reference Table
+
+| Parameter | Value | Unit | Description |
+|-----------|-------|------|-------------|
+| **Groove Width** | 12 | mm | Dovetail slot width |
+| **Groove Depth** | 10.5 | mm | Dovetail slot depth |
+| **Min Panel Thickness** | 19 | mm | Minimum shelf thickness |
+| **Sleeve Density** | 6 | per meter | Standard sleeve distribution |
+| **Screw Interval** | 200 | mm | Rail fixing screw spacing |
+| **Edge Margin** | 50 | mm | Distance from shelf edge to first sleeve |
+| **System 32 Y** | 37 | mm | Sleeve Y position from front edge |
+| **Dowel Diameter** | 5 | mm | Positioning dowel diameter |
+| **Dowel Depth** | 5 | mm | Dowel hole depth |
+| **Pilot Hole** | 3 | mm | Screw pilot hole diameter |
+| **Rail Length** | 3000 | mm | Standard aluminium rail length |
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
 - Blum Catalog Pages 2, 5, 6, 13, 14-67, 64, 74-76, 84, 150, 410, 420, 430, 452
+- Häfele Selection 14 (Ixconnect Dovetail)
 - Häfele Selection 15 (Metalla 510 Standard Hinges)
 - Häfele Selection 16 (Specialty Hinges)
 - Häfele Selection 17 (Metalla 510 & Mounting Plates)
