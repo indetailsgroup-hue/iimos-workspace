@@ -2502,9 +2502,771 @@ function validateLiftConfiguration(opts: LiftOptions): ValidationResult {
 
 ---
 
+## ส่วนที่ 11: Advanced Mounting Engine - Häfele Metalla 510 & Mounting Plates (Architecture v9.0)
+
+ระบบ **Advanced Mounting Engine** รองรับบานพับ Häfele Metalla 510 Push สำหรับเฟรมอลูมิเนียม และ Mounting Plates หลากหลายรูปแบบ (Linear/Cruciform, Screw/Euro, Zinc/Steel)
+
+### 11.1 Engineering Logic Highlights
+
+1. **Aluminium Frame Support**: ระบบเจาะสำหรับเฟรมอลูมิเนียม 17-24mm (ไม่เจาะถ้วย 35mm)
+2. **Plate Strategy**: เลือกฐานรองได้ละเอียด (Linear vs Cruciform, Zinc vs Steel, Screw vs Euro)
+3. **Extended Distance**: รองรับระยะ D สูงสุด 12mm สำหรับงานแก้ปัญหาหน้างาน
+4. **Push Mechanism**: รองรับบานพับ Push สำหรับงานออกแบบไร้มือจับ
+5. **Fixing Method Intelligence**: แยกแยะ Euro Screw (5mm) และ Chipboard Screw (3mm)
+
+### 11.2 Master Hardware Database
+
+```typescript
+// src/services/hardware/hafeleDb.ts
+
+export type SystemType =
+  | 'MINIFIX_15' | 'SC_8_60' | 'U_12_10' | 'TOFIX_25' | 'LAMELLO_P' | 'DOVETAIL_RAIL'
+  // --- STANDARD HINGES ---
+  | 'HINGE_110' | 'HINGE_155' | 'HINGE_165' | 'HINGE_THIN' | 'HINGE_BLIND_SM' | 'HINGE_BLIND_LG'
+  | 'HINGE_PROFILE_94' | 'HINGE_REBATED_110' | 'HINGE_CORNER_70' | 'HINGE_FRIDGE'
+  | 'HINGE_ANGLE_VAR'
+  // --- ALUMINIUM FRAME (Selection 17) ---
+  | 'HINGE_ALU_105_PUSH';
+
+export type PlateType = 'LINEAR' | 'CRUCIFORM';
+export type PlateMaterial = 'STEEL' | 'ZINC';
+export type FixingMethod = 'SCREW' | 'EURO';
+
+export interface HardwareItem {
+  id: string;
+  itemNo: string;
+  name: string;
+  category: 'HINGE_CUP' | 'HINGE_PLATE' | 'ACCESSORY';
+  specs: {
+    // Hinge Specs
+    cupDepth?: number;
+    cupDia?: number;
+    openingAngle?: number;
+    crankConstant?: number;
+    pattern?: string;        // '48/6', 'ALU_FRAME'
+    isPush?: boolean;
+
+    // Plate Specs
+    distance?: number;       // D (0, 2, 3, 6, 9, 12)
+    type?: PlateType;
+    material?: PlateMaterial;
+    fixing?: FixingMethod;
+  };
+}
+
+export const HAFELE_MASTER_DB = {
+  hinges: {
+    // =================================================================
+    // ALUMINIUM FRAME HINGES (Selection 17 - Page 1)
+    // =================================================================
+    // Metalla 510 Push สำหรับเฟรมอลูมิเนียมกว้าง 17-24mm
+    // Note: รุ่น Push ต้องใช้คู่กับตัวกดกระเด้ง (สั่งแยก)
+
+    h_alu_full: {
+      id: 'h_alu_full',
+      itemNo: '329.23.810',
+      name: 'Metalla 510 Alu Push Full Overlay',
+      category: 'HINGE_CUP',
+      specs: {
+        openingAngle: 105,
+        crankConstant: 18,  // K = 18 (Full Overlay)
+        pattern: 'ALU_FRAME',
+        cupDepth: 0,        // No cup drilling
+        isPush: true
+      }
+    } as HardwareItem,
+
+    h_alu_half: {
+      id: 'h_alu_half',
+      itemNo: '329.23.830',
+      name: 'Metalla 510 Alu Push Half Overlay',
+      category: 'HINGE_CUP',
+      specs: {
+        openingAngle: 105,
+        crankConstant: 9,   // K = 9 (Half Overlay)
+        pattern: 'ALU_FRAME',
+        cupDepth: 0,
+        isPush: true
+      }
+    } as HardwareItem,
+
+    h_alu_inset: {
+      id: 'h_alu_inset',
+      itemNo: '329.23.840',
+      name: 'Metalla 510 Alu Push Inset',
+      category: 'HINGE_CUP',
+      specs: {
+        openingAngle: 105,
+        crankConstant: -2,  // K = -2 (Inset)
+        pattern: 'ALU_FRAME',
+        cupDepth: 0,
+        isPush: true
+      }
+    } as HardwareItem,
+  },
+
+  plates: {
+    // =================================================================
+    // MOUNTING PLATES EXPANSION (Selection 17 - Page 2-5)
+    // =================================================================
+
+    // --- 1. Linear Plates (Zinc) - Page 2 ---
+    // Screw Fixing (Chipboard)
+    pl_lin_sc_d0: {
+      id: 'pl_lin_sc_d0',
+      itemNo: '329.67.040',
+      name: 'Linear Zinc Screw D0',
+      category: 'HINGE_PLATE',
+      specs: { distance: 0, type: 'LINEAR', material: 'ZINC', fixing: 'SCREW' }
+    } as HardwareItem,
+
+    pl_lin_sc_d3: {
+      id: 'pl_lin_sc_d3',
+      itemNo: '329.67.043',
+      name: 'Linear Zinc Screw D3',
+      category: 'HINGE_PLATE',
+      specs: { distance: 3, type: 'LINEAR', material: 'ZINC', fixing: 'SCREW' }
+    } as HardwareItem,
+
+    // Euro Fixing
+    pl_lin_eu_d0: {
+      id: 'pl_lin_eu_d0',
+      itemNo: '329.67.000',
+      name: 'Linear Zinc Euro D0',
+      category: 'HINGE_PLATE',
+      specs: { distance: 0, type: 'LINEAR', material: 'ZINC', fixing: 'EURO' }
+    } as HardwareItem,
+
+    // --- 2. Cruciform Plates (Zinc) - Page 3 & 5 ---
+    // Screw Fixing - Standard Distance
+    pl_crux_zn_sc_d0: {
+      id: 'pl_crux_zn_sc_d0',
+      itemNo: '329.71.500',
+      name: 'Cruciform Zinc Screw D0',
+      category: 'HINGE_PLATE',
+      specs: { distance: 0, type: 'CRUCIFORM', material: 'ZINC', fixing: 'SCREW' }
+    } as HardwareItem,
+
+    pl_crux_zn_sc_d2: {
+      id: 'pl_crux_zn_sc_d2',
+      itemNo: '329.71.502',
+      name: 'Cruciform Zinc Screw D2',
+      category: 'HINGE_PLATE',
+      specs: { distance: 2, type: 'CRUCIFORM', material: 'ZINC', fixing: 'SCREW' }
+    } as HardwareItem,
+
+    // High Distance (Page 5 - For Blind Corner/Thick Door)
+    pl_crux_zn_sc_d9: {
+      id: 'pl_crux_zn_sc_d9',
+      itemNo: '329.73.608',
+      name: 'Cruciform Zinc Screw D9',
+      category: 'HINGE_PLATE',
+      specs: { distance: 9, type: 'CRUCIFORM', material: 'ZINC', fixing: 'SCREW' }
+    } as HardwareItem,
+
+    pl_crux_zn_sc_d12: {
+      id: 'pl_crux_zn_sc_d12',
+      itemNo: '329.73.609',
+      name: 'Cruciform Zinc Screw D12',
+      category: 'HINGE_PLATE',
+      specs: { distance: 12, type: 'CRUCIFORM', material: 'ZINC', fixing: 'SCREW' }
+    } as HardwareItem,
+
+    // Euro Fixing (Page 3)
+    pl_crux_zn_eu_d0: {
+      id: 'pl_crux_zn_eu_d0',
+      itemNo: '329.71.510',
+      name: 'Cruciform Zinc Euro D0',
+      category: 'HINGE_PLATE',
+      specs: { distance: 0, type: 'CRUCIFORM', material: 'ZINC', fixing: 'EURO' }
+    } as HardwareItem,
+
+    // --- 3. Cruciform Plates (Steel) - Page 4 ---
+    pl_crux_st_sc_d0: {
+      id: 'pl_crux_st_sc_d0',
+      itemNo: '329.68.000',
+      name: 'Cruciform Steel Screw D0',
+      category: 'HINGE_PLATE',
+      specs: { distance: 0, type: 'CRUCIFORM', material: 'STEEL', fixing: 'SCREW' }
+    } as HardwareItem,
+  },
+
+  accessories: {
+    // Screw for Alu Frame (Page 1)
+    screw_alu: {
+      id: 'scr_alu',
+      itemNo: '028.01.062',
+      name: 'Screw for Alu Frame',
+      category: 'ACCESSORY',
+      specs: {}
+    } as HardwareItem
+  }
+};
+```
+
+### 11.3 Overlay Formula for Aluminium Frame Hinges
+
+```
+OVERLAY CALCULATION (Metalla 510 Alu):
+
+Overlay = E + K - D
+
+Where:
+- E = Cup Distance (3-7mm for Alu Frame)
+- K = Crank Constant (Full=18, Half=9, Inset=-2)
+- D = Plate Distance (0, 2, 3, 6, 9, 12mm)
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Crank Type   │   K    │  Overlay Range*  │   Use Case         │
+├───────────────┼────────┼──────────────────┼────────────────────┤
+│  Full Overlay │  +18   │   14-19mm        │  Standard Cabinets │
+│  Half Overlay │   +9   │    5-10mm        │  Two-Door Meeting  │
+│  Inset        │   -2   │    0-3mm         │  Flush Doors       │
+└───────────────┴────────┴──────────────────┴────────────────────┘
+
+*With E=4mm (standard), D=0mm
+```
+
+### 11.4 Plate Selection Matrix
+
+```
+PLATE SELECTION GUIDE:
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Type        │  Material  │  Fixing  │  Distance  │  Item No      │ Use │
+├──────────────┼────────────┼──────────┼────────────┼───────────────┼─────┤
+│  Linear      │  Zinc      │  Screw   │  D0        │  329.67.040   │  A  │
+│  Linear      │  Zinc      │  Screw   │  D3        │  329.67.043   │  A  │
+│  Linear      │  Zinc      │  Euro    │  D0        │  329.67.000   │  B  │
+├──────────────┼────────────┼──────────┼────────────┼───────────────┼─────┤
+│  Cruciform   │  Zinc      │  Screw   │  D0        │  329.71.500   │  C  │
+│  Cruciform   │  Zinc      │  Screw   │  D2        │  329.71.502   │  C  │
+│  Cruciform   │  Zinc      │  Screw   │  D9        │  329.73.608   │  D  │
+│  Cruciform   │  Zinc      │  Screw   │  D12       │  329.73.609   │  D  │
+│  Cruciform   │  Zinc      │  Euro    │  D0        │  329.71.510   │  E  │
+├──────────────┼────────────┼──────────┼────────────┼───────────────┼─────┤
+│  Cruciform   │  Steel     │  Screw   │  D0        │  329.68.000   │  F  │
+└──────────────┴────────────┴──────────┴────────────┴───────────────┴─────┘
+
+Use Cases:
+A = Narrow space, visible edge (Linear)
+B = Pre-drilled Euro holes (Linear)
+C = Standard application (most common)
+D = Thick doors, blind corners, site adjustment
+E = Pre-drilled Euro holes (Cruciform)
+F = Heavy-duty, steel cabinet
+```
+
+### 11.5 Advanced Hinge Engine
+
+```typescript
+// src/services/engineering/hingeEngine.ts
+
+import { HAFELE_MASTER_DB, HardwareItem, SystemType, FixingMethod, PlateType } from '../hardware/hafeleDb';
+
+export interface HingePlan {
+  isValid: boolean;
+  quantity: number;
+  positions: number[];
+  specs: {
+    cup: HardwareItem;
+    plate: HardwareItem;
+    accessory?: HardwareItem
+  };
+  meta: {
+    cupDistanceE: number;
+    plateDistanceD: number;
+    fixing: FixingMethod;
+    pattern: string;
+    actualOverlay: number;
+  };
+}
+
+interface HingeOptions {
+  doorHeight: number;
+  doorWeight: number;
+  overlay: number;
+  system: SystemType;
+  preferredFixing?: FixingMethod;   // 'SCREW' (Default) or 'EURO'
+  preferredPlateType?: PlateType;   // 'CRUCIFORM' (Default) or 'LINEAR'
+}
+
+/**
+ * Smart Hardware Selection with Overlay Solver
+ */
+const selectHardware = (
+  system: SystemType,
+  overlay: number,
+  fixing: FixingMethod,
+  plateType: PlateType
+) => {
+  const db = HAFELE_MASTER_DB.hinges;
+  const plates = HAFELE_MASTER_DB.plates;
+
+  // 1. SELECT CUP based on system and overlay
+  let cup: HardwareItem;
+  let accessory: HardwareItem | undefined;
+
+  if (system === 'HINGE_ALU_105_PUSH') {
+    // Aluminium Frame Hinge Selection
+    if (overlay >= 14) {
+      cup = db.h_alu_full;       // Full Overlay (14-19mm)
+    } else if (overlay >= 5) {
+      cup = db.h_alu_half;       // Half Overlay (5-10mm)
+    } else {
+      cup = db.h_alu_inset;      // Inset (0-3mm)
+    }
+
+    // Alu frame requires special screws
+    accessory = HAFELE_MASTER_DB.accessories.screw_alu;
+  } else {
+    // Standard hinge selection (fallback)
+    cup = db.h_alu_full; // Would normally select from 110/155 etc.
+  }
+
+  // 2. SOLVER: Find best E and D combination
+  // Formula: Overlay = E + K - D
+  const K = cup.specs.crankConstant || 0;
+
+  let bestE = 4;      // Default cup distance
+  let bestD = 0;      // Default plate distance
+  let minDiff = 999;
+
+  const availPlates = [0, 2, 3, 6, 9, 12];
+  const availE = [3, 4, 5, 6, 7];  // Alu Frame E range
+
+  for (const E of availE) {
+    for (const D of availPlates) {
+      const calcOverlay = E + K - D;
+      const diff = Math.abs(calcOverlay - overlay);
+
+      // Preference: Smaller D is better, Standard E (4-5) is better
+      if (diff < minDiff || (diff === minDiff && D < bestD)) {
+        minDiff = diff;
+        bestE = E;
+        bestD = D;
+      }
+    }
+  }
+
+  // 3. MATCH PLATE SKU from database
+  const allPlates = Object.values(plates);
+  let plate = allPlates.find(p =>
+    p.specs.distance === bestD &&
+    p.specs.fixing === fixing &&
+    p.specs.type === plateType
+  );
+
+  // Fallback if exact match not found
+  if (!plate) {
+    plate = allPlates.find(p =>
+      p.specs.distance === bestD &&
+      p.specs.fixing === fixing
+    ) || plates.pl_crux_zn_sc_d0;
+  }
+
+  return { cup, plate, accessory, bestD, bestE };
+};
+
+/**
+ * Calculate complete hinge plan
+ */
+export const calculateHingePlan = (opts: HingeOptions): HingePlan => {
+  const {
+    doorHeight,
+    doorWeight,
+    system,
+    overlay,
+    preferredFixing = 'SCREW',
+    preferredPlateType = 'CRUCIFORM'
+  } = opts;
+
+  // 1. Hardware Selection
+  const selection = selectHardware(system, overlay, preferredFixing, preferredPlateType);
+  const { cup, plate, accessory, bestD, bestE } = selection;
+
+  // 2. Quantity Calculation (Same as standard hinges)
+  const qty = (doorHeight > 2100 || doorWeight > 17) ? 5 :
+              (doorHeight > 1600 || doorWeight > 12) ? 4 :
+              (doorHeight > 900  || doorWeight > 6)  ? 3 : 2;
+
+  // 3. Position Calculation (System 32 aligned)
+  const positions: number[] = [];
+  const margin = 96;  // 3 × 32mm from edge
+  const span = doorHeight - (2 * margin);
+
+  for (let i = 0; i < qty; i++) {
+    positions.push(Math.round(margin + (span / (qty - 1)) * i));
+  }
+
+  // 4. Calculate actual overlay achieved
+  const actualOverlay = bestE + (cup.specs.crankConstant || 0) - bestD;
+
+  return {
+    isValid: true,
+    quantity: qty,
+    positions,
+    specs: {
+      cup,
+      plate,
+      accessory
+    },
+    meta: {
+      cupDistanceE: bestE,
+      plateDistanceD: bestD,
+      actualOverlay,
+      fixing: preferredFixing,
+      pattern: cup.specs.pattern || '48/6'
+    }
+  };
+};
+```
+
+### 11.6 CAM Generator for Advanced Mounting
+
+```typescript
+// src/services/cam/generators/hingeOp.ts
+
+import { calculateHingePlan, HingePlan } from '../../engineering/hingeEngine';
+
+export interface MachineOp {
+  id: string;
+  type: 'DRILL' | 'MILL';
+  face: 'FACE' | 'EDGE' | 'BACK';
+  x: number;
+  y: number;
+  diameter: number;
+  depth: number;
+  hardwareId: string;
+}
+
+/**
+ * Generate drilling operations for hinges
+ * Supports both standard cups and aluminium frame mounting
+ */
+export const generateHingeOps = (
+  doorId: string,
+  cabinetId: string,
+  opts: any
+): MachineOp[] => {
+  const plan = calculateHingePlan(opts);
+  if (!plan.isValid) return [];
+
+  const ops: MachineOp[] = [];
+  const { cup, plate, accessory } = plan.specs;
+
+  // Determine Plate Drill Diameter based on fixing method
+  // Euro uses 5mm, Chipboard Screw uses 3mm pilot
+  const plateHoleDia = plan.meta.fixing === 'EURO' ? 5 : 3;
+
+  plan.positions.forEach((yPos, i) => {
+
+    // === 1. DOOR OPERATIONS ===
+    if (plan.meta.pattern === 'ALU_FRAME') {
+      // ⚠️ ALUMINIUM FRAME: NO 35mm CUP HOLE!
+      // Drill pilot holes for frame screws instead
+      const screwCenterX = 20.5;  // Per Häfele spec
+
+      [-24, 24].forEach(offsetY => {
+        ops.push({
+          id: `${doorId}-alu-pilot-${i}-${offsetY}`,
+          type: 'DRILL',
+          face: 'FACE',
+          x: screwCenterX,
+          y: yPos + offsetY,
+          diameter: 3.0,  // Pilot hole for Alu Screw
+          depth: 10,
+          hardwareId: accessory?.itemNo || 'ALU-SCREW'
+        });
+      });
+    } else {
+      // STANDARD 35mm CUP HOLE
+      const cupCenterX = plan.meta.cupDistanceE + 17.5;
+
+      ops.push({
+        id: `${doorId}-cup-${i}`,
+        type: 'DRILL',
+        face: 'FACE',
+        x: cupCenterX,
+        y: yPos,
+        diameter: 35,
+        depth: cup.specs.cupDepth || 12,
+        hardwareId: cup.itemNo
+      });
+
+      // Screw Holes (48/6 pattern)
+      [-24, 24].forEach(offsetY => {
+        ops.push({
+          id: `${doorId}-cup-scr-${i}-${offsetY}`,
+          type: 'DRILL',
+          face: 'FACE',
+          x: cupCenterX - 6,
+          y: yPos + offsetY,
+          diameter: 2.5,
+          depth: 5,
+          hardwareId: 'HINGE-SCREW'
+        });
+      });
+    }
+
+    // === 2. CABINET OPERATIONS (PLATE) ===
+    // Drill 2 holes spaced 32mm apart (Offset Y ±16)
+    [-16, 16].forEach(offsetY => {
+      ops.push({
+        id: `${cabinetId}-plt-${i}-${offsetY}`,
+        type: 'DRILL',
+        face: 'FACE',
+        x: 37,  // System 32 edge distance
+        y: yPos + offsetY,
+        diameter: plateHoleDia,  // ✅ Dynamic: 3mm vs 5mm
+        depth: 13,
+        hardwareId: plate.itemNo
+      });
+    });
+  });
+
+  return ops;
+};
+```
+
+### 11.7 Drilling Pattern Diagrams
+
+```
+ALUMINIUM FRAME HINGE (Metalla 510 Push):
+
+DOOR PANEL (Alu Frame 17-24mm):
+┌─────────────────────────────────────────┐
+│                                         │
+│     No 35mm cup hole!                   │
+│                                         │
+│         ●  ← Pilot 3mm @ Y+24           │
+│        20.5mm from edge                 │
+│         ●  ← Pilot 3mm @ Y-24           │
+│                                         │
+│     Screw spacing: 48mm (24+24)         │
+│                                         │
+└─────────────────────────────────────────┘
+
+CABINET SIDE PANEL:
+┌─────────────────────────────────────────┐
+│                                         │
+│         ●  ← Plate hole @ Y+16          │
+│   37mm  │                               │
+│   from  │  Diameter: 5mm (Euro)         │
+│   edge  │            3mm (Screw)        │
+│         ●  ← Plate hole @ Y-16          │
+│                                         │
+│     Hole spacing: 32mm (16+16)          │
+│                                         │
+└─────────────────────────────────────────┘
+
+
+STANDARD HINGE (35mm Cup):
+
+DOOR PANEL:
+┌─────────────────────────────────────────┐
+│                                         │
+│         ●  ← Screw 2.5mm @ Y+24         │
+│                                         │
+│     ◯──────── 35mm Cup @ E+17.5mm       │
+│                                         │
+│         ●  ← Screw 2.5mm @ Y-24         │
+│                                         │
+│     Cup center = E + 17.5mm from edge   │
+│     Screw offset = -6mm from cup center │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+### 11.8 Plate Geometry Comparison
+
+```
+LINEAR PLATE (Narrow):
+┌────┐
+│    │
+│ ●  │  Width: 12mm
+│    │  For narrow spaces
+│ ●  │  Visible edge applications
+│    │
+└────┘
+
+CRUCIFORM PLATE (Standard):
+┌────────────┐
+│            │
+│  ●    ●    │  Width: 35mm
+│            │  Most common
+│  ●    ●    │  Better stability
+│            │
+└────────────┘
+
+Distance Options:
+┌─────────────────────────────────────────────────────┐
+│  D0   │  D2   │  D3   │  D6   │  D9   │  D12  │
+├───────┼───────┼───────┼───────┼───────┼───────┤
+│  0mm  │  2mm  │  3mm  │  6mm  │  9mm  │  12mm │
+│       │       │       │       │       │       │
+│ Std   │ Minor │ Minor │ Med   │ Thick │ Max   │
+│       │ adj.  │ adj.  │ adj.  │ door  │ adj.  │
+└───────┴───────┴───────┴───────┴───────┴───────┘
+```
+
+### 11.9 Visual Component
+
+```typescript
+// src/components/3d/hardware/MasterHinge.tsx
+
+import React, { useMemo } from 'react';
+import { calculateHingePlan } from '../../../services/engineering/hingeEngine';
+
+const mm = (v: number) => v / 1000;
+
+interface MasterHingeProps {
+  doorHeight: number;
+  doorWeight: number;
+  overlay: number;
+  system: 'HINGE_ALU_105_PUSH' | 'HINGE_110' | string;
+  preferredFixing?: 'SCREW' | 'EURO';
+  preferredPlateType?: 'LINEAR' | 'CRUCIFORM';
+}
+
+export const MasterHinge: React.FC<MasterHingeProps> = (props) => {
+  const plan = useMemo(() => calculateHingePlan(props as any), [props]);
+
+  if (!plan?.isValid) return null;
+
+  const { cup, plate } = plan.specs;
+
+  return (
+    <group>
+      {plan.positions.map((y, i) => (
+        <group key={i} position={[0, mm(y), 0]}>
+
+          {/* CUP Visual */}
+          <group position={[mm(21.5), 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+            {plan.meta.pattern === 'ALU_FRAME' ? (
+              // Aluminium Frame Hinge Visual (No Cup)
+              <mesh position={[0, mm(-2), 0]}>
+                <boxGeometry args={[mm(40), mm(15), mm(3)]} />
+                <meshStandardMaterial color="#90A4AE" metalness={0.8} />
+              </mesh>
+            ) : (
+              // Standard Cup Visual
+              <mesh>
+                <cylinderGeometry args={[mm(17.5), mm(17.5), mm(2), 32]} />
+                <meshStandardMaterial color="#CFD8DC" />
+              </mesh>
+            )}
+          </group>
+
+          {/* PLATE Visual */}
+          <group position={[mm(-20), 0, mm(15)]}>
+            <mesh position={[mm(-25), 0, mm(-5)]}>
+              {/* Shape changes based on Plate Type */}
+              {plate.specs.type === 'LINEAR' ? (
+                // Linear Plate (Narrow)
+                <boxGeometry args={[
+                  mm(12),
+                  mm(48),
+                  mm((plate.specs.distance || 0) + 2)
+                ]} />
+              ) : (
+                // Cruciform Plate (Wide)
+                <boxGeometry args={[
+                  mm(35),
+                  mm(48),
+                  mm((plate.specs.distance || 0) + 2)
+                ]} />
+              )}
+              <meshStandardMaterial
+                color={plate.specs.material === 'STEEL' ? "#B0BEC5" : "#CFD8DC"}
+              />
+            </mesh>
+          </group>
+
+        </group>
+      ))}
+    </group>
+  );
+};
+```
+
+### 11.10 Quick Reference Tables
+
+**Metalla 510 Alu Push Hinges:**
+
+| Model | Item No | Crank K | Overlay Range | Application |
+|-------|---------|---------|---------------|-------------|
+| Full Overlay | 329.23.810 | +18 | 14-19mm | Standard cabinets |
+| Half Overlay | 329.23.830 | +9 | 5-10mm | Two doors meeting |
+| Inset | 329.23.840 | -2 | 0-3mm | Flush doors |
+
+**Mounting Plates Summary:**
+
+| Type | Material | Fixing | Distances Available |
+|------|----------|--------|---------------------|
+| Linear | Zinc | Screw | D0, D3 |
+| Linear | Zinc | Euro | D0 |
+| Cruciform | Zinc | Screw | D0, D2, D9, D12 |
+| Cruciform | Zinc | Euro | D0 |
+| Cruciform | Steel | Screw | D0 |
+
+**Drilling Diameter by Fixing Method:**
+
+| Fixing Method | Cabinet Hole Ø | Door Hole Ø | Notes |
+|---------------|----------------|-------------|-------|
+| Screw (Chipboard) | 3mm pilot | 35mm cup / 3mm pilot | Most common |
+| Euro (Pre-drilled) | 5mm | 35mm cup / 3mm pilot | System cabinets |
+| Alu Frame | 3mm pilot (cabinet) | 3mm pilot (frame) | No cup hole |
+
+### 11.11 Complete Implementation Example
+
+```typescript
+// Example: Aluminium frame door on standard cabinet
+
+const aluDoorConfig = {
+  doorHeight: 700,
+  doorWeight: 4,
+  overlay: 16,
+  system: 'HINGE_ALU_105_PUSH' as const,
+  preferredFixing: 'SCREW' as const,
+  preferredPlateType: 'CRUCIFORM' as const
+};
+
+// Generate plan
+const plan = calculateHingePlan(aluDoorConfig);
+
+console.log('=== Aluminium Frame Hinge Plan ===');
+console.log('Hinge:', plan.specs.cup.name);          // 'Metalla 510 Alu Push Full'
+console.log('Plate:', plan.specs.plate.name);        // 'Cruciform Zinc Screw D0'
+console.log('Accessory:', plan.specs.accessory?.name); // 'Screw for Alu Frame'
+console.log('Quantity:', plan.quantity);              // 2
+console.log('Positions:', plan.positions);            // [96, 604]
+console.log('Actual Overlay:', plan.meta.actualOverlay); // 22mm (E=4 + K=18 - D=0)
+console.log('Pattern:', plan.meta.pattern);           // 'ALU_FRAME'
+
+// Generate CAM operations
+const ops = generateHingeOps('DOOR-001', 'CAB-001', aluDoorConfig);
+
+console.log('\n=== CAM Operations ===');
+console.log('Total operations:', ops.length);  // 8 (4 door pilots + 4 plate holes)
+
+// Door operations (Alu Frame - pilot holes only)
+const doorOps = ops.filter(op => op.id.includes('DOOR'));
+console.log('Door ops:', doorOps.length);      // 4 (2 positions × 2 pilots each)
+console.log('Door hole Ø:', doorOps[0].diameter); // 3mm (pilot)
+
+// Cabinet operations (plate holes)
+const cabOps = ops.filter(op => op.id.includes('CAB'));
+console.log('Cabinet ops:', cabOps.length);    // 4 (2 positions × 2 holes each)
+console.log('Cabinet hole Ø:', cabOps[0].diameter); // 3mm (Screw fixing)
+```
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
 - Blum Catalog Pages 2, 5, 6, 13, 14-67, 64, 74-76, 84, 150, 410, 420, 430, 452
+- Häfele Selection 17 (Metalla 510 & Mounting Plates)
 - Hettich Product Catalog
 - Häfele Furniture Fittings Handbook
 - European Kitchen Cabinet Standards (EN 16121)
