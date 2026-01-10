@@ -978,9 +978,393 @@ function validateDrawer(
 
 ---
 
-## ส่วนที่ 9: Quick Reference Tables
+## ส่วนที่ 9: Blum Wooden Drawer Systems (MOVENTO/TANDEM)
 
-### 9.1 Door Size Matrix
+ระบบรางลิ้นชักสำหรับงานไม้ (Wooden Drawer Systems) ของ Blum ครอบคลุมทั้งรุ่น **MOVENTO** (รุ่นท็อป ปรับ 4 มิติ) และ **TANDEM** (รุ่นมาตรฐาน)
+
+### 9.1 Wood Drawer Architect Engine
+
+หลักการ **"Internal Width First"** - คำนวณจากความกว้างภายในลิ้นชักก่อน เพื่อให้มั่นใจว่าลิ้นชักจะใส่รางได้พอดี
+
+```
+สูตรหลัก: Internal Drawer Width = Cabinet LW - 42mm
+```
+
+นี่คือค่าคงที่ของราง Blum MOVENTO/TANDEM เพื่อให้มีที่ว่างสำหรับราง
+
+### 9.2 Master Hardware Database
+
+```typescript
+// src/services/hardware/masterDb.ts
+
+export type SystemType =
+  | 'BLUM_MOVENTO'      // Synchronised, 40/60kg, 4D Adjustment
+  | 'BLUM_TANDEM_FULL'  // Standard, 30kg, Full Extension
+  | 'BLUM_TANDEM_PART'; // Standard, 30kg, Partial Extension
+
+export interface HardwareItem {
+  id: string;
+  brand: 'HAFELE' | 'BLUM';
+  itemNo: string;
+  name: string;
+  category: 'RUNNER_UNDERMOUNT' | 'LOCKING_DEVICE';
+  specs: {
+    loadCapacity?: number;    // 30, 40, 60 kg
+    nominalLength?: number;   // NL
+    extension?: 'FULL' | 'PARTIAL';
+    minCabinetDepth?: number; // NL + 3mm
+    lockingFamily?: 'MOVENTO' | 'TANDEM';
+    hand?: 'LEFT' | 'RIGHT';
+  };
+}
+
+export const MASTER_DB = {
+  runners_wood: {
+    // =================================================================
+    // MOVENTO (Page 410) - The Professional Choice
+    // =================================================================
+    // 40kg Full Extension (760H)
+    mov_40_450: {
+      id: 'mov_760h_450', brand: 'BLUM', itemNo: '760H4500S',
+      name: 'MOVENTO 40kg NL450',
+      category: 'RUNNER_UNDERMOUNT',
+      specs: {
+        loadCapacity: 40, nominalLength: 450, extension: 'FULL',
+        minCabinetDepth: 453, lockingFamily: 'MOVENTO'
+      }
+    },
+    mov_40_500: {
+      id: 'mov_760h_500', brand: 'BLUM', itemNo: '760H5000S',
+      name: 'MOVENTO 40kg NL500',
+      category: 'RUNNER_UNDERMOUNT',
+      specs: {
+        loadCapacity: 40, nominalLength: 500, extension: 'FULL',
+        minCabinetDepth: 503, lockingFamily: 'MOVENTO'
+      }
+    },
+
+    // 60kg Heavy Duty (766H)
+    mov_60_500: {
+      id: 'mov_766h_500', brand: 'BLUM', itemNo: '766H5000S',
+      name: 'MOVENTO 60kg NL500',
+      category: 'RUNNER_UNDERMOUNT',
+      specs: {
+        loadCapacity: 60, nominalLength: 500, extension: 'FULL',
+        minCabinetDepth: 503, lockingFamily: 'MOVENTO'
+      }
+    },
+
+    // =================================================================
+    // TANDEM (Page 430) - The Standard Choice
+    // =================================================================
+    // 30kg Full Extension (560H)
+    tan_full_500: {
+      id: 'tan_560h_500', brand: 'BLUM', itemNo: '560H5000B',
+      name: 'TANDEM Full 30kg NL500',
+      category: 'RUNNER_UNDERMOUNT',
+      specs: {
+        loadCapacity: 30, nominalLength: 500, extension: 'FULL',
+        minCabinetDepth: 503, lockingFamily: 'TANDEM'
+      }
+    },
+
+    // 30kg Partial Extension (550H)
+    tan_part_500: {
+      id: 'tan_550h_500', brand: 'BLUM', itemNo: '550H5000B',
+      name: 'TANDEM Part 30kg NL500',
+      category: 'RUNNER_UNDERMOUNT',
+      specs: {
+        loadCapacity: 30, nominalLength: 500, extension: 'PARTIAL',
+        minCabinetDepth: 503, lockingFamily: 'TANDEM'
+      }
+    },
+  },
+
+  locking_devices: {
+    // =================================================================
+    // LOCKING DEVICES (Page 420, 452)
+    // =================================================================
+    // MOVENTO Series (T51.7601) - ปรับซ้ายขวา/สูงต่ำได้
+    lock_mov_L: {
+      id: 'lock_mov_l', brand: 'BLUM', itemNo: 'T51.7601 L',
+      name: 'Locking Device MOVENTO (L)',
+      category: 'LOCKING_DEVICE',
+      specs: { hand: 'LEFT' }
+    },
+    lock_mov_R: {
+      id: 'lock_mov_r', brand: 'BLUM', itemNo: 'T51.7601 R',
+      name: 'Locking Device MOVENTO (R)',
+      category: 'LOCKING_DEVICE',
+      specs: { hand: 'RIGHT' }
+    },
+
+    // TANDEM Series (T51.1700) - รุ่นมาตรฐาน
+    lock_tan_L: {
+      id: 'lock_tan_l', brand: 'BLUM', itemNo: 'T51.1700 L',
+      name: 'Locking Device TANDEM (L)',
+      category: 'LOCKING_DEVICE',
+      specs: { hand: 'LEFT' }
+    },
+    lock_tan_R: {
+      id: 'lock_tan_r', brand: 'BLUM', itemNo: 'T51.1700 R',
+      name: 'Locking Device TANDEM (R)',
+      category: 'LOCKING_DEVICE',
+      specs: { hand: 'RIGHT' }
+    },
+  }
+};
+```
+
+### 9.3 Wooden Drawer Engine
+
+Engine คำนวณ Cutlist ที่รองรับความหนาไม้หลากหลาย (16/19mm)
+
+```typescript
+// src/services/engineering/woodDrawerEngine.ts
+
+export interface WoodDrawerPlan {
+  isValid: boolean;
+  specs: {
+    runner: HardwareItem;
+    locks: { left: HardwareItem; right: HardwareItem };
+  };
+  cutList: {
+    sides: { length: number; height: number; qty: number };
+    frontBack: { width: number; height: number; qty: number };
+    bottom: { width: number; length: number; qty: number };
+  };
+  drilling: {
+    cabinet: { x: number; y: number }[];
+    drawerBack: { x: number; y: number; dia: number }[]; // รูเจาะหลัง (Hook)
+    drawerBottom: { x: number; y: number }[];            // รูเจาะพื้น (Lock)
+  };
+  meta: {
+    outerWidth: number;    // SKW
+    internalWidth: number; // LW_drawer
+    drawerLength: number;  // SKL
+  };
+}
+
+interface Options {
+  cabinetLW: number;      // ความกว้างภายในตู้
+  cabinetLT: number;      // ความลึกภายในตู้
+  drawerHeight: number;   // ความสูงกล่อง
+  woodThickness: number;  // 16mm หรือ 19mm
+  system: SystemType;
+  totalLoad?: number;
+}
+
+export const calculateWoodDrawer = (opts: Options): WoodDrawerPlan => {
+  const { cabinetLW, cabinetLT, drawerHeight, woodThickness, system } = opts;
+  const db = MASTER_DB.runners_wood;
+  const dbLocks = MASTER_DB.locking_devices;
+
+  // 1. SELECT RUNNER
+  const availableNL = [450, 500];
+  const targetNL = availableNL.reverse().find(nl => cabinetLT >= nl + 3) || 500;
+
+  let runner = db.mov_40_500; // Default
+  if (system === 'BLUM_MOVENTO') {
+    runner = (opts.totalLoad && opts.totalLoad > 40)
+      ? db.mov_60_500
+      : db.mov_40_500;
+  } else if (system === 'BLUM_TANDEM_PART') {
+    runner = db.tan_part_500;
+  } else {
+    runner = db.tan_full_500;
+  }
+
+  // 2. SELECT LOCKING DEVICES
+  const family = runner.specs.lockingFamily;
+  const locks = {
+    left: family === 'MOVENTO' ? dbLocks.lock_mov_L : dbLocks.lock_tan_L,
+    right: family === 'MOVENTO' ? dbLocks.lock_mov_R : dbLocks.lock_tan_R,
+  };
+
+  // 3. DIMENSION CALCULATION (Critical Logic)
+  // สูตร: Internal Drawer Width = Cabinet LW - 42mm
+  const internalWidth = cabinetLW - 42;
+
+  // คำนวณ Outer Width (SKW) จากความหนาไม้
+  const boxOuterWidth = internalWidth + (2 * woodThickness);
+
+  // Drawer Length (SKL) = NL - 10mm
+  const boxLength = runner.specs.nominalLength! - 10;
+
+  // 4. CUTLIST GENERATION
+  const sides = { length: boxLength, height: drawerHeight, qty: 2 };
+  const frontBack = { width: internalWidth, height: drawerHeight, qty: 2 };
+  const bottom = { width: internalWidth, length: boxLength, qty: 1 };
+
+  // 5. DRILLING POSITIONS
+
+  // 5.1 Cabinet Runner (System 32)
+  const cabDrill = [
+    { x: 37, y: 0 },
+    { x: 261, y: 0 },
+    { x: 293, y: 0 }
+  ];
+
+  // 5.2 Drawer Back (Rear Hook) - 7mm from inner side, 11mm from bottom
+  const backDrill = [
+    { x: 7, y: 11, dia: 6 },
+    { x: frontBack.width - 7, y: 11, dia: 6 }
+  ];
+
+  // 5.3 Locking Device (Drawer Bottom) - ~10mm from inner edge
+  const bottomDrill = [
+    { x: 10, y: 10 },
+    { x: bottom.width - 10, y: 10 }
+  ];
+
+  return {
+    isValid: true,
+    specs: { runner, locks },
+    cutList: { sides, frontBack, bottom },
+    drilling: { cabinet: cabDrill, drawerBack: backDrill, drawerBottom: bottomDrill },
+    meta: { outerWidth: boxOuterWidth, internalWidth, drawerLength: boxLength }
+  };
+};
+```
+
+### 9.4 CAM Generator for Wood Drawer
+
+```typescript
+// src/services/cam/generators/woodDrawerOp.ts
+
+export const generateWoodDrawerOps = (
+  cabinetId: string,
+  drawerBoxId: string,
+  opts: any
+): MachineOp[] => {
+  const plan = calculateWoodDrawer(opts);
+  if (!plan.isValid) return [];
+
+  const ops: MachineOp[] = [];
+  const drawerY = opts.drawerY || 50;
+
+  // === 1. CABINET OPS (Runner Mounting) ===
+  plan.drilling.cabinet.forEach((hole, i) => {
+    ops.push({
+      id: `${cabinetId}-run-${i}`,
+      type: 'DRILL', face: 'FACE',
+      x: hole.x,
+      y: drawerY + 37,
+      diameter: 5, depth: 13,
+      hardwareId: plan.specs.runner.itemNo
+    });
+  });
+
+  // === 2. DRAWER COMPONENT OPS ===
+
+  // 2.1 Rear Hook (Back Panel) - รู 6mm สำหรับเกี่ยวเดือยราง
+  plan.drilling.drawerBack.forEach((hole, i) => {
+    ops.push({
+      id: `${drawerBoxId}-back-hook-${i}`,
+      type: 'DRILL', face: 'FACE',
+      x: hole.x, y: hole.y,
+      diameter: hole.dia, depth: 10,
+      hardwareId: 'BLUM-HOOK'
+    });
+  });
+
+  // 2.2 Locking Device (Bottom Panel) - รูนำศูนย์สำหรับยึดตัวล็อค
+  plan.drilling.drawerBottom.forEach((hole, i) => {
+    ops.push({
+      id: `${drawerBoxId}-lock-pilot-${i}`,
+      type: 'DRILL', face: 'BOTTOM',
+      x: hole.x, y: hole.y,
+      diameter: 2.5, depth: 10,
+      hardwareId: plan.specs.locks.left.itemNo
+    });
+  });
+
+  return ops;
+};
+```
+
+### 9.5 MOVENTO vs TANDEM Comparison
+
+| Feature | MOVENTO | TANDEM Full | TANDEM Partial |
+|---------|---------|-------------|----------------|
+| **Load Capacity** | 40/60 kg | 30 kg | 30 kg |
+| **Extension** | Full + Sync | Full | 3/4 |
+| **Adjustment** | 4D | 2D | 2D |
+| **Locking Device** | T51.7601 | T51.1700 | T51.1700 |
+| **Item No. (NL500)** | 760H5000S | 560H5000B | 550H5000B |
+| **Min Cabinet Depth** | NL + 3mm | NL + 3mm | NL + 3mm |
+| **Price Level** | Premium | Standard | Economy |
+
+### 9.6 Drawer Width Calculation (Wood Box)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    CABINET (LW)                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │                  RUNNER GAP                      │   │
+│  │  ┌───────────────────────────────────────────┐  │   │
+│  │  │              DRAWER BOX                   │  │   │
+│  │  │  ┌─────────────────────────────────────┐  │  │   │
+│  │  │  │         INTERNAL WIDTH              │  │  │   │
+│  │  │  │         (LW - 42mm)                 │  │  │   │
+│  │  │  └─────────────────────────────────────┘  │  │   │
+│  │  │  ←──────── Wood Thickness ─────────────→  │  │   │
+│  │  └───────────────────────────────────────────┘  │   │
+│  │  ←──────────── Outer Width (SKW) ────────────→  │   │
+│  └─────────────────────────────────────────────────┘   │
+│  ←─────────────────── 21mm ───→  ←────── 21mm ───────→ │
+└─────────────────────────────────────────────────────────┘
+
+สูตร:
+- Internal Width = Cabinet LW - 42mm (ค่าคงที่)
+- Outer Width (SKW) = Internal Width + (2 × Wood Thickness)
+- Drawer Length (SKL) = Nominal Length (NL) - 10mm
+```
+
+### 9.7 Wood Thickness Compatibility
+
+| Wood Thickness | Internal Width | Outer Width | Notes |
+|----------------|----------------|-------------|-------|
+| 16mm | LW - 42 | LW - 42 + 32 = LW - 10 | Standard |
+| 18mm | LW - 42 | LW - 42 + 36 = LW - 6 | Common |
+| 19mm | LW - 42 | LW - 42 + 38 = LW - 4 | Premium |
+
+**ตัวอย่าง: Cabinet LW = 500mm, Wood 16mm**
+```
+Internal Width = 500 - 42 = 458mm
+Outer Width = 458 + 32 = 490mm
+Gap (each side) = (500 - 490) / 2 = 5mm ✓
+```
+
+### 9.8 Drilling Pattern Reference
+
+```
+DRAWER BACK PANEL (Face View):
+┌─────────────────────────────────────────┐
+│                                         │
+│                                         │
+│                                         │
+│                                         │
+│  ○                                   ○  │ ← Rear Hook Holes
+│  ↑                                   ↑  │
+│ 7mm                               7mm   │
+└─────────────────────────────────────────┘
+  ↑ 11mm from bottom
+
+DRAWER BOTTOM (Top View):
+┌─────────────────────────────────────────┐
+│  ○                                   ○  │ ← Locking Device
+│  ↑                                   ↑  │    Pilot Holes
+│ 10mm                              10mm  │
+│  ←─────────── 10mm from front ─────────→│
+└─────────────────────────────────────────┘
+```
+
+---
+
+## ส่วนที่ 10: Quick Reference Tables
+
+### 10.1 Door Size Matrix
 
 | ช่องเปิด (W×H) | Full Overlay | Half Overlay | Inset |
 |----------------|--------------|--------------|-------|
@@ -992,7 +1376,7 @@ function validateDrawer(
 
 *สูตร: Full Overlay = Opening + 36mm (Overlay 18mm × 2)*
 
-### 9.2 Drawer Box Width Matrix
+### 10.2 Drawer Box Width Matrix
 
 | ช่องเปิด (W) | Side Mount | Undermount | Legrabox |
 |--------------|------------|------------|----------|
@@ -1006,7 +1390,7 @@ function validateDrawer(
 
 *สูตร: Box Width = Opening - 26mm (Slide 12.5mm + Clearance 0.5mm × 2)*
 
-### 9.3 Hinge Count by Door Size
+### 10.3 Hinge Count by Door Size
 
 | Door Height | Door Weight ≤4kg | ≤8kg | ≤12kg | ≤16kg |
 |-------------|------------------|------|-------|-------|
@@ -1096,6 +1480,9 @@ console.log('Drawer valid:', drawerValidation.isValid);
 4. **Slide Selection**: การเลือกรางตามน้ำหนักและความยาว
 5. **DXF Export**: Layer naming และ export functions
 6. **Validation**: ตรวจสอบความถูกต้องของขนาด
+7. **Blum Wooden Drawer Systems**: MOVENTO/TANDEM พร้อม Wood Drawer Architect Engine
+8. **Hardware Database**: Master DB สำหรับ Runners และ Locking Devices
+9. **CAM Integration**: G-code generation สำหรับ drilling patterns
 
 **Reference Documents:**
 - [Hardware & Drilling Specifications](./hardware-drilling-specifications.md)
