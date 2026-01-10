@@ -5520,9 +5520,662 @@ console.log('Sleeve dowel holes:', dowelOps.length);  // 8 (4 sleeves × 2 dowel
 
 ---
 
+## ส่วนที่ 15: Lamello P-System Engine (Architecture v5.5)
+
+ระบบ **Lamello P-System** (Clamex P-14, P-10, Medius) เป็นระบบข้อต่อแบบ T-Slot ที่ให้ความแข็งแรงสูงและถอดประกอบได้ ใช้กลไก Lever Lock ที่ยึดแน่นเพียงหมุนด้วยไขควงปากแบน
+
+### 15.1 Medius Intelligence System
+
+ระบบ Medius ถูกออกแบบมาเพื่อแก้ปัญหา "Back-to-Back Installation" บนแผงกลาง (Center Panel) โดยใช้ความลึกร่องต่างกันทั้งสองด้าน:
+
+```
+MEDIUS CONCEPT (Center Panel Back-to-Back):
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  STANDARD P-14 (Both sides same depth):                        │
+│  ─────────────────────────────────────                          │
+│                                                                 │
+│  ┌─────────┬────────────────────┬─────────┐                    │
+│  │ SHELF L │   CENTER PANEL     │ SHELF R │                    │
+│  │         │    (16mm thick)    │         │                    │
+│  │  ◀───   │   14.7 + 14.7 = 29.4mm       │   ───▶  │                    │
+│  │  14.7mm │   ❌ COLLISION!    │  14.7mm │                    │
+│  └─────────┴────────────────────┴─────────┘                    │
+│                                                                 │
+│  MEDIUS P-14/10 (Different depths):                            │
+│  ───────────────────────────────────                            │
+│                                                                 │
+│  ┌─────────┬────────────────────┬─────────┐                    │
+│  │ SHELF L │   CENTER PANEL     │ SHELF R │                    │
+│  │         │    (16mm thick)    │         │                    │
+│  │  ◀───   │   10 + 10 = 20mm  │   ───▶  │                    │
+│  │  14.7mm │   ✅ Safe gap!    │  14.7mm │                    │
+│  └─────────┴────────────────────┴─────────┘                    │
+│                                                                 │
+│  Edge (Shelf): 14.7mm depth (Lever side)                       │
+│  Face (Center): 10mm depth (Anchor side)                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 15.2 Hardware Database
+
+```typescript
+// src/services/hardware/hafeleDb.ts
+
+export type SystemType =
+  | 'MINIFIX_15' | 'MINIFIX_12' | 'MAXIFIX_35'
+  | 'SC_8_60' | 'U_12_10' | 'CC_8_5_30' | 'TOFIX_25'
+  | 'LAMELLO_P'      // Lamello P-System
+  | 'DOVETAIL_RAIL'
+  | 'DOVETAIL_DIRECT';
+
+export type BoardThickness = 12 | 13 | 15 | 16 | 18 | 19 | 22 | 23 | 25 | 26 | 29 | 34;
+
+export interface LamelloItem {
+  id: string;
+  itemNo: string;
+  name: string;
+  category: 'CONNECTOR_LAMELLO';
+  specs: {
+    drillDepth: number;      // Edge groove depth (Lever side)
+    faceDepth: number;       // Face groove depth (Anchor side)
+    diameter: number;        // T-Slot width (7mm)
+    length: number;          // Arc length (66mm / 52mm)
+    accessDia: number;       // Access hole diameter (6mm)
+    accessDist: number;      // Access hole distance from edge
+    minThickness: number;    // Minimum board thickness
+    toolProfile: string;     // CNC tool profile code
+  };
+}
+
+export const LAMELLO_HARDWARE = {
+  // =================================================================
+  // Clamex P-14 (Standard for >= 16mm panels)
+  // =================================================================
+  p14: {
+    id: 'clamex_p14',
+    itemNo: '267.91.136',
+    name: 'Lamello Clamex P-14',
+    category: 'CONNECTOR_LAMELLO',
+    specs: {
+      drillDepth: 14.7,    // Edge depth 14.7mm (standard)
+      faceDepth: 14.7,     // Face depth same
+      diameter: 7,         // T-Slot width 7mm
+      length: 66,          // Arc length 66mm
+      accessDia: 6,        // Access hole 6mm
+      accessDist: 6,       // 6mm from edge
+      minThickness: 16,
+      toolProfile: 'P-SYSTEM-14'
+    }
+  } as LamelloItem,
+
+  // =================================================================
+  // Clamex P-10 (Thin Panels >= 13mm)
+  // =================================================================
+  p10: {
+    id: 'clamex_p10',
+    itemNo: '267.91.130',
+    name: 'Lamello Clamex P-10',
+    category: 'CONNECTOR_LAMELLO',
+    specs: {
+      drillDepth: 10,      // Edge depth 10mm
+      faceDepth: 10,       // Face depth same
+      diameter: 7,
+      length: 52,          // Shorter arc (52mm)
+      accessDia: 6,
+      accessDist: 6,
+      minThickness: 13,
+      toolProfile: 'P-SYSTEM-10'
+    }
+  } as LamelloItem,
+
+  // =================================================================
+  // Clamex P Medius 14/10 (Center Panel - Back-to-Back)
+  // =================================================================
+  medius: {
+    id: 'clamex_medius',
+    itemNo: '267.91.138',
+    name: 'Lamello Clamex P Medius 14/10',
+    category: 'CONNECTOR_LAMELLO',
+    specs: {
+      drillDepth: 14.7,    // Edge (Lever side): 14.7mm
+      faceDepth: 10,       // Face (Anchor side): 10mm ONLY!
+      diameter: 7,
+      length: 66,
+      accessDia: 6,
+      accessDist: 6,
+      minThickness: 16,    // Center panel min 16mm
+      toolProfile: 'P-SYSTEM-MEDIUS'
+    }
+  } as LamelloItem
+};
+```
+
+### 15.3 Lamello Engineering Engine
+
+```typescript
+// src/services/engineering/lamelloEngine.ts
+import { LAMELLO_HARDWARE, LamelloItem } from '../hardware/hafeleDb';
+
+export interface LamelloPlan {
+  isValid: boolean;
+  system: 'LAMELLO_P';
+  specs: {
+    connector: LamelloItem;
+  };
+  positions: {
+    x: number;
+    rotationY: number;
+  }[];
+  meta: {
+    edgeGrooveDepth: number;  // Lever side depth
+    faceGrooveDepth: number;  // Anchor side depth
+    isMedius: boolean;
+    slotLength: number;
+    accessHole: { dia: number; dist: number };
+  };
+}
+
+interface LamelloOptions {
+  length: number;           // Panel length
+  thickness: number;        // Panel thickness
+  isCenterPanel?: boolean;  // Flag for center panel (Medius)
+}
+
+/**
+ * Lamello P-System Joinery Calculator
+ *
+ * Selection Logic:
+ * - Center Panel (back-to-back): Use Medius (Edge=14.7, Face=10)
+ * - Standard >= 16mm: Use P-14 (Edge=14.7, Face=14.7)
+ * - Thin 13-15mm: Use P-10 (Edge=10, Face=10)
+ * - < 13mm: Invalid
+ */
+export function calculateLamelloPlan(opts: LamelloOptions): LamelloPlan {
+  const { length, thickness, isCenterPanel = false } = opts;
+
+  // =================================================================
+  // 1. CONNECTOR SELECTION
+  // =================================================================
+  let connector: LamelloItem;
+
+  if (isCenterPanel) {
+    // Center panel: Use Medius for back-to-back installation
+    if (thickness < 16) {
+      return createInvalidPlan('Center panel requires min 16mm thickness');
+    }
+    connector = LAMELLO_HARDWARE.medius;
+  } else if (thickness >= 16) {
+    // Standard thick panel: Use P-14
+    connector = LAMELLO_HARDWARE.p14;
+  } else if (thickness >= 13) {
+    // Thin panel: Use P-10
+    connector = LAMELLO_HARDWARE.p10;
+  } else {
+    // Too thin for Lamello
+    return createInvalidPlan('Panel too thin for Lamello (min 13mm)');
+  }
+
+  // =================================================================
+  // 2. POSITION CALCULATION
+  // =================================================================
+  const margin = 60; // Lamello needs 50-80mm from edge for tool access
+  const positions: LamelloPlan['positions'] = [];
+
+  // Left position
+  positions.push({ x: margin, rotationY: 0 });
+
+  // Right position
+  positions.push({ x: length - margin, rotationY: Math.PI });
+
+  // Center position (for long panels > 600mm)
+  if (length > 600) {
+    positions.push({ x: length / 2, rotationY: 0 });
+  }
+
+  // Extra positions for very long panels
+  if (length > 1200) {
+    positions.push({ x: length / 3, rotationY: 0 });
+    positions.push({ x: (length / 3) * 2, rotationY: Math.PI });
+  }
+
+  return {
+    isValid: true,
+    system: 'LAMELLO_P',
+    specs: { connector },
+    positions,
+    meta: {
+      edgeGrooveDepth: connector.specs.drillDepth,
+      faceGrooveDepth: connector.specs.faceDepth,
+      isMedius: isCenterPanel,
+      slotLength: connector.specs.length,
+      accessHole: {
+        dia: connector.specs.accessDia,
+        dist: connector.specs.accessDist
+      }
+    }
+  };
+}
+
+function createInvalidPlan(reason: string): LamelloPlan {
+  return {
+    isValid: false,
+    system: 'LAMELLO_P',
+    specs: {} as any,
+    positions: [],
+    meta: {
+      edgeGrooveDepth: 0,
+      faceGrooveDepth: 0,
+      isMedius: false,
+      slotLength: 0,
+      accessHole: { dia: 0, dist: 0 }
+    }
+  };
+}
+```
+
+### 15.4 CAM Generator for Lamello
+
+```typescript
+// src/services/cam/generators/lamelloOp.ts
+import { calculateLamelloPlan, LamelloPlan } from '../../engineering/lamelloEngine';
+
+export interface LamelloMachineOp {
+  id: string;
+  type: 'MILL_T_SLOT' | 'DRILL';
+  face: 'EDGE' | 'FACE';
+  x: number;
+  y: number;
+  params?: {
+    length: number;
+    depth: number;
+    width: number;
+    toolProfile: string;
+  };
+  diameter?: number;
+  depth?: number;
+  hardwareRef: string;
+}
+
+/**
+ * Generate CNC operations for Lamello P-System
+ *
+ * Operations per connector:
+ * 1. SHELF EDGE: T-Slot milling (Lever side)
+ * 2. SHELF FACE: Access hole drilling (6mm)
+ * 3. SIDE PANEL FACE: T-Slot milling (Anchor side) - separate function
+ */
+export function generateLamelloShelfOps(
+  partId: string,
+  opts: Parameters<typeof calculateLamelloPlan>[0]
+): LamelloMachineOp[] {
+  const plan = calculateLamelloPlan(opts);
+  if (!plan.isValid) return [];
+
+  const ops: LamelloMachineOp[] = [];
+  const { connector } = plan.specs;
+
+  plan.positions.forEach((pos, i) => {
+    // =================================================================
+    // 1. EDGE T-SLOT (Shelf edge - Lever side)
+    // =================================================================
+    ops.push({
+      id: `${partId}-lamello-edge-${i}`,
+      type: 'MILL_T_SLOT',
+      face: 'EDGE',
+      x: pos.x,
+      y: 0, // Center of edge thickness
+      params: {
+        length: connector.specs.length,      // 66mm or 52mm
+        depth: connector.specs.drillDepth,   // 14.7mm or 10mm
+        width: connector.specs.diameter,     // 7mm
+        toolProfile: connector.specs.toolProfile
+      },
+      hardwareRef: connector.itemNo
+    });
+
+    // =================================================================
+    // 2. ACCESS HOLE (Shelf face - for screwdriver)
+    // =================================================================
+    ops.push({
+      id: `${partId}-lamello-access-${i}`,
+      type: 'DRILL',
+      face: 'FACE',
+      x: pos.x,
+      y: connector.specs.accessDist, // 6mm from edge
+      diameter: connector.specs.accessDia,   // 6mm
+      depth: connector.specs.drillDepth,     // Through to T-Slot
+      hardwareRef: `${connector.itemNo}-ACCESS`
+    });
+  });
+
+  return ops;
+}
+
+/**
+ * Generate T-Slot operations for mating panel (Side panel face)
+ * Uses faceGrooveDepth which differs for Medius (10mm vs 14.7mm)
+ */
+export function generateLamelloMatingOps(
+  partId: string,
+  shelfY: number,  // Y position of shelf on side panel
+  plan: LamelloPlan
+): LamelloMachineOp[] {
+  if (!plan.isValid) return [];
+
+  const ops: LamelloMachineOp[] = [];
+  const { connector } = plan.specs;
+
+  plan.positions.forEach((pos, i) => {
+    // FACE T-SLOT (Side panel - Anchor side)
+    // Note: Uses faceGrooveDepth (10mm for Medius, 14.7mm for standard)
+    ops.push({
+      id: `${partId}-lamello-face-${i}`,
+      type: 'MILL_T_SLOT',
+      face: 'FACE',
+      x: pos.x,
+      y: shelfY,
+      params: {
+        length: connector.specs.length,
+        depth: plan.meta.faceGrooveDepth,  // KEY: Different for Medius!
+        width: connector.specs.diameter,
+        toolProfile: connector.specs.toolProfile
+      },
+      hardwareRef: connector.itemNo
+    });
+  });
+
+  return ops;
+}
+```
+
+### 15.5 Visual Component
+
+```typescript
+// src/components/3d/hardware/LamelloConnector.tsx
+import React, { useMemo } from 'react';
+import { calculateLamelloPlan } from '../../../services/engineering/lamelloEngine';
+
+const mm = (v: number) => v / 1000;
+
+interface LamelloConnectorProps {
+  length: number;
+  thickness: number;
+  isCenterPanel?: boolean;
+}
+
+export const LamelloConnector: React.FC<LamelloConnectorProps> = (props) => {
+  const plan = useMemo(() => calculateLamelloPlan(props), [props]);
+
+  if (!plan.isValid) return null;
+
+  const { connector } = plan.specs;
+
+  return (
+    <group>
+      {plan.positions.map((pos, i) => (
+        <group
+          key={i}
+          position={[mm(pos.x), 0, 0]}
+          rotation={[0, pos.rotationY, 0]}
+        >
+          {/* 1. T-Slot Body (Capsule/Biscuit Shape) */}
+          <mesh position={[0, mm(connector.specs.drillDepth / 2), 0]}>
+            <boxGeometry args={[
+              mm(connector.specs.length),    // 66mm or 52mm
+              mm(connector.specs.drillDepth), // 14.7mm or 10mm
+              mm(7)                           // 7mm width
+            ]} />
+            <meshStandardMaterial color="#263238" /> {/* Black plastic */}
+          </mesh>
+
+          {/* 2. Zinc Lever (Locking Mechanism) */}
+          <mesh position={[0, mm(connector.specs.drillDepth / 2), 0]}>
+            <cylinderGeometry args={[mm(4), mm(4), mm(connector.specs.drillDepth), 16]} />
+            <meshStandardMaterial color="#B0BEC5" metalness={0.8} roughness={0.3} />
+          </mesh>
+
+          {/* 3. Access Hole Indicator (Red marker) */}
+          <mesh
+            position={[0, mm(connector.specs.accessDist), mm(5)]}
+            rotation={[Math.PI / 2, 0, 0]}
+          >
+            <cylinderGeometry args={[mm(3), mm(3), mm(10), 16]} />
+            <meshBasicMaterial color="#EF5350" wireframe transparent opacity={0.7} />
+          </mesh>
+
+          {/* 4. Medius Indicator (Green for special depth) */}
+          {plan.meta.isMedius && (
+            <mesh position={[mm(20), mm(5), 0]}>
+              <sphereGeometry args={[mm(3), 8, 8]} />
+              <meshBasicMaterial color="#4CAF50" />
+            </mesh>
+          )}
+        </group>
+      ))}
+    </group>
+  );
+};
+```
+
+### 15.6 Connector Variant Comparison
+
+| Variant | Item No | Edge Depth | Face Depth | Slot Length | Min Thickness | Use Case |
+|---------|---------|------------|------------|-------------|---------------|----------|
+| **P-14** | 267.91.136 | 14.7mm | 14.7mm | 66mm | 16mm | Standard panels |
+| **P-10** | 267.91.130 | 10mm | 10mm | 52mm | 13mm | Thin panels |
+| **Medius** | 267.91.138 | 14.7mm | 10mm | 66mm | 16mm | Center panel (back-to-back) |
+
+### 15.7 T-Slot Milling Diagram
+
+```
+T-SLOT PROFILE (Cross Section):
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│    EDGE VIEW (Shelf side - Lever):                             │
+│    ────────────────────────────────                             │
+│                                                                 │
+│    ┌─────────────────────────────────────┐                     │
+│    │           SHELF PANEL               │                     │
+│    │                                     │                     │
+│    │    ╔═════════════════════════╗     │                     │
+│    │    ║    T-SLOT GROOVE        ║     │ ← 14.7mm or 10mm    │
+│    │    ║    (7mm wide)           ║     │                     │
+│    │    ╚═════════════════════════╝     │                     │
+│    │              ↑                      │                     │
+│    │         66mm / 52mm                 │                     │
+│    └──────────────────────────────────────┘                     │
+│              │                                                  │
+│              │                                                  │
+│              ▼                                                  │
+│    ┌──────────────────────────────────────┐                    │
+│    │         SIDE PANEL (Face)           │                     │
+│    │                                      │                     │
+│    │    ╔═════════════════════════╗      │                     │
+│    │    ║   MATING T-SLOT         ║      │ ← faceDepth        │
+│    │    ║   (Anchor side)         ║      │   (10mm for Medius)│
+│    │    ╚═════════════════════════╝      │                     │
+│    │                                      │                     │
+│    └──────────────────────────────────────┘                     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+ACCESS HOLE POSITION:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│         SHELF PANEL (Top View):                                │
+│         ───────────────────────                                 │
+│                                                                 │
+│    ┌─────────────────────────────────────────────────────────┐ │
+│    │                                                         │ │
+│    │    ○ ← Access Hole (6mm dia, 6mm from edge)            │ │
+│    │    │                                                    │ │
+│    │    │                                                    │ │
+│    │    ▼                                                    │ │
+│    │   ╔══════════════════════════════════════════╗         │ │
+│    │   ║           T-SLOT (66mm long)             ║ ← EDGE  │ │
+│    │   ╚══════════════════════════════════════════╝         │ │
+│    │                                                         │ │
+│    └─────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│    Access hole allows screwdriver to rotate the lever          │
+│    and lock the connector                                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 15.8 Position Layout
+
+```
+LAMELLO POSITION DISTRIBUTION:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  Short Panel (≤600mm): 2 connectors                            │
+│  ┌───────────────────────────────────────────────────────┐     │
+│  │  60mm                                          60mm   │     │
+│  │   ├──┐                                      ┌──┤      │     │
+│  │   ◆  │                                      │  ◆      │     │
+│  │      │          SHELF (600mm)               │         │     │
+│  │      │                                      │         │     │
+│  └──────┴──────────────────────────────────────┴─────────┘     │
+│                                                                 │
+│  Medium Panel (600-1200mm): 3 connectors                       │
+│  ┌───────────────────────────────────────────────────────┐     │
+│  │  60mm              center                     60mm    │     │
+│  │   ├──┐               ◆                     ┌──┤       │     │
+│  │   ◆  │                                     │  ◆       │     │
+│  │      │           SHELF (900mm)             │          │     │
+│  └──────┴──────────────────────────────────────┴─────────┘     │
+│                                                                 │
+│  Long Panel (>1200mm): 5 connectors                            │
+│  ┌───────────────────────────────────────────────────────┐     │
+│  │  60mm    1/3       center       2/3          60mm     │     │
+│  │   ├──┐    ◆          ◆          ◆         ┌──┤        │     │
+│  │   ◆  │                                    │  ◆        │     │
+│  │      │          SHELF (1500mm)            │           │     │
+│  └──────┴──────────────────────────────────────┴─────────┘     │
+│                                                                 │
+│  ◆ = Lamello P-System connector                                │
+│  Margin: 60mm from edge (tool access requirement)              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 15.9 Calculation Examples
+
+```typescript
+// Example 1: Standard shelf on 18mm panel
+const standardPlan = calculateLamelloPlan({
+  length: 800,
+  thickness: 18,
+  isCenterPanel: false
+});
+
+console.log('=== Standard Shelf Plan ===');
+console.log('Valid:', standardPlan.isValid);           // true
+console.log('Connector:', standardPlan.specs.connector.name);
+// 'Lamello Clamex P-14'
+console.log('Edge Depth:', standardPlan.meta.edgeGrooveDepth);  // 14.7mm
+console.log('Face Depth:', standardPlan.meta.faceGrooveDepth);  // 14.7mm
+console.log('Is Medius:', standardPlan.meta.isMedius);          // false
+console.log('Positions:', standardPlan.positions.length);       // 3 (>600mm)
+
+
+// Example 2: Center panel (back-to-back)
+const centerPanelPlan = calculateLamelloPlan({
+  length: 600,
+  thickness: 16,
+  isCenterPanel: true  // KEY: Triggers Medius selection
+});
+
+console.log('\n=== Center Panel Plan (Medius) ===');
+console.log('Connector:', centerPanelPlan.specs.connector.name);
+// 'Lamello Clamex P Medius 14/10'
+console.log('Edge Depth:', centerPanelPlan.meta.edgeGrooveDepth);  // 14.7mm
+console.log('Face Depth:', centerPanelPlan.meta.faceGrooveDepth);  // 10mm (DIFFERENT!)
+console.log('Is Medius:', centerPanelPlan.meta.isMedius);          // true
+
+
+// Example 3: Thin panel (13mm)
+const thinPanelPlan = calculateLamelloPlan({
+  length: 500,
+  thickness: 13,
+  isCenterPanel: false
+});
+
+console.log('\n=== Thin Panel Plan ===');
+console.log('Connector:', thinPanelPlan.specs.connector.name);
+// 'Lamello Clamex P-10'
+console.log('Slot Length:', thinPanelPlan.meta.slotLength);  // 52mm (shorter)
+console.log('Edge Depth:', thinPanelPlan.meta.edgeGrooveDepth);  // 10mm
+
+
+// Example 4: Too thin (invalid)
+const invalidPlan = calculateLamelloPlan({
+  length: 500,
+  thickness: 12,  // < 13mm minimum!
+  isCenterPanel: false
+});
+
+console.log('\n=== Invalid Plan ===');
+console.log('Valid:', invalidPlan.isValid);  // false
+
+
+// Example 5: Generate CAM operations
+const shelfOps = generateLamelloShelfOps('SHELF-001', {
+  length: 800,
+  thickness: 18
+});
+
+console.log('\n=== CAM Operations ===');
+console.log('Total shelf ops:', shelfOps.length);  // 6 (3 positions × 2 ops)
+
+const tSlotOps = shelfOps.filter(op => op.type === 'MILL_T_SLOT');
+console.log('T-Slot operations:', tSlotOps.length);  // 3
+
+const accessOps = shelfOps.filter(op => op.type === 'DRILL');
+console.log('Access hole operations:', accessOps.length);  // 3
+console.log('Access hole diameter:', accessOps[0].diameter);  // 6mm
+
+
+// Example 6: Generate mating panel operations (Side panel)
+const matingOps = generateLamelloMatingOps('SIDE-001', 300, standardPlan);
+
+console.log('\n=== Mating Panel Operations ===');
+console.log('Face T-Slot ops:', matingOps.length);  // 3
+console.log('Face depth:', matingOps[0].params?.depth);  // 14.7mm (or 10mm for Medius)
+```
+
+### 15.10 Technical Reference Table
+
+| Parameter | P-14 | P-10 | Medius | Unit | Description |
+|-----------|------|------|--------|------|-------------|
+| **Edge Groove Depth** | 14.7 | 10 | 14.7 | mm | Lever side depth |
+| **Face Groove Depth** | 14.7 | 10 | 10 | mm | Anchor side depth |
+| **Slot Width** | 7 | 7 | 7 | mm | T-Slot width |
+| **Slot Length** | 66 | 52 | 66 | mm | Arc length |
+| **Access Hole Dia** | 6 | 6 | 6 | mm | Screwdriver access |
+| **Access Hole Dist** | 6 | 6 | 6 | mm | Distance from edge |
+| **Min Thickness** | 16 | 13 | 16 | mm | Minimum panel thickness |
+| **Tool Profile** | P-SYSTEM-14 | P-SYSTEM-10 | P-SYSTEM-MEDIUS | - | CNC cutter code |
+| **Edge Margin** | 60 | 60 | 60 | mm | Min distance from panel edge |
+
+### 15.11 CNC Tool Requirements
+
+| Tool | Description | Use |
+|------|-------------|-----|
+| **Lamello Zeta P2** | Dedicated handheld P-System cutter | Manual/Semi-auto |
+| **T-Slot Cutter 7mm** | CNC router bit for T-Slot | CNC machining |
+| **6mm Drill Bit** | Standard drill for access hole | CNC/Manual |
+| **Flathead Screwdriver** | For lever rotation | Assembly |
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
 - Blum Catalog Pages 2, 5, 6, 13, 14-67, 64, 74-76, 84, 150, 410, 420, 430, 452
+- Häfele Selection 13 (Lamello P-System)
 - Häfele Selection 14 (Ixconnect Dovetail)
 - Häfele Selection 15 (Metalla 510 Standard Hinges)
 - Häfele Selection 16 (Specialty Hinges)
