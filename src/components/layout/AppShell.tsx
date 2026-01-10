@@ -50,9 +50,9 @@ interface AppShellProps {
 // Spec State Badge Component
 function SpecStateBadge({ state, onChange }: { state: SpecState; onChange?: (s: SpecState) => void }) {
   const colors = {
-    DRAFT: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-    FROZEN: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-    RELEASED: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    DRAFT: 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:border-amber-400/50',
+    FROZEN: 'bg-blue-500/10 text-blue-400 border-blue-500/30 hover:border-blue-400/50',
+    RELEASED: 'bg-green-500/10 text-green-400 border-green-500/30 hover:border-green-400/50',
   };
   
   const icons = {
@@ -63,8 +63,8 @@ function SpecStateBadge({ state, onChange }: { state: SpecState; onChange?: (s: 
   
   return (
     <div className="relative group">
-      <button 
-        className={`px-3 py-1.5 rounded border text-xs font-medium flex items-center gap-2 ${colors[state]}`}
+      <button
+        className={`px-3 py-1.5 rounded-lg border text-xs font-mono flex items-center gap-2 transition-all duration-200 ${colors[state]}`}
         onClick={() => {
           if (!onChange) return;
           const states: SpecState[] = ['DRAFT', 'FROZEN', 'RELEASED'];
@@ -82,47 +82,53 @@ function SpecStateBadge({ state, onChange }: { state: SpecState; onChange?: (s: 
 // Gate Status Badge Component
 function GateStatusBadge({ status, errors, warnings }: { status: GateStatus; errors: string[]; warnings: string[] }) {
   const colors = {
-    OK: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-    WARNING: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-    BLOCKED: 'bg-red-500/20 text-red-400 border-red-500/30',
+    OK: 'bg-green-500/10 text-green-400 border-green-500/30 hover:border-green-400/50',
+    WARNING: 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:border-amber-400/50',
+    BLOCKED: 'bg-red-500/10 text-red-400 border-red-500/30 hover:border-red-400/50',
   };
-  
+
   const icons = {
     OK: '✓',
     WARNING: '⚠',
     BLOCKED: '✕',
   };
-  
+
   const [showDetails, setShowDetails] = useState(false);
-  
+
   return (
     <div className="relative">
-      <button 
-        className={`px-3 py-1.5 rounded border text-xs font-medium flex items-center gap-2 ${colors[status]}`}
+      <button
+        className={`px-3 py-1.5 rounded-lg border text-xs font-mono flex items-center gap-2 transition-all duration-200 ${colors[status]}`}
         onClick={() => setShowDetails(!showDetails)}
       >
         <span className="text-sm">{icons[status]}</span>
         <span>Gate: {status}</span>
       </button>
-      
+
       {showDetails && (errors.length > 0 || warnings.length > 0) && (
-        <div className="absolute top-full right-0 mt-2 w-80 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl z-50 p-4">
-          <h4 className="text-white font-semibold text-sm mb-3">Gate Validation Report</h4>
-          
+        <div className="absolute top-full right-0 mt-2 w-80 bg-surface-2 border border-[#333] rounded-xl shadow-2xl z-50 p-4">
+          <h4 className="text-white font-medium text-sm mb-3">Gate Validation Report</h4>
+
           {errors.length > 0 && (
-            <div className="mb-3">
-              <div className="text-red-400 text-xs font-medium mb-1">❌ Errors (Blocking)</div>
+            <div className="mb-3 p-3 rounded-lg bg-red-500/5 border border-red-500/20">
+              <div className="text-red-400 text-xs font-medium mb-2 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+                Errors (Blocking)
+              </div>
               {errors.map((err, i) => (
-                <div key={i} className="text-zinc-400 text-xs pl-4 py-0.5">• {err}</div>
+                <div key={i} className="text-gray-400 text-xs pl-4 py-0.5">• {err}</div>
               ))}
             </div>
           )}
-          
+
           {warnings.length > 0 && (
-            <div>
-              <div className="text-amber-400 text-xs font-medium mb-1">⚠ Warnings</div>
+            <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+              <div className="text-amber-400 text-xs font-medium mb-2 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                Warnings
+              </div>
               {warnings.map((warn, i) => (
-                <div key={i} className="text-zinc-400 text-xs pl-4 py-0.5">• {warn}</div>
+                <div key={i} className="text-gray-400 text-xs pl-4 py-0.5">• {warn}</div>
               ))}
             </div>
           )}
@@ -138,10 +144,10 @@ function ExportButton({ enabled, onClick }: { enabled: boolean; onClick?: () => 
     <button
       disabled={!enabled}
       onClick={onClick}
-      className={`px-4 py-1.5 rounded text-xs font-medium flex items-center gap-2 transition-all
-        ${enabled 
-          ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer' 
-          : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+      className={`px-4 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 transition-all duration-200
+        ${enabled
+          ? 'bg-green-500 hover:bg-green-400 hover:shadow-glow-green text-black cursor-pointer'
+          : 'bg-surface-4 text-gray-500 cursor-not-allowed border border-[#333]'
         }`}
     >
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -165,47 +171,51 @@ export function AppShell({
   const canExport = project.gateStatus === 'OK' && project.specState !== 'DRAFT';
   
   return (
-    <div className="h-screen w-screen flex flex-col bg-zinc-950 text-white overflow-hidden">
+    <div className="h-screen w-screen flex flex-col bg-black text-white overflow-hidden">
       {/* PROJECT HEADER */}
-      <header className="h-12 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-4 shrink-0">
+      <header className="h-12 bg-surface-1 border-b border-[#333] flex items-center justify-between px-4 shrink-0">
         {/* Left: Logo + Project Name */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">II</span>
+            <div className="w-8 h-8 bg-surface-3 border border-[#333] rounded-lg flex items-center justify-center">
+              <span className="text-green-400 font-bold text-sm">II</span>
             </div>
-            <span className="text-emerald-400 font-semibold text-sm">IIMOS</span>
+            <span className="text-white font-medium text-sm">IIMOS</span>
           </div>
-          
-          <div className="h-6 w-px bg-zinc-700" />
-          
-          <div>
+
+          <div className="h-6 w-px bg-[#333]" />
+
+          <div className="flex items-center gap-2">
             <span className="text-white font-medium">{project.name}</span>
-            <span className="text-zinc-500 text-xs ml-2">v{project.version}</span>
+            <span className="text-xs font-mono text-gray-500 bg-surface-3 px-2 py-0.5 rounded border border-[#333]">v{project.version}</span>
           </div>
         </div>
-        
+
         {/* Center: View Controls (placeholder) */}
-        <div className="flex items-center gap-2">
-          {['Front', 'Left', 'Perspective', 'Install', 'Factory', 'CNC'].map((view) => (
-            <button 
+        <div className="flex items-center gap-1 bg-surface-2 rounded-lg p-1 border border-[#333]">
+          {['Front', 'Left', 'Perspective', 'Install', 'Factory', 'CNC'].map((view, i) => (
+            <button
               key={view}
-              className="px-2 py-1 text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors"
+              className={`px-3 py-1 text-xs rounded-md transition-all duration-200 ${
+                i === 2
+                  ? 'bg-surface-4 text-white'
+                  : 'text-gray-500 hover:text-white hover:bg-surface-3'
+              }`}
             >
               {view}
             </button>
           ))}
         </div>
-        
+
         {/* Right: Status + Export */}
         <div className="flex items-center gap-3">
           <SpecStateBadge state={project.specState} onChange={onSpecStateChange} />
-          <GateStatusBadge 
-            status={project.gateStatus} 
+          <GateStatusBadge
+            status={project.gateStatus}
             errors={project.gateErrors}
             warnings={project.gateWarnings}
           />
-          <div className="h-6 w-px bg-zinc-700" />
+          <div className="h-6 w-px bg-[#333]" />
           <ExportButton enabled={canExport} onClick={onExport} />
         </div>
       </header>
@@ -213,32 +223,37 @@ export function AppShell({
       {/* MAIN CONTENT */}
       <div className="flex-1 flex overflow-hidden">
         {/* LEFT PANEL - Designer Intent */}
-        <aside className="w-80 bg-zinc-900 border-r border-zinc-800 flex flex-col shrink-0 overflow-hidden">
-          <div className="p-3 border-b border-zinc-800">
-            <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Designer Intent</h2>
+        <aside className="w-80 bg-surface-1 border-r border-[#333] flex flex-col shrink-0 overflow-hidden">
+          <div className="p-3 border-b border-[#333]">
+            <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Designer Intent</h2>
           </div>
           <div className="flex-1 overflow-y-auto">
             {leftPanel}
           </div>
         </aside>
-        
+
         {/* CENTER - R3F Viewport */}
-        <main className="flex-1 relative overflow-hidden">
+        <main className="flex-1 relative overflow-hidden bg-black">
           {viewport}
-          
+
           {/* Engine Info Badge */}
-          <div className="absolute bottom-4 left-4 text-emerald-400 text-xs font-mono space-y-0.5 pointer-events-none">
-            <div className="font-semibold">BIOPHILIC RENDER ENGINE</div>
-            <div className="text-zinc-500">Scale: 1 Unit = 1mm</div>
-            <div className="text-zinc-500">Mode: True-Grain™ + Real-Scale UV</div>
-            <div className="text-zinc-500">Engine: R3F / PBR Manufacturing</div>
+          <div className="absolute bottom-4 left-4 pointer-events-none">
+            <div className="bg-surface-2/80 backdrop-blur-sm border border-[#333] rounded-lg px-3 py-2 space-y-1">
+              <div className="text-green-400 text-xs font-mono font-medium flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                BIOPHILIC RENDER ENGINE
+              </div>
+              <div className="text-gray-500 text-[10px] font-mono">Scale: 1 Unit = 1mm</div>
+              <div className="text-gray-500 text-[10px] font-mono">Mode: True-Grain™ + Real-Scale UV</div>
+              <div className="text-gray-500 text-[10px] font-mono">Engine: R3F / PBR Manufacturing</div>
+            </div>
           </div>
         </main>
-        
+
         {/* RIGHT PANEL - Parametric Contract */}
-        <aside className="w-80 bg-zinc-900 border-l border-zinc-800 flex flex-col shrink-0 overflow-hidden">
-          <div className="p-3 border-b border-zinc-800">
-            <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Parametric Contract</h2>
+        <aside className="w-80 bg-surface-1 border-l border-[#333] flex flex-col shrink-0 overflow-hidden">
+          <div className="p-3 border-b border-[#333]">
+            <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Parametric Contract</h2>
           </div>
           <div className="flex-1 overflow-y-auto">
             {rightPanel}
@@ -247,37 +262,37 @@ export function AppShell({
       </div>
       
       {/* FOOTER */}
-      <footer className="h-8 bg-zinc-900 border-t border-zinc-800 flex items-center justify-between px-4 text-xs shrink-0">
+      <footer className="h-8 bg-surface-1 border-t border-[#333] flex items-center justify-between px-4 text-xs shrink-0">
         {/* Machine Compatibility */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-zinc-500">Machine:</span>
-            <span className="text-emerald-400">Homag CENTATEQ P-110</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="text-gray-500">Machine:</span>
+            <span className="text-green-400 font-mono">Homag CENTATEQ P-110</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
           </div>
-          <div className="h-4 w-px bg-zinc-700" />
+          <div className="h-4 w-px bg-[#333]" />
           <div className="flex items-center gap-2">
-            <span className="text-zinc-500">Nesting:</span>
-            <span className="text-zinc-300">Ready</span>
+            <span className="text-gray-500">Nesting:</span>
+            <span className="text-white">Ready</span>
           </div>
         </div>
-        
+
         {/* Validation Token */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-zinc-500">Validation:</span>
-            <span className="text-zinc-300 font-mono">
+            <span className="text-gray-500">Validation:</span>
+            <span className={`font-mono ${project.gateStatus === 'OK' ? 'text-green-400' : 'text-gray-400'}`}>
               {project.gateStatus === 'OK' ? '✓ PASSED' : '○ PENDING'}
             </span>
           </div>
-          <div className="h-4 w-px bg-zinc-700" />
+          <div className="h-4 w-px bg-[#333]" />
           <div className="flex items-center gap-2">
-            <span className="text-zinc-500">Panels:</span>
-            <span className="text-zinc-300">6</span>
+            <span className="text-gray-500">Panels:</span>
+            <span className="text-white font-mono">6</span>
           </div>
-          <div className="h-4 w-px bg-zinc-700" />
-          <div className="text-zinc-500">
-            © IIMOS Manufacturing OS v1.0
+          <div className="h-4 w-px bg-[#333]" />
+          <div className="text-gray-600 font-mono">
+            IIMOS Manufacturing OS v2.0
           </div>
         </div>
       </footer>
