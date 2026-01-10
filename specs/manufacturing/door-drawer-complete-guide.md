@@ -1362,9 +1362,493 @@ DRAWER BOTTOM (Top View):
 
 ---
 
-## ส่วนที่ 10: Quick Reference Tables
+## ส่วนที่ 10: Blum LEGRABOX System (Box Systems)
 
-### 10.1 Door Size Matrix
+ระบบลิ้นชักกล่องโลหะ **LEGRABOX** ของ Blum เป็นระบบลิ้นชักแบบ Box System ที่รวมแผ่นข้างและรางเป็นชิ้นเดียว ให้ความสวยงามและติดตั้งง่าย
+
+### 10.1 Drawer Kinetics Engine
+
+Engine อัจฉริยะที่คำนวณขนาด LEGRABOX โดยอัตโนมัติ:
+
+```typescript
+// src/services/engineering/legraboxKineticsEngine.ts
+
+/**
+ * LEGRABOX Drawer Kinetics Engine
+ * Architecture v12.0 - Complete Box System Integration
+ *
+ * Key Principles:
+ * 1. Auto-Sizing: เลือกรหัสความสูงอัตโนมัติตามหน้าบาน
+ * 2. Dynamic Configuration: คำนวณแผ่นพื้นและหลังตามรหัสที่เลือก
+ * 3. Drilling Matrix: กำหนดตำแหน่งเจาะตรงตามมาตรฐาน Blum
+ */
+
+export type HeightCode = 'N' | 'M' | 'K' | 'C' | 'F';
+export type LoadClass = 40 | 70;
+
+export interface LegraboxConfig {
+  heightCode: HeightCode;
+  loadClass: LoadClass;
+  nominalLength: number;  // NL: 270, 300, 350, 400, 450, 500, 550, 600
+  cabinetLW: number;      // Cabinet Internal Width
+}
+
+// LEGRABOX Height Code Specifications (Page 198-411)
+export const HEIGHT_SPECS: Record<HeightCode, {
+  sideHeight: number;    // ความสูงแผ่นข้าง
+  backHeight: number;    // ความสูงแผ่นหลัง
+  minFrontHeight: number; // ความสูงหน้าบานต่ำสุด
+  maxFrontHeight: number; // ความสูงหน้าบานสูงสุด
+}> = {
+  N: { sideHeight: 66.5, backHeight: 63, minFrontHeight: 0, maxFrontHeight: 119 },
+  M: { sideHeight: 90.5, backHeight: 84, minFrontHeight: 120, maxFrontHeight: 159 },
+  K: { sideHeight: 128.5, backHeight: 116, minFrontHeight: 160, maxFrontHeight: 219 },
+  C: { sideHeight: 177, backHeight: 167, minFrontHeight: 220, maxFrontHeight: 279 },
+  F: { sideHeight: 241, backHeight: 218, minFrontHeight: 280, maxFrontHeight: 999 }
+};
+
+/**
+ * Auto-select height code based on front panel height
+ */
+export function autoSelectHeightCode(frontHeight: number): HeightCode {
+  if (frontHeight < 120) return 'N';
+  if (frontHeight < 160) return 'M';
+  if (frontHeight < 220) return 'K';
+  if (frontHeight < 280) return 'C';
+  return 'F';
+}
+```
+
+### 10.2 LEGRABOX Hardware Database
+
+```typescript
+// Master Hardware Database for LEGRABOX
+
+export const LEGRABOX_RUNNERS = {
+  // =================================================================
+  // 40kg Class (750.XXXS Series) - Standard
+  // =================================================================
+  'LGB_40_270': { itemNo: '750.2701S', loadClass: 40, nominalLength: 270 },
+  'LGB_40_300': { itemNo: '750.3001S', loadClass: 40, nominalLength: 300 },
+  'LGB_40_350': { itemNo: '750.3501S', loadClass: 40, nominalLength: 350 },
+  'LGB_40_400': { itemNo: '750.4001S', loadClass: 40, nominalLength: 400 },
+  'LGB_40_450': { itemNo: '750.4501S', loadClass: 40, nominalLength: 450 },
+  'LGB_40_500': { itemNo: '750.5001S', loadClass: 40, nominalLength: 500 },
+  'LGB_40_550': { itemNo: '750.5501S', loadClass: 40, nominalLength: 550 },
+  'LGB_40_600': { itemNo: '750.6001S', loadClass: 40, nominalLength: 600 },
+
+  // =================================================================
+  // 70kg Class (753.XXXS Series) - Heavy Duty
+  // =================================================================
+  'LGB_70_270': { itemNo: '753.2701S', loadClass: 70, nominalLength: 270 },
+  'LGB_70_300': { itemNo: '753.3001S', loadClass: 70, nominalLength: 300 },
+  'LGB_70_350': { itemNo: '753.3501S', loadClass: 70, nominalLength: 350 },
+  'LGB_70_400': { itemNo: '753.4001S', loadClass: 70, nominalLength: 400 },
+  'LGB_70_450': { itemNo: '753.4501S', loadClass: 70, nominalLength: 450 },
+  'LGB_70_500': { itemNo: '753.5001S', loadClass: 70, nominalLength: 500 },
+  'LGB_70_550': { itemNo: '753.5501S', loadClass: 70, nominalLength: 550 },
+  'LGB_70_600': { itemNo: '753.6001S', loadClass: 70, nominalLength: 600 },
+};
+
+export const LEGRABOX_SIDES: Record<HeightCode, {
+  itemNoLeft: string;
+  itemNoRight: string;
+  height: number;
+  backHeight: number;
+}> = {
+  N: { itemNoLeft: 'ZN7.30FIIE-L', itemNoRight: 'ZN7.30FIIE-R', height: 66.5, backHeight: 63 },
+  M: { itemNoLeft: 'ZM7.30FIIE-L', itemNoRight: 'ZM7.30FIIE-R', height: 90.5, backHeight: 84 },
+  K: { itemNoLeft: 'ZK7.30FIIE-L', itemNoRight: 'ZK7.30FIIE-R', height: 128.5, backHeight: 116 },
+  C: { itemNoLeft: 'ZC7.30FIIE-L', itemNoRight: 'ZC7.30FIIE-R', height: 177, backHeight: 167 },
+  F: { itemNoLeft: 'ZF7.30FIIE-L', itemNoRight: 'ZF7.30FIIE-R', height: 241, backHeight: 218 },
+};
+
+export const LEGRABOX_FRONT_FIXING = {
+  // EXPANDO Front Fixing (Standard)
+  expando: {
+    itemNo: 'ZF7N70E2',
+    type: 'EXPANDO',
+    adjustmentX: 2,  // ±2mm
+    adjustmentY: 2,  // ±2mm
+    adjustmentZ: 2,  // ±2mm
+  },
+  // Screw-on Front Fixing (Economy)
+  screwOn: {
+    itemNo: 'ZF7N7002',
+    type: 'SCREW_ON',
+    adjustmentX: 0,
+    adjustmentY: 0,
+    adjustmentZ: 0,
+  }
+};
+```
+
+### 10.3 Cutlist Calculation Engine
+
+```typescript
+// LEGRABOX Cutlist Formulas (Critical!)
+
+export interface LegraboxCutlist {
+  bottom: {
+    width: number;   // LW - 35mm
+    depth: number;   // NL - 10mm
+  };
+  back: {
+    width: number;   // LW - 38mm
+    height: number;  // Depends on height code
+  };
+}
+
+/**
+ * Calculate LEGRABOX cutlist dimensions
+ *
+ * Critical Formulas:
+ * - Bottom Width  = Cabinet LW - 35mm
+ * - Bottom Depth  = Nominal Length - 10mm
+ * - Back Width    = Cabinet LW - 38mm
+ * - Back Height   = Based on height code (N/M/K/C/F)
+ */
+export function calculateLegraboxCutlist(
+  cabinetLW: number,
+  nominalLength: number,
+  heightCode: HeightCode
+): LegraboxCutlist {
+  const heightSpec = HEIGHT_SPECS[heightCode];
+
+  return {
+    bottom: {
+      width: cabinetLW - 35,
+      depth: nominalLength - 10
+    },
+    back: {
+      width: cabinetLW - 38,
+      height: heightSpec.backHeight
+    }
+  };
+}
+
+/**
+ * Complete LEGRABOX drawer plan generation
+ */
+export interface LegraboxDrawerPlan {
+  isValid: boolean;
+  heightCode: HeightCode;
+  runner: {
+    itemNo: string;
+    loadClass: number;
+    nominalLength: number;
+  };
+  sides: {
+    left: string;
+    right: string;
+    height: number;
+  };
+  cutlist: LegraboxCutlist;
+  frontFix: {
+    itemNo: string;
+    xPosition: number;  // 15.5mm from inner side
+  };
+  drilling: {
+    cabinet: { x: number; y: number; dia: number; depth: number }[];
+  };
+}
+
+export function generateLegraboxPlan(
+  cabinetLW: number,
+  cabinetDepth: number,
+  frontHeight: number,
+  loadRequired: number = 30
+): LegraboxDrawerPlan {
+  // 1. Auto-select height code
+  const heightCode = autoSelectHeightCode(frontHeight);
+  const heightSpec = HEIGHT_SPECS[heightCode];
+  const sideSpec = LEGRABOX_SIDES[heightCode];
+
+  // 2. Select runner based on load and cabinet depth
+  const loadClass: LoadClass = loadRequired > 40 ? 70 : 40;
+  const availableNL = [270, 300, 350, 400, 450, 500, 550, 600];
+  const maxNL = cabinetDepth - 3; // min clearance 3mm
+  const nominalLength = availableNL.reverse().find(nl => nl <= maxNL) || 270;
+
+  const runnerKey = `LGB_${loadClass}_${nominalLength}`;
+  const runner = LEGRABOX_RUNNERS[runnerKey as keyof typeof LEGRABOX_RUNNERS];
+
+  // 3. Calculate cutlist
+  const cutlist = calculateLegraboxCutlist(cabinetLW, nominalLength, heightCode);
+
+  // 4. Drilling positions (System 32 compatible)
+  const cabinetDrilling = [
+    { x: 37, y: 0, dia: 5, depth: 13 },
+    { x: 261, y: 0, dia: 5, depth: 13 },
+    { x: 389, y: 0, dia: 5, depth: 13 }
+  ];
+
+  return {
+    isValid: true,
+    heightCode,
+    runner: {
+      itemNo: runner.itemNo,
+      loadClass: runner.loadClass,
+      nominalLength: runner.nominalLength
+    },
+    sides: {
+      left: sideSpec.itemNoLeft,
+      right: sideSpec.itemNoRight,
+      height: sideSpec.height
+    },
+    cutlist,
+    frontFix: {
+      itemNo: LEGRABOX_FRONT_FIXING.expando.itemNo,
+      xPosition: 15.5  // Fixed position from inner side
+    },
+    drilling: {
+      cabinet: cabinetDrilling
+    }
+  };
+}
+```
+
+### 10.4 CAM Generator for LEGRABOX
+
+```typescript
+// src/services/cam/generators/legraboxOp.ts
+
+export interface LegraboxMachineOp {
+  id: string;
+  type: 'DRILL' | 'MILL';
+  face: 'LEFT' | 'RIGHT' | 'BOTTOM' | 'FACE';
+  x: number;
+  y: number;
+  diameter: number;
+  depth: number;
+  hardwareRef: string;
+}
+
+export function generateLegraboxCabinetOps(
+  cabinetId: string,
+  drawerY: number,  // Y position of drawer in cabinet
+  plan: LegraboxDrawerPlan
+): LegraboxMachineOp[] {
+  const ops: LegraboxMachineOp[] = [];
+
+  // LEFT SIDE - Runner mounting holes
+  plan.drilling.cabinet.forEach((hole, i) => {
+    ops.push({
+      id: `${cabinetId}-L-run-${i}`,
+      type: 'DRILL',
+      face: 'LEFT',
+      x: hole.x,
+      y: drawerY + 37,  // System 32 row
+      diameter: hole.dia,
+      depth: hole.depth,
+      hardwareRef: plan.runner.itemNo
+    });
+  });
+
+  // RIGHT SIDE - Runner mounting holes (mirror)
+  plan.drilling.cabinet.forEach((hole, i) => {
+    ops.push({
+      id: `${cabinetId}-R-run-${i}`,
+      type: 'DRILL',
+      face: 'RIGHT',
+      x: hole.x,
+      y: drawerY + 37,
+      diameter: hole.dia,
+      depth: hole.depth,
+      hardwareRef: plan.runner.itemNo
+    });
+  });
+
+  return ops;
+}
+
+export function generateLegraboxComponentOps(
+  drawerId: string,
+  plan: LegraboxDrawerPlan
+): LegraboxMachineOp[] {
+  const ops: LegraboxMachineOp[] = [];
+
+  // BOTTOM PANEL - No drilling required (slides into side rails)
+
+  // BACK PANEL - Optional adjustment holes
+  // Position: 15.5mm from each side
+  ops.push({
+    id: `${drawerId}-back-L`,
+    type: 'DRILL',
+    face: 'FACE',
+    x: 15.5,
+    y: plan.cutlist.back.height / 2,
+    diameter: 5,
+    depth: 10,
+    hardwareRef: 'LEGRABOX-BACK-CONN'
+  });
+
+  ops.push({
+    id: `${drawerId}-back-R`,
+    type: 'DRILL',
+    face: 'FACE',
+    x: plan.cutlist.back.width - 15.5,
+    y: plan.cutlist.back.height / 2,
+    diameter: 5,
+    depth: 10,
+    hardwareRef: 'LEGRABOX-BACK-CONN'
+  });
+
+  return ops;
+}
+```
+
+### 10.5 Height Code Auto-Selection Logic
+
+```
+FRONT HEIGHT → HEIGHT CODE SELECTION:
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Front Height (mm)  │  Code  │  Side Height  │  Back Height    │
+├─────────────────────┼────────┼───────────────┼─────────────────┤
+│     0 - 119         │   N    │    66.5mm     │     63mm        │
+│   120 - 159         │   M    │    90.5mm     │     84mm        │
+│   160 - 219         │   K    │   128.5mm     │    116mm        │
+│   220 - 279         │   C    │   177mm       │    167mm        │
+│   280+              │   F    │   241mm       │    218mm        │
+└─────────────────────┴────────┴───────────────┴─────────────────┘
+
+ตัวอย่าง:
+- หน้าบาน 140mm → รหัส M (90.5mm side, 84mm back)
+- หน้าบาน 200mm → รหัส K (128.5mm side, 116mm back)
+- หน้าบาน 300mm → รหัส F (241mm side, 218mm back)
+```
+
+### 10.6 LEGRABOX Cutlist Diagram
+
+```
+BOTTOM PANEL:
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│                        BOTTOM                               │
+│                                                             │
+│                  Width = LW - 35mm                          │
+│                  Depth = NL - 10mm                          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+BACK PANEL:
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│                         BACK                                │  Height varies
+│                                                             │  by code:
+│                  Width = LW - 38mm                          │  N=63, M=84,
+│                                                             │  K=116, C=167,
+│                                                             │  F=218
+└─────────────────────────────────────────────────────────────┘
+
+CUTLIST EXAMPLE (Cabinet LW=500mm, NL=450mm, Code K):
+┌──────────────────────────────────────────────────────────────┐
+│  Part      │  Width    │  Depth/Height  │  Qty  │  Material │
+├────────────┼───────────┼────────────────┼───────┼───────────┤
+│  Bottom    │  465mm    │  440mm         │   1   │  16mm MDF │
+│  Back      │  462mm    │  116mm         │   1   │  16mm MDF │
+│  Sides     │  LEGRABOX │  128.5mm       │   2   │  Metal    │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 10.7 Cabinet Drilling Pattern (LEGRABOX)
+
+```
+CABINET SIDE PANEL (Face View):
+
+           ← Back of Cabinet                Front of Cabinet →
+     ┌─────────────────────────────────────────────────────────────┐
+     │                                                             │
+     │     ●              ●              ●                         │
+     │   37mm           261mm          389mm                       │
+     │     ↓              ↓              ↓                         │
+     │  ┌─────────────────────────────────────────────────────┐   │
+     │  │                    DRAWER AREA                       │   │
+     │  │                                                      │   │
+     │  │                                                      │   │
+     │  └─────────────────────────────────────────────────────┘   │
+     │                                                             │
+     │  ● = Drilling Position (5mm dia, 13mm depth)                │
+     │                                                             │
+     └─────────────────────────────────────────────────────────────┘
+
+FRONT FIXING BRACKET POSITION:
+┌─────────────────────────────────────────┐
+│              DRAWER FRONT               │
+│                                         │
+│  ○ ←── 15.5mm from inner side          │
+│                                         │
+│                                         │
+│                                         │
+│                                    ○ ←──│── 15.5mm from inner side
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+### 10.8 Runner Load Class Comparison
+
+| Specification | 40kg Class (750) | 70kg Class (753) |
+|---------------|------------------|------------------|
+| **Series** | 750.XXXS | 753.XXXS |
+| **Load Capacity** | 40 kg | 70 kg |
+| **Use Case** | Standard drawers | Heavy/Large drawers |
+| **Available NL** | 270-600mm | 270-600mm |
+| **Soft Close** | Included | Included |
+| **Price Level** | Standard | Premium |
+
+### 10.9 Height Code Comparison
+
+| Code | Side Height | Back Height | Front Range | Best For |
+|------|-------------|-------------|-------------|----------|
+| **N** | 66.5mm | 63mm | <120mm | Shallow drawers |
+| **M** | 90.5mm | 84mm | 120-159mm | Standard drawers |
+| **K** | 128.5mm | 116mm | 160-219mm | Medium drawers |
+| **C** | 177mm | 167mm | 220-279mm | Deep drawers |
+| **F** | 241mm | 218mm | 280mm+ | Extra deep/Pot drawers |
+
+### 10.10 Complete Implementation Example
+
+```typescript
+// Example: Generate LEGRABOX drawer for a base cabinet
+
+const cabinetConfig = {
+  width: 600,
+  depth: 560,
+  internalWidth: 564,  // LW = 600 - 18×2
+  internalDepth: 540   // After back panel
+};
+
+const drawerFrontHeight = 180; // mm
+
+// Generate plan
+const plan = generateLegraboxPlan(
+  cabinetConfig.internalWidth,
+  cabinetConfig.internalDepth,
+  drawerFrontHeight,
+  35  // Expected load in kg
+);
+
+console.log('Generated LEGRABOX Plan:');
+console.log('Height Code:', plan.heightCode);           // 'K'
+console.log('Runner:', plan.runner.itemNo);              // '750.5001S'
+console.log('Bottom:', plan.cutlist.bottom);             // { width: 529, depth: 490 }
+console.log('Back:', plan.cutlist.back);                 // { width: 526, height: 116 }
+console.log('Sides:', plan.sides.height, 'mm');          // 128.5mm
+
+// Generate CAM operations
+const cabinetOps = generateLegraboxCabinetOps('CAB-001', 100, plan);
+const componentOps = generateLegraboxComponentOps('DRW-001', plan);
+
+console.log('Cabinet drilling operations:', cabinetOps.length);  // 6
+console.log('Component operations:', componentOps.length);       // 2
+```
+
+---
+
+## ส่วนที่ 11: Quick Reference Tables
+
+### 11.1 Door Size Matrix
 
 | ช่องเปิด (W×H) | Full Overlay | Half Overlay | Inset |
 |----------------|--------------|--------------|-------|
@@ -1376,7 +1860,7 @@ DRAWER BOTTOM (Top View):
 
 *สูตร: Full Overlay = Opening + 36mm (Overlay 18mm × 2)*
 
-### 10.2 Drawer Box Width Matrix
+### 11.2 Drawer Box Width Matrix
 
 | ช่องเปิด (W) | Side Mount | Undermount | Legrabox |
 |--------------|------------|------------|----------|
@@ -1390,7 +1874,7 @@ DRAWER BOTTOM (Top View):
 
 *สูตร: Box Width = Opening - 26mm (Slide 12.5mm + Clearance 0.5mm × 2)*
 
-### 10.3 Hinge Count by Door Size
+### 11.3 Hinge Count by Door Size
 
 | Door Height | Door Weight ≤4kg | ≤8kg | ≤12kg | ≤16kg |
 |-------------|------------------|------|-------|-------|
@@ -1482,7 +1966,8 @@ console.log('Drawer valid:', drawerValidation.isValid);
 6. **Validation**: ตรวจสอบความถูกต้องของขนาด
 7. **Blum Wooden Drawer Systems**: MOVENTO/TANDEM พร้อม Wood Drawer Architect Engine
 8. **Hardware Database**: Master DB สำหรับ Runners และ Locking Devices
-9. **CAM Integration**: G-code generation สำหรับ drilling patterns
+9. **LEGRABOX Box System**: ระบบลิ้นชักกล่องโลหะ พร้อม Drawer Kinetics Engine และ Auto Height Selection
+10. **CAM Integration**: G-code generation สำหรับ drilling patterns
 
 **Reference Documents:**
 - [Hardware & Drilling Specifications](./hardware-drilling-specifications.md)
