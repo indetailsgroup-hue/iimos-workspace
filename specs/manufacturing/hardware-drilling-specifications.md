@@ -1347,9 +1347,608 @@ function generateRodCutOp(rodLength: number): MachineOp {
 
 ---
 
+## ส่วนที่ 9: Blum Hinge & HK-XS Linked System (Architecture v11.0)
+
+ส่วนนี้รวบรวมข้อมูลจากไฟล์ Blum 68-197 (ระบบบานพับและบานยก) โดยเน้น **Linked Kinematics** - ความสัมพันธ์ระหว่างบานพับ (Hinge) และโช๊คช่วยยก (HK-XS) ที่ต้องคำนวณร่วมกัน
+
+### 9.1 Engineering Logic Highlights
+
+| Feature | Description |
+|---------|-------------|
+| **Linked Kinematics** | ตำแหน่งเจาะโช๊ค HK-XS ($H$) อ้างอิงค่า $MD$ และ $K$ จากบานพับที่เลือก |
+| **Blum Solver** | สูตร $FA = TB + 10 - MD$ แม่นยำกว่าสูตรทั่วไป |
+| **Pattern Recognition** | ระยะเจาะรูสกรู 45/9.5mm (Blum Standard) |
+
+### 9.2 Master Hardware Database (Hinge & Lift)
+
+```typescript
+// src/services/hardware/masterDb.ts
+
+export type SystemType =
+  | 'MINIFIX_15' | 'SC_8_60'
+  // --- BLUM SYSTEMS ---
+  | 'BLUM_HK_XS'         // Stay Lift
+  | 'BLUM_CLIP_110'      // Standard
+  | 'BLUM_CLIP_155'      // Zero Protrusion
+  | 'BLUM_CLIP_THIN'     // Thin Door
+  | 'BLUM_CLIP_BLIND';   // Blind Corner
+
+export interface HardwareItem {
+  id: string;
+  brand: 'HAFELE' | 'BLUM';
+  itemNo: string;
+  name: string;
+  category: 'LIFT' | 'HINGE_CUP' | 'HINGE_PLATE' | 'ACCESSORY';
+  specs: {
+    // Hinge Specs
+    cupDepth?: number;       // Standard 13mm
+    openingAngle?: number;
+    pattern?: string;        // '45/9.5'
+    crankConstant?: number;  // ค่าคงที่ของรุ่น (TB3->FA13 => K=10)
+    crank?: number;          // 0 (Full), 9.5 (Half), 18 (Inset)
+
+    // Lift Specs
+    powerFactorMin?: number; // LF = KH * Weight
+    powerFactorMax?: number;
+
+    // Plate Specs
+    distance?: number;       // MD (0, 3, 9)
+  };
+}
+
+export const MASTER_DB = {
+  // =================================================================
+  // 1. AVENTOS HK-XS (Page 64)
+  // =================================================================
+  lifts: {
+    hkxs_weak: {
+      id: 'hkxs_20k1101', brand: 'BLUM', itemNo: '20K1101',
+      name: 'HK-XS Weak (LF 200-1000)', category: 'LIFT',
+      specs: { powerFactorMin: 200, powerFactorMax: 1000 }
+    },
+    hkxs_med: {
+      id: 'hkxs_20k1301', brand: 'BLUM', itemNo: '20K1301',
+      name: 'HK-XS Medium (LF 500-1500)', category: 'LIFT',
+      specs: { powerFactorMin: 500, powerFactorMax: 1500 }
+    },
+    hkxs_strong: {
+      id: 'hkxs_20k1501', brand: 'BLUM', itemNo: '20K1501',
+      name: 'HK-XS Strong (LF 800-1800)', category: 'LIFT',
+      specs: { powerFactorMin: 800, powerFactorMax: 1800 }
+    },
+
+    // Brackets
+    hkxs_cab: {
+      id: 'hkxs_cab', brand: 'BLUM', itemNo: '20K5101',
+      name: 'Cabinet Fixing', category: 'ACCESSORY', specs: {}
+    },
+    hkxs_front: {
+      id: 'hkxs_front', brand: 'BLUM', itemNo: '20K4101',
+      name: 'Front Fixing', category: 'ACCESSORY', specs: {}
+    },
+  },
+
+  // =================================================================
+  // 2. CLIP TOP BLUMOTION (Page 74-76)
+  // =================================================================
+  hinges: {
+    // Standard 110° (Page 76 - Table)
+    // Formula: Overlay = TB + 10 - MD
+    b110_full: {
+      id: 'b110_full', brand: 'BLUM', itemNo: '71B3550',
+      name: 'CLIP top 110° Full', category: 'HINGE_CUP',
+      specs: {
+        openingAngle: 110, crank: 0, crankConstant: 10,
+        cupDepth: 13, pattern: '45/9.5'
+      }
+    },
+    b110_half: {
+      id: 'b110_half', brand: 'BLUM', itemNo: '71B3650',
+      name: 'CLIP top 110° Half', category: 'HINGE_CUP',
+      specs: {
+        openingAngle: 110, crank: 9.5, crankConstant: 10,
+        cupDepth: 13, pattern: '45/9.5'
+      }
+    },
+    b110_inset: {
+      id: 'b110_inset', brand: 'BLUM', itemNo: '71B3750',
+      name: 'CLIP top 110° Inset', category: 'HINGE_CUP',
+      specs: {
+        openingAngle: 110, crank: 18, crankConstant: 10,
+        cupDepth: 13, pattern: '45/9.5'
+      }
+    },
+
+    // Wide Angle 155° (Page 84)
+    b155_zero: {
+      id: 'b155_zero', brand: 'BLUM', itemNo: '71B7550',
+      name: 'CLIP top 155° Zero', category: 'HINGE_CUP',
+      specs: {
+        openingAngle: 155, crank: 0, crankConstant: 10,
+        cupDepth: 11.5, pattern: '45/9.5'
+      }
+    },
+  },
+
+  plates: {
+    // Mounting Plates (MD 0, 3, 9) - Page 150
+    bp_d0: {
+      id: 'bp_d0', brand: 'BLUM', itemNo: '173H7100',
+      name: 'Cruciform Plate D0', category: 'HINGE_PLATE',
+      specs: { distance: 0 }
+    },
+    bp_d3: {
+      id: 'bp_d3', brand: 'BLUM', itemNo: '173H7130',
+      name: 'Cruciform Plate D3', category: 'HINGE_PLATE',
+      specs: { distance: 3 }
+    },
+    bp_d9: {
+      id: 'bp_d9', brand: 'BLUM', itemNo: '175H7190',
+      name: 'Cruciform Plate D9', category: 'HINGE_PLATE',
+      specs: { distance: 9 }
+    },
+  }
+};
+```
+
+### 9.3 Blum Engineering Engine
+
+หัวใจสำคัญ: เชื่อมโยงผลลัพธ์การคำนวณ Hinge (MD, Crank) ไปสู่สูตรของ HK-XS
+
+```typescript
+// src/services/engineering/blumEngine.ts
+import { MASTER_DB, HardwareItem, SystemType } from '../hardware/masterDb';
+
+interface HingeResult {
+  cup: HardwareItem;
+  plate: HardwareItem;
+  bestTB: number; // Drilling Distance (3-7mm)
+  bestMD: number; // Plate Spacing
+}
+
+// === 1. HINGE SOLVER ===
+// คำนวณหาคู่ TB และ MD ที่ดีที่สุดสำหรับระยะทับขอบ (Overlay) ที่ต้องการ
+export const calculateBlumHinge = (
+  overlay: number,
+  system: SystemType
+): HingeResult => {
+  const db = MASTER_DB.hinges;
+  const plates = MASTER_DB.plates;
+
+  // 1.1 Select Arm Type
+  let cup = db.b110_full;
+  if (system === 'BLUM_CLIP_155') {
+    cup = db.b155_zero;
+  } else {
+    // Auto-select based on Overlay target
+    if (overlay >= 11) cup = db.b110_full;      // Full (~14-19mm)
+    else if (overlay >= 2) cup = db.b110_half;  // Half (~5-9mm)
+    else cup = db.b110_inset;                   // Inset
+  }
+
+  // 1.2 Geometry Solver
+  // Formula: Overlay = TB + Fixed - Crank - MD
+  const Fixed = cup.specs.crankConstant || 10;
+  const Crank = cup.specs.crank || 0;
+
+  let bestTB = 5; // Default standard
+  let bestMD = 0;
+  let minDiff = 999;
+
+  const availTB = [3, 4, 5, 6]; // Blum drilling distances
+  const availMD = [0, 3, 9];    // Available plates
+
+  for (const TB of availTB) {
+    for (const MD of availMD) {
+      const calcOverlay = TB + Fixed - Crank - MD;
+      const diff = Math.abs(calcOverlay - overlay);
+
+      if (diff < minDiff) {
+        minDiff = diff;
+        bestTB = TB;
+        bestMD = MD;
+      }
+    }
+  }
+
+  // Map MD to Plate SKU
+  let plate = plates.bp_d0;
+  if (bestMD === 3) plate = plates.bp_d3;
+  if (bestMD === 9) plate = plates.bp_d9;
+
+  return { cup, plate, bestTB, bestMD };
+};
+
+// === 2. HK-XS CALCULATOR ===
+// สูตรหน้า 64: H = 137 + MD + K + SOB
+// ต้องรับค่า MD และ K จากบานพับที่คำนวณได้ข้างบน
+export const calculateHKXS = (
+  cabinetHeight: number,
+  frontWeight: number,
+  topThickness: number, // SOB
+  hingeInfo: { md: number; crank: number } // ข้อมูลจาก Hinge Result
+) => {
+  const db = MASTER_DB.lifts;
+
+  // Power Factor
+  const LF = cabinetHeight * frontWeight;
+
+  // Mechanism Selection
+  let mech = db.hkxs_weak;
+  if (LF > 1500) mech = db.hkxs_strong;
+  else if (LF > 1000) mech = db.hkxs_med;
+
+  // Calculate Drill Position Y (From Top Edge)
+  // H = 137 + MD + K + SOB
+  const drillY = 137 + hingeInfo.md + hingeInfo.crank + topThickness;
+
+  return {
+    isValid: true,
+    mechanism: mech,
+    drillY_cabinet: drillY,
+    powerFactor: LF
+  };
+};
+```
+
+### 9.4 Blum Overlay Calculation Formula
+
+```
+BLUM OVERLAY FORMULA (Page 76):
+
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│   Overlay (FA) = TB + Fixed - Crank - MD                        │
+│                                                                 │
+│   Where:                                                        │
+│   • TB    = Drilling Distance (3-6mm from door edge)            │
+│   • Fixed = Crank Constant (10 for CLIP top 110°)               │
+│   • Crank = Arm Type (0=Full, 9.5=Half, 18=Inset)               │
+│   • MD    = Mounting Distance (0, 3, 9mm plate options)         │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+EXAMPLE CALCULATIONS:
+
+Full Overlay (TB=5, Crank=0, MD=0):
+  FA = 5 + 10 - 0 - 0 = 15mm ✓
+
+Half Overlay (TB=5, Crank=9.5, MD=0):
+  FA = 5 + 10 - 9.5 - 0 = 5.5mm ✓
+
+Inset (TB=5, Crank=18, MD=0):
+  FA = 5 + 10 - 18 - 0 = -3mm (negative = inset)
+```
+
+### 9.5 HK-XS Drilling Position Formula
+
+```
+HK-XS DRILL POSITION (Page 64):
+
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│   H = 137 + MD + K + SOB                                        │
+│                                                                 │
+│   Where:                                                        │
+│   • 137 = Base constant (mm)                                    │
+│   • MD  = Mounting Distance from Hinge Plate                    │
+│   • K   = Crank value from Hinge Cup                            │
+│   • SOB = Top Panel Thickness (typically 18mm)                  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+CABINET SIDE VIEW:
+┌─────────────────────────────────────────┐
+│              TOP (SOB)                   │
+├─────────────────────────────────────────┤
+│                                         │
+│  ○─────────────────────○                │ ← H = 137 + MD + K + SOB
+│  │                     │                │
+│  │    HK-XS Mechanism  │                │
+│  │                     │                │
+│                                         │
+│                                         │
+│                                         │
+│                                         │
+└─────────────────────────────────────────┘
+
+EXAMPLE: Full Overlay Hinge (MD=0, K=0) with 18mm Top:
+  H = 137 + 0 + 0 + 18 = 155mm from cabinet top edge
+```
+
+### 9.6 CAM Generator for Blum Hinge & HK-XS
+
+```typescript
+// src/services/cam/generators/blumOp.ts
+import { calculateBlumHinge, calculateHKXS } from '../../engineering/blumEngine';
+import { MachineOp } from './types';
+
+export const generateBlumOps = (
+  doorId: string,
+  cabinetId: string,
+  opts: {
+    overlay: number;
+    hingeSystem: SystemType;
+    doorHeight: number;
+    cabinetHeight?: number;
+    frontWeight?: number;
+    topThickness?: number;
+    system?: string;
+  }
+): MachineOp[] => {
+  const ops: MachineOp[] = [];
+
+  // 1. คำนวณ Hinge ก่อนเสมอ (เพราะ HK-XS ต้องใช้ค่า MD/Crank)
+  const hingeRes = calculateBlumHinge(
+    opts.overlay,
+    opts.hingeSystem || 'BLUM_CLIP_110'
+  );
+  const { cup, plate, bestTB } = hingeRes;
+
+  // === HINGE OPERATIONS ===
+  // คำนวณจำนวนบานพับตามความสูง (หน้า 75)
+  const qty = opts.doorHeight > 900 ? 3 : 2;
+  const margin = 100;
+
+  for (let i = 0; i < qty; i++) {
+    const y = Math.round(
+      margin + ((opts.doorHeight - 2 * margin) / (qty - 1)) * i
+    );
+
+    // 1.1 Door Cup (Pattern 45/9.5)
+    const cupX = bestTB + 17.5;
+    ops.push({
+      id: `${doorId}-cup-${i}`,
+      type: 'DRILL',
+      face: 'FACE',
+      x: cupX,
+      y: y,
+      diameter: 35,
+      depth: 13,
+      hardwareId: cup.itemNo
+    });
+
+    // Screw Holes (45mm spacing, 9.5mm offset)
+    [-22.5, 22.5].forEach(offY => {
+      ops.push({
+        id: `${doorId}-scr-${i}-${offY}`,
+        type: 'DRILL',
+        face: 'FACE',
+        x: cupX - 9.5,
+        y: y + offY,
+        diameter: 2.5,
+        depth: 5 // Pilot Hole
+      });
+    });
+
+    // 1.2 Cabinet Plate (System 32)
+    [-16, 16].forEach(offY => {
+      ops.push({
+        id: `${cabinetId}-plt-${i}-${offY}`,
+        type: 'DRILL',
+        face: 'FACE',
+        x: 37,
+        y: y + offY,
+        diameter: 5,
+        depth: 13,
+        hardwareId: plate.itemNo
+      });
+    });
+  }
+
+  // === AVENTOS HK-XS OPERATIONS ===
+  if (opts.system === 'BLUM_HK_XS' && opts.cabinetHeight && opts.frontWeight) {
+    // ส่งค่า MD และ Crank จากบานพับเข้าไปคำนวณ
+    const liftRes = calculateHKXS(
+      opts.cabinetHeight,
+      opts.frontWeight,
+      opts.topThickness || 18, // SOB
+      { md: hingeRes.bestMD, crank: cup.specs.crank || 0 }
+    );
+
+    // Cabinet Fixing (3 holes for mechanism)
+    const yFromTop = liftRes.drillY_cabinet;
+
+    [0, 32, 64].forEach(offset => {
+      ops.push({
+        id: `${cabinetId}-hkxs-${offset}`,
+        type: 'DRILL',
+        face: 'FACE',
+        x: 37, // Standard X for Blum Lifts
+        y: yFromTop + offset,
+        diameter: 5,
+        depth: 13,
+        hardwareId: liftRes.mechanism.itemNo
+      });
+    });
+
+    // Front Fixing (Approx 125.5 + MD + K from top of door)
+    const frontVal = 125.5 + hingeRes.bestMD + (cup.specs.crank || 0);
+    ops.push({
+      id: `${doorId}-hkxs-front`,
+      type: 'DRILL',
+      face: 'FACE',
+      x: 50,
+      y: frontVal,
+      diameter: 5,
+      depth: 10
+    });
+  }
+
+  return ops;
+};
+```
+
+### 9.7 Hinge Drilling Pattern (45/9.5mm Standard)
+
+```
+DOOR PANEL - HINGE CUP DRILLING:
+
+     ┌─────────────────────────────────────────┐
+     │                DOOR EDGE                 │
+     │                                         │
+     │     ○ ←── Screw Hole (2.5mm)            │  ↑
+     │     │                                   │  │ 22.5mm
+     │ ●───┼─────────────────────────●         │  ↓
+     │     │                         ↑         │  ← Cup Center (35mm dia)
+     │     ○ ←── Screw Hole          │ 9.5mm   │  ↑
+     │                               ↓         │  │ 22.5mm
+     │                                         │  ↓
+     │     ↑                                   │
+     │     TB + 17.5mm (Cup Center X)          │
+     │                                         │
+     └─────────────────────────────────────────┘
+     ←─────────────────────────────────────────→
+                    Door Width
+
+Screw Pattern: 45mm total spacing (22.5mm each side of cup center)
+Screw Offset:  9.5mm from cup center toward door edge
+```
+
+### 9.8 HK-XS Power Factor Selection
+
+| Power Factor (LF) | Mechanism | Item No. | Application |
+|-------------------|-----------|----------|-------------|
+| 200 - 1000 | HK-XS Weak | 20K1101 | Light fronts |
+| 500 - 1500 | HK-XS Medium | 20K1301 | Standard fronts |
+| 800 - 1800 | HK-XS Strong | 20K1501 | Heavy fronts |
+
+**Power Factor Formula:**
+```
+LF = Cabinet Height (mm) × Front Weight (kg)
+
+Example:
+- Cabinet Height: 400mm
+- Front Weight: 3kg
+- LF = 400 × 3 = 1200
+
+→ Select: HK-XS Medium (20K1301)
+```
+
+### 9.9 CLIP top Hinge Selection Matrix
+
+| Overlay Target | Arm Type | Crank Value | Item No. | Use Case |
+|----------------|----------|-------------|----------|----------|
+| 14-19mm | Full | 0 | 71B3550 | Standard full overlay |
+| 5-9mm | Half | 9.5 | 71B3650 | Shared partition |
+| -3 to 0mm | Inset | 18 | 71B3750 | Flush with frame |
+| 14-19mm | 155° Zero | 0 | 71B7550 | Corner cabinets |
+
+### 9.10 Mounting Plate Distance Options
+
+| Plate | Distance (MD) | Item No. | Effect on Overlay |
+|-------|---------------|----------|-------------------|
+| D0 | 0mm | 173H7100 | Maximum overlay |
+| D3 | 3mm | 173H7130 | -3mm from maximum |
+| D9 | 9mm | 175H7190 | -9mm from maximum |
+
+### 9.11 Complete Linked Calculation Example
+
+```typescript
+// Example: Wall Cabinet with HK-XS Lift + CLIP top Hinges
+
+const cabinetConfig = {
+  width: 600,
+  height: 400,
+  depth: 350,
+  topThickness: 18,
+  frontWeight: 3  // kg
+};
+
+const doorConfig = {
+  overlay: 15,  // Full overlay target
+  height: 380
+};
+
+// Step 1: Calculate Hinge (this determines MD and Crank)
+const hingeResult = calculateBlumHinge(doorConfig.overlay, 'BLUM_CLIP_110');
+
+console.log('Hinge Result:');
+console.log('  Cup:', hingeResult.cup.itemNo);           // 71B3550
+console.log('  Plate:', hingeResult.plate.itemNo);       // 173H7100
+console.log('  TB:', hingeResult.bestTB, 'mm');          // 5mm
+console.log('  MD:', hingeResult.bestMD, 'mm');          // 0mm
+console.log('  Actual Overlay:',
+  hingeResult.bestTB + 10 - hingeResult.cup.specs.crank - hingeResult.bestMD
+);  // 15mm
+
+// Step 2: Calculate HK-XS using Hinge values
+const liftResult = calculateHKXS(
+  cabinetConfig.height,
+  cabinetConfig.frontWeight,
+  cabinetConfig.topThickness,
+  { md: hingeResult.bestMD, crank: hingeResult.cup.specs.crank || 0 }
+);
+
+console.log('HK-XS Result:');
+console.log('  Mechanism:', liftResult.mechanism.itemNo);  // 20K1301
+console.log('  Power Factor:', liftResult.powerFactor);    // 1200
+console.log('  Drill Y:', liftResult.drillY_cabinet, 'mm'); // 155mm from top
+
+// Step 3: Generate CAM Operations
+const ops = generateBlumOps('DOOR-001', 'CAB-001', {
+  overlay: doorConfig.overlay,
+  hingeSystem: 'BLUM_CLIP_110',
+  doorHeight: doorConfig.height,
+  cabinetHeight: cabinetConfig.height,
+  frontWeight: cabinetConfig.frontWeight,
+  topThickness: cabinetConfig.topThickness,
+  system: 'BLUM_HK_XS'
+});
+
+console.log('Generated Operations:', ops.length);
+// Hinges: 2 cups + 4 screws + 4 plates = 10
+// HK-XS: 3 cabinet + 1 front = 4
+// Total: 14 operations
+```
+
+### 9.12 Drilling Reference Diagram
+
+```
+COMPLETE WALL CABINET WITH HK-XS + HINGES:
+
+                    ← Cabinet Width (600mm) →
+     ┌─────────────────────────────────────────────────────────────┐
+     │                    TOP PANEL (18mm)                          │
+     ├─────────────────────────────────────────────────────────────┤
+     │                                                              │
+     │  ○──○──○ ←── HK-XS (H = 137 + MD + K + SOB)                 │
+     │                                                              │
+     │                                                              │
+     │  ○    ○ ←── Hinge Plate #1 (Y = 100mm)                      │
+     │  ↑                                                           │
+     │  37mm (System 32)                                            │
+     │                                                              │
+     │                                                              │
+     │                                                              │
+     │  ○    ○ ←── Hinge Plate #2 (Y = doorHeight - 100mm)         │
+     │                                                              │
+     │                                                              │
+     └─────────────────────────────────────────────────────────────┘
+                           CABINET SIDE
+
+DOOR PANEL:
+     ┌─────────────────────────────────────────┐
+     │                                         │
+     │  ○ ←── HK-XS Front Fixing (125.5 + MD + K)
+     │                                         │
+     │  ○                                      │
+     │  ●──○ ←── Hinge Cup #1 + Screws         │
+     │  ○                                      │
+     │                                         │
+     │                                         │
+     │  ○                                      │
+     │  ●──○ ←── Hinge Cup #2 + Screws         │
+     │  ○                                      │
+     │                                         │
+     └─────────────────────────────────────────┘
+```
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
-- Blum Catalog Pages 2, 410, 420, 430, 452
+- Blum Catalog Pages 2, 64, 74-76, 84, 150, 410, 420, 430, 452
 - Hettich Product Catalog
 - Häfele Furniture Fittings Handbook
 - European Kitchen Cabinet Standards (EN 16121)
