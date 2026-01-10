@@ -3263,9 +3263,825 @@ console.log('Cabinet hole Ø:', cabOps[0].diameter); // 3mm (Screw fixing)
 
 ---
 
+## ส่วนที่ 12: Hinge Specialist Engine - Specialty Hinges (Architecture v8.0)
+
+ระบบ **Hinge Specialist Engine** รองรับบานพับพิเศษครบทุกรูปแบบ จาก Häfele Selection 16 รวมถึง Profile Doors, Rebated Doors, Blind Corner, Angled Applications และ Refrigerator Hinges
+
+### 12.1 Engineering Logic Highlights
+
+1. **Complex Geometry**: รองรับตู้เข้ามุมทุกรูปแบบ (15° ถึง 70° Bi-fold) และ Blind Corner
+2. **Material Intelligence**: ปรับความลึกเจาะอัตโนมัติ (9mm บานบังใบ / 13mm บานหนา Profile)
+3. **Pattern Awareness**: รองรับระยะรูเจาะสกรูพิเศษ (52/7.5 และ 45/9.5)
+4. **Hardware Safety**: บังคับใช้ Plate D=9mm สำหรับ Small Blind Corner
+
+### 12.2 Master Hardware Database - Specialty Hinges
+
+```typescript
+// src/services/hardware/hafeleDb.ts
+
+export type SystemType =
+  | 'MINIFIX_15' | 'SC_8_60' | 'U_12_10' | 'TOFIX_25' | 'LAMELLO_P' | 'DOVETAIL_RAIL'
+  // --- STANDARD ---
+  | 'HINGE_110' | 'HINGE_155' | 'HINGE_165' | 'HINGE_THIN'
+  // --- SPECIALTY (Selection 16) ---
+  | 'HINGE_PROFILE_94'   // บานหนา/บานคิ้ว (เจาะลึก 13mm)
+  | 'HINGE_REBATED_110'  // บานบังใบ (เจาะตื้น 9mm)
+  | 'HINGE_BLIND_SM'     // Blind Corner เล็ก (ใช้ Plate D9)
+  | 'HINGE_BLIND_LG'     // Blind Corner ใหญ่
+  | 'HINGE_CORNER_70'    // บานพับตู้เข้ามุม (Bi-fold)
+  | 'HINGE_ANGLE_15'     // หน้าบานเอียง +15°
+  | 'HINGE_ANGLE_24'     // หน้าบานเอียง +24°
+  | 'HINGE_ANGLE_30'     // หน้าบานเอียง +30°
+  | 'HINGE_ANGLE_37'     // หน้าบานเอียง +37°
+  | 'HINGE_ANGLE_45'     // หน้าบานเอียง +45°
+  | 'HINGE_FRIDGE';      // ตู้เย็น (Flat Design)
+
+export interface HardwareItem {
+  id: string;
+  itemNo: string;
+  name: string;
+  category: 'HINGE_CUP' | 'HINGE_PLATE';
+  specs: {
+    cupDepth: number;       // ความลึกเจาะถ้วย (Critical Spec)
+    cupDia: number;         // 35mm
+    openingAngle: number;
+    crankConstant?: number; // ค่า K
+    pattern?: string;       // '48/6' (Std), '52/7.5' (Profile), '45/9.5' (Fridge)
+    distance?: number;      // Plate Distance
+  };
+}
+
+export const HAFELE_SPECIALTY_HINGES = {
+  // =================================================================
+  // 9.1 PROFILE / THICK DOORS (Selection 16 - Page 1-2)
+  // =================================================================
+  // ⚠️ Critical: เจาะลึก 13mm | Pattern 52/7.5
+  // สำหรับบานหนา >24mm หรือบานคิ้ว (Profile Door)
+
+  h_prof_full: {
+    id: 'h_prof_full',
+    itemNo: '329.05.605',
+    name: 'Profile 94° Full Overlay',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 94,
+      cupDepth: 13.0,      // Deep drilling
+      cupDia: 35,
+      pattern: '52/7.5',   // Special screw pattern
+      crankConstant: 19    // K = 19 (Full)
+    }
+  } as HardwareItem,
+
+  h_prof_half: {
+    id: 'h_prof_half',
+    itemNo: '329.05.614',
+    name: 'Profile 94° Half Overlay',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 94,
+      cupDepth: 13.0,
+      cupDia: 35,
+      pattern: '52/7.5',
+      crankConstant: 8     // K = 8 (Half)
+    }
+  } as HardwareItem,
+
+  h_prof_inset: {
+    id: 'h_prof_inset',
+    itemNo: '329.05.632',
+    name: 'Profile 94° Inset',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 94,
+      cupDepth: 13.0,
+      cupDia: 35,
+      pattern: '52/7.5',
+      crankConstant: -1    // K = -1 (Inset)
+    }
+  } as HardwareItem,
+
+  // =================================================================
+  // 9.2 REBATED DOORS (Selection 16 - Page 3)
+  // =================================================================
+  // ⚠️ Critical: เจาะตื้น 9mm สำหรับบานบังใบ/กระจก
+
+  h_rebated: {
+    id: 'h_rebated',
+    itemNo: '329.26.611',
+    name: 'Rebated 110° Full',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 110,
+      cupDepth: 9.0,       // Shallow drilling!
+      cupDia: 35,
+      pattern: '48/6',     // Standard pattern
+      crankConstant: 13
+    }
+  } as HardwareItem,
+
+  // =================================================================
+  // 9.3 BLIND CORNER (Selection 16 - Page 5-6)
+  // =================================================================
+  // Small Blind requires D=9 Plate (Mandatory)
+
+  h_blind_sm: {
+    id: 'h_blind_sm',
+    itemNo: '329.34.601',
+    name: 'Blind Corner Small 94°',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 94,
+      cupDepth: 11.0,
+      cupDia: 35,
+      pattern: '48/6'
+    }
+  } as HardwareItem,
+
+  h_blind_lg: {
+    id: 'h_blind_lg',
+    itemNo: '329.35.600',
+    name: 'Blind Corner Large 110°',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 110,
+      cupDepth: 11.0,
+      cupDia: 35,
+      pattern: '48/6'
+    }
+  } as HardwareItem,
+
+  // =================================================================
+  // 9.4 CORNER UNIT / BI-FOLD (Selection 16 - Page 7)
+  // =================================================================
+
+  h_corner_70: {
+    id: 'h_corner_70',
+    itemNo: '329.19.700',
+    name: 'Bi-fold Corner 70°',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 70,
+      cupDepth: 11.0,
+      cupDia: 35,
+      pattern: '48/6'
+    }
+  } as HardwareItem,
+
+  // =================================================================
+  // 9.5 ANGLED APPLICATIONS (Selection 16 - Page 9-10)
+  // =================================================================
+  // For angled cabinet faces (diagonal corners, end panels)
+
+  h_angle_15: {
+    id: 'h_angle_15',
+    itemNo: '329.96.600',
+    name: 'Angle Hinge +15°',
+    category: 'HINGE_CUP',
+    specs: { openingAngle: 94, cupDepth: 11.0, cupDia: 35, pattern: '48/6' }
+  } as HardwareItem,
+
+  h_angle_24: {
+    id: 'h_angle_24',
+    itemNo: '329.96.601',
+    name: 'Angle Hinge +24°',
+    category: 'HINGE_CUP',
+    specs: { openingAngle: 94, cupDepth: 11.0, cupDia: 35, pattern: '48/6' }
+  } as HardwareItem,
+
+  h_angle_30: {
+    id: 'h_angle_30',
+    itemNo: '329.96.602',
+    name: 'Angle Hinge +30°',
+    category: 'HINGE_CUP',
+    specs: { openingAngle: 94, cupDepth: 11.0, cupDia: 35, pattern: '48/6' }
+  } as HardwareItem,
+
+  h_angle_37: {
+    id: 'h_angle_37',
+    itemNo: '329.96.604',
+    name: 'Angle Hinge +37°',
+    category: 'HINGE_CUP',
+    specs: { openingAngle: 94, cupDepth: 11.0, cupDia: 35, pattern: '48/6' }
+  } as HardwareItem,
+
+  h_angle_45: {
+    id: 'h_angle_45',
+    itemNo: '329.96.605',
+    name: 'Angle Hinge +45°',
+    category: 'HINGE_CUP',
+    specs: { openingAngle: 94, cupDepth: 11.0, cupDia: 35, pattern: '48/6' }
+  } as HardwareItem,
+
+  // =================================================================
+  // 9.6 REFRIGERATOR (Selection 16 - Page 11)
+  // =================================================================
+  // ⚠️ Pattern 45/9.5 (Special screw spacing)
+
+  h_fridge: {
+    id: 'h_fridge',
+    itemNo: '329.23.600',
+    name: 'Refrigerator 94° Flat',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 94,
+      cupDepth: 11.0,
+      cupDia: 35,
+      pattern: '45/9.5'    // Unique screw pattern!
+    }
+  } as HardwareItem
+};
+
+// Special Plates for Blind Corner
+export const SPECIALTY_PLATES = {
+  d0: {
+    id: 'pl_d0',
+    itemNo: '329.67.060',
+    name: 'Plate D=0',
+    category: 'HINGE_PLATE',
+    specs: { distance: 0 }
+  } as HardwareItem,
+
+  d2: {
+    id: 'pl_d2',
+    itemNo: '329.67.062',
+    name: 'Plate D=2',
+    category: 'HINGE_PLATE',
+    specs: { distance: 2 }
+  } as HardwareItem,
+
+  d3: {
+    id: 'pl_d3',
+    itemNo: '329.67.063',
+    name: 'Plate D=3',
+    category: 'HINGE_PLATE',
+    specs: { distance: 3 }
+  } as HardwareItem,
+
+  // ✅ MANDATORY for Small Blind Corner (Page 6)
+  d9_blind: {
+    id: 'pl_d9',
+    itemNo: '329.88.609',
+    name: 'Blind Corner Plate D=9',
+    category: 'HINGE_PLATE',
+    specs: { distance: 9 }
+  } as HardwareItem
+};
+```
+
+### 12.3 Drilling Depth by Hinge Type
+
+```
+CRITICAL DRILLING DEPTHS:
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Hinge Type         │  Cup Depth  │  Pattern   │  Min Door Thick  │ Use │
+├─────────────────────┼─────────────┼────────────┼──────────────────┼─────┤
+│  Standard 110/155   │   11mm      │   48/6     │     16mm         │  A  │
+│  Profile 94°        │   13mm      │   52/7.5   │     24mm         │  B  │
+│  Rebated 110°       │    9mm      │   48/6     │     14mm         │  C  │
+│  Blind Corner       │   11mm      │   48/6     │     16mm         │  D  │
+│  Angle 15°-45°      │   11mm      │   48/6     │     16mm         │  E  │
+│  Bi-fold 70°        │   11mm      │   48/6     │     16mm         │  F  │
+│  Refrigerator       │   11mm      │   45/9.5   │     16mm         │  G  │
+└─────────────────────┴─────────────┴────────────┴──────────────────┴─────┘
+
+Use Cases:
+A = Standard overlay doors (most common)
+B = Thick doors >24mm, profile/framed doors
+C = Rebated/rabbeted doors, glass frame doors
+D = L-shaped corner cabinets
+E = Diagonal corner, angled end panels
+F = Corner unit bi-fold doors
+G = Built-in refrigerator cabinets
+
+
+⚠️ SAFETY RULE:
+Maximum drill depth = Door Thickness - 2mm
+(Never drill through the door face!)
+```
+
+### 12.4 Screw Pattern Variations
+
+```
+SCREW HOLE PATTERNS:
+
+STANDARD (48/6) - Most Hinges:
+┌─────────────────────────────────────┐
+│                                     │
+│         ●  ← Screw @ Y+24           │
+│         │                           │
+│     ◯───┤  ← 35mm Cup               │
+│         │   (6mm offset from center)│
+│         ●  ← Screw @ Y-24           │
+│                                     │
+│   Total spacing: 48mm (24+24)       │
+│   X offset: 6mm from cup center     │
+└─────────────────────────────────────┘
+
+
+PROFILE (52/7.5) - Thick Door Hinges:
+┌─────────────────────────────────────┐
+│                                     │
+│         ●  ← Screw @ Y+26           │
+│         │                           │
+│     ◯───┤  ← 35mm Cup               │
+│         │   (7.5mm offset)          │
+│         ●  ← Screw @ Y-26           │
+│                                     │
+│   Total spacing: 52mm (26+26)       │
+│   X offset: 7.5mm from cup center   │
+└─────────────────────────────────────┘
+
+
+REFRIGERATOR (45/9.5) - Fridge Hinges:
+┌─────────────────────────────────────┐
+│                                     │
+│         ●  ← Screw @ Y+22.5         │
+│         │                           │
+│     ◯───┤  ← 35mm Cup               │
+│         │   (9.5mm offset)          │
+│         ●  ← Screw @ Y-22.5         │
+│                                     │
+│   Total spacing: 45mm (22.5+22.5)   │
+│   X offset: 9.5mm from cup center   │
+└─────────────────────────────────────┘
+```
+
+### 12.5 Specialty Hinge Selection Engine
+
+```typescript
+// src/services/engineering/hingeEngine.ts
+
+import {
+  HAFELE_SPECIALTY_HINGES,
+  SPECIALTY_PLATES,
+  HardwareItem,
+  SystemType
+} from '../hardware/hafeleDb';
+
+export interface HingePlan {
+  isValid: boolean;
+  quantity: number;
+  positions: number[];
+  specs: {
+    cup: HardwareItem;
+    plate: HardwareItem;
+  };
+  meta: {
+    cupDistanceE: number;
+    plateDistanceD: number;
+    drillDepth: number;
+    pattern: string;
+  };
+}
+
+interface HingeOptions {
+  doorHeight: number;
+  doorWeight: number;
+  doorThickness: number;
+  overlay: number;
+  system: SystemType;
+}
+
+/**
+ * Select specialty hardware based on application
+ */
+const selectSpecialtyHardware = (
+  system: SystemType,
+  overlay: number,
+  thickness: number
+): { cup: HardwareItem; plate: HardwareItem } | null => {
+  const db = HAFELE_SPECIALTY_HINGES;
+  const plates = SPECIALTY_PLATES;
+
+  switch (system) {
+    // === 1. PROFILE / THICK DOOR (>24mm) ===
+    case 'HINGE_PROFILE_94':
+      if (overlay >= 12) return { cup: db.h_prof_full, plate: plates.d0 };
+      if (overlay >= 5)  return { cup: db.h_prof_half, plate: plates.d0 };
+      return { cup: db.h_prof_inset, plate: plates.d0 };
+
+    // === 2. REBATED DOOR (Glass/Profile Frame) ===
+    case 'HINGE_REBATED_110':
+      return { cup: db.h_rebated, plate: plates.d0 };
+
+    // === 3. BLIND CORNER ===
+    case 'HINGE_BLIND_SM':
+      // ⚠️ MANDATORY: Small Blind requires D=9 Plate!
+      return { cup: db.h_blind_sm, plate: plates.d9_blind };
+    case 'HINGE_BLIND_LG':
+      return { cup: db.h_blind_lg, plate: plates.d3 };
+
+    // === 4. BI-FOLD / CORNER UNIT ===
+    case 'HINGE_CORNER_70':
+      return { cup: db.h_corner_70, plate: plates.d0 };
+
+    // === 5. ANGLED APPLICATIONS ===
+    case 'HINGE_ANGLE_15':
+      return { cup: db.h_angle_15, plate: plates.d0 };
+    case 'HINGE_ANGLE_24':
+      return { cup: db.h_angle_24, plate: plates.d0 };
+    case 'HINGE_ANGLE_30':
+      return { cup: db.h_angle_30, plate: plates.d0 };
+    case 'HINGE_ANGLE_37':
+      return { cup: db.h_angle_37, plate: plates.d0 };
+    case 'HINGE_ANGLE_45':
+      return { cup: db.h_angle_45, plate: plates.d0 };
+
+    // === 6. REFRIGERATOR ===
+    case 'HINGE_FRIDGE':
+      return { cup: db.h_fridge, plate: plates.d0 };
+
+    default:
+      return null; // Not a specialty hinge
+  }
+};
+
+/**
+ * Calculate complete hinge plan for specialty applications
+ */
+export const calculateSpecialtyHingePlan = (opts: HingeOptions): HingePlan => {
+  const { doorHeight, doorWeight, system, overlay, doorThickness } = opts;
+
+  // 1. Select Hardware
+  const selection = selectSpecialtyHardware(system, overlay, doorThickness);
+
+  if (!selection) {
+    // Fallback to standard hinges
+    return {
+      isValid: false,
+      quantity: 0,
+      positions: [],
+      specs: { cup: {} as HardwareItem, plate: {} as HardwareItem },
+      meta: { cupDistanceE: 0, plateDistanceD: 0, drillDepth: 0, pattern: '' }
+    };
+  }
+
+  const { cup, plate } = selection;
+
+  // 2. Calculate Quantity (Weight Graph)
+  const qty = (doorHeight > 2100 || doorWeight > 17) ? 5 :
+              (doorHeight > 1600 || doorWeight > 12) ? 4 :
+              (doorHeight > 900  || doorWeight > 6)  ? 3 : 2;
+
+  // 3. Calculate Positions (System 32 aligned)
+  const positions: number[] = [];
+  const margin = 96;  // 3 × 32mm from edge
+  const span = doorHeight - (2 * margin);
+
+  for (let i = 0; i < qty; i++) {
+    positions.push(Math.round(margin + (span / (qty - 1)) * i));
+  }
+
+  // 4. Safety Check: Maximum drill depth
+  const safeDepth = Math.min(
+    cup.specs.cupDepth,
+    doorThickness - 2  // Never drill through!
+  );
+
+  return {
+    isValid: true,
+    quantity: qty,
+    positions,
+    specs: { cup, plate },
+    meta: {
+      cupDistanceE: 4,  // Standard E
+      plateDistanceD: plate.specs.distance || 0,
+      drillDepth: safeDepth,
+      pattern: cup.specs.pattern || '48/6'
+    }
+  };
+};
+```
+
+### 12.6 CAM Generator with Pattern Support
+
+```typescript
+// src/services/cam/generators/hingeOp.ts
+
+import { calculateSpecialtyHingePlan, HingePlan } from '../../engineering/hingeEngine';
+
+export interface MachineOp {
+  id: string;
+  type: 'DRILL' | 'MILL';
+  face: 'FACE' | 'EDGE' | 'BACK';
+  x: number;
+  y: number;
+  diameter: number;
+  depth: number;
+  hardwareId: string;
+}
+
+/**
+ * Generate drilling operations for specialty hinges
+ * Supports multiple screw patterns (48/6, 52/7.5, 45/9.5)
+ */
+export const generateSpecialtyHingeOps = (
+  doorId: string,
+  cabinetId: string,
+  opts: any
+): MachineOp[] => {
+  const plan = calculateSpecialtyHingePlan(opts);
+  if (!plan.isValid) return [];
+
+  const ops: MachineOp[] = [];
+  const { cup, plate } = plan.specs;
+
+  // Safety: Maximum drill depth check
+  const safeDepth = Math.min(plan.meta.drillDepth, opts.doorThickness - 2);
+
+  // Pattern-specific screw offsets
+  let screwOffsetY = 24;   // Half of spacing (48/2 = 24)
+  let screwOffsetX = 6;    // X offset from cup center
+
+  if (plan.meta.pattern === '52/7.5') {
+    // Profile Door Pattern
+    screwOffsetY = 26;     // 52/2 = 26
+    screwOffsetX = 7.5;
+  } else if (plan.meta.pattern === '45/9.5') {
+    // Refrigerator Pattern
+    screwOffsetY = 22.5;   // 45/2 = 22.5
+    screwOffsetX = 9.5;
+  }
+
+  plan.positions.forEach((yPos, i) => {
+
+    // === 1. DOOR CUP HOLE ===
+    const cupCenterX = 21.5;  // E + 17.5 (Standard E=4)
+
+    ops.push({
+      id: `${doorId}-cup-${i}`,
+      type: 'DRILL',
+      face: 'FACE',
+      x: cupCenterX,
+      y: yPos,
+      diameter: 35,
+      depth: safeDepth,  // ✅ Dynamic depth per hinge type
+      hardwareId: cup.itemNo
+    });
+
+    // === 2. SCREW HOLES (Dynamic Pattern) ===
+    [-1, 1].forEach(dir => {
+      ops.push({
+        id: `${doorId}-scr-${i}-${dir}`,
+        type: 'DRILL',
+        face: 'FACE',
+        x: cupCenterX - screwOffsetX,  // Offset from cup center
+        y: yPos + (screwOffsetY * dir),
+        diameter: 2.5,
+        depth: 5,
+        hardwareId: 'HINGE-SCREW'
+      });
+    });
+
+    // === 3. CABINET PLATE HOLES (Standard System 32) ===
+    [-16, 16].forEach(offsetY => {
+      ops.push({
+        id: `${cabinetId}-plt-${i}-${offsetY}`,
+        type: 'DRILL',
+        face: 'FACE',
+        x: 37,  // Standard X distance
+        y: yPos + offsetY,
+        diameter: 5,
+        depth: 13,
+        hardwareId: plate.itemNo
+      });
+    });
+  });
+
+  return ops;
+};
+```
+
+### 12.7 Application Selection Diagram
+
+```
+SPECIALTY HINGE SELECTION FLOWCHART:
+
+                    ┌─────────────────┐
+                    │  Door Type?     │
+                    └────────┬────────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+        ▼                    ▼                    ▼
+┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+│ Thick/Profile │   │   Rebated     │   │ Corner/Angled │
+│   (>24mm)     │   │ (Glass Frame) │   │               │
+└───────┬───────┘   └───────┬───────┘   └───────┬───────┘
+        │                   │                   │
+        ▼                   ▼                   │
+   PROFILE_94          REBATED_110              │
+   Depth: 13mm         Depth: 9mm               │
+   Pattern: 52/7.5     Pattern: 48/6            │
+                                                │
+        ┌───────────────────────────────────────┤
+        │                                       │
+        ▼                                       ▼
+┌───────────────┐                      ┌───────────────┐
+│ Blind Corner? │                      │ Angle Needed? │
+└───────┬───────┘                      └───────┬───────┘
+        │                                      │
+   ┌────┴────┐                    ┌────┬────┬────┬────┐
+   │         │                    │    │    │    │    │
+   ▼         ▼                    ▼    ▼    ▼    ▼    ▼
+ Small     Large                 15°  24°  30°  37°  45°
+(D=9!)    (D=3)                  └────┴────┴────┴────┘
+                                        ANGLE_XX
+
+
+SPECIAL CASES:
+┌─────────────────┐       ┌─────────────────┐
+│  Bi-fold Door?  │       │  Refrigerator?  │
+│                 │       │                 │
+│   CORNER_70     │       │   FRIDGE        │
+│   Depth: 11mm   │       │   Depth: 11mm   │
+│   Pattern: 48/6 │       │   Pattern: 45/9.5│
+└─────────────────┘       └─────────────────┘
+```
+
+### 12.8 Visual Component with Depth Indicator
+
+```typescript
+// src/components/3d/hardware/MasterHinge.tsx
+
+import React, { useMemo } from 'react';
+import { calculateSpecialtyHingePlan } from '../../../services/engineering/hingeEngine';
+
+const mm = (v: number) => v / 1000;
+
+interface MasterHingeProps {
+  doorHeight: number;
+  doorWeight: number;
+  doorThickness: number;
+  overlay: number;
+  system: string;
+}
+
+export const MasterHinge: React.FC<MasterHingeProps> = (props) => {
+  const plan = useMemo(() => calculateSpecialtyHingePlan(props as any), [props]);
+
+  if (!plan?.isValid) return null;
+
+  const { cup, plate } = plan.specs;
+
+  // Color Coding for QA Visualization
+  // Red = Deep (Profile), Green = Shallow (Rebated), Gray = Standard
+  const depthColor = plan.meta.drillDepth > 12
+    ? "#EF5350"   // Red - Deep (Profile)
+    : (plan.meta.drillDepth < 10
+      ? "#66BB6A" // Green - Shallow (Rebated)
+      : "#B0BEC5" // Gray - Standard
+    );
+
+  return (
+    <group>
+      {plan.positions.map((y, i) => (
+        <group key={i} position={[0, mm(y), 0]}>
+
+          {/* CUP Visual */}
+          <group position={[mm(21.5), 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+            {/* Cup Ring */}
+            <mesh>
+              <cylinderGeometry args={[mm(17.5), mm(17.5), mm(1), 32]} />
+              <meshStandardMaterial color="#CFD8DC" />
+            </mesh>
+
+            {/* Depth Visualizer (Color-coded) */}
+            <mesh position={[0, 0, mm(-plan.meta.drillDepth / 2)]}>
+              <cylinderGeometry args={[
+                mm(17),
+                mm(17),
+                mm(plan.meta.drillDepth),
+                32
+              ]} />
+              <meshStandardMaterial
+                color={depthColor}
+                transparent
+                opacity={0.8}
+              />
+            </mesh>
+          </group>
+
+          {/* ARM & PLATE */}
+          <group position={[mm(-20), 0, mm(15)]}>
+            {/* Hinge Arm */}
+            <mesh>
+              <boxGeometry args={[mm(60), mm(20), mm(5)]} />
+              <meshStandardMaterial color="#90A4AE" />
+            </mesh>
+
+            {/* Plate (Height based on D value) */}
+            <mesh position={[mm(-25), 0, mm(-5)]}>
+              <boxGeometry args={[
+                mm(10),
+                mm(48),
+                mm((plate.specs.distance || 0) + 2)
+              ]} />
+              <meshStandardMaterial color="#546E7A" />
+            </mesh>
+          </group>
+
+        </group>
+      ))}
+    </group>
+  );
+};
+```
+
+### 12.9 Quick Reference Tables
+
+**Specialty Hinges Summary:**
+
+| Type | Item No | Angle | Depth | Pattern | Plate | Application |
+|------|---------|-------|-------|---------|-------|-------------|
+| Profile Full | 329.05.605 | 94° | 13mm | 52/7.5 | D0 | Thick/Frame doors |
+| Profile Half | 329.05.614 | 94° | 13mm | 52/7.5 | D0 | Thick/Frame doors |
+| Profile Inset | 329.05.632 | 94° | 13mm | 52/7.5 | D0 | Thick/Frame doors |
+| Rebated | 329.26.611 | 110° | 9mm | 48/6 | D0 | Glass frame doors |
+| Blind Small | 329.34.601 | 94° | 11mm | 48/6 | **D9** | L-corner (small) |
+| Blind Large | 329.35.600 | 110° | 11mm | 48/6 | D3 | L-corner (large) |
+| Bi-fold 70° | 329.19.700 | 70° | 11mm | 48/6 | D0 | Corner units |
+| Angle +15° | 329.96.600 | 94° | 11mm | 48/6 | D0 | Angled panels |
+| Angle +24° | 329.96.601 | 94° | 11mm | 48/6 | D0 | Angled panels |
+| Angle +30° | 329.96.602 | 94° | 11mm | 48/6 | D0 | Angled panels |
+| Angle +37° | 329.96.604 | 94° | 11mm | 48/6 | D0 | Angled panels |
+| Angle +45° | 329.96.605 | 94° | 11mm | 48/6 | D0 | Angled panels |
+| Refrigerator | 329.23.600 | 94° | 11mm | 45/9.5 | D0 | Built-in fridge |
+
+**Screw Pattern Reference:**
+
+| Pattern | Y Spacing | X Offset | Cup Dia | Hinge Types |
+|---------|-----------|----------|---------|-------------|
+| 48/6 | 48mm (±24) | 6mm | 35mm | Standard, Blind, Angle, Corner |
+| 52/7.5 | 52mm (±26) | 7.5mm | 35mm | Profile/Thick doors |
+| 45/9.5 | 45mm (±22.5) | 9.5mm | 35mm | Refrigerator |
+
+**Minimum Door Thickness:**
+
+| Hinge Type | Min Thickness | Cup Depth | Safety Margin |
+|------------|---------------|-----------|---------------|
+| Rebated | 14mm | 9mm | 5mm |
+| Standard | 16mm | 11mm | 5mm |
+| Profile | 24mm | 13mm | 11mm |
+
+### 12.10 Complete Implementation Example
+
+```typescript
+// Example: Profile door hinge for thick framed door
+
+const profileDoorConfig = {
+  doorHeight: 720,
+  doorWeight: 8,
+  doorThickness: 28,  // Thick profile door
+  overlay: 16,
+  system: 'HINGE_PROFILE_94' as const
+};
+
+// Generate plan
+const plan = calculateSpecialtyHingePlan(profileDoorConfig);
+
+console.log('=== Profile Door Hinge Plan ===');
+console.log('Hinge:', plan.specs.cup.name);        // 'Profile 94° Full Overlay'
+console.log('Item No:', plan.specs.cup.itemNo);   // '329.05.605'
+console.log('Plate:', plan.specs.plate.name);     // 'Plate D=0'
+console.log('Quantity:', plan.quantity);           // 3
+console.log('Positions:', plan.positions);         // [96, 360, 624]
+console.log('Drill Depth:', plan.meta.drillDepth); // 13mm
+console.log('Pattern:', plan.meta.pattern);        // '52/7.5'
+
+// Generate CAM operations
+const ops = generateSpecialtyHingeOps('DOOR-001', 'CAB-001', profileDoorConfig);
+
+console.log('\n=== CAM Operations ===');
+console.log('Total operations:', ops.length);  // 15 (3 cups + 6 screws + 6 plates)
+
+// Verify screw pattern
+const screwOps = ops.filter(op => op.id.includes('scr'));
+console.log('Screw Y positions:', screwOps.map(op => op.y));
+// Profile pattern: Y spacing = 52mm (26 + 26)
+
+// Example: Small Blind Corner (D=9 required)
+const blindCornerConfig = {
+  doorHeight: 600,
+  doorWeight: 5,
+  doorThickness: 18,
+  overlay: 12,
+  system: 'HINGE_BLIND_SM' as const
+};
+
+const blindPlan = calculateSpecialtyHingePlan(blindCornerConfig);
+console.log('\n=== Blind Corner Plan ===');
+console.log('Plate:', blindPlan.specs.plate.name);     // 'Blind Corner Plate D=9'
+console.log('Plate D:', blindPlan.meta.plateDistanceD); // 9 (MANDATORY!)
+```
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
 - Blum Catalog Pages 2, 5, 6, 13, 14-67, 64, 74-76, 84, 150, 410, 420, 430, 452
+- Häfele Selection 16 (Specialty Hinges)
 - Häfele Selection 17 (Metalla 510 & Mounting Plates)
 - Hettich Product Catalog
 - Häfele Furniture Fittings Handbook
