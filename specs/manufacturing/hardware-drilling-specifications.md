@@ -885,8 +885,471 @@ CREATE TABLE panel_hardware (
 
 ---
 
+## ส่วนที่ 8: Blum Complete Hardware Database (Architecture v14.0)
+
+ส่วนนี้รวบรวม SKU ทั้งหมดของ Blum ที่ยังไม่ได้ครอบคลุมในส่วนก่อนหน้า รวมถึง Lift Systems, Box Systems, และ Hinges รุ่นประหยัด
+
+### 8.1 Master Hardware Database
+
+```typescript
+// src/services/hardware/masterDb.ts
+
+export type SystemType =
+  // Existing Systems
+  | 'BLUM_MOVENTO' | 'BLUM_TANDEM_FULL' | 'BLUM_TANDEM_PART'
+  // Lift Systems
+  | 'AVENTOS_HS_TOP' | 'AVENTOS_HL_TOP' | 'AVENTOS_HK_TOP' | 'AVENTOS_HK_S'
+  // Box Systems
+  | 'MERIVOBOX' | 'TANDEMBOX_ANTARO' | 'METABOX_320'
+  // Hinges
+  | 'HINGE_MODUL';
+
+export interface HardwareItem {
+  id: string;
+  brand: 'HAFELE' | 'BLUM';
+  itemNo: string;
+  name: string;
+  category: 'LIFT_MECHANISM' | 'DRAWER_SIDE' | 'HINGE_CUP' | 'ACCESSORY';
+  specs: {
+    // Lift Specs
+    powerFactorMin?: number;
+    powerFactorMax?: number;
+    minCabinetHeight?: number;
+    rodDeduction?: number;     // ค่าลบสำหรับตัดเหล็กโยง (LW - X)
+
+    // Drawer Specs
+    nominalLength?: number;
+    cutlist?: {
+      bottomWidthDed: number;  // ค่าลบความกว้างพื้น (LW - X)
+      bottomDepthDed: number;  // ค่าลบความลึกพื้น (NL - Y)
+      backWidthDed: number;    // ค่าลบความกว้างหลัง (LW - Z)
+    };
+    drillPattern?: 'MERIVO_M' | 'TANDEM_STD' | 'METABOX';
+
+    // Hinge Specs
+    openingAngle?: number;
+  };
+}
+```
+
+### 8.2 Lift Systems (AVENTOS HS, HL, HK top, HK-S)
+
+```typescript
+export const LIFT_SYSTEMS = {
+  // =================================================================
+  // AVENTOS HS top (Up & Over) - Requires Stabilizer Rod
+  // =================================================================
+  hs_top_set: {
+    id: 'hs_top_b', brand: 'BLUM', itemNo: '22S2500',
+    name: 'HS top Set B',
+    category: 'LIFT_MECHANISM',
+    specs: {
+      minCabinetHeight: 526,
+      rodDeduction: 129  // สูตรตัดเหล็กโยง: LW - 129mm
+    }
+  },
+
+  // =================================================================
+  // AVENTOS HL top (Lift Up) - Requires Stabilizer Rod
+  // =================================================================
+  hl_top_set: {
+    id: 'hl_top_25', brand: 'BLUM', itemNo: '22L2500',
+    name: 'HL top Set 25',
+    category: 'LIFT_MECHANISM',
+    specs: {
+      minCabinetHeight: 390,
+      rodDeduction: 129  // สูตรตัดเหล็กโยง: LW - 129mm
+    }
+  },
+
+  // =================================================================
+  // AVENTOS HK top (Stay Lift - Modern Standard)
+  // =================================================================
+  hk_top_27: {
+    id: 'hk_top_27', brand: 'BLUM', itemNo: '22K2700',
+    name: 'HK top Medium',
+    category: 'LIFT_MECHANISM',
+    specs: {
+      powerFactorMin: 1730,
+      powerFactorMax: 5200
+    }
+  },
+
+  // =================================================================
+  // AVENTOS HK-S (Small Stay Lift)
+  // =================================================================
+  hks_weak: {
+    id: 'hks_20k2', brand: 'BLUM', itemNo: '20K2B00',
+    name: 'HK-S Weak',
+    category: 'LIFT_MECHANISM',
+    specs: {
+      powerFactorMin: 220,
+      powerFactorMax: 500
+    }
+  },
+
+  // =================================================================
+  // Cross Stabilizer Rod (สำหรับ HS/HL)
+  // =================================================================
+  rod_oval: {
+    id: 'rod_1061', brand: 'BLUM', itemNo: '20Q1061',
+    name: 'Cross Stabilizer Rod',
+    category: 'ACCESSORY',
+    specs: {}
+  },
+};
+```
+
+### 8.3 Box Systems (MERIVOBOX, TANDEMBOX, METABOX)
+
+```typescript
+export const BOX_SYSTEMS = {
+  // =================================================================
+  // MERIVOBOX (Platform) - Bottom: LW-51
+  // =================================================================
+  merivo_m: {
+    id: 'meri_m_500', brand: 'BLUM', itemNo: '470M5002',
+    name: 'MERIVOBOX M NL500',
+    category: 'DRAWER_SIDE',
+    specs: {
+      nominalLength: 500,
+      cutlist: {
+        bottomWidthDed: 51,  // Bottom = LW - 51mm
+        bottomDepthDed: 26,  // Bottom Depth = NL - 26mm
+        backWidthDed: 51     // Back = LW - 51mm
+      },
+      drillPattern: 'MERIVO_M'
+    }
+  },
+
+  // =================================================================
+  // TANDEMBOX antaro (Classic) - Bottom: LW-75 (16mm)
+  // =================================================================
+  antaro_m: {
+    id: 'antaro_m_500', brand: 'BLUM', itemNo: '378M5002',
+    name: 'TANDEMBOX antaro M NL500',
+    category: 'DRAWER_SIDE',
+    specs: {
+      nominalLength: 500,
+      cutlist: {
+        bottomWidthDed: 75,  // Bottom = LW - 75mm
+        bottomDepthDed: 24,  // Bottom Depth = NL - 24mm
+        backWidthDed: 87     // Back = LW - 87mm
+      },
+      drillPattern: 'TANDEM_STD'
+    }
+  },
+
+  // =================================================================
+  // METABOX (Economy) - Bottom: LW-31
+  // =================================================================
+  meta_m: {
+    id: 'meta_320_500', brand: 'BLUM', itemNo: '320M5000',
+    name: 'METABOX 320M NL500',
+    category: 'DRAWER_SIDE',
+    specs: {
+      nominalLength: 500,
+      cutlist: {
+        bottomWidthDed: 31,  // Bottom = LW - 31mm
+        bottomDepthDed: 2,   // Bottom Depth = NL - 2mm
+        backWidthDed: 31     // Back = LW - 31mm
+      },
+      drillPattern: 'METABOX'
+    }
+  },
+};
+```
+
+### 8.4 MODUL Hinge (Economy)
+
+```typescript
+export const HINGE_SYSTEMS = {
+  // =================================================================
+  // MODUL HINGE (Page 2) - Economy Option
+  // =================================================================
+  modul_100: {
+    id: 'mod_100', brand: 'BLUM', itemNo: '91M2550',
+    name: 'MODUL 100° Slide-on',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 100
+    }
+  },
+};
+```
+
+### 8.5 Box Systems Comparison
+
+| Feature | MERIVOBOX | TANDEMBOX antaro | METABOX |
+|---------|-----------|------------------|---------|
+| **Profile Shape** | Straight L | Curved | Sloped |
+| **Bottom Deduction** | LW - 51mm | LW - 75mm | LW - 31mm |
+| **Back Deduction** | LW - 51mm | LW - 87mm | LW - 31mm |
+| **Depth Deduction** | NL - 26mm | NL - 24mm | NL - 2mm |
+| **Drill Pattern** | MERIVO_M | TANDEM_STD | METABOX |
+| **Price Level** | Premium | Standard | Economy |
+| **Visual Style** | Modern | Classic Rounded | Industrial |
+
+### 8.6 Lift Engineering Engine
+
+```typescript
+// src/services/engineering/finalEngine.ts
+
+export const calculateFinalLift = (
+  kh: number,       // Cabinet Height
+  width: number,    // Internal Width
+  weight: number,   // Front Weight
+  system: SystemType
+) => {
+  const db = LIFT_SYSTEMS;
+  const LF = kh * weight; // Lift Factor
+
+  let mech: HardwareItem | undefined;
+  let rodLength: number | undefined;
+
+  switch (system) {
+    case 'AVENTOS_HK_TOP':
+      mech = db.hk_top_27;
+      break;
+    case 'AVENTOS_HK_S':
+      mech = db.hks_weak;
+      break;
+    case 'AVENTOS_HS_TOP':
+    case 'AVENTOS_HL_TOP':
+      mech = system === 'AVENTOS_HS_TOP' ? db.hs_top_set : db.hl_top_set;
+      // Formula: Rod = Internal Width - Deduction (129mm)
+      rodLength = width - (mech.specs.rodDeduction || 129);
+      break;
+  }
+
+  // Drill Position (from cabinet top)
+  let drillY = 0;
+  if (system === 'AVENTOS_HK_TOP') drillY = 173;
+  else if (system === 'AVENTOS_HK_S') drillY = 100;
+  else if (system === 'AVENTOS_HS_TOP') drillY = 240;
+  else if (system === 'AVENTOS_HL_TOP') drillY = 150;
+
+  return { isValid: !!mech, mech, rodLength, drillY };
+};
+```
+
+### 8.7 Box Engineering Engine
+
+```typescript
+export const calculateFinalDrawer = (
+  lw: number,       // Internal Width
+  system: SystemType
+) => {
+  const db = BOX_SYSTEMS;
+  let side: HardwareItem;
+
+  if (system === 'MERIVOBOX') side = db.merivo_m;
+  else if (system === 'TANDEMBOX_ANTARO') side = db.antaro_m;
+  else if (system === 'METABOX_320') side = db.meta_m;
+  else side = db.merivo_m; // Default
+
+  const c = side.specs.cutlist!;
+
+  // CUTLIST FORMULA
+  const cutList = {
+    bottom: {
+      w: lw - c.bottomWidthDed,
+      d: side.specs.nominalLength! - c.bottomDepthDed
+    },
+    back: {
+      w: lw - c.backWidthDed,
+      h: 84  // Standard M height
+    }
+  };
+
+  // DRILL PATTERN Y (from Drawer Base)
+  let drillY = 32;
+  if (side.specs.drillPattern === 'METABOX') drillY = 33;
+  else if (side.specs.drillPattern === 'TANDEM_STD') drillY = 33;
+
+  return { isValid: true, side, cutList, drillY };
+};
+```
+
+### 8.8 CAM Operations Generator
+
+```typescript
+// src/services/cam/generators/finalOp.ts
+
+export const generateFinalOps = (opts: any): MachineOp[] => {
+  const ops: MachineOp[] = [];
+
+  // === LIFT OPERATIONS ===
+  if (opts.type === 'LIFT') {
+    const res = calculateFinalLift(opts.kh, opts.lw, opts.weight, opts.system);
+
+    // 1. Mechanism Drill
+    if (res.mech) {
+      ops.push({
+        id: 'lift-mech', type: 'DRILL', face: 'FACE',
+        x: 37, y: res.drillY,
+        diameter: 5, depth: 13, hardwareId: res.mech.itemNo
+      });
+    }
+
+    // 2. Cross Stabilizer Rod Cut (สำหรับ HS/HL)
+    if (res.rodLength) {
+      ops.push({
+        id: 'cut-rod', type: 'CUT_METAL',
+        params: { length: res.rodLength, material: 'ALU_OVAL' },
+        hardwareId: '20Q1061'
+      });
+    }
+  }
+
+  // === DRAWER OPERATIONS ===
+  else if (opts.type === 'DRAWER') {
+    const res = calculateFinalDrawer(opts.lw, opts.system);
+
+    // Pattern differs by system
+    const xPositions = res.side.specs.drillPattern === 'METABOX'
+      ? [37, 165]           // 2-hole pattern
+      : [37, 224, 256];     // 3-hole pattern
+
+    xPositions.forEach(x => {
+      ops.push({
+        id: `run-${x}`, type: 'DRILL', face: 'FACE',
+        x: x, y: opts.drawerY + res.drillY,
+        diameter: 5, depth: 13, hardwareId: res.side.itemNo
+      });
+    });
+  }
+
+  return ops;
+};
+```
+
+### 8.9 Lift Systems Drilling Reference
+
+```
+AVENTOS HS top:
+┌─────────────────────────────────────────┐
+│                 TOP                      │
+├─────────────────────────────────────────┤
+│                                         │
+│  ○                                   ○  │ ← Mechanism (240mm from top)
+│  │                                   │  │
+│  │←───── Cross Stabilizer Rod ─────→│  │
+│  │       (LW - 129mm)               │  │
+│                                         │
+│                                         │
+└─────────────────────────────────────────┘
+
+AVENTOS HK top:
+┌─────────────────────────────────────────┐
+│                 TOP                      │
+├─────────────────────────────────────────┤
+│  ○                                   ○  │ ← Mechanism (173mm from top)
+│                                         │
+│          (No Rod Required)              │
+│                                         │
+└─────────────────────────────────────────┘
+
+AVENTOS HK-S:
+┌─────────────────────────────────────────┐
+│                 TOP                      │
+├─────────────────────────────────────────┤
+│  ○                                   ○  │ ← Mechanism (100mm from top)
+│                                         │
+│       (Compact / Small Cabinets)        │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+### 8.10 Box Systems Drilling Reference
+
+```
+MERIVOBOX (3-hole pattern):
+┌─────────────────────────────────────────┐
+│           CABINET SIDE                  │
+│                                         │
+│  ○──────────────────○────○              │
+│  37mm            224mm  256mm           │
+│                                         │
+│  Y = Drawer Base + 32mm                 │
+└─────────────────────────────────────────┘
+
+TANDEMBOX antaro (3-hole pattern):
+┌─────────────────────────────────────────┐
+│           CABINET SIDE                  │
+│                                         │
+│  ○──────────────────○────○              │
+│  37mm            224mm  256mm           │
+│                                         │
+│  Y = Drawer Base + 33mm                 │
+└─────────────────────────────────────────┘
+
+METABOX (2-hole pattern):
+┌─────────────────────────────────────────┐
+│           CABINET SIDE                  │
+│                                         │
+│  ○────────────○                         │
+│  37mm       165mm                       │
+│                                         │
+│  Y = Drawer Base + 33mm                 │
+└─────────────────────────────────────────┘
+```
+
+### 8.11 Cutlist Quick Reference
+
+| System | Bottom Width | Bottom Depth | Back Width |
+|--------|--------------|--------------|------------|
+| MERIVOBOX | LW - 51 | NL - 26 | LW - 51 |
+| TANDEMBOX antaro | LW - 75 | NL - 24 | LW - 87 |
+| METABOX | LW - 31 | NL - 2 | LW - 31 |
+| Wood Drawer (MOVENTO) | LW - 42 | NL - 10 | LW - 42 |
+
+**ตัวอย่าง: Cabinet LW = 500mm, NL = 500mm**
+
+| System | Bottom W | Bottom D | Back W |
+|--------|----------|----------|--------|
+| MERIVOBOX | 449mm | 474mm | 449mm |
+| TANDEMBOX antaro | 425mm | 476mm | 413mm |
+| METABOX | 469mm | 498mm | 469mm |
+| Wood Drawer | 458mm | 490mm | 458mm |
+
+### 8.12 Cross Stabilizer Rod Cutting Formula
+
+สำหรับ AVENTOS HS top และ HL top ต้องใช้เหล็กโยง (Cross Stabilizer Rod) เพื่อยึดกลไกทั้ง 2 ฝั่ง
+
+```
+Rod Length = Internal Cabinet Width - 129mm
+
+ตัวอย่าง:
+- Cabinet LW = 900mm → Rod = 900 - 129 = 771mm
+- Cabinet LW = 600mm → Rod = 600 - 129 = 471mm
+```
+
+```typescript
+function calculateRodLength(cabinetLW: number): number {
+  const ROD_DEDUCTION = 129; // mm
+  return cabinetLW - ROD_DEDUCTION;
+}
+
+// CAM Operation for Metal Cutting
+function generateRodCutOp(rodLength: number): MachineOp {
+  return {
+    id: 'cut-rod',
+    type: 'CUT_METAL',
+    params: {
+      length: rodLength,
+      material: 'ALU_OVAL',
+      stockItem: '20Q1061'
+    }
+  };
+}
+```
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
+- Blum Catalog Pages 2, 410, 420, 430, 452
 - Hettich Product Catalog
 - Häfele Furniture Fittings Handbook
 - European Kitchen Cabinet Standards (EN 16121)
