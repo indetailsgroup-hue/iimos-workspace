@@ -6172,9 +6172,849 @@ console.log('Face depth:', matingOps[0].params?.depth);  // 14.7mm (or 10mm for 
 
 ---
 
+## ส่วนที่ 16: Ixconnect & Tofix System Engine (Architecture v5.0)
+
+ระบบ **Ixconnect** (SC, U, CC) และ **Tofix** เป็นข้อต่อแบบ One-Piece และ Semi-Concealed ที่รองรับงานที่ซับซ้อนกว่า Minifix ทั่วไป โดยมีคุณสมบัติ Advanced Drilling Logic ที่ต้องเจาะ 2 แกนในจุดเดียว
+
+### 16.1 Advanced Drilling Logic
+
+ระบบนี้รองรับการเจาะหลายแบบที่ซับซ้อน:
+
+```
+MULTI-AXIS BORING CONCEPT:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  STANDARD MINIFIX (Single Axis per Part):                      │
+│  ──────────────────────────────────────                         │
+│                                                                 │
+│  SIDE PANEL:        SHELF:                                      │
+│  ┌─────────┐        ┌─────────────────┐                        │
+│  │    ○    │        │        │        │                        │
+│  │  Face   │        │   Edge Only     │                        │
+│  │  Only   │        │        ↓        │                        │
+│  └─────────┘        └─────────────────┘                        │
+│                                                                 │
+│  IXCONNECT SC/U (Dual Axis - Same Part):                       │
+│  ────────────────────────────────────────                       │
+│                                                                 │
+│  ┌─────────────────────────────────────┐                       │
+│  │           SHELF PANEL               │                       │
+│  │                                      │                       │
+│  │    ○ ←── Access Hole (Face)         │ ← 6mm @ distB        │
+│  │    │     at 25mm or 45mm            │                       │
+│  │    │                                 │                       │
+│  │    ▼                                 │                       │
+│  │   ══════════════════════════ ← Edge │ ← 8mm or 12mm        │
+│  │   Connector Body (60mm deep)        │                       │
+│  └─────────────────────────────────────┘                       │
+│                                                                 │
+│  TOFIX (Dynamic Formula):                                       │
+│  ────────────────────────                                       │
+│                                                                 │
+│  ┌─────────────────────────────────────┐                       │
+│  │           SIDE PANEL                │                       │
+│  │                                      │                       │
+│  │         ┌───────┐ ← Housing 25mm    │                       │
+│  │         │   ○   │   @ A position    │                       │
+│  │         └───────┘                    │                       │
+│  │              ↑                       │                       │
+│  │    A = TopThickness - 1.5mm         │ ← Dynamic!           │
+│  │              │                       │                       │
+│  │   ═══════════╪══════════════ ← Edge │ ← Neck 7mm           │
+│  │              │                       │                       │
+│  └─────────────────────────────────────┘                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 16.2 Hardware Database
+
+```typescript
+// src/services/hardware/hafeleDb.ts
+
+export type SystemType =
+  | 'MINIFIX_15' | 'MINIFIX_12' | 'MAXIFIX_35'
+  | 'SC_8_60'    // Ixconnect One-piece (8mm)
+  | 'U_12_10'    // Ixconnect Heavy Duty (12mm)
+  | 'CC_8_5_30'  // Claw Connector (Drawer)
+  | 'TOFIX_25'   // Tofix (Semi-concealed)
+  | 'LAMELLO_P'
+  | 'DOVETAIL_RAIL'
+  | 'DOVETAIL_DIRECT';
+
+export type BoardThickness = 12 | 13 | 15 | 16 | 18 | 19 | 22 | 23 | 25 | 26 | 29 | 34;
+
+export interface IxconnectItem {
+  id: string;
+  itemNo: string;
+  name: string;
+  category: 'CONNECTOR_ONE_PIECE' | 'HOUSING_TOFIX' | 'BOLT';
+  specs: {
+    drillDepth: number;      // Edge drill depth
+    diameter: number;        // Edge drill diameter
+    distB?: number;          // Access hole distance from edge
+    accessDia?: number;      // Access hole diameter
+    matingDia?: number;      // Mating panel drill diameter
+    neckDia?: number;        // Neck drill diameter (Tofix)
+    length?: number;         // Connector length
+  };
+}
+
+export const IXCONNECT_HARDWARE = {
+  // =================================================================
+  // IXCONNECT SC 8/60 (One-Piece Connector)
+  // =================================================================
+  sc_8_60: {
+    id: 'sc_8_60',
+    itemNo: '262.11.117',
+    name: 'Ixconnect SC 8/60 (Red/Grey)',
+    category: 'CONNECTOR_ONE_PIECE',
+    specs: {
+      diameter: 8,        // Edge drill 8mm
+      drillDepth: 60,     // Edge depth 60mm (55mm body + margin)
+      accessDia: 6,       // Face access hole 6mm
+      distB: 25,          // Access hole 25mm from edge
+      matingDia: 8        // Mating panel 8mm
+    }
+  } as IxconnectItem,
+
+  // =================================================================
+  // IXCONNECT U 12/10 (Heavy Duty Spreading)
+  // =================================================================
+  u_12_10: {
+    id: 'u_12_10',
+    itemNo: '262.11.600',
+    name: 'Ixconnect U 12/10 Spreading',
+    category: 'CONNECTOR_ONE_PIECE',
+    specs: {
+      diameter: 12,       // Edge drill 12mm
+      drillDepth: 55,     // Edge depth 55mm (54mm body + margin)
+      accessDia: 6,       // Face access hole 6mm
+      distB: 45,          // Access hole 45mm from edge
+      matingDia: 10       // Mating panel 10mm
+    }
+  } as IxconnectItem,
+
+  // =================================================================
+  // IXCONNECT CC 8/5/30 Claw (Drawer Connector)
+  // =================================================================
+  cc_8_5_30: {
+    id: 'cc_8_5_30',
+    itemNo: '262.11.113',
+    name: 'Ixconnect CC 8/5/30 Claw',
+    category: 'CONNECTOR_ONE_PIECE',
+    specs: {
+      diameter: 5,        // Edge drill 5mm (drawer side)
+      drillDepth: 30,     // Edge depth 30mm
+      matingDia: 8,       // Face drill 8mm (drawer front)
+      distB: 30           // Installation distance
+    }
+  } as IxconnectItem
+};
+
+export const TOFIX_HARDWARE = {
+  // =================================================================
+  // TOFIX Housing 25mm
+  // =================================================================
+  housing_25: {
+    id: 'tofix_25',
+    itemNo: '261.95.704',
+    name: 'Tofix Housing 25mm (White)',
+    category: 'HOUSING_TOFIX',
+    specs: {
+      diameter: 25,       // Face drill 25mm
+      drillDepth: 12.5,   // Housing depth
+      neckDia: 7          // Edge neck drill 7mm
+    }
+  } as IxconnectItem,
+
+  // =================================================================
+  // TOFIX Bolt
+  // =================================================================
+  bolt_std: {
+    id: 'tofix_bolt',
+    itemNo: '261.95.010',
+    name: 'Tofix Bolt',
+    category: 'BOLT',
+    specs: {
+      diameter: 5,
+      drillDepth: 11
+    }
+  } as IxconnectItem
+};
+```
+
+### 16.3 Ixconnect & Tofix Engineering Engine
+
+```typescript
+// src/services/engineering/ixconnectEngine.ts
+import {
+  IXCONNECT_HARDWARE,
+  TOFIX_HARDWARE,
+  IxconnectItem
+} from '../hardware/hafeleDb';
+
+export type IxconnectSystem = 'SC_8_60' | 'U_12_10' | 'CC_8_5_30' | 'TOFIX_25';
+
+export interface IxconnectPlan {
+  isValid: boolean;
+  system: IxconnectSystem;
+  specs: {
+    main: IxconnectItem;
+    mating?: IxconnectItem;
+  };
+  positions: {
+    x: number;
+    yOffset: number;      // Access hole or Housing Y position
+    rotationY: number;
+    dowelOffsets: number[];
+  }[];
+  meta: {
+    edgeDrill: { dia: number; depth: number };
+    faceDrill: { dia: number; depth: number; distB: number };
+    useDowels: boolean;
+    formula?: string;     // For Tofix: "A = TopThickness - 1.5"
+  };
+}
+
+interface IxconnectOptions {
+  length: number;
+  thickness: number;        // Panel thickness
+  targetThickness?: number; // Target panel thickness (for Tofix)
+  system: IxconnectSystem;
+}
+
+/**
+ * Ixconnect & Tofix Joinery Calculator
+ *
+ * Key Features:
+ * - SC 8/60: Edge 8mm + Face Access 6mm @ 25mm
+ * - U 12/10: Edge 12mm + Face Access 6mm @ 45mm
+ * - CC 8/5/30: Edge 5mm (Drawer, no dowels)
+ * - TOFIX: Housing 25mm + Neck 7mm with dynamic formula
+ */
+export function calculateIxconnectPlan(opts: IxconnectOptions): IxconnectPlan {
+  const { length, thickness, targetThickness = 19, system } = opts;
+
+  let main: IxconnectItem;
+  let mating: IxconnectItem | undefined;
+  let yOffset = 0;
+  let margin = 50;
+  let useDowels = true;
+  let formula: string | undefined;
+
+  // =================================================================
+  // SYSTEM SELECTION
+  // =================================================================
+  switch (system) {
+    case 'SC_8_60':
+      main = IXCONNECT_HARDWARE.sc_8_60;
+      yOffset = main.specs.distB!;  // 25mm
+      break;
+
+    case 'U_12_10':
+      main = IXCONNECT_HARDWARE.u_12_10;
+      yOffset = main.specs.distB!;  // 45mm
+      break;
+
+    case 'CC_8_5_30':
+      main = IXCONNECT_HARDWARE.cc_8_5_30;
+      yOffset = main.specs.distB!;  // 30mm
+      useDowels = false;  // Claw doesn't use dowels
+      margin = 32;        // Drawer standard margin
+      break;
+
+    case 'TOFIX_25':
+      main = TOFIX_HARDWARE.housing_25;
+      mating = TOFIX_HARDWARE.bolt_std;
+      // TOFIX FORMULA: A = B - 9 + 7.5 = TargetThickness - 1.5
+      yOffset = targetThickness - 1.5;
+      formula = `A = ${targetThickness} - 1.5 = ${yOffset}mm`;
+      break;
+
+    default:
+      return createInvalidPlan(system, 'Unknown system');
+  }
+
+  // =================================================================
+  // POSITION CALCULATION
+  // =================================================================
+  const positions: IxconnectPlan['positions'] = [];
+  const dowelOffsets = useDowels ? [32] : [];
+
+  // Left position
+  positions.push({
+    x: margin,
+    yOffset,
+    rotationY: 0,
+    dowelOffsets
+  });
+
+  // Right position
+  positions.push({
+    x: length - margin,
+    yOffset,
+    rotationY: Math.PI,
+    dowelOffsets
+  });
+
+  // Center position (for long panels > 600mm, not for Claw)
+  if (length > 600 && system !== 'CC_8_5_30') {
+    positions.push({
+      x: length / 2,
+      yOffset,
+      rotationY: 0,
+      dowelOffsets: useDowels ? [-32, 32] : []
+    });
+  }
+
+  // =================================================================
+  // BUILD META
+  // =================================================================
+  let faceDrill = { dia: 0, depth: 0, distB: 0 };
+
+  if (system === 'TOFIX_25') {
+    faceDrill = {
+      dia: main.specs.diameter,    // 25mm
+      depth: main.specs.drillDepth, // 12.5mm
+      distB: yOffset
+    };
+  } else if (main.specs.accessDia) {
+    faceDrill = {
+      dia: main.specs.accessDia,   // 6mm
+      depth: 14,                    // Through to edge drill
+      distB: main.specs.distB!
+    };
+  }
+
+  return {
+    isValid: true,
+    system,
+    specs: { main, mating },
+    positions,
+    meta: {
+      edgeDrill: {
+        dia: system === 'TOFIX_25' ? main.specs.neckDia! : main.specs.diameter,
+        depth: system === 'TOFIX_25' ? yOffset + 13 : main.specs.drillDepth
+      },
+      faceDrill,
+      useDowels,
+      formula
+    }
+  };
+}
+
+function createInvalidPlan(system: IxconnectSystem, reason: string): IxconnectPlan {
+  return {
+    isValid: false,
+    system,
+    specs: {} as any,
+    positions: [],
+    meta: {
+      edgeDrill: { dia: 0, depth: 0 },
+      faceDrill: { dia: 0, depth: 0, distB: 0 },
+      useDowels: false
+    }
+  };
+}
+```
+
+### 16.4 CAM Generator for Ixconnect & Tofix
+
+```typescript
+// src/services/cam/generators/ixconnectOp.ts
+import { calculateIxconnectPlan, IxconnectPlan } from '../../engineering/ixconnectEngine';
+
+export interface IxconnectMachineOp {
+  id: string;
+  type: 'DRILL';
+  face: 'EDGE' | 'FACE';
+  x: number;
+  y: number;
+  diameter: number;
+  depth: number;
+  hardwareRef: string;
+}
+
+/**
+ * Generate CNC operations for Ixconnect and Tofix systems
+ *
+ * Operations per connector:
+ * - SC/U: Edge drill (8/12mm) + Face access hole (6mm)
+ * - CC: Edge drill (5mm) only
+ * - TOFIX: Face housing (25mm) + Edge neck (7mm)
+ */
+export function generateIxconnectOps(
+  partId: string,
+  opts: Parameters<typeof calculateIxconnectPlan>[0]
+): IxconnectMachineOp[] {
+  const plan = calculateIxconnectPlan(opts);
+  if (!plan.isValid) return [];
+
+  const ops: IxconnectMachineOp[] = [];
+  const { main, mating } = plan.specs;
+
+  plan.positions.forEach((pos, i) => {
+    const { system } = plan;
+
+    // =================================================================
+    // IXCONNECT SC/U/CC - One-Piece Connectors
+    // =================================================================
+    if (system === 'SC_8_60' || system === 'U_12_10' || system === 'CC_8_5_30') {
+
+      // 1. EDGE DRILL (Connector body)
+      ops.push({
+        id: `${partId}-conn-edge-${i}`,
+        type: 'DRILL',
+        face: 'EDGE',
+        x: pos.x,
+        y: 0,
+        diameter: plan.meta.edgeDrill.dia,
+        depth: plan.meta.edgeDrill.depth,
+        hardwareRef: main.itemNo
+      });
+
+      // 2. FACE DRILL (Access hole) - Only for SC and U
+      if (plan.meta.faceDrill.dia > 0 && system !== 'CC_8_5_30') {
+        ops.push({
+          id: `${partId}-access-face-${i}`,
+          type: 'DRILL',
+          face: 'FACE',
+          x: pos.x,
+          y: plan.meta.faceDrill.distB,
+          diameter: plan.meta.faceDrill.dia,
+          depth: plan.meta.faceDrill.depth,
+          hardwareRef: `${main.itemNo}-ACCESS`
+        });
+      }
+    }
+
+    // =================================================================
+    // TOFIX SYSTEM
+    // =================================================================
+    else if (system === 'TOFIX_25') {
+
+      // 1. FACE DRILL (Housing 25mm)
+      ops.push({
+        id: `${partId}-tofix-house-${i}`,
+        type: 'DRILL',
+        face: 'FACE',
+        x: pos.x,
+        y: pos.yOffset,  // Calculated from formula
+        diameter: plan.meta.faceDrill.dia,
+        depth: plan.meta.faceDrill.depth,
+        hardwareRef: main.itemNo
+      });
+
+      // 2. EDGE DRILL (Neck for bolt access)
+      ops.push({
+        id: `${partId}-tofix-neck-${i}`,
+        type: 'DRILL',
+        face: 'EDGE',
+        x: pos.x,
+        y: 0,
+        diameter: plan.meta.edgeDrill.dia,   // 7mm
+        depth: plan.meta.edgeDrill.depth,    // yOffset + 13mm
+        hardwareRef: main.itemNo
+      });
+    }
+
+    // =================================================================
+    // DOWELS (Common)
+    // =================================================================
+    if (plan.meta.useDowels) {
+      pos.dowelOffsets.forEach((off, j) => {
+        const xPos = pos.rotationY ? pos.x - off : pos.x + off;
+        ops.push({
+          id: `${partId}-dowel-${i}-${j}`,
+          type: 'DRILL',
+          face: 'EDGE',
+          x: xPos,
+          y: 0,
+          diameter: 8,
+          depth: 30,
+          hardwareRef: 'DOWEL-8x30'
+        });
+      });
+    }
+  });
+
+  return ops;
+}
+```
+
+### 16.5 Visual Component
+
+```typescript
+// src/components/3d/hardware/IxconnectConnector.tsx
+import React, { useMemo } from 'react';
+import { calculateIxconnectPlan } from '../../../services/engineering/ixconnectEngine';
+
+const mm = (v: number) => v / 1000;
+
+interface IxconnectConnectorProps {
+  length: number;
+  thickness: number;
+  targetThickness?: number;
+  system: 'SC_8_60' | 'U_12_10' | 'CC_8_5_30' | 'TOFIX_25';
+}
+
+export const IxconnectConnector: React.FC<IxconnectConnectorProps> = (props) => {
+  const plan = useMemo(() => calculateIxconnectPlan(props), [props]);
+
+  if (!plan.isValid) return null;
+
+  const { main } = plan.specs;
+  const { system } = plan;
+
+  return (
+    <group>
+      {plan.positions.map((pos, i) => (
+        <group
+          key={i}
+          position={[mm(pos.x), 0, 0]}
+          rotation={[0, pos.rotationY, 0]}
+        >
+          {/* SC 8/60 - Red/Grey connector */}
+          {system === 'SC_8_60' && (
+            <group>
+              {/* Body in edge */}
+              <mesh position={[0, mm(plan.meta.edgeDrill.depth / 2), 0]}>
+                <cylinderGeometry args={[
+                  mm(plan.meta.edgeDrill.dia / 2),
+                  mm(plan.meta.edgeDrill.dia / 2),
+                  mm(plan.meta.edgeDrill.depth),
+                  16
+                ]} />
+                <meshStandardMaterial color="#D32F2F" />
+              </mesh>
+              {/* Access hole marker */}
+              <mesh
+                position={[0, mm(plan.meta.faceDrill.distB), mm(5)]}
+                rotation={[Math.PI / 2, 0, 0]}
+              >
+                <cylinderGeometry args={[mm(3), mm(3), mm(10), 16]} />
+                <meshBasicMaterial color="#222" wireframe />
+              </mesh>
+            </group>
+          )}
+
+          {/* U 12/10 - Grey heavy duty connector */}
+          {system === 'U_12_10' && (
+            <group>
+              <mesh position={[0, mm(plan.meta.edgeDrill.depth / 2), 0]}>
+                <cylinderGeometry args={[
+                  mm(plan.meta.edgeDrill.dia / 2),
+                  mm(plan.meta.edgeDrill.dia / 2),
+                  mm(plan.meta.edgeDrill.depth),
+                  16
+                ]} />
+                <meshStandardMaterial color="#90A4AE" />
+              </mesh>
+              <mesh
+                position={[0, mm(plan.meta.faceDrill.distB), mm(5)]}
+                rotation={[Math.PI / 2, 0, 0]}
+              >
+                <cylinderGeometry args={[mm(3), mm(3), mm(10), 16]} />
+                <meshBasicMaterial color="#222" wireframe />
+              </mesh>
+            </group>
+          )}
+
+          {/* CC 8/5/30 - Claw for drawer */}
+          {system === 'CC_8_5_30' && (
+            <mesh position={[0, mm(15), 0]}>
+              <boxGeometry args={[mm(5), mm(30), mm(12)]} />
+              <meshStandardMaterial color="#C0C0C0" metalness={0.6} />
+            </mesh>
+          )}
+
+          {/* TOFIX - Housing */}
+          {system === 'TOFIX_25' && (
+            <group
+              position={[0, mm(pos.yOffset), 0]}
+              rotation={[Math.PI / 2, 0, 0]}
+            >
+              <mesh>
+                <cylinderGeometry args={[mm(12.5), mm(12.5), mm(12.5), 32]} />
+                <meshStandardMaterial color="#FFFFFF" />
+              </mesh>
+              {/* Cap */}
+              <mesh position={[0, mm(6.1), 0]}>
+                <boxGeometry args={[mm(20), mm(1), mm(5)]} />
+                <meshBasicMaterial color="#795548" />
+              </mesh>
+            </group>
+          )}
+
+          {/* Dowels */}
+          {pos.dowelOffsets.map((off, j) => (
+            <group key={j} position={[mm(off), 0, 0]}>
+              <mesh position={[0, mm(15), 0]}>
+                <cylinderGeometry args={[mm(4), mm(4), mm(30), 16]} />
+                <meshStandardMaterial color="#D7CCC8" />
+              </mesh>
+            </group>
+          ))}
+        </group>
+      ))}
+    </group>
+  );
+};
+```
+
+### 16.6 System Comparison Table
+
+| Feature | SC 8/60 | U 12/10 | CC 8/5/30 | TOFIX 25 |
+|---------|---------|---------|-----------|----------|
+| **Item No** | 262.11.117 | 262.11.600 | 262.11.113 | 261.95.704 |
+| **Edge Drill** | 8mm × 60mm | 12mm × 55mm | 5mm × 30mm | 7mm × (A+13)mm |
+| **Face Drill** | 6mm @ 25mm | 6mm @ 45mm | None | 25mm @ A |
+| **Access Dist** | 25mm | 45mm | 30mm | Formula |
+| **Use Dowels** | Yes | Yes | No | Yes |
+| **Use Case** | Standard | Heavy Duty | Drawer | Top Mount |
+| **Color** | Red/Grey | Grey | Silver | White |
+
+### 16.7 Drilling Pattern Diagrams
+
+```
+IXCONNECT SC 8/60 (Dual-Axis Drilling):
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  SHELF PANEL (Top View):                                       │
+│  ──────────────────────                                         │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                                                         │   │
+│  │    ○ ←── Access Hole (6mm dia)                         │   │
+│  │    │     25mm from edge                                 │   │
+│  │    │                                                    │   │
+│  │    ▼                                                    │   │
+│  │   ════════════════════════════════════════════ ← EDGE  │   │
+│  │   │         Edge Drill: 8mm × 60mm deep                │   │
+│  │   ▼                                                    │   │
+│  │   ●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●  │   │
+│  │           Connector Body (55mm)                        │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ● = Access hole connects to edge drill for screwdriver        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+IXCONNECT U 12/10 (Heavy Duty):
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  Same concept but:                                              │
+│  - Edge: 12mm × 55mm                                           │
+│  - Access: 6mm @ 45mm from edge                                │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                                                         │   │
+│  │                                                         │   │
+│  │    ○ ←── 45mm from edge (larger spread for HD)         │   │
+│  │    │                                                    │   │
+│  │    ▼                                                    │   │
+│  │   ════════════════════════════════════════════ ← EDGE  │   │
+│  │   │         Edge Drill: 12mm × 55mm deep               │   │
+│  │   ▼                                                    │   │
+│  │   ●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●  │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+TOFIX 25 (Dynamic Formula):
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  SIDE PANEL (Cross Section):                                   │
+│  ───────────────────────────                                    │
+│                                                                 │
+│       TOP PANEL (Thickness = B)                                │
+│       ┌────────────────────────────────┐                       │
+│       │         ● ← Bolt              │                        │
+│       │         │   (5mm × 11mm)       │                        │
+│       └─────────┼──────────────────────┘                        │
+│                 │                                               │
+│  A = B - 1.5mm  │ ← Formula!                                   │
+│                 │                                               │
+│  SIDE   ┌───────┼───────┐                                      │
+│  PANEL  │       │       │                                      │
+│         │   ┌───▼───┐   │ ← Housing 25mm @ position A          │
+│         │   │   ○   │   │                                      │
+│         │   └───────┘   │                                      │
+│         │               │                                      │
+│   EDGE ═╪═══════════════╪══                                     │
+│         │               │                                      │
+│         │   ↑           │                                      │
+│         │   Neck 7mm    │ ← Depth = A + 13mm                   │
+│         │   (for bolt)  │                                      │
+│         └───────────────┘                                      │
+│                                                                 │
+│  Example: If TopThickness = 19mm                               │
+│           A = 19 - 1.5 = 17.5mm                                │
+│           Neck depth = 17.5 + 13 = 30.5mm                      │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+IXCONNECT CC 8/5/30 (Drawer Claw):
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  DRAWER SIDE (Edge View):                                      │
+│  ────────────────────────                                       │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │   DRAWER SIDE PANEL                                     │   │
+│  │                                                         │   │
+│  │   ════════════════════════════════════════════ ← EDGE  │   │
+│  │   │         Edge Drill: 5mm × 30mm                     │   │
+│  │   ▼                                                    │   │
+│  │   ●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●                     │   │
+│  │           Claw Connector                               │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  - No face drilling required                                    │
+│  - No dowels (Claw self-aligns)                                │
+│  - Margin: 32mm (drawer standard)                              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 16.8 Calculation Examples
+
+```typescript
+// Example 1: Standard shelf with SC 8/60
+const scPlan = calculateIxconnectPlan({
+  length: 800,
+  thickness: 18,
+  system: 'SC_8_60'
+});
+
+console.log('=== SC 8/60 Plan ===');
+console.log('Valid:', scPlan.isValid);              // true
+console.log('Connector:', scPlan.specs.main.name);  // 'Ixconnect SC 8/60'
+console.log('Edge Drill:', scPlan.meta.edgeDrill);  // { dia: 8, depth: 60 }
+console.log('Face Drill:', scPlan.meta.faceDrill);  // { dia: 6, depth: 14, distB: 25 }
+console.log('Positions:', scPlan.positions.length); // 3 (>600mm)
+console.log('Uses Dowels:', scPlan.meta.useDowels); // true
+
+
+// Example 2: Heavy duty with U 12/10
+const uPlan = calculateIxconnectPlan({
+  length: 600,
+  thickness: 18,
+  system: 'U_12_10'
+});
+
+console.log('\n=== U 12/10 Plan ===');
+console.log('Edge Drill:', uPlan.meta.edgeDrill);  // { dia: 12, depth: 55 }
+console.log('Access Dist:', uPlan.meta.faceDrill.distB);  // 45mm
+
+
+// Example 3: Drawer with Claw CC
+const clawPlan = calculateIxconnectPlan({
+  length: 400,
+  thickness: 16,
+  system: 'CC_8_5_30'
+});
+
+console.log('\n=== CC Claw Plan ===');
+console.log('Edge Drill:', clawPlan.meta.edgeDrill);  // { dia: 5, depth: 30 }
+console.log('Uses Dowels:', clawPlan.meta.useDowels); // false
+console.log('Positions:', clawPlan.positions.length); // 2 (drawer margin 32mm)
+
+
+// Example 4: Tofix with dynamic formula
+const tofixPlan = calculateIxconnectPlan({
+  length: 600,
+  thickness: 18,
+  targetThickness: 25,  // Top panel is 25mm thick
+  system: 'TOFIX_25'
+});
+
+console.log('\n=== TOFIX 25 Plan ===');
+console.log('Formula:', tofixPlan.meta.formula);
+// 'A = 25 - 1.5 = 23.5mm'
+console.log('Housing Y:', tofixPlan.positions[0].yOffset);  // 23.5mm
+console.log('Face Drill:', tofixPlan.meta.faceDrill);
+// { dia: 25, depth: 12.5, distB: 23.5 }
+console.log('Edge (Neck):', tofixPlan.meta.edgeDrill);
+// { dia: 7, depth: 36.5 } (23.5 + 13)
+
+
+// Example 5: Generate CAM operations
+const ops = generateIxconnectOps('SHELF-001', {
+  length: 800,
+  thickness: 18,
+  system: 'SC_8_60'
+});
+
+console.log('\n=== CAM Operations ===');
+console.log('Total ops:', ops.length);
+// 3 connectors × (1 edge + 1 face + 1 dowel) = 9 ops
+
+const edgeOps = ops.filter(op => op.face === 'EDGE' && !op.id.includes('dowel'));
+console.log('Edge drills:', edgeOps.length);  // 3
+console.log('Edge dia:', edgeOps[0].diameter); // 8mm
+
+const faceOps = ops.filter(op => op.face === 'FACE');
+console.log('Face drills:', faceOps.length);  // 3
+console.log('Face Y pos:', faceOps[0].y);     // 25mm
+```
+
+### 16.9 Technical Reference Table
+
+| Parameter | SC 8/60 | U 12/10 | CC 8/5/30 | TOFIX 25 | Unit |
+|-----------|---------|---------|-----------|----------|------|
+| **Edge Diameter** | 8 | 12 | 5 | 7 | mm |
+| **Edge Depth** | 60 | 55 | 30 | A+13 | mm |
+| **Face Diameter** | 6 | 6 | - | 25 | mm |
+| **Face Depth** | 14 | 14 | - | 12.5 | mm |
+| **Distance B** | 25 | 45 | 30 | A | mm |
+| **Mating Drill** | 8 | 10 | 8 | 5 | mm |
+| **Dowel Offset** | 32 | 32 | - | 32 | mm |
+| **Edge Margin** | 50 | 50 | 32 | 50 | mm |
+
+### 16.10 Tofix Formula Reference
+
+```
+TOFIX DRILLING DIMENSION FORMULA:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  Given:                                                         │
+│  - B = Top Panel Thickness (targetThickness)                   │
+│  - Housing position from catalog = B - 9 + 7.5                 │
+│                                                                 │
+│  Simplified:                                                    │
+│  ┌─────────────────────────────────────┐                       │
+│  │                                     │                       │
+│  │   A = B - 1.5 mm                    │                       │
+│  │                                     │                       │
+│  │   Neck Depth = A + 13 mm            │                       │
+│  │                                     │                       │
+│  └─────────────────────────────────────┘                       │
+│                                                                 │
+│  Examples:                                                      │
+│  ┌────────────────┬─────────┬──────────────┐                   │
+│  │ Top Thickness  │    A    │  Neck Depth  │                   │
+│  ├────────────────┼─────────┼──────────────┤                   │
+│  │     16mm       │ 14.5mm  │   27.5mm     │                   │
+│  │     18mm       │ 16.5mm  │   29.5mm     │                   │
+│  │     19mm       │ 17.5mm  │   30.5mm     │                   │
+│  │     22mm       │ 20.5mm  │   33.5mm     │                   │
+│  │     25mm       │ 23.5mm  │   36.5mm     │                   │
+│  └────────────────┴─────────┴──────────────┘                   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
 - Blum Catalog Pages 2, 5, 6, 13, 14-67, 64, 74-76, 84, 150, 410, 420, 430, 452
+- Häfele Selection 12 (Ixconnect SC/U/CC & Tofix)
 - Häfele Selection 13 (Lamello P-System)
 - Häfele Selection 14 (Ixconnect Dovetail)
 - Häfele Selection 15 (Metalla 510 Standard Hinges)
