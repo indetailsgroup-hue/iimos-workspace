@@ -4078,9 +4078,746 @@ console.log('Plate D:', blindPlan.meta.plateDistanceD); // 9 (MANDATORY!)
 
 ---
 
+## ส่วนที่ 13: Hinge Kinematics Engine - Häfele Metalla 510 Standard (Architecture v7.0)
+
+ระบบ **Hinge Kinematics Engine** รองรับบานพับ Häfele Metalla 510 ครบทุก Series (Standard, 155°, 165°, Thin Door, Blind Corner) จาก Selection 15 พร้อมระบบคำนวณอัตโนมัติระดับวิศวกรรม
+
+### 13.1 Engineering Logic Highlights
+
+1. **Smart Balancing**: คำนวณจำนวนบานพับ (2-5 ตัว) อัตโนมัติตามกราฟน้ำหนักและความสูงหน้าบาน
+2. **Safety Depth Guard**: ตรวจสอบความหนาบาน หากเป็น Thin Door (<15mm) สลับไปใช้รุ่นถ้วยตื้น 8.0mm
+3. **Overlay Solver**: คำนวณหาคู่ระยะเจาะ (Cup E) และฐานรอง (Plate D) จากสูตร `Overlay = E + K - D`
+4. **Application Aware**: เลือกรุ่น 155° Zero Protrusion อัตโนมัติเมื่อมีลิ้นชักภายใน
+
+### 13.2 Master Hardware Database - Standard Hinges
+
+```typescript
+// src/services/hardware/hafeleDb.ts
+
+export type SystemType =
+  | 'MINIFIX_15' | 'SC_8_60' | 'U_12_10' | 'TOFIX_25' | 'LAMELLO_P' | 'DOVETAIL_RAIL'
+  // HINGE SYSTEMS
+  | 'HINGE_110'      // Standard 110°
+  | 'HINGE_155'      // Zero Protrusion (ลิ้นชักใน)
+  | 'HINGE_165'      // Wide Angle
+  | 'HINGE_THIN'     // Thin Door (เจาะตื้น 8mm)
+  | 'HINGE_BLIND';   // Blind Corner
+
+export interface HardwareItem {
+  id: string;
+  itemNo: string;
+  name: string;
+  category: 'HINGE_CUP' | 'HINGE_PLATE';
+  specs: {
+    // Hinge Specs
+    cupDepth?: number;       // 11.0-13.5mm (Standard) vs 8.0mm (Thin)
+    cupDia?: number;         // 35mm
+    openingAngle?: number;   // 110, 155, 165
+    crankConstant?: number;  // ค่า K สำหรับคำนวณ Overlay
+    pattern?: string;        // "48/6" (Standard Pattern)
+
+    // Plate Specs
+    distance?: number;       // ความสูงฐาน D (0, 2, 3)
+  };
+}
+
+export const HAFELE_STANDARD_HINGES = {
+  // =================================================================
+  // METALLA 510 HINGES (Selection 15)
+  // =================================================================
+
+  // --- 1. Standard 110° Soft Close (Page 14) ---
+  // Full Overlay (ทับขอบ) -> K = 13
+  h110_full: {
+    id: 'h110_full',
+    itemNo: '329.17.600',
+    name: 'Metalla 510 110° Full Overlay',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 110,
+      crankConstant: 13,    // K for Overlay calculation
+      cupDepth: 11.0,
+      cupDia: 35,
+      pattern: '48/6'
+    }
+  } as HardwareItem,
+
+  // Half Overlay (กลางขอบ) -> K = 4
+  h110_half: {
+    id: 'h110_half',
+    itemNo: '329.17.602',
+    name: 'Metalla 510 110° Half Overlay',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 110,
+      crankConstant: 4,
+      cupDepth: 11.0,
+      cupDia: 35,
+      pattern: '48/6'
+    }
+  } as HardwareItem,
+
+  // Inset (ฝังใน) -> K = -5
+  h110_inset: {
+    id: 'h110_inset',
+    itemNo: '329.17.603',
+    name: 'Metalla 510 110° Inset',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 110,
+      crankConstant: -5,
+      cupDepth: 11.0,
+      cupDia: 35,
+      pattern: '48/6'
+    }
+  } as HardwareItem,
+
+  // --- 2. Wide Angle 155° Zero Protrusion (Page 12) ---
+  // สำหรับตู้ที่มีลิ้นชักภายใน (Internal Drawers)
+  h155_full: {
+    id: 'h155_full',
+    itemNo: '329.29.217',
+    name: 'Metalla 510 155° Zero Protrusion',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 155,
+      crankConstant: 13,
+      cupDepth: 11.5,
+      cupDia: 35,
+      pattern: '48/6'
+    }
+  } as HardwareItem,
+
+  // --- 3. Thin Door 105° (Page 15) ---
+  // ⚠️ CRITICAL: เจาะลึกเพียง 8.0mm (สำหรับหน้าบานหนา 10-16mm)
+  h_thin_full: {
+    id: 'h_thin_full',
+    itemNo: '329.28.600',
+    name: 'Metalla 510 Thin Door 105°',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 105,
+      crankConstant: 13,
+      cupDepth: 8.0,        // Shallow drilling!
+      cupDia: 35,
+      pattern: '48/6'
+    }
+  } as HardwareItem,
+
+  // --- 4. Wide Angle 165° (Page 16) ---
+  h165_full: {
+    id: 'h165_full',
+    itemNo: '329.07.700',
+    name: 'Metalla 510 165° Full Overlay',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 165,
+      crankConstant: 13,
+      cupDepth: 11.0,
+      cupDia: 35,
+      pattern: '48/6'
+    }
+  } as HardwareItem,
+
+  // --- 5. Blind Corner (Page 10) ---
+  h_blind: {
+    id: 'h_blind',
+    itemNo: '329.11.705',
+    name: 'Metalla 510 Blind Corner',
+    category: 'HINGE_CUP',
+    specs: {
+      openingAngle: 110,
+      crankConstant: -99,   // Special (not applicable)
+      cupDepth: 11.5,
+      cupDia: 35,
+      pattern: '48/6'
+    }
+  } as HardwareItem,
+};
+
+// --- MOUNTING PLATES (Page 8) ---
+export const STANDARD_PLATES = {
+  d0: {
+    id: 'plate_d0',
+    itemNo: '329.67.060',
+    name: 'Mounting Plate D=0',
+    category: 'HINGE_PLATE',
+    specs: { distance: 0 }
+  } as HardwareItem,
+
+  d2: {
+    id: 'plate_d2',
+    itemNo: '329.67.062',
+    name: 'Mounting Plate D=2',
+    category: 'HINGE_PLATE',
+    specs: { distance: 2 }
+  } as HardwareItem,
+
+  d3: {
+    id: 'plate_d3',
+    itemNo: '329.67.063',
+    name: 'Mounting Plate D=3',
+    category: 'HINGE_PLATE',
+    specs: { distance: 3 }
+  } as HardwareItem
+};
+```
+
+### 13.3 Overlay Calculation Formula
+
+```
+OVERLAY FORMULA (Metalla 510 Standard):
+
+Overlay = E + K - D
+
+Where:
+- E = Cup Distance from door edge (3-6mm)
+- K = Crank Constant (depends on hinge type)
+- D = Plate Distance (0, 2, 3mm)
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Hinge Type          │   K    │  Typical Overlay  │   Application       │
+├──────────────────────┼────────┼───────────────────┼─────────────────────┤
+│  110° Full Overlay   │  +13   │   15-19mm         │  Standard cabinets  │
+│  110° Half Overlay   │   +4   │    6-10mm         │  Two doors meeting  │
+│  110° Inset          │   -5   │   -2 to +2mm      │  Flush doors        │
+│  155° Zero Protrusion│  +13   │   15-19mm         │  Internal drawers   │
+│  165° Wide Angle     │  +13   │   15-19mm         │  Corner access      │
+│  105° Thin Door      │  +13   │   15-19mm         │  Thin panels <15mm  │
+└──────────────────────┴────────┴───────────────────┴─────────────────────┘
+
+
+SOLVER EXAMPLE:
+Target Overlay = 16mm
+Using 110° Full (K=13)
+
+Try E=3, D=0: Overlay = 3 + 13 - 0 = 16mm ✅ Perfect!
+Try E=5, D=2: Overlay = 5 + 13 - 2 = 16mm ✅ Also works!
+```
+
+### 13.4 Hinge Quantity Graph
+
+```
+HINGE QUANTITY BY HEIGHT & WEIGHT (Page 1):
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Door Height (mm)    │  ≤6kg  │  ≤12kg  │  ≤17kg  │  >17kg  │
+├──────────────────────┼────────┼─────────┼─────────┼─────────┤
+│  ≤900mm              │   2    │    2    │    3    │    3    │
+│  ≤1200mm             │   2    │    3    │    3    │    4    │
+│  ≤1600mm             │   3    │    3    │    4    │    4    │
+│  ≤2100mm             │   3    │    4    │    4    │    5    │
+│  >2100mm             │   4    │    4    │    5    │    5    │
+└──────────────────────┴────────┴─────────┴─────────┴─────────┘
+
+Formula (Simplified):
+qty = (height > 2100 || weight > 17) ? 5 :
+      (height > 1600 || weight > 12) ? 4 :
+      (height > 900  || weight > 6)  ? 3 : 2;
+```
+
+### 13.5 Hinge Kinematics Engine
+
+```typescript
+// src/services/engineering/hingeEngine.ts
+
+import {
+  HAFELE_STANDARD_HINGES,
+  STANDARD_PLATES,
+  HardwareItem,
+  SystemType
+} from '../hardware/hafeleDb';
+
+export interface HingePlan {
+  isValid: boolean;
+  quantity: number;
+  positions: number[];  // Y positions from bottom edge
+  specs: {
+    cup: HardwareItem;
+    plate: HardwareItem;
+  };
+  meta: {
+    cupDistanceE: number;    // 3-6mm
+    plateDistanceD: number;  // 0, 2, 3mm
+    actualOverlay: number;
+  };
+}
+
+interface HingeOptions {
+  doorHeight: number;
+  doorWeight: number;       // kg
+  doorThickness: number;    // mm
+  overlay: number;          // Target overlay (e.g., 16mm)
+  system?: SystemType;
+  isInternalDrawer?: boolean;
+}
+
+/**
+ * Calculate hinge quantity based on height and weight graph
+ */
+const getHingeCount = (height: number, weight: number): number => {
+  if (height > 2100 || weight > 17) return 5;
+  if (height > 1600 || weight > 12) return 4;
+  if (height > 900  || weight > 6)  return 3;
+  return 2;
+};
+
+/**
+ * Select appropriate hinge based on application
+ */
+const selectHinge = (
+  system: SystemType,
+  overlay: number,
+  isThinDoor: boolean,
+  hasInternalDrawer: boolean
+): HardwareItem => {
+  const db = HAFELE_STANDARD_HINGES;
+
+  // ✅ Safety: Force Thin Door Hinge (8mm depth) for thin panels
+  if (isThinDoor) return db.h_thin_full;
+
+  // Application-specific selection
+  if (hasInternalDrawer || system === 'HINGE_155') return db.h155_full;
+  if (system === 'HINGE_165') return db.h165_full;
+  if (system === 'HINGE_BLIND') return db.h_blind;
+
+  // Standard 110° selection based on overlay
+  if (overlay >= 10) return db.h110_full;   // Full Overlay
+  if (overlay >= 0)  return db.h110_half;   // Half Overlay
+  return db.h110_inset;                      // Inset
+};
+
+/**
+ * Calculate complete hinge plan with Overlay Solver
+ */
+export const calculateStandardHingePlan = (opts: HingeOptions): HingePlan => {
+  const {
+    doorHeight,
+    doorWeight,
+    doorThickness,
+    overlay,
+    system = 'HINGE_110',
+    isInternalDrawer = false
+  } = opts;
+
+  // 1. Check Thin Door condition (<15mm = thin)
+  const isThinDoor = doorThickness < 15;
+
+  // 2. Calculate quantity from graph
+  const qty = getHingeCount(doorHeight, doorWeight);
+
+  // 3. Select hardware
+  const cup = selectHinge(system, overlay, isThinDoor, isInternalDrawer);
+  const K = cup.specs.crankConstant || 0;
+
+  // 4. SOLVER: Find best E (3-6mm) and D (0,2,3) combination
+  // Formula: Overlay = E + K - D
+  let bestE = 3;
+  let bestD = 0;
+  let minDiff = 999;
+
+  const availPlates = [0, 2, 3];
+  const availE = [3, 4, 5, 6];
+
+  for (const E of availE) {
+    for (const D of availPlates) {
+      const calcOverlay = E + K - D;
+      const diff = Math.abs(calcOverlay - overlay);
+
+      if (diff < minDiff) {
+        minDiff = diff;
+        bestE = E;
+        bestD = D;
+      }
+    }
+  }
+
+  // 5. Map D to Plate item
+  let plate = STANDARD_PLATES.d0;
+  if (bestD === 2) plate = STANDARD_PLATES.d2;
+  if (bestD === 3) plate = STANDARD_PLATES.d3;
+
+  // 6. Calculate positions (System 32 aligned)
+  const positions: number[] = [];
+  const margin = 96;  // 32 × 3mm from edges
+
+  if (qty === 2) {
+    positions.push(margin, doorHeight - margin);
+  } else {
+    const span = doorHeight - (2 * margin);
+    const step = span / (qty - 1);
+
+    for (let i = 0; i < qty; i++) {
+      const rawY = margin + (step * i);
+      positions.push(Math.round(rawY));
+    }
+  }
+
+  return {
+    isValid: minDiff <= 2.5,  // Accept up to 2.5mm error (adjustable on-site)
+    quantity: qty,
+    positions,
+    specs: { cup, plate },
+    meta: {
+      cupDistanceE: bestE,
+      plateDistanceD: bestD,
+      actualOverlay: bestE + K - bestD
+    }
+  };
+};
+```
+
+### 13.6 CAM Generator for Standard Hinges
+
+```typescript
+// src/services/cam/generators/hingeOp.ts
+
+import { calculateStandardHingePlan, HingePlan } from '../../engineering/hingeEngine';
+
+export interface MachineOp {
+  id: string;
+  type: 'DRILL' | 'MILL';
+  face: 'FACE' | 'EDGE' | 'BACK';
+  x: number;
+  y: number;
+  diameter: number;
+  depth: number;
+  hardwareId: string;
+}
+
+/**
+ * Generate drilling operations for standard hinges
+ * Pattern 48/6 for all Metalla 510 series
+ */
+export const generateStandardHingeOps = (
+  doorId: string,
+  cabinetId: string,
+  opts: any
+): MachineOp[] => {
+  const plan = calculateStandardHingePlan(opts);
+  if (!plan.isValid) return [];
+
+  const ops: MachineOp[] = [];
+  const { cup, plate } = plan.specs;
+
+  plan.positions.forEach((yPos, i) => {
+
+    // === 1. DOOR OPERATIONS (CUP) ===
+    // Center X = Cup Distance E + Radius (17.5mm)
+    const cupCenterX = plan.meta.cupDistanceE + 17.5;
+
+    // 1.1 Main Cup Hole (35mm diameter)
+    ops.push({
+      id: `${doorId}-cup-${i}`,
+      type: 'DRILL',
+      face: 'FACE',
+      x: cupCenterX,
+      y: yPos,
+      diameter: 35,
+      // ✅ CRITICAL: Use depth from spec (8mm for Thin, 11mm for Standard)
+      depth: cup.specs.cupDepth || 11,
+      hardwareId: cup.itemNo
+    });
+
+    // 1.2 Screw Holes (Pattern 48/6)
+    // 48mm apart (Y ±24mm), Offset 6mm from center X
+    const screwX = cupCenterX - 6;
+    [-24, 24].forEach(offsetY => {
+      ops.push({
+        id: `${doorId}-cup-screw-${i}-${offsetY}`,
+        type: 'DRILL',
+        face: 'FACE',
+        x: screwX,
+        y: yPos + offsetY,
+        diameter: 2.5,  // Pilot hole
+        depth: 5,
+        hardwareId: 'HINGE-SCREW'
+      });
+    });
+
+    // === 2. CABINET OPERATIONS (PLATE) ===
+    // System 32 mounting, X = 37mm from front edge
+    const plateX = 37;
+    [-16, 16].forEach(offsetY => {
+      ops.push({
+        id: `${cabinetId}-plate-${i}-${offsetY}`,
+        type: 'DRILL',
+        face: 'FACE',
+        x: plateX,
+        y: yPos + offsetY,
+        diameter: 5,  // System 32 hole
+        depth: 13,
+        hardwareId: plate.itemNo
+      });
+    });
+  });
+
+  return ops;
+};
+```
+
+### 13.7 Drilling Pattern Diagram
+
+```
+STANDARD HINGE DRILLING (Pattern 48/6):
+
+DOOR PANEL (Face View):
+┌─────────────────────────────────────────┐
+│                                         │
+│         ●  ← Screw 2.5mm @ Y+24         │
+│         │     (X = E + 17.5 - 6)        │
+│         │                               │
+│     ◯───┴───── 35mm Cup                 │
+│         │      (X = E + 17.5mm)         │
+│         │      Depth = 8mm (Thin)       │
+│         │             or 11mm (Std)     │
+│         ●  ← Screw 2.5mm @ Y-24         │
+│                                         │
+│   E = Cup distance from edge (3-6mm)    │
+│   Pattern spacing: 48mm (24+24)         │
+│   Screw offset: 6mm from cup center     │
+└─────────────────────────────────────────┘
+
+
+CABINET SIDE PANEL (Face View):
+┌─────────────────────────────────────────┐
+│                                         │
+│         ●  ← Plate hole @ Y+16          │
+│   37mm  │     (5mm dia, 13mm deep)      │
+│   from  │                               │
+│   edge  │                               │
+│         │                               │
+│         ●  ← Plate hole @ Y-16          │
+│                                         │
+│   Plate spacing: 32mm (16+16)           │
+│   Standard System 32 pattern            │
+└─────────────────────────────────────────┘
+```
+
+### 13.8 Thin Door Safety System
+
+```
+THIN DOOR DETECTION & SAFETY:
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Door Thickness  │  Hinge Type       │  Cup Depth  │  Safety Status     │
+├──────────────────┼───────────────────┼─────────────┼────────────────────┤
+│  <10mm           │  NOT SUPPORTED    │    N/A      │  ⛔ Error          │
+│  10-14mm         │  THIN DOOR 105°   │   8.0mm     │  ✅ Auto-selected  │
+│  15-17mm         │  STANDARD 110°    │  11.0mm     │  ✅ Normal         │
+│  18-24mm         │  STANDARD 110°    │  11.0mm     │  ✅ Normal         │
+│  >24mm           │  PROFILE (v8.0)   │  13.0mm     │  ✅ See Section 12 │
+└──────────────────┴───────────────────┴─────────────┴────────────────────┘
+
+
+SAFETY RULE:
+If doorThickness < 15mm:
+  → Force select THIN DOOR hinge (8mm cup depth)
+  → Prevents drilling through door face!
+
+MINIMUM CLEARANCE:
+- Thin Door: 10mm panel - 8mm cup = 2mm clearance ✅
+- Standard:  16mm panel - 11mm cup = 5mm clearance ✅
+
+⚠️ NEVER drill cup depth > (doorThickness - 2mm)
+```
+
+### 13.9 Visual Component
+
+```typescript
+// src/components/3d/hardware/MasterHinge.tsx
+
+import React, { useMemo } from 'react';
+import { calculateStandardHingePlan } from '../../../services/engineering/hingeEngine';
+
+const mm = (v: number) => v / 1000;
+
+interface MasterHingeProps {
+  doorHeight: number;
+  doorWeight: number;
+  doorThickness: number;
+  overlay: number;
+  system?: string;
+  isInternalDrawer?: boolean;
+}
+
+export const MasterHinge: React.FC<MasterHingeProps> = (props) => {
+  const plan = useMemo(() => calculateStandardHingePlan(props as any), [props]);
+
+  if (!plan?.isValid) return null;
+
+  const { cup, plate } = plan.specs;
+
+  // Color coding: Orange = Thin Door (warning), Gray = Standard
+  const cupColor = cup.specs.cupDepth! < 10 ? "#FF9800" : "#CFD8DC";
+
+  return (
+    <group>
+      {plan.positions.map((y, i) => (
+        <group key={i} position={[0, mm(y), 0]}>
+
+          {/* 1. Cup on Door */}
+          <group
+            position={[mm(plan.meta.cupDistanceE + 17.5), 0, 0]}
+            rotation={[0, 0, Math.PI / 2]}
+          >
+            {/* Cup Ring */}
+            <mesh>
+              <cylinderGeometry args={[mm(17.5), mm(17.5), mm(2), 32]} />
+              <meshStandardMaterial color={cupColor} metalness={0.6} />
+            </mesh>
+
+            {/* Cup Body (shows depth) */}
+            <mesh position={[0, mm(-cup.specs.cupDepth! / 2), 0]}>
+              <cylinderGeometry args={[
+                mm(17),
+                mm(17),
+                mm(cup.specs.cupDepth!),
+                32
+              ]} />
+              <meshStandardMaterial color="#90A4AE" />
+            </mesh>
+          </group>
+
+          {/* 2. Arm & Plate on Cabinet */}
+          <group position={[mm(-20), 0, mm(15)]}>
+            {/* Hinge Arm */}
+            <mesh>
+              <boxGeometry args={[mm(60), mm(20), mm(5)]} />
+              <meshStandardMaterial color="#B0BEC5" />
+            </mesh>
+
+            {/* Mounting Plate */}
+            <mesh position={[mm(-25), 0, mm(-5)]}>
+              <boxGeometry args={[
+                mm(10),
+                mm(45),
+                mm((plate.specs.distance || 0) + 2)
+              ]} />
+              <meshStandardMaterial color="#78909C" />
+            </mesh>
+          </group>
+
+        </group>
+      ))}
+    </group>
+  );
+};
+```
+
+### 13.10 Quick Reference Tables
+
+**Metalla 510 Standard Hinges:**
+
+| Type | Item No | Angle | K | Depth | Application |
+|------|---------|-------|---|-------|-------------|
+| 110° Full | 329.17.600 | 110° | +13 | 11mm | Standard full overlay |
+| 110° Half | 329.17.602 | 110° | +4 | 11mm | Two doors meeting |
+| 110° Inset | 329.17.603 | 110° | -5 | 11mm | Flush doors |
+| 155° Zero | 329.29.217 | 155° | +13 | 11.5mm | Internal drawers |
+| 165° Wide | 329.07.700 | 165° | +13 | 11mm | Corner access |
+| 105° Thin | 329.28.600 | 105° | +13 | 8mm | Thin doors <15mm |
+| Blind Corner | 329.11.705 | 110° | N/A | 11.5mm | L-shaped corners |
+
+**Standard Mounting Plates:**
+
+| Plate | Item No | Distance D | Use Case |
+|-------|---------|------------|----------|
+| D=0 | 329.67.060 | 0mm | Standard (most common) |
+| D=2 | 329.67.062 | 2mm | Fine overlay adjustment |
+| D=3 | 329.67.063 | 3mm | Reduced overlay |
+
+**Overlay Quick Calculator:**
+
+| E (mm) | K | D (mm) | Overlay Result |
+|--------|---|--------|----------------|
+| 3 | +13 | 0 | 16mm (Full) |
+| 4 | +13 | 0 | 17mm (Full) |
+| 5 | +13 | 2 | 16mm (Full) |
+| 3 | +4 | 0 | 7mm (Half) |
+| 5 | +4 | 2 | 7mm (Half) |
+| 3 | -5 | 0 | -2mm (Inset) |
+| 6 | -5 | 3 | -2mm (Inset) |
+
+### 13.11 Complete Implementation Example
+
+```typescript
+// Example: Standard cabinet door with hinge plan
+
+const standardDoorConfig = {
+  doorHeight: 720,
+  doorWeight: 8,
+  doorThickness: 18,
+  overlay: 16,
+  system: 'HINGE_110' as const,
+  isInternalDrawer: false
+};
+
+// Generate plan
+const plan = calculateStandardHingePlan(standardDoorConfig);
+
+console.log('=== Standard Hinge Plan ===');
+console.log('Hinge:', plan.specs.cup.name);        // 'Metalla 510 110° Full Overlay'
+console.log('Item No:', plan.specs.cup.itemNo);   // '329.17.600'
+console.log('Plate:', plan.specs.plate.name);     // 'Mounting Plate D=0'
+console.log('Quantity:', plan.quantity);           // 3
+console.log('Positions:', plan.positions);         // [96, 360, 624]
+console.log('Cup Depth:', plan.specs.cup.specs.cupDepth); // 11mm
+console.log('Actual Overlay:', plan.meta.actualOverlay);   // 16mm
+
+// Generate CAM operations
+const ops = generateStandardHingeOps('DOOR-001', 'CAB-001', standardDoorConfig);
+
+console.log('\n=== CAM Operations ===');
+console.log('Total operations:', ops.length);  // 15 (3 cups + 6 screws + 6 plates)
+
+// Verify cup depth
+const cupOps = ops.filter(op => op.id.includes('cup-') && !op.id.includes('screw'));
+console.log('Cup depth:', cupOps[0].depth);  // 11mm (Standard)
+
+
+// Example: Thin door (auto-safety switch)
+const thinDoorConfig = {
+  doorHeight: 600,
+  doorWeight: 3,
+  doorThickness: 12,  // Thin door!
+  overlay: 16,
+  system: 'HINGE_110' as const
+};
+
+const thinPlan = calculateStandardHingePlan(thinDoorConfig);
+
+console.log('\n=== Thin Door Plan ===');
+console.log('Hinge:', thinPlan.specs.cup.name);  // 'Metalla 510 Thin Door 105°'
+console.log('Cup Depth:', thinPlan.specs.cup.specs.cupDepth); // 8mm (SAFETY!)
+console.log('Clearance:', thinDoorConfig.doorThickness - thinPlan.specs.cup.specs.cupDepth!);
+// Output: 4mm clearance ✅
+
+
+// Example: Cabinet with internal drawers (155° Zero Protrusion)
+const drawerCabinetConfig = {
+  doorHeight: 720,
+  doorWeight: 6,
+  doorThickness: 18,
+  overlay: 16,
+  system: 'HINGE_155' as const,
+  isInternalDrawer: true
+};
+
+const drawerPlan = calculateStandardHingePlan(drawerCabinetConfig);
+
+console.log('\n=== Drawer Cabinet Plan ===');
+console.log('Hinge:', drawerPlan.specs.cup.name);  // 'Metalla 510 155° Zero Protrusion'
+console.log('Angle:', drawerPlan.specs.cup.specs.openingAngle);  // 155°
+// Zero protrusion allows drawers to fully extend!
+```
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
 - Blum Catalog Pages 2, 5, 6, 13, 14-67, 64, 74-76, 84, 150, 410, 420, 430, 452
+- Häfele Selection 15 (Metalla 510 Standard Hinges)
 - Häfele Selection 16 (Specialty Hinges)
 - Häfele Selection 17 (Metalla 510 & Mounting Plates)
 - Hettich Product Catalog
