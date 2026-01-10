@@ -11086,6 +11086,681 @@ console.log('Set count:', layout2.setCount); // 2
 
 ---
 
+## ส่วนที่ 22: Smart Panel Joint System - Pattern Calculation (Architecture v2.5)
+
+ระบบ **Smart Panel Joint** ที่แยก Logic การคำนวณตำแหน่งออกจาก Component แสดงผล พร้อมรองรับเงื่อนไข B24/B34 และการจัดวาง Dowel แบบอัตโนมัติ
+
+### 22.1 Engineering Conditions
+
+ระบบนี้แปลงเงื่อนไขทางวิศวกรรมเป็น Code 2 ส่วนหลัก:
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    ENGINEERING CONDITIONS TO CODE                            ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  1. PLACEMENT LOGIC (เงื่อนไขความยาวแผ่นไม้):                                ║
+║  ═══════════════════════════════════════════                                 ║
+║                                                                              ║
+║  ┌────────────────────────────────────────────────────────────────────────┐ ║
+║  │  Panel Length    │  Joint Sets  │  Pattern                            │ ║
+║  ├──────────────────┼──────────────┼─────────────────────────────────────┤ ║
+║  │  B < 400mm       │  2 sets      │  Left + Right (1 dowel each inner)  │ ║
+║  │  A > 400mm       │  3 sets      │  Left + Center + Right              │ ║
+║  │                  │              │  (Center has 2 dowels both sides)   │ ║
+║  └────────────────────────────────────────────────────────────────────────┘ ║
+║                                                                              ║
+║  2. HARDWARE SPEC (เงื่อนไขสเปคอุปกรณ์):                                     ║
+║  ══════════════════════════════════════                                      ║
+║                                                                              ║
+║  ┌────────────────────────────────────────────────────────────────────────┐ ║
+║  │  Variant  │  Shaft Length  │  Sleeve Height  │  Formula                │ ║
+║  ├───────────┼────────────────┼─────────────────┼─────────────────────────┤ ║
+║  │  B = 24   │  24mm          │  14mm           │  sleeveH = B - 10       │ ║
+║  │  B = 34   │  34mm          │  24mm           │  sleeveH = B - 10       │ ║
+║  └────────────────────────────────────────────────────────────────────────┘ ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
+
+### 22.2 Layout Calculation Utility (layoutUtils.ts)
+
+**Logic คำนวณตำแหน่ง - แยกออกจาก Component เพื่อ Reusability**
+
+```typescript
+// src/services/engineering/layoutUtils.ts
+
+/**
+ * Smart Panel Joint Layout Calculator
+ * Architecture v2.5 - Separated Logic for Reusability
+ *
+ * Key Rules:
+ * - Panel < 400mm: 2 joints (Left + Right)
+ * - Panel > 400mm: 3 joints (Left + Center + Right)
+ * - Edge joints have 1 dowel (inner side)
+ * - Center joint has 2 dowels (both sides)
+ */
+
+export interface FittingNode {
+  id: string;
+  x: number;              // Position X on panel (mm)
+  rotationY: number;      // Rotation: 0 or Math.PI (180°)
+  dowelOffsets: number[]; // Relative dowel positions (e.g., [32] or [-32, 32])
+  type: 'LEFT' | 'CENTER' | 'RIGHT';
+}
+
+export interface LayoutResult {
+  joints: FittingNode[];
+  panelLength: number;
+  jointCount: number;
+  totalDowels: number;
+  isValid: boolean;
+}
+
+// Constants
+const EDGE_DIST = 35;    // Distance from edge to Minifix center (per drawing)
+const DOWEL_GAP = 32;    // System 32 spacing
+const MIN_LENGTH = 100;  // Minimum panel length
+const CENTER_THRESHOLD = 400;  // Add center joint above this
+
+/**
+ * Calculate joint layout for any panel length
+ *
+ * Visual Pattern:
+ *
+ * Panel < 400mm:
+ * ┌─────────────────────────────────────────────────────────────┐
+ * │                                                             │
+ * │  [Edge]--35--[MFX]--32--[Dowel]  ←---→  [Dowel]--32--[MFX]--35--[Edge]
+ * │              Left                             Right (rotated 180°)
+ * │                                                             │
+ * └─────────────────────────────────────────────────────────────┘
+ *
+ * Panel > 400mm:
+ * ┌───────────────────────────────────────────────────────────────────────┐
+ * │                                                                       │
+ * │  [E]--35--[MFX]--32--[D]   [D]--32--[MFX]--32--[D]   [D]--32--[MFX]--35--[E]
+ * │           Left                    Center                    Right     │
+ * │                                                                       │
+ * └───────────────────────────────────────────────────────────────────────┘
+ */
+export function calculateJointLayout(panelLength: number): LayoutResult {
+  const joints: FittingNode[] = [];
+
+  // Validation
+  if (panelLength < MIN_LENGTH) {
+    return {
+      joints: [],
+      panelLength,
+      jointCount: 0,
+      totalDowels: 0,
+      isValid: false
+    };
+  }
+
+  // =================================================================
+  // 1. LEFT JOINT (ชุดซ้าย)
+  // Pattern: [Edge] --35--> [Minifix] --32--> [Dowel]
+  // Dowel on inner side (+32)
+  // =================================================================
+  joints.push({
+    id: 'joint-left',
+    x: EDGE_DIST,
+    rotationY: 0,
+    dowelOffsets: [DOWEL_GAP],  // 1 dowel at +32 (toward center)
+    type: 'LEFT'
+  });
+
+  // =================================================================
+  // 2. RIGHT JOINT (ชุดขวา)
+  // Pattern: [Dowel] <--32-- [Minifix] <--35-- [Edge]
+  // Rotated 180° so bolt head faces same direction as left
+  // After rotation, +32 effectively points toward center
+  // =================================================================
+  joints.push({
+    id: 'joint-right',
+    x: panelLength - EDGE_DIST,
+    rotationY: Math.PI,         // 180° rotation
+    dowelOffsets: [DOWEL_GAP],  // 1 dowel (points inward after rotation)
+    type: 'RIGHT'
+  });
+
+  // =================================================================
+  // 3. CENTER JOINT (ชุดกลาง) - Only when length > 400mm
+  // Pattern: [Dowel] <--32-- [Minifix] --32--> [Dowel]
+  // Two dowels on both sides for maximum support
+  // =================================================================
+  if (panelLength > CENTER_THRESHOLD) {
+    joints.push({
+      id: 'joint-center',
+      x: panelLength / 2,
+      rotationY: 0,
+      dowelOffsets: [-DOWEL_GAP, DOWEL_GAP],  // 2 dowels: left (-32) and right (+32)
+      type: 'CENTER'
+    });
+  }
+
+  // Calculate totals
+  const totalDowels = joints.reduce((sum, j) => sum + j.dowelOffsets.length, 0);
+
+  return {
+    joints,
+    panelLength,
+    jointCount: joints.length,
+    totalDowels,
+    isValid: true
+  };
+}
+
+/**
+ * Get drill positions for CNC from layout result
+ */
+export interface DrillPosition {
+  x: number;
+  y: number;
+  type: 'MINIFIX' | 'DOWEL';
+  diameter: number;
+  depth: number;
+  jointId: string;
+}
+
+export function getDrillPositions(layout: LayoutResult): DrillPosition[] {
+  const positions: DrillPosition[] = [];
+
+  for (const joint of layout.joints) {
+    // Minifix hole
+    positions.push({
+      x: joint.x,
+      y: 0,
+      type: 'MINIFIX',
+      diameter: 5,
+      depth: 11,
+      jointId: joint.id
+    });
+
+    // Dowel holes
+    joint.dowelOffsets.forEach((offset) => {
+      // Apply rotation correction for right joint
+      const actualOffset = joint.rotationY === Math.PI ? -offset : offset;
+      positions.push({
+        x: joint.x + actualOffset,
+        y: 0,
+        type: 'DOWEL',
+        diameter: 8,
+        depth: 15,
+        jointId: joint.id
+      });
+    });
+  }
+
+  return positions;
+}
+```
+
+### 22.3 Joint Selector Component (JointSelector.tsx)
+
+**Component แสดงผล - รองรับการเปลี่ยนรุ่น B24/B34**
+
+```typescript
+// src/components/3d/JointSelector.tsx
+
+import React from 'react';
+
+// Helper: Convert mm to Three.js units (meters)
+const mm = (v: number) => v / 1000;
+
+// =================================================================
+// MATERIAL DEFINITIONS
+// =================================================================
+interface JointMaterials {
+  metal?: any;      // Zinc/Steel for shaft and head
+  zinc?: any;       // Zinc diecast for cam housing
+  plastic?: any;    // Red/White plastic for sleeve
+  darkMetal?: any;  // Dark metal for thread
+  wood?: any;       // Wood color for dowel
+  black?: any;      // Black for visual marks
+}
+
+// =================================================================
+// COMPONENT PROPS
+// =================================================================
+interface JointSelectorProps {
+  variant?: 'B24' | 'B34';       // Bolt variant selection
+  dowelOffsets?: number[];       // Dowel positions as array
+  materials?: JointMaterials;    // Material references
+  showLabels?: boolean;          // Debug labels
+}
+
+// =================================================================
+// HARDWARE SPECS BY VARIANT
+// =================================================================
+const HARDWARE_SPECS = {
+  B24: {
+    shaftLength: 24,     // B = 24mm
+    sleeveHeight: 14,    // B - 10 = 14mm
+    threadLength: 11,
+    shaftDia: 3.75,
+    sleeveDia: 4,
+    headDia: 3.5,
+    camDepth: 12,
+    camDia: 7.5
+  },
+  B34: {
+    shaftLength: 34,     // B = 34mm
+    sleeveHeight: 24,    // B - 10 = 24mm
+    threadLength: 11,
+    shaftDia: 3.75,
+    sleeveDia: 4,
+    headDia: 3.5,
+    camDepth: 12,
+    camDia: 7.5
+  }
+};
+
+// =================================================================
+// MAIN COMPONENT
+// =================================================================
+export const JointSelector: React.FC<JointSelectorProps> = ({
+  variant = 'B24',
+  dowelOffsets = [32],
+  materials = {},
+  showLabels = false
+}) => {
+
+  // Get specs for selected variant
+  const specs = HARDWARE_SPECS[variant];
+  const { shaftLength, sleeveHeight, threadLength, shaftDia, sleeveDia, headDia, camDepth, camDia } = specs;
+
+  return (
+    <group>
+      {/* =================================================================
+          PART 1: MINIFIX HARDWARE
+          Origin (0,0,0) is at the wood joint interface
+          ================================================================= */}
+      <group>
+        {/* SHAFT: Runs from surface (0) into wood by B length */}
+        <mesh position={[0, mm(shaftLength / 2), 0]}>
+          <cylinderGeometry args={[mm(shaftDia), mm(shaftDia), mm(shaftLength), 16]} />
+          <meshStandardMaterial color="#888888" metalness={0.8} roughness={0.3} {...materials.metal} />
+        </mesh>
+
+        {/* BALL HEAD: At end of shaft (distance B) */}
+        <mesh position={[0, mm(shaftLength), 0]}>
+          <sphereGeometry args={[mm(headDia), 16, 16]} />
+          <meshStandardMaterial color="#888888" metalness={0.8} roughness={0.3} {...materials.metal} />
+        </mesh>
+
+        {/* CAM HOUSING: Mounted at shaft end position */}
+        <group position={[0, mm(shaftLength), 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <mesh>
+            <cylinderGeometry args={[mm(camDia), mm(camDia), mm(camDepth), 32]} />
+            <meshStandardMaterial color="#C0C0C0" metalness={0.6} roughness={0.4} {...materials.zinc} />
+          </mesh>
+
+          {/* Cross slot visual (screwdriver mark) */}
+          <mesh position={[0, mm(camDepth / 2 + 0.1), 0]} rotation={[0, 0, Math.PI / 4]}>
+            <boxGeometry args={[mm(8), mm(0.5), mm(1)]} />
+            <meshBasicMaterial color="#222222" {...materials.black} />
+          </mesh>
+        </group>
+
+        {/* SLEEVE: Plastic sleeve, height varies by variant */}
+        {/* Origin 0, extends in negative Y direction */}
+        <mesh position={[0, mm(-sleeveHeight / 2), 0]}>
+          <cylinderGeometry args={[mm(sleeveDia), mm(sleeveDia), mm(sleeveHeight), 16]} />
+          <meshStandardMaterial color="#D32F2F" {...materials.plastic} />
+        </mesh>
+
+        {/* THREAD: Extends beyond sleeve */}
+        <mesh position={[0, mm(-sleeveHeight - threadLength / 2), 0]}>
+          <cylinderGeometry args={[mm(2.5), mm(2.5), mm(threadLength), 16]} />
+          <meshStandardMaterial color="#555555" metalness={0.7} {...materials.darkMetal} />
+        </mesh>
+      </group>
+
+      {/* =================================================================
+          PART 2: DOWELS (Loop creates based on array length)
+          Supports both 1 dowel (edge) and 2 dowels (center)
+          ================================================================= */}
+      {dowelOffsets.map((offset, i) => (
+        <group key={i} position={[mm(offset), 0, 0]}>
+          {/* Dowel 8x30mm: Offset Y by -15mm (embeds into side panel) */}
+          <mesh position={[0, mm(-15), 0]}>
+            <cylinderGeometry args={[mm(4), mm(4), mm(30), 16]} />
+            <meshStandardMaterial color="#D2B48C" {...materials.wood} />
+          </mesh>
+
+          {/* Optional: Debug label */}
+          {showLabels && (
+            <mesh position={[0, mm(20), 0]}>
+              <sphereGeometry args={[mm(2)]} />
+              <meshBasicMaterial color="#4CAF50" />
+            </mesh>
+          )}
+        </group>
+      ))}
+    </group>
+  );
+};
+
+export default JointSelector;
+```
+
+### 22.4 Smart Panel Integration (SmartPanel.tsx)
+
+**ไฟล์หลักที่รวม Logic และ Component เข้าด้วยกัน**
+
+```typescript
+// src/components/3d/SmartPanel.tsx
+
+import React, { useMemo } from 'react';
+import { calculateJointLayout, LayoutResult } from '@/services/engineering/layoutUtils';
+import { JointSelector } from './JointSelector';
+
+const mm = (v: number) => v / 1000;
+
+// =================================================================
+// COMPONENT PROPS
+// =================================================================
+interface SmartPanelProps {
+  length: number;                    // Panel length in mm
+  width?: number;                    // Panel width in mm
+  thickness?: number;                // Panel thickness in mm
+  variant?: 'B24' | 'B34';          // Bolt variant
+  showWireframe?: boolean;          // Show panel as wireframe
+  showJoints?: boolean;             // Show joint hardware
+  debug?: boolean;                  // Show debug info
+}
+
+// =================================================================
+// MAIN COMPONENT
+// =================================================================
+export const SmartPanel: React.FC<SmartPanelProps> = ({
+  length = 500,
+  width = 300,
+  thickness = 19,
+  variant = 'B24',
+  showWireframe = true,
+  showJoints = true,
+  debug = false
+}) => {
+
+  // Calculate joint positions using separated logic
+  const layout = useMemo<LayoutResult>(() =>
+    calculateJointLayout(length),
+    [length]
+  );
+
+  // Material definitions
+  const materials = useMemo(() => ({
+    metal: { color: '#888888', metalness: 0.8, roughness: 0.3 },
+    zinc: { color: '#C0C0C0', metalness: 0.6, roughness: 0.4 },
+    plastic: { color: '#D32F2F' },
+    darkMetal: { color: '#555555', metalness: 0.7 },
+    wood: { color: '#D2B48C' },
+    black: { color: '#222222' }
+  }), []);
+
+  return (
+    <group>
+      {/* =================================================================
+          PANEL VISUALIZATION (Reference)
+          ================================================================= */}
+      {showWireframe && (
+        <mesh position={[mm(length / 2), mm(-thickness / 2), 0]}>
+          <boxGeometry args={[mm(length), mm(thickness), mm(width)]} />
+          <meshStandardMaterial
+            color="#F5F5F5"
+            wireframe={true}
+            transparent
+            opacity={0.5}
+          />
+        </mesh>
+      )}
+
+      {/* =================================================================
+          JOINT HARDWARE (Loop through calculated positions)
+          ================================================================= */}
+      {showJoints && layout.joints.map((joint) => (
+        <group
+          key={joint.id}
+          position={[mm(joint.x), 0, 0]}
+          rotation={[0, joint.rotationY, 0]}  // Apply 180° for right joint
+        >
+          <JointSelector
+            variant={variant}
+            dowelOffsets={joint.dowelOffsets}
+            materials={materials}
+            showLabels={debug}
+          />
+
+          {/* Debug: Joint type indicator */}
+          {debug && (
+            <mesh position={[0, mm(40), 0]}>
+              <sphereGeometry args={[mm(3)]} />
+              <meshBasicMaterial color={
+                joint.type === 'LEFT' ? '#2196F3' :
+                joint.type === 'RIGHT' ? '#F44336' : '#4CAF50'
+              } />
+            </mesh>
+          )}
+        </group>
+      ))}
+
+      {/* Debug: Layout info */}
+      {debug && (
+        <group position={[mm(length / 2), mm(60), 0]}>
+          {/* Visual indicator for panel length */}
+        </group>
+      )}
+    </group>
+  );
+};
+
+export default SmartPanel;
+```
+
+### 22.5 Layout Pattern Diagrams
+
+```
+JOINT LAYOUT BY PANEL LENGTH:
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  PANEL < 400mm (2 JOINTS)                                                    ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║     ┌────────────────────────────────────────────────────────────────┐      ║
+║     │                         PANEL                                  │      ║
+║     │                                                                │      ║
+║     │  ┌─────┐                                      ┌─────┐         │      ║
+║     │  │Dowel│                                      │Dowel│         │      ║
+║     │  │ +32 │                                      │ +32*│  *after │      ║
+║     │  └──┬──┘                                      └──┬──┘  rotation║      ║
+║     │     │                                            │            │      ║
+║     │  ┌──┴──┐                                      ┌──┴──┐         │      ║
+║     │  │ MFX │                                      │ MFX │         │      ║
+║     │  │ 35  │                                      │ L-35│         │      ║
+║     │  └─────┘                                      └─────┘         │      ║
+║     │   Left                                         Right          │      ║
+║     │  (rotY=0)                                    (rotY=π)         │      ║
+║     │                                                                │      ║
+║     └────────────────────────────────────────────────────────────────┘      ║
+║              ↑                                              ↑               ║
+║             35mm                                          35mm              ║
+║                                                                              ║
+║  Example: 350mm panel                                                        ║
+║  - Joint Left:  x = 35mm,  dowelOffsets = [32]   → Dowel at 67mm           ║
+║  - Joint Right: x = 315mm, dowelOffsets = [32]   → Dowel at 283mm          ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  PANEL > 400mm (3 JOINTS)                                                    ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║     ┌────────────────────────────────────────────────────────────────────┐  ║
+║     │                              PANEL                                 │  ║
+║     │                                                                    │  ║
+║     │  ┌───┐           ┌───┐       ┌───┐           ┌───┐                │  ║
+║     │  │ D │           │ D │       │ D │           │ D │                │  ║
+║     │  │+32│           │-32│       │+32│           │+32│                │  ║
+║     │  └─┬─┘           └─┬─┘       └─┬─┘           └─┬─┘                │  ║
+║     │    │               │           │               │                  │  ║
+║     │  ┌─┴─┐           ┌─┴───────────┴─┐           ┌─┴─┐                │  ║
+║     │  │MFX│           │     CENTER    │           │MFX│                │  ║
+║     │  │35 │           │      MFX      │           │L35│                │  ║
+║     │  └───┘           └───────────────┘           └───┘                │  ║
+║     │  Left              Center (L/2)              Right                │  ║
+║     │                                                                    │  ║
+║     └────────────────────────────────────────────────────────────────────┘  ║
+║                                                                              ║
+║  Example: 600mm panel                                                        ║
+║  - Joint Left:   x = 35mm,  dowelOffsets = [32]      → Dowel at 67mm       ║
+║  - Joint Center: x = 300mm, dowelOffsets = [-32, 32] → Dowels at 268, 332mm║
+║  - Joint Right:  x = 565mm, dowelOffsets = [32]      → Dowel at 533mm      ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
+
+### 22.6 Hardware Spec Comparison
+
+```
+B24 vs B34 VARIANT COMPARISON:
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│  B24 VARIANT                         B34 VARIANT                           │
+│  ═══════════                         ═══════════                           │
+│                                                                             │
+│       ┌───┐                                ┌───┐                           │
+│       │CAM│                                │CAM│                           │
+│       └─┬─┘                                └─┬─┘                           │
+│         │                                    │                             │
+│    ┌────┴────┐ B=24mm                  ┌────┴────┐ B=34mm                 │
+│    │  SHAFT  │                         │  SHAFT  │                         │
+│    │         │                         │         │                         │
+│    └────┬────┘                         │         │                         │
+│  ═══════╪═══════ Surface               │         │                         │
+│    ┌────┴────┐                         └────┬────┘                         │
+│    │ SLEEVE  │ H=14mm              ═════════╪═════════ Surface             │
+│    └────┬────┘                         ┌────┴────┐                         │
+│         │                              │ SLEEVE  │ H=24mm                  │
+│    ┌────┴────┐ Thread                  │         │                         │
+│    │  ····   │ 11mm                    └────┬────┘                         │
+│    └─────────┘                              │                              │
+│                                        ┌────┴────┐ Thread                  │
+│                                        │  ····   │ 11mm                    │
+│                                        └─────────┘                         │
+│                                                                             │
+│  Formula: sleeveH = B - 10                                                 │
+│  B24: 24 - 10 = 14mm                                                       │
+│  B34: 34 - 10 = 24mm                                                       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 22.7 Usage Examples
+
+```typescript
+// Example 1: Short panel (< 400mm)
+const layout1 = calculateJointLayout(350);
+console.log('Joint count:', layout1.jointCount);  // 2
+console.log('Total dowels:', layout1.totalDowels); // 2
+
+// Example 2: Long panel (> 400mm)
+const layout2 = calculateJointLayout(600);
+console.log('Joint count:', layout2.jointCount);  // 3
+console.log('Total dowels:', layout2.totalDowels); // 4
+
+// Example 3: Get CNC drill positions
+const drills = getDrillPositions(layout2);
+drills.forEach(d => {
+  console.log(`${d.type} at x=${d.x}mm, dia=${d.diameter}mm, depth=${d.depth}mm`);
+});
+// Output:
+// MINIFIX at x=35mm, dia=5mm, depth=11mm
+// DOWEL at x=67mm, dia=8mm, depth=15mm
+// MINIFIX at x=565mm, dia=5mm, depth=11mm
+// DOWEL at x=533mm, dia=8mm, depth=15mm
+// MINIFIX at x=300mm, dia=5mm, depth=11mm
+// DOWEL at x=268mm, dia=8mm, depth=15mm
+// DOWEL at x=332mm, dia=8mm, depth=15mm
+
+// Example 4: React component usage
+<SmartPanel
+  length={600}
+  variant="B24"
+  showWireframe={true}
+  showJoints={true}
+  debug={false}
+/>
+
+// Example 5: Change variant
+<SmartPanel
+  length={450}
+  variant="B34"  // Longer shaft, taller sleeve
+/>
+```
+
+### 22.8 Quick Reference Table
+
+| Panel Length | Joint Count | Dowel Count | Left Dowels | Center Dowels | Right Dowels |
+|--------------|-------------|-------------|-------------|---------------|--------------|
+| 150mm | 2 | 2 | 1 | - | 1 |
+| 300mm | 2 | 2 | 1 | - | 1 |
+| 400mm | 2 | 2 | 1 | - | 1 |
+| 401mm | 3 | 4 | 1 | 2 | 1 |
+| 600mm | 3 | 4 | 1 | 2 | 1 |
+| 800mm | 3 | 4 | 1 | 2 | 1 |
+| 1000mm | 3 | 4 | 1 | 2 | 1 |
+
+### 22.9 Variant Specification Table
+
+| Property | B24 | B34 | Unit | Formula |
+|----------|-----|-----|------|---------|
+| **Shaft Length** | 24 | 34 | mm | B |
+| **Sleeve Height** | 14 | 24 | mm | B - 10 |
+| **Thread Length** | 11 | 11 | mm | Fixed |
+| **Shaft Diameter** | 3.75 | 3.75 | mm | Fixed |
+| **Head Diameter** | 3.5 | 3.5 | mm | Fixed |
+| **Cam Diameter** | 7.5 | 7.5 | mm | Fixed |
+| **Cam Depth** | 12 | 12 | mm | Fixed |
+
+### 22.10 Architecture Summary
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    ARCHITECTURE v2.5 - SMART PANEL SYSTEM                   │
+│                                                                             │
+│   ┌───────────────────┐                                                     │
+│   │   layoutUtils.ts  │ ◄── Pure Logic (No UI Dependencies)                │
+│   │                   │                                                     │
+│   │ calculateJoint()  │     - Panel length rules                           │
+│   │ getDrillPos()     │     - Dowel placement                              │
+│   └─────────┬─────────┘     - CNC positions                                │
+│             │                                                               │
+│             │ LayoutResult                                                  │
+│             │                                                               │
+│   ┌─────────▼─────────┐     ┌───────────────────┐                          │
+│   │  SmartPanel.tsx   │────►│ JointSelector.tsx │                          │
+│   │   (Container)     │     │   (Presentation)  │                          │
+│   │                   │     │                   │                          │
+│   │ - Loop joints     │     │ - Variant B24/B34 │                          │
+│   │ - Apply rotation  │     │ - Draw hardware   │                          │
+│   │ - Material refs   │     │ - Draw dowels     │                          │
+│   └───────────────────┘     └───────────────────┘                          │
+│                                                                             │
+│  Key Principles:                                                            │
+│  ✅ Separation of Concerns - Logic separate from UI                        │
+│  ✅ Reusability - layoutUtils can be used anywhere                         │
+│  ✅ Configurability - Variant selection (B24/B34)                          │
+│  ✅ Testability - Pure functions easy to unit test                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
 - Blum Catalog Pages 2, 5, 6, 13, 14-67, 64, 74-76, 84, 150, 410, 420, 430, 452
