@@ -9305,6 +9305,952 @@ ARCHITECTURE PRINCIPLES:
 
 ---
 
+## ส่วนที่ 20: Universal Minifix System with Operation Manual (Architecture v3.5)
+
+ระบบ **Universal Minifix** พร้อมคู่มือปฏิบัติงานครบถ้วน รองรับทุกรูปแบบการประกอบ (Overlay/Inset) และทุกตำแหน่ง (Top/Bottom) โดยใช้ Häfele Wood Dowel รุ่น Fluted เป็นมาตรฐาน
+
+### 20.1 Hardware Database (hardware_db.ts)
+
+**สำหรับแผนกจัดซื้อและคลังสินค้า (BOM Generation)**
+
+```typescript
+// src/services/hardware/hardware_db.ts
+
+/**
+ * Häfele Hardware Database
+ * Architecture v3.5 - Universal Minifix System
+ *
+ * Purpose:
+ * - BOM Generation for Procurement
+ * - Warehouse Management (Item Numbers)
+ * - Engineering Calculations (Dimensions)
+ */
+
+export type BoltVariant = 'B24' | 'B34';
+export type BoardThickness = 16 | 19;
+
+export const HAFELE_CATALOG = {
+  // =================================================================
+  // 🔩 1. CONNECTING BOLTS (แกนเหล็ก)
+  // Reference: Häfele Catalog PDF Page 3-4
+  // =================================================================
+  bolts: {
+    B24: {
+      id: "bolt_b24",
+      itemNo: "262.27.670",        // S200 Econo Unfinished (Standard)
+      name: "S200 Econo S Bolt (B=24mm)",
+      length: 24,                  // Total bolt length
+      sleeveH: 0,                  // No plastic sleeve
+      params: {
+        drillDia: 5,               // Pilot hole diameter
+        drillDepth: 11,            // Edge boring depth
+        headDia: 7,                // Head diameter for visual
+        threadDia: 5               // Thread diameter
+      }
+    },
+    B34: {
+      id: "bolt_b34",
+      itemNo: "262.28.670",        // S200 Econo Unfinished (High Strength)
+      name: "S200 Econo S Bolt (B=34mm)",
+      length: 34,                  // Longer for thick panels
+      sleeveH: 10,                 // Red plastic sleeve (depth spacer)
+      params: {
+        drillDia: 5,
+        drillDepth: 11,
+        headDia: 7,
+        threadDia: 5
+      }
+    }
+  },
+
+  // =================================================================
+  // ⚙️ 2. MINIFIX 15 CAMS (ตัวเรือนล็อค)
+  // Reference: Häfele Catalog PDF Page 5-6
+  // =================================================================
+  cams: {
+    t16: {
+      id: "cam_16mm",
+      itemNo: "262.26.033",        // For 16mm board thickness
+      name: "Minifix 15 Cam (For 16mm)",
+      depth: 12.5,                 // Housing depth
+      distA: 8.0,                  // Distance from surface to bolt center
+      params: {
+        boreDia: 15,               // Housing bore diameter
+        boreDepth: 12.5            // Depth of housing bore
+      }
+    },
+    t19: {
+      id: "cam_19mm",
+      itemNo: "262.26.035",        // For 19mm board thickness
+      name: "Minifix 15 Cam (For 19mm)",
+      depth: 14.0,                 // Deeper housing
+      distA: 9.5,                  // Greater offset for thicker board
+      params: {
+        boreDia: 15,
+        boreDepth: 14.0
+      }
+    }
+  },
+
+  // =================================================================
+  // 🪵 3. WOOD DOWELS (เดือยไม้)
+  // Reference: Häfele Catalog PDF 267-84-239
+  // =================================================================
+  dowels: {
+    // Standard Fluted (มีร่องกาว - ยอดนิยม)
+    standard: {
+      id: "dowel_8x30",
+      itemNo: "267.83.230",        // ✅ Standard Item Number
+      name: "Wood Dowel 8x30mm (Fluted)",
+      description: "เดือยไม้บีชแท้ แบบมีร่องกาว (Standard)",
+      material: "Beech Wood",
+      diameter: 8,
+      length: 30,
+      drillDepth: 15,              // ฝังข้างละ 15mm (length/2)
+      spacing: 32,                 // ระยะห่างมาตรฐาน System 32
+      fluted: true,
+      params: {
+        boreDia: 8,                // Matching hole diameter
+        boreDepth: 15              // Half of dowel length
+      }
+    },
+
+    // Pre-Glued (อัดกาวในตัว)
+    preglued: {
+      id: "dowel_8x30_pre",
+      itemNo: "267.84.230",        // ✅ Pre-glued variant
+      name: "Pre-glued Dowel 8x30mm",
+      description: "เดือยไม้อัดกาวในตัว ใช้น้ำฉีดกระตุ้นกาว",
+      material: "Beech Wood + Water-Activated Adhesive",
+      diameter: 8,
+      length: 30,
+      drillDepth: 15,
+      fluted: true,
+      activationMethod: "Water spray",
+      params: {
+        boreDia: 8,
+        boreDepth: 15
+      }
+    },
+
+    // Standard 8x35mm (ยาวกว่าสำหรับไม้หนา)
+    standard_35: {
+      id: "dowel_8x35",
+      itemNo: "267.83.235",
+      name: "Wood Dowel 8x35mm (Fluted)",
+      diameter: 8,
+      length: 35,
+      drillDepth: 17,              // Rounded up from 17.5
+      params: {
+        boreDia: 8,
+        boreDepth: 17
+      }
+    },
+
+    // Standard 8x40mm (สำหรับงานหนัก)
+    standard_40: {
+      id: "dowel_8x40",
+      itemNo: "267.83.240",
+      name: "Wood Dowel 8x40mm (Fluted)",
+      diameter: 8,
+      length: 40,
+      drillDepth: 20,
+      params: {
+        boreDia: 8,
+        boreDepth: 20
+      }
+    }
+  }
+} as const;
+
+// Type exports for strict typing
+export type BoltSpec = typeof HAFELE_CATALOG.bolts.B24;
+export type CamSpec = typeof HAFELE_CATALOG.cams.t16;
+export type DowelSpec = typeof HAFELE_CATALOG.dowels.standard;
+```
+
+### 20.2 Layout Engine (layout_engine.ts)
+
+**สำหรับฝ่ายผลิตและเครื่อง CNC (คำนวณตำแหน่งเจาะ)**
+
+```typescript
+// src/services/engineering/layout_engine.ts
+
+/**
+ * Universal Minifix Layout Engine
+ * Architecture v3.5 - Automatic Fitting Set Calculation
+ *
+ * Purpose:
+ * - Calculate fitting set positions
+ * - Determine dowel placement relative to bolts
+ * - Handle rotation for symmetric drilling
+ */
+
+import { HAFELE_CATALOG } from './hardware_db';
+
+// =================================================================
+// PLACEMENT CONSTANTS (System 32 Compatible)
+// =================================================================
+const MARGIN_TO_BOLT = 35;    // Distance from panel edge to bolt center
+const BOLT_TO_DOWEL = 32;     // System 32 spacing between bolt and dowel
+
+export interface FittingSet {
+  id: string;
+  x: number;                   // Position from left edge (mm)
+  dowelOffsets: number[];      // Relative positions of dowels to bolt
+  rotationY: number;           // 0 = normal, Math.PI = flipped
+  hardwareRefs: {
+    bolt: string;
+    cam: string;
+    dowels: string[];
+  };
+}
+
+export interface LayoutPlan {
+  sets: FittingSet[];
+  panelLength: number;
+  isValid: boolean;
+  issues: string[];
+}
+
+/**
+ * Calculate Universal Layout for any panel length
+ *
+ * Layout Pattern:
+ * ┌──────────────────────────────────────────────────────────────┐
+ * │                                                              │
+ * │   [Edge]--35--[Bolt]--32--[Dowel]    Center    [Dowel]--32--[Bolt]--35--[Edge]
+ * │         Left Set                                      Right Set
+ * │                                                              │
+ * │   For panels > 400mm: Add center set                        │
+ * │   [Dowel]--32--[Bolt]--32--[Dowel]                         │
+ * │                                                              │
+ * └──────────────────────────────────────────────────────────────┘
+ */
+export function calculateUniversalLayout(
+  panelLength: number,
+  variant: 'B24' | 'B34' = 'B24',
+  thickness: 16 | 19 = 19
+): LayoutPlan {
+  const sets: FittingSet[] = [];
+  const issues: string[] = [];
+
+  // Validation
+  if (panelLength < 150) {
+    issues.push(`Panel too short: ${panelLength}mm (min 150mm)`);
+  }
+
+  // Select hardware
+  const bolt = HAFELE_CATALOG.bolts[variant];
+  const cam = thickness === 16 ? HAFELE_CATALOG.cams.t16 : HAFELE_CATALOG.cams.t19;
+  const dowel = HAFELE_CATALOG.dowels.standard;
+
+  // =================================================================
+  // 1. LEFT SET (ชุดซ้าย)
+  // Pattern: [Edge] --35--> [Bolt] --32--> [Dowel]
+  // Dowel on inner side (toward center)
+  // =================================================================
+  sets.push({
+    id: 'set-left',
+    x: MARGIN_TO_BOLT,
+    dowelOffsets: [BOLT_TO_DOWEL],  // Dowel +32mm inward
+    rotationY: 0,
+    hardwareRefs: {
+      bolt: bolt.itemNo,
+      cam: cam.itemNo,
+      dowels: [dowel.itemNo]
+    }
+  });
+
+  // =================================================================
+  // 2. RIGHT SET (ชุดขวา)
+  // Pattern: [Dowel] <--32-- [Bolt] <--35-- [Edge]
+  // Rotated 180° so Cam access hole faces inward
+  // =================================================================
+  sets.push({
+    id: 'set-right',
+    x: panelLength - MARGIN_TO_BOLT,
+    dowelOffsets: [BOLT_TO_DOWEL],  // After rotation: points inward
+    rotationY: Math.PI,              // 180° rotation
+    hardwareRefs: {
+      bolt: bolt.itemNo,
+      cam: cam.itemNo,
+      dowels: [dowel.itemNo]
+    }
+  });
+
+  // =================================================================
+  // 3. CENTER SET (ชุดกลาง) - เมื่อความยาว > 400mm
+  // Pattern: [Dowel] <--32-- [Bolt] --32--> [Dowel]
+  // Two dowels flanking the center bolt
+  // =================================================================
+  if (panelLength > 400) {
+    sets.push({
+      id: 'set-center',
+      x: panelLength / 2,
+      dowelOffsets: [-BOLT_TO_DOWEL, BOLT_TO_DOWEL],  // Both sides
+      rotationY: 0,
+      hardwareRefs: {
+        bolt: bolt.itemNo,
+        cam: cam.itemNo,
+        dowels: [dowel.itemNo, dowel.itemNo]
+      }
+    });
+  }
+
+  // =================================================================
+  // 4. ADDITIONAL SETS for very long panels (>800mm)
+  // =================================================================
+  if (panelLength > 800) {
+    // Quarter positions
+    const quarterLeft = panelLength * 0.25;
+    const quarterRight = panelLength * 0.75;
+
+    sets.push({
+      id: 'set-quarter-left',
+      x: quarterLeft,
+      dowelOffsets: [BOLT_TO_DOWEL],
+      rotationY: 0,
+      hardwareRefs: {
+        bolt: bolt.itemNo,
+        cam: cam.itemNo,
+        dowels: [dowel.itemNo]
+      }
+    });
+
+    sets.push({
+      id: 'set-quarter-right',
+      x: quarterRight,
+      dowelOffsets: [BOLT_TO_DOWEL],
+      rotationY: Math.PI,
+      hardwareRefs: {
+        bolt: bolt.itemNo,
+        cam: cam.itemNo,
+        dowels: [dowel.itemNo]
+      }
+    });
+  }
+
+  return {
+    sets,
+    panelLength,
+    isValid: issues.length === 0,
+    issues
+  };
+}
+
+/**
+ * Get flat list of all drill positions for CNC
+ */
+export interface DrillPosition {
+  x: number;
+  y: number;
+  type: 'BOLT' | 'CAM' | 'DOWEL';
+  face: 'FACE' | 'EDGE';
+  diameter: number;
+  depth: number;
+  hardwareRef: string;
+}
+
+export function getDrillPositions(
+  layout: LayoutPlan,
+  thickness: 16 | 19 = 19
+): DrillPosition[] {
+  const positions: DrillPosition[] = [];
+  const cam = thickness === 16 ? HAFELE_CATALOG.cams.t16 : HAFELE_CATALOG.cams.t19;
+  const bolt = HAFELE_CATALOG.bolts.B24;
+  const dowel = HAFELE_CATALOG.dowels.standard;
+
+  for (const set of layout.sets) {
+    // Bolt position (Edge boring)
+    positions.push({
+      x: set.x,
+      y: 0,  // On edge
+      type: 'BOLT',
+      face: 'EDGE',
+      diameter: bolt.params.drillDia,
+      depth: bolt.params.drillDepth,
+      hardwareRef: set.hardwareRefs.bolt
+    });
+
+    // Cam position (Face boring)
+    positions.push({
+      x: set.x,
+      y: cam.distA,  // Distance A from surface
+      type: 'CAM',
+      face: 'FACE',
+      diameter: cam.params.boreDia,
+      depth: cam.params.boreDepth,
+      hardwareRef: set.hardwareRefs.cam
+    });
+
+    // Dowel positions (Edge boring)
+    set.dowelOffsets.forEach((offset, i) => {
+      // Apply rotation for correct offset direction
+      const actualOffset = set.rotationY === Math.PI ? -offset : offset;
+      positions.push({
+        x: set.x + actualOffset,
+        y: 0,  // On edge
+        type: 'DOWEL',
+        face: 'EDGE',
+        diameter: dowel.params.boreDia,
+        depth: dowel.params.boreDepth,
+        hardwareRef: set.hardwareRefs.dowels[i]
+      });
+    });
+  }
+
+  return positions;
+}
+```
+
+### 20.3 Visual Component (MinifixSystem.tsx)
+
+**สำหรับหน้างานติดตั้ง (Installation Guide) - 3D Visualization**
+
+```typescript
+// src/components/3d/MinifixSystem.tsx
+
+import React, { useMemo } from 'react';
+import { HAFELE_CATALOG, BoltVariant, BoardThickness } from '@/services/hardware/hardware_db';
+import { calculateUniversalLayout, LayoutPlan, FittingSet } from '@/services/engineering/layout_engine';
+
+const mm = (v: number) => v / 1000; // Convert mm to Three.js units (meters)
+
+// =================================================================
+// COMPONENT PROPS
+// =================================================================
+interface MinifixSystemProps {
+  length: number;                          // Panel length (mm)
+  jointType: 'OVERLAY' | 'INSET';         // Joint configuration
+  position: 'TOP' | 'BOTTOM';             // Panel position in cabinet
+  variant?: BoltVariant;                  // B24 or B34
+  thickness?: BoardThickness;             // 16 or 19mm
+  showLabels?: boolean;                   // Show item numbers
+}
+
+// =================================================================
+// MAIN COMPONENT
+// =================================================================
+export const MinifixSystem: React.FC<MinifixSystemProps> = ({
+  length,
+  jointType,
+  position,
+  variant = 'B24',
+  thickness = 19,
+  showLabels = false
+}) => {
+
+  // Compute layout using Engine (Engine as Truth)
+  const layout = useMemo<LayoutPlan>(() =>
+    calculateUniversalLayout(length, variant, thickness),
+    [length, variant, thickness]
+  );
+
+  // Select hardware specs from catalog (Spec Lock)
+  const bolt = HAFELE_CATALOG.bolts[variant];
+  const cam = thickness === 16 ? HAFELE_CATALOG.cams.t16 : HAFELE_CATALOG.cams.t19;
+  const dowel = HAFELE_CATALOG.dowels.standard;
+
+  // =================================================================
+  // ORIENTATION LOGIC (Critical for correct assembly)
+  // =================================================================
+  /**
+   * Determines hardware orientation based on joint type and position
+   *
+   * OVERLAY (ทับขอบ):
+   *   - Cam housing is in SIDE panel
+   *   - Bolt/Dowel are VERTICAL (perpendicular to Top/Bottom panel)
+   *   - TOP: Bolt points down (-Y)
+   *   - BOTTOM: Bolt points up (+Y)
+   *
+   * INSET (ฝังใน):
+   *   - Cam housing is in TOP/BOTTOM panel
+   *   - Bolt/Dowel are HORIZONTAL (parallel to panel surface)
+   *   - Bolt points toward side panel (-X or +X)
+   */
+  const getOrientation = (): [number, number, number] => {
+    if (jointType === 'OVERLAY') {
+      // Vertical orientation
+      if (position === 'TOP') {
+        return [Math.PI, 0, 0]; // Bolt points down
+      }
+      return [0, 0, 0];         // Bolt points up
+    } else {
+      // INSET: Horizontal orientation
+      return [0, 0, -Math.PI / 2]; // Bolt lies flat
+    }
+  };
+
+  const groupRotation = getOrientation();
+
+  return (
+    <group>
+      {layout.sets.map((set, i) => (
+        <FittingSetVisual
+          key={set.id}
+          set={set}
+          bolt={bolt}
+          cam={cam}
+          dowel={dowel}
+          groupRotation={groupRotation}
+          showLabels={showLabels}
+        />
+      ))}
+    </group>
+  );
+};
+
+// =================================================================
+// FITTING SET VISUAL (Sub-component)
+// =================================================================
+interface FittingSetVisualProps {
+  set: FittingSet;
+  bolt: typeof HAFELE_CATALOG.bolts.B24;
+  cam: typeof HAFELE_CATALOG.cams.t16;
+  dowel: typeof HAFELE_CATALOG.dowels.standard;
+  groupRotation: [number, number, number];
+  showLabels: boolean;
+}
+
+const FittingSetVisual: React.FC<FittingSetVisualProps> = ({
+  set,
+  bolt,
+  cam,
+  dowel,
+  groupRotation,
+  showLabels
+}) => {
+  return (
+    <group
+      position={[mm(set.x), 0, 0]}
+      rotation={groupRotation}
+    >
+      {/* Rotate individual set (for left/right symmetry) */}
+      <group rotation={[0, set.rotationY, 0]}>
+
+        {/* === BOLT ASSEMBLY === */}
+        <group>
+          {/* Shaft (ก้าน) */}
+          <mesh position={[0, mm(bolt.length / 2), 0]}>
+            <cylinderGeometry args={[mm(3.5), mm(3.5), mm(bolt.length), 16]} />
+            <meshStandardMaterial color="#888888" metalness={0.8} roughness={0.3} />
+          </mesh>
+
+          {/* Head (หัว) */}
+          <mesh position={[0, mm(bolt.length), 0]}>
+            <sphereGeometry args={[mm(3.5)]} />
+            <meshStandardMaterial color="#888888" metalness={0.8} roughness={0.3} />
+          </mesh>
+
+          {/* Sleeve (ปลอก - B34 only) */}
+          {bolt.sleeveH > 0 && (
+            <mesh position={[0, mm(bolt.length - 15), 0]}>
+              <cylinderGeometry args={[mm(4.5), mm(4.5), mm(10), 16]} />
+              <meshStandardMaterial color="#D32F2F" /> {/* Red plastic */}
+            </mesh>
+          )}
+
+          {/* Thread (เกลียว) */}
+          <mesh position={[0, mm(-5), 0]}>
+            <cylinderGeometry args={[mm(2.5), mm(1), mm(10), 12]} />
+            <meshStandardMaterial color="#555555" metalness={0.7} />
+          </mesh>
+        </group>
+
+        {/* === CAM HOUSING === */}
+        <group position={[0, mm(bolt.length), 0]} rotation={[Math.PI / 2, 0, 0]}>
+          {/* Main housing */}
+          <mesh>
+            <cylinderGeometry args={[mm(7.5), mm(7.5), mm(cam.depth), 32]} />
+            <meshStandardMaterial color="#C0C0C0" metalness={0.6} roughness={0.4} />
+          </mesh>
+
+          {/* Screwdriver slot (ร่องไขควง) */}
+          <mesh position={[0, mm(cam.depth / 2 + 0.1), 0]} rotation={[0, 0, Math.PI / 4]}>
+            <boxGeometry args={[mm(8), mm(0.5), mm(1.5)]} />
+            <meshBasicMaterial color="#333333" />
+          </mesh>
+        </group>
+
+        {/* === WOOD DOWELS (267.83.230) === */}
+        {set.dowelOffsets.map((offset, j) => (
+          <group key={j} position={[mm(offset), 0, 0]}>
+            {/* Dowel body */}
+            <mesh>
+              <cylinderGeometry args={[mm(4), mm(4), mm(dowel.length), 16]} />
+              <meshStandardMaterial color="#D7CCC8" /> {/* Wood color */}
+            </mesh>
+
+            {/* Fluted texture (ลายร่องกาว) */}
+            {[0, 60, 120, 180, 240, 300].map((angle) => (
+              <mesh key={angle} rotation={[0, (angle * Math.PI) / 180, 0]}>
+                <boxGeometry args={[mm(0.3), mm(dowel.length - 2), mm(8.2)]} />
+                <meshBasicMaterial color="#8D6E63" transparent opacity={0.5} />
+              </mesh>
+            ))}
+          </group>
+        ))}
+
+      </group>
+    </group>
+  );
+};
+
+export default MinifixSystem;
+```
+
+### 20.4 CAM Generator for CNC
+
+```typescript
+// src/services/cam/generators/minifixUniversalOps.ts
+
+import { LayoutPlan, getDrillPositions, DrillPosition } from '@/services/engineering/layout_engine';
+import { HAFELE_CATALOG } from '@/services/hardware/hardware_db';
+
+export interface CNCOperation {
+  id: string;
+  type: 'DRILL';
+  face: 'FACE' | 'EDGE' | 'LEFT' | 'RIGHT' | 'TOP' | 'BOTTOM';
+  x: number;
+  y: number;
+  z: number;
+  diameter: number;
+  depth: number;
+  rpm: number;
+  feedRate: number;
+  hardwareRef: string;
+  comment: string;
+}
+
+// =================================================================
+// DEFAULT MACHINING PARAMETERS
+// =================================================================
+const MACHINING_PARAMS = {
+  BOLT: { rpm: 2800, feedRate: 3.5 },
+  CAM: { rpm: 2500, feedRate: 2.5 },
+  DOWEL: { rpm: 2800, feedRate: 3.5 }
+};
+
+/**
+ * Generate CNC operations for Minifix Universal System
+ */
+export function generateMinifixUniversalOps(
+  panelId: string,
+  layout: LayoutPlan,
+  thickness: 16 | 19 = 19
+): CNCOperation[] {
+  const ops: CNCOperation[] = [];
+  const positions = getDrillPositions(layout, thickness);
+
+  positions.forEach((pos, i) => {
+    const machiningParams = MACHINING_PARAMS[pos.type];
+
+    ops.push({
+      id: `${panelId}-minifix-${i}`,
+      type: 'DRILL',
+      face: pos.face,
+      x: pos.x,
+      y: pos.y,
+      z: 0,
+      diameter: pos.diameter,
+      depth: pos.depth,
+      rpm: machiningParams.rpm,
+      feedRate: machiningParams.feedRate,
+      hardwareRef: pos.hardwareRef,
+      comment: `${pos.type} hole for ${pos.hardwareRef}`
+    });
+  });
+
+  return ops;
+}
+
+/**
+ * Generate G-code for Biesse CNC
+ */
+export function generateBiesseGCode(ops: CNCOperation[]): string {
+  const lines: string[] = [
+    '; Minifix Universal System - G-code',
+    '; Generated by IIMOS Designer',
+    'G90 ; Absolute positioning',
+    'G21 ; Metric units',
+    ''
+  ];
+
+  ops.forEach((op, i) => {
+    lines.push(`; Operation ${i + 1}: ${op.comment}`);
+    lines.push(`G0 X${op.x.toFixed(2)} Y${op.y.toFixed(2)} ; Rapid to position`);
+    lines.push(`S${op.rpm} M3 ; Spindle on`);
+    lines.push(`G1 Z-${op.depth.toFixed(2)} F${op.feedRate * 1000} ; Drill`);
+    lines.push(`G0 Z5 ; Retract`);
+    lines.push('');
+  });
+
+  lines.push('M5 ; Spindle off');
+  lines.push('G0 X0 Y0 Z50 ; Home');
+  lines.push('M30 ; Program end');
+
+  return lines.join('\n');
+}
+
+/**
+ * Generate BOM from layout
+ */
+export interface BOMItem {
+  itemNo: string;
+  name: string;
+  quantity: number;
+  unit: string;
+}
+
+export function generateMinifixBOM(layout: LayoutPlan): BOMItem[] {
+  const items: Map<string, BOMItem> = new Map();
+
+  for (const set of layout.sets) {
+    // Bolt
+    const bolt = HAFELE_CATALOG.bolts.B24;
+    if (!items.has(bolt.itemNo)) {
+      items.set(bolt.itemNo, { itemNo: bolt.itemNo, name: bolt.name, quantity: 0, unit: 'pc' });
+    }
+    items.get(bolt.itemNo)!.quantity += 1;
+
+    // Cam
+    const cam = HAFELE_CATALOG.cams.t19;
+    if (!items.has(cam.itemNo)) {
+      items.set(cam.itemNo, { itemNo: cam.itemNo, name: cam.name, quantity: 0, unit: 'pc' });
+    }
+    items.get(cam.itemNo)!.quantity += 1;
+
+    // Dowels
+    const dowel = HAFELE_CATALOG.dowels.standard;
+    if (!items.has(dowel.itemNo)) {
+      items.set(dowel.itemNo, { itemNo: dowel.itemNo, name: dowel.name, quantity: 0, unit: 'pc' });
+    }
+    items.get(dowel.itemNo)!.quantity += set.dowelOffsets.length;
+  }
+
+  return Array.from(items.values());
+}
+```
+
+### 20.5 Drilling Pattern Diagrams
+
+```
+UNIVERSAL MINIFIX LAYOUT - PANEL VIEW (TOP DOWN):
+
+Panel Length: 600mm Example
+┌──────────────────────────────────────────────────────────────────────────┐
+│                                                                          │
+│   ┌─────┐                      ┌─────┐                      ┌─────┐     │
+│   │Dowel│                      │Dowel│                      │Dowel│     │
+│   │ 67  │                      │ 268 │                      │ 533 │     │
+│   └──┬──┘                      └──┬──┘                      └──┬──┘     │
+│      │-32                    -32 │ +32                    -32 │         │
+│   ┌──┴──┐                      ┌─┴───┐                      ┌─┴───┐    │
+│   │Bolt │                      │Bolt │                      │Bolt │    │
+│   │ 35  │                      │ 300 │                      │ 565 │    │
+│   └─────┘                      └─────┘                      └─────┘    │
+│     Left Set                  Center Set                   Right Set    │
+│     (rotY=0)                   (rotY=0)                   (rotY=π)     │
+│                                                                          │
+│   ←─── 35mm ───→           ←── Center ──→           ←─── 35mm ───→     │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+                                ↑ 600mm Total ↑
+
+
+OVERLAY JOINT - SIDE VIEW:
+
+Side Panel (Vertical)         Top/Bottom Panel (Horizontal)
+┌──────────────────┐         ┌─────────────────────────────────┐
+│                  │         │                                 │
+│    ┌──────┐      │         │   ○ Bolt (Vertical, pointing    │
+│    │ CAM  │←─────┼─────────┼───● down for TOP panel)         │
+│    │Housing│     │         │   ○ Dowel                       │
+│    └──────┘      │         │                                 │
+│                  │         └─────────────────────────────────┘
+│     ● = Cam bore │
+│    (15mm dia)    │
+└──────────────────┘
+
+
+INSET JOINT - SIDE VIEW:
+
+Side Panel (Vertical)         Top/Bottom Panel (Horizontal)
+┌──────────────────┐         ┌─────────────────────────────────┐
+│                  │         │                                 │
+│   ○ Bolt (Horiz) │←────────┼───┌──────┐ CAM Housing          │
+│   ○ Dowel        │         │   │ CAM  │ (in Top/Bottom)      │
+│                  │         │   └──────┘                      │
+│                  │         │                                 │
+└──────────────────┘         └─────────────────────────────────┘
+```
+
+### 20.6 CNC Drilling Specifications
+
+```
+EDGE BORING (ขอบแผ่น):
+┌────────────────────────────────────────────────────────────────┐
+│                                                                │
+│   Component     │  Diameter  │  Depth    │  Tool     │  RPM   │
+│  ──────────────┼────────────┼───────────┼───────────┼─────── │
+│   Bolt Hole     │   5mm      │  11mm     │  Brad Pt  │  2800  │
+│   Dowel Hole    │   8mm      │  15mm     │  Brad Pt  │  2800  │
+│                                                                │
+│   Position: Y=0 (center of edge thickness)                     │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+
+FACE BORING (หน้าแผ่น):
+┌────────────────────────────────────────────────────────────────┐
+│                                                                │
+│   Component     │  Diameter  │  Depth    │  Tool     │  RPM   │
+│  ──────────────┼────────────┼───────────┼───────────┼─────── │
+│   Cam Housing   │  15mm      │  12.5mm*  │  Forstner │  2500  │
+│                                                                │
+│   * 12.5mm for 16mm board, 14.0mm for 19mm board              │
+│                                                                │
+│   Position Y (Distance A):                                     │
+│   - 16mm board: Y = 8.0mm from surface                        │
+│   - 19mm board: Y = 9.5mm from surface                        │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### 20.7 Operation Manual (คู่มือปฏิบัติงาน)
+
+```
+╔══════════════════════════════════════════════════════════════════════════╗
+║                    OPERATION MANUAL - MINIFIX UNIVERSAL                   ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║                                                                          ║
+║  📦 1. WAREHOUSE (คลังสินค้า)                                             ║
+║  ════════════════════════════                                            ║
+║                                                                          ║
+║  Standard Kit per Joint Set:                                             ║
+║  ┌─────────────────────────────────────────────────────────────────┐    ║
+║  │  Item No.      │  Description              │  Qty  │  Unit      │    ║
+║  ├────────────────┼───────────────────────────┼───────┼────────────┤    ║
+║  │  262.27.670    │  S200 Bolt B=24mm         │   1   │  pc        │    ║
+║  │  262.26.035    │  Minifix 15 Cam (19mm)    │   1   │  pc        │    ║
+║  │  267.83.230    │  Wood Dowel 8x30 Fluted   │  1-2  │  pc        │    ║
+║  └─────────────────────────────────────────────────────────────────┘    ║
+║                                                                          ║
+║  Optional Pre-glued: 267.84.230 (ต้องมีน้ำฉีดกระตุ้นกาว)                 ║
+║                                                                          ║
+║  ────────────────────────────────────────────────────────────────────    ║
+║                                                                          ║
+║  🔧 2. PRODUCTION (ฝ่ายผลิต/CNC)                                         ║
+║  ═══════════════════════════════                                         ║
+║                                                                          ║
+║  Drilling Parameters:                                                    ║
+║  ┌─────────────────────────────────────────────────────────────────┐    ║
+║  │  Position               │  From Edge  │  Hole Type  │  Remarks  │    ║
+║  ├─────────────────────────┼─────────────┼─────────────┼───────────┤    ║
+║  │  Bolt                   │   35mm      │  5mm×11mm   │  Edge     │    ║
+║  │  Dowel (from Bolt)      │   ±32mm     │  8mm×15mm   │  Edge     │    ║
+║  │  Cam Housing            │   At Bolt X │  15mm×14mm  │  Face     │    ║
+║  └─────────────────────────────────────────────────────────────────┘    ║
+║                                                                          ║
+║  Pattern Rule:                                                           ║
+║  - Bolt always 35mm from panel edge                                      ║
+║  - Dowel always 32mm from Bolt (System 32)                              ║
+║  - Dowel always on INNER side (toward panel center)                      ║
+║                                                                          ║
+║  ────────────────────────────────────────────────────────────────────    ║
+║                                                                          ║
+║  🛠️ 3. INSTALLATION (ฝ่ายติดตั้ง)                                        ║
+║  ═════════════════════════════════                                       ║
+║                                                                          ║
+║  OVERLAY Configuration:                                                  ║
+║  ┌──────────────────────────────────────────────────────────────────┐   ║
+║  │  • Bolt/Dowel are VERTICAL (ตั้งฉาก)                              │   ║
+║  │  • Exit from Top/Bottom panel face                                │   ║
+║  │  • Cam housing in SIDE panel                                      │   ║
+║  │                                                                   │   ║
+║  │  TOP Panel:    Bolt points DOWN (-Y)                              │   ║
+║  │  BOTTOM Panel: Bolt points UP (+Y)                                │   ║
+║  └──────────────────────────────────────────────────────────────────┘   ║
+║                                                                          ║
+║  INSET Configuration:                                                    ║
+║  ┌──────────────────────────────────────────────────────────────────┐   ║
+║  │  • Bolt/Dowel are HORIZONTAL (นอนราบ)                             │   ║
+║  │  • Exit from Top/Bottom panel EDGE                                │   ║
+║  │  • Cam housing in TOP/BOTTOM panel                                │   ║
+║  │                                                                   │   ║
+║  │  Bolt points toward side panel                                    │   ║
+║  └──────────────────────────────────────────────────────────────────┘   ║
+║                                                                          ║
+║  ⚠️ CRITICAL: Dowel always supports load on INNER side                  ║
+║                                                                          ║
+╚══════════════════════════════════════════════════════════════════════════╝
+```
+
+### 20.8 Hardware Reference Table
+
+| Component | Item No. | Size | Drill Dia | Drill Depth | Notes |
+|-----------|----------|------|-----------|-------------|-------|
+| **Bolt B24** | 262.27.670 | B=24mm | 5mm | 11mm | Standard |
+| **Bolt B34** | 262.28.670 | B=34mm | 5mm | 11mm | With sleeve |
+| **Cam 16mm** | 262.26.033 | ø15mm | 15mm | 12.5mm | A=8.0mm |
+| **Cam 19mm** | 262.26.035 | ø15mm | 15mm | 14.0mm | A=9.5mm |
+| **Dowel Std** | 267.83.230 | 8×30mm | 8mm | 15mm | Fluted |
+| **Dowel Pre** | 267.84.230 | 8×30mm | 8mm | 15mm | Pre-glued |
+| **Dowel 35** | 267.83.235 | 8×35mm | 8mm | 17mm | Long |
+| **Dowel 40** | 267.83.240 | 8×40mm | 8mm | 20mm | Heavy duty |
+
+### 20.9 Set Count by Panel Length
+
+| Panel Length | Left Set | Center Set | Quarter Sets | Right Set | Total |
+|--------------|----------|------------|--------------|-----------|-------|
+| 150-400mm | 1 | 0 | 0 | 1 | **2** |
+| 401-800mm | 1 | 1 | 0 | 1 | **3** |
+| 801-1200mm | 1 | 1 | 2 | 1 | **5** |
+| >1200mm | 1 | 1 | 4+ | 1 | **7+** |
+
+### 20.10 Architecture Summary
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    ARCHITECTURE v3.5 DATA FLOW                          │
+│                                                                         │
+│   ┌──────────────────┐                                                  │
+│   │  HAFELE_CATALOG  │ ◄── Single Source of Truth                      │
+│   │  (hardware_db)   │     All item numbers and dimensions             │
+│   └────────┬─────────┘                                                  │
+│            │                                                            │
+│            ▼                                                            │
+│   ┌──────────────────┐                                                  │
+│   │  LAYOUT_ENGINE   │ ◄── Calculation Engine                          │
+│   │  (layout_engine) │     Placement logic, no hardcoded values        │
+│   └────────┬─────────┘                                                  │
+│            │                                                            │
+│     ┌──────┴──────┐                                                     │
+│     │             │                                                     │
+│     ▼             ▼                                                     │
+│ ┌──────────┐  ┌──────────┐                                              │
+│ │  VISUAL  │  │   CAM    │                                              │
+│ │Component │  │Generator │                                              │
+│ │(Consumer)│  │(Consumer)│                                              │
+│ └──────────┘  └──────────┘                                              │
+│     │             │                                                     │
+│     ▼             ▼                                                     │
+│ ┌──────────┐  ┌──────────┐                                              │
+│ │  3D View │  │ CNC Code │                                              │
+│ │  (R3F)   │  │ (G-code) │                                              │
+│ └──────────┘  └──────────┘                                              │
+│                                                                         │
+│  Key Principles:                                                        │
+│  ✅ Engine as Truth - All logic in layout_engine                       │
+│  ✅ Visual as Consumer - Components only render                        │
+│  ✅ Spec Lock - All values from HAFELE_CATALOG                         │
+│  ✅ System 32 - 37mm setback, 32mm spacing                             │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
 - Blum Catalog Pages 2, 5, 6, 13, 14-67, 64, 74-76, 84, 150, 410, 420, 430, 452
