@@ -11761,6 +11761,631 @@ drills.forEach(d => {
 
 ---
 
+## ส่วนที่ 23: Minifix 3D Visualization - Implementation Errata & Best Practices
+
+เอกสารนี้รวบรวม **ข้อผิดพลาดที่พบ (Errata)** และ **แนวปฏิบัติที่ถูกต้อง (Best Practices)** สำหรับการ implement ระบบ Minifix 3D visualization
+
+### 23.1 Errata Summary
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    MINIFIX 3D IMPLEMENTATION ERRATA                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Issue #  │  Component        │  Severity  │  Description                   │
+├───────────┼───────────────────┼────────────┼────────────────────────────────┤
+│  ERR-001  │  Dowel Rotation   │  🔴 HIGH   │  rotationX: 90 ทำให้เดือยนอน   │
+│  ERR-002  │  Position Overlap │  ⚠️ MEDIUM │  offsetX: 0 ซ้อนทับกับน็อต     │
+│  ERR-003  │  Origin Point     │  🎯 DESIGN │  Origin ควรอยู่ที่ขอบไม้       │
+│  ERR-004  │  Cam Rotation     │  🔒 LOW    │  rotation ล็อกตายตัว            │
+└───────────┴───────────────────┴────────────┴────────────────────────────────┘
+```
+
+---
+
+### 23.2 ERR-001: Dowel Rotation Error (🔴 HIGH)
+
+#### ปัญหา
+
+ในไฟล์ Config มีการกำหนดค่า `rotationX: 90` ซึ่งทำให้ CylinderGeometry ใน Three.js ถูกหมุนผิดทิศทาง
+
+```typescript
+// ❌ WRONG - Config ที่ผิดพลาด
+dowel: {
+  // ...
+  rotationX: 90,  // หมุนแกน X 90° = เดือยนอนราบ
+  // ...
+}
+```
+
+#### การวิเคราะห์
+
+```
+THREE.JS CYLINDER GEOMETRY DEFAULT ORIENTATION:
+
+   Default (rotation = 0):              After rotationX: 90°:
+
+        ┌─────┐                             ─────────────────
+        │     │  ← Axis Y (Up)              └───────────────┘
+        │     │                                  ↑
+        │     │                               Axis Z (Forward)
+        └─────┘
+
+   เดือยตั้งตรง ✅                        เดือยนอนราบ ❌
+   (ขนานกับน็อต)                         (ขนานกับพื้น)
+```
+
+#### วิธีแก้ไข
+
+```typescript
+// ✅ CORRECT - Config ที่ถูกต้อง
+export const DEFAULT_MINIFIX_CONFIG = {
+  // ...
+  dowel: {
+    offsetX: 32,    // ระยะห่างจากน็อต (System 32)
+    offsetY: 0,
+    offsetZ: 0,
+    rotationX: 0,   // ✅ แก้จาก 90 เป็น 0 ให้ตั้งตรง
+    rotationY: 0,
+    rotationZ: 0
+  }
+}
+```
+
+---
+
+### 23.3 ERR-002: Position Overlap (⚠️ MEDIUM)
+
+#### ปัญหา
+
+ค่า `offsetX: 0` ใน Config ทำให้เดือยไม้ถูกสร้างที่จุดเดียวกับน็อต Minifix (0,0,0)
+
+```typescript
+// ❌ WRONG - ค่า offset = 0
+dowel: {
+  offsetX: 0,  // เดือยซ้อนทับกับน็อต
+  offsetY: 0,
+  offsetZ: 0,
+  // ...
+}
+```
+
+#### ผลกระทบ
+
+```
+Z-FIGHTING DIAGRAM:
+
+   Position (0,0,0):                    Visual Result:
+
+        ┌─────┐                         ┌─────┐
+        │Bolt │                         │▓▓▓▓▓│ ← Z-fighting
+        │ + ⟵─│── Dowel at same pos     │▓▓▓▓▓│   (flickering)
+        │Dowel│                         │▓▓▓▓▓│
+        └─────┘                         └─────┘
+
+   Model Overlap                        Render Artifact
+```
+
+#### วิธีแก้ไข
+
+```typescript
+// ✅ CORRECT - กำหนด offset ตามมาตรฐาน System 32
+dowel: {
+  offsetX: 32,   // ✅ ระยะห่าง 32mm จากน็อต
+  offsetY: 0,
+  offsetZ: 0,
+  rotationX: 0,
+  rotationY: 0,
+  rotationZ: 0
+}
+```
+
+#### ระยะ Offset มาตรฐาน
+
+```
+SYSTEM 32 DOWEL PLACEMENT:
+
+   ← 32mm →│← 32mm →
+
+   ○       ●       ○
+   Dowel   Bolt    Dowel
+
+   Standard Pattern:
+   - Single: offsetX = 32 (right side)
+   - Pair: offsetX = -32 (left), +32 (right)
+```
+
+---
+
+### 23.4 ERR-003: Origin Point Design Issue (🎯 DESIGN)
+
+#### ปัญหา
+
+Code ปัจจุบันยึด "หัวน็อต (Ball Head)" เป็นจุด Origin (0,0,0) แล้วยืดก้านลงไปหาเกลียว
+
+```typescript
+// ❌ CURRENT APPROACH - Origin at Ball Head
+//
+//        ● ← Ball Head = Origin (0,0,0)
+//        │
+//        │ Shaft
+//        │
+//        ├──── Interface (เลื่อนตำแหน่งเมื่อเปลี่ยน B)
+//        │
+//        │ Thread
+//        ▼
+```
+
+#### ผลกระทบ
+
+```
+PROBLEM WHEN CHANGING VARIANT:
+
+   B24 Variant:                    B34 Variant:
+
+   ● ← Origin (0,0,0)              ● ← Origin (0,0,0)
+   │                               │
+   │ 24mm Shaft                    │
+   │                               │ 34mm Shaft
+   ├──── Interface @ -24mm         │
+   │                               │
+   ▼                               ├──── Interface @ -34mm ← MOVED!
+                                   │
+                                   ▼
+
+   เมื่อเปลี่ยนจาก B24 → B34:
+   - หัวน็อตอยู่ที่เดิม
+   - แต่รอยต่อไม้ (Interface) เลื่อนลง 10mm
+   - ทำให้การประกอบผิดเพี้ยน!
+```
+
+#### วิธีแก้ไข (Refactor)
+
+```typescript
+// ✅ CORRECT APPROACH - Origin at Wood Interface
+//
+//        │ Thread (ออกไปทางลบ)
+//        │
+//   ─────┼───── Interface = Origin (0,0,0)
+//        │
+//        │ Shaft (เข้าไปทาง +Y)
+//        │
+//        ● ← Ball Head @ +B (ขยับตาม Variant)
+```
+
+#### Implementation
+
+```typescript
+// ✅ CORRECTED - Origin at Interface
+case 'minifix_15':
+  const cfg = minifixConfig;
+  const B = cfg.bolt.shaftLength; // 24 or 34
+  const sleeveH = cfg.sleeve.height;
+
+  return (
+    <group>
+      {/* --- ZONE 1: ฝังในเนื้อไม้ (0 → +B) --- */}
+
+      {/* SHAFT: Origin (0) → Ball Head (B) */}
+      <mesh position={[0, mm(B / 2), 0]}>
+        <cylinderGeometry args={[
+          mm(cfg.bolt.shaftDiameter / 2),
+          mm(cfg.bolt.shaftDiameter / 2),
+          mm(B)
+        ]} />
+      </mesh>
+
+      {/* BALL HEAD: ปลายสุดที่ระยะ B */}
+      <mesh position={[0, mm(B), 0]}>
+        <sphereGeometry args={[mm(cfg.bolt.ballDiameter / 2)]} />
+      </mesh>
+
+      {/* CAM HOUSING: อยู่ที่ระยะ B (ขยับตาม Variant) */}
+      <group position={[mm(cfg.cam.offsetX), mm(B + cfg.cam.offsetY), 0]}>
+        {/* Cam mesh */}
+      </group>
+
+      {/* --- ZONE 2: รอยต่อและเกลียว (0 → Negative) --- */}
+
+      {/* SLEEVE: อยู่รอบ Origin */}
+      <mesh position={[0, mm(sleeveH / 2), 0]}>
+        <cylinderGeometry args={[
+          mm(cfg.sleeve.diameter / 2),
+          mm(cfg.sleeve.diameter / 2),
+          mm(sleeveH)
+        ]} />
+      </mesh>
+
+      {/* THREAD: ยื่นออกไปทางลบ */}
+      <mesh position={[0, mm(-cfg.bolt.threadLength / 2), 0]}>
+        <cylinderGeometry args={[
+          mm(cfg.bolt.threadDiameter / 2),
+          mm(cfg.bolt.threadDiameter / 2),
+          mm(cfg.bolt.threadLength)
+        ]} />
+      </mesh>
+    </group>
+  );
+```
+
+#### Origin Point Comparison
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    ORIGIN POINT COMPARISON                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   ❌ WRONG: Origin at Ball Head       ✅ CORRECT: Origin at Interface       │
+│                                                                              │
+│         ●════ Origin (0,0,0)                  Thread                         │
+│         ║                                        ║                           │
+│       Shaft                                      ▼                           │
+│         ║                              ─────────●═══════ Origin (0,0,0)      │
+│   ─────╫───── Interface (ลอย)                  ║                             │
+│         ║                                     Shaft                          │
+│       Thread                                   ║                             │
+│         ▼                                      ●                             │
+│                                            Ball Head                         │
+│                                                                              │
+│   ปัญหา:                              ข้อดี:                                 │
+│   - Interface เลื่อนเมื่อเปลี่ยน B     - Interface คงที่                     │
+│   - ยากต่อการจัดตำแหน่ง               - จัดตำแหน่งง่าย                        │
+│   - พิกัดสับสน                         - พิกัดเป็นระบบ                        │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 23.5 ERR-004: Cam Rotation Locked (🔒 LOW)
+
+#### ปัญหา
+
+ค่า rotation ของ Cam Housing ถูกกำหนดไว้ตายตัว ทำให้หมุนหันรูไขควงไปทิศอื่นไม่ได้
+
+```typescript
+// ❌ WRONG - Hardcoded rotation
+<group
+  position={[...]}
+  rotation={[Math.PI/2, 0, 0]}  // ล็อกตายตัว!
+>
+```
+
+#### ผลกระทบ
+
+```
+CAM SCREW SLOT ORIENTATION:
+
+   Locked (current):              Needed for different panels:
+
+   ┌───────────┐                  ┌───────────┐  ┌───────────┐
+   │   ━━━━    │ ← Slot หันหน้า   │     ┃     │  │    ╲╱     │
+   │           │                  │     ┃     │  │    ╱╲     │
+   └───────────┘                  └───────────┘  └───────────┘
+
+   Only one direction             Slot หันซ้าย    Slot หันเฉียง
+```
+
+#### วิธีแก้ไข
+
+```typescript
+// ✅ CORRECT - Config-driven rotation
+<group
+  position={[mm(cfg.cam.offsetX), mm(B + cfg.cam.offsetY), mm(cfg.cam.offsetZ)]}
+  rotation={[
+    Math.PI/2 + (cfg.cam.rotationX || 0) * Math.PI / 180, // Base + Config
+    (cfg.cam.rotationY || 0) * Math.PI / 180,
+    (cfg.cam.rotationZ || 0) * Math.PI / 180
+  ]}
+>
+  {/* Cam mesh */}
+</group>
+```
+
+#### Config Structure
+
+```typescript
+interface CamConfig {
+  offsetX: number;
+  offsetY: number;
+  offsetZ: number;
+  rotationX: number;  // องศา (degrees) - บวกกับ base rotation
+  rotationY: number;  // องศา (degrees)
+  rotationZ: number;  // องศา (degrees)
+  diameter: number;
+  depth: number;
+}
+```
+
+---
+
+### 23.6 Corrected Default Config
+
+```typescript
+// src/stores/hardwareConfig.ts
+
+export const DEFAULT_MINIFIX_CONFIG = {
+  bolt: {
+    shaftLength: 24,       // B value (24 or 34)
+    shaftDiameter: 3.75,   // mm
+    threadLength: 11,      // mm (fixed)
+    threadDiameter: 6,     // mm
+    ballDiameter: 3.5,     // mm
+  },
+
+  sleeve: {
+    height: 14,            // sleeveH = B - 10 (24 - 10 = 14)
+    diameter: 8,           // mm
+  },
+
+  cam: {
+    offsetX: 0,
+    offsetY: 0,
+    offsetZ: 0,
+    rotationX: 0,          // degrees - added to base PI/2
+    rotationY: 0,
+    rotationZ: 0,
+    diameter: 15,          // mm
+    depth: 12,             // mm
+  },
+
+  // ✅ CORRECTED DOWEL CONFIG
+  dowel: {
+    offsetX: 32,           // ✅ ระยะห่าง 32mm (ไม่ใช่ 0)
+    offsetY: 0,
+    offsetZ: 0,
+    rotationX: 0,          // ✅ แก้จาก 90 เป็น 0
+    rotationY: 0,
+    rotationZ: 0,
+    diameter: 8,           // mm
+    length: 30,            // mm
+  },
+
+  // Optional: Assembly-level rotation
+  assemblyRotation: {
+    x: 0,                  // degrees
+    y: 0,
+    z: 0,
+  }
+};
+
+// Variant B34
+export const MINIFIX_B34_CONFIG = {
+  ...DEFAULT_MINIFIX_CONFIG,
+  bolt: {
+    ...DEFAULT_MINIFIX_CONFIG.bolt,
+    shaftLength: 34,       // B = 34
+  },
+  sleeve: {
+    ...DEFAULT_MINIFIX_CONFIG.sleeve,
+    height: 24,            // sleeveH = 34 - 10 = 24
+  },
+};
+```
+
+---
+
+### 23.7 Complete Implementation Reference
+
+```typescript
+// src/components/canvas/JointSelector.tsx
+
+import * as THREE from 'three';
+
+interface MinifixVisualizerProps {
+  config: typeof DEFAULT_MINIFIX_CONFIG;
+  materials: {
+    brass: THREE.Material;
+    zinc: THREE.Material;
+    plastic: THREE.Material;
+    wood: THREE.Material;
+  };
+}
+
+function MinifixVisualizer({ config, materials }: MinifixVisualizerProps) {
+  const cfg = config;
+  const B = cfg.bolt.shaftLength;
+  const sleeveH = cfg.sleeve.height;
+
+  // Convert mm to Three.js units (assuming 1 unit = 1mm)
+  const mm = (value: number) => value;
+
+  // Convert degrees to radians
+  const deg2rad = (deg: number) => deg * Math.PI / 180;
+
+  // Assembly rotation from config
+  const assemblyRot: [number, number, number] = [
+    deg2rad(cfg.assemblyRotation?.x || 0),
+    deg2rad(cfg.assemblyRotation?.y || 0),
+    deg2rad(cfg.assemblyRotation?.z || 0),
+  ];
+
+  return (
+    <group rotation={assemblyRot}>
+      {/* ============================================= */}
+      {/* ZONE 1: Inside Wood Panel (0 → +B)           */}
+      {/* ============================================= */}
+
+      {/* SHAFT: Runs from Interface (0) to Ball Head (B) */}
+      <mesh
+        position={[0, mm(B / 2), 0]}
+        material={materials.zinc}
+      >
+        <cylinderGeometry args={[
+          mm(cfg.bolt.shaftDiameter / 2),
+          mm(cfg.bolt.shaftDiameter / 2),
+          mm(B)
+        ]} />
+      </mesh>
+
+      {/* BALL HEAD: At end of shaft (position B) */}
+      <mesh
+        position={[0, mm(B), 0]}
+        material={materials.zinc}
+      >
+        <sphereGeometry args={[mm(cfg.bolt.ballDiameter / 2)]} />
+      </mesh>
+
+      {/* CAM HOUSING: At position B (moves with variant) */}
+      <group
+        position={[
+          mm(cfg.cam.offsetX),
+          mm(B + cfg.cam.offsetY),
+          mm(cfg.cam.offsetZ)
+        ]}
+        rotation={[
+          Math.PI / 2 + deg2rad(cfg.cam.rotationX || 0),
+          deg2rad(cfg.cam.rotationY || 0),
+          deg2rad(cfg.cam.rotationZ || 0),
+        ]}
+      >
+        <mesh material={materials.zinc}>
+          <cylinderGeometry args={[
+            mm(cfg.cam.diameter / 2),
+            mm(cfg.cam.diameter / 2),
+            mm(cfg.cam.depth)
+          ]} />
+        </mesh>
+      </group>
+
+      {/* ============================================= */}
+      {/* ZONE 2: Interface & Thread (0 → Negative)    */}
+      {/* ============================================= */}
+
+      {/* SLEEVE: Around interface, height = sleeveH */}
+      <mesh
+        position={[0, mm(sleeveH / 2), 0]}
+        material={materials.plastic}
+      >
+        <cylinderGeometry args={[
+          mm(cfg.sleeve.diameter / 2),
+          mm(cfg.sleeve.diameter / 2),
+          mm(sleeveH)
+        ]} />
+      </mesh>
+
+      {/* THREAD: Extends outward (negative Y) */}
+      <mesh
+        position={[0, mm(-cfg.bolt.threadLength / 2), 0]}
+        material={materials.zinc}
+      >
+        <cylinderGeometry args={[
+          mm(cfg.bolt.threadDiameter / 2),
+          mm(cfg.bolt.threadDiameter / 2),
+          mm(cfg.bolt.threadLength)
+        ]} />
+      </mesh>
+
+      {/* ============================================= */}
+      {/* ZONE 3: Wood Dowels (Separate from bolt)     */}
+      {/* ============================================= */}
+
+      {/* DOWEL: Offset from bolt per System 32 */}
+      <mesh
+        position={[
+          mm(cfg.dowel.offsetX),
+          mm(cfg.dowel.offsetY),
+          mm(cfg.dowel.offsetZ)
+        ]}
+        rotation={[
+          deg2rad(cfg.dowel.rotationX || 0),
+          deg2rad(cfg.dowel.rotationY || 0),
+          deg2rad(cfg.dowel.rotationZ || 0),
+        ]}
+        material={materials.wood}
+      >
+        <cylinderGeometry args={[
+          mm(cfg.dowel.diameter / 2),
+          mm(cfg.dowel.diameter / 2),
+          mm(cfg.dowel.length)
+        ]} />
+      </mesh>
+    </group>
+  );
+}
+```
+
+---
+
+### 23.8 Visual Reference Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              MINIFIX 3D COMPONENT STRUCTURE (Corrected)                      │
+│                                                                              │
+│                            ↑ +Y (into panel)                                 │
+│                            │                                                 │
+│                            │  ● Ball Head @ Y = B                            │
+│                            │  │                                              │
+│                            │  │ Shaft (length = B)                           │
+│                            │  │                                              │
+│   ┌────────┐               │  ┃                    ┌────────┐                │
+│   │ PANEL  │───────────────┼──╋────────────────────│ PANEL  │                │
+│   │  TOP   │      Interface│= ╋ = Origin (0,0,0)   │ BOTTOM │                │
+│   └────────┘               │  ┃                    └────────┘                │
+│                            │  │                                              │
+│                            │  │ Thread (length = 11)                         │
+│                            │  ▼                                              │
+│                            │                                                 │
+│                            │     ○ ← Dowel @ X = 32mm                        │
+│                            │                                                 │
+│                            ↓ -Y (out of panel)                               │
+│                                                                              │
+│   Component Positions:                                                       │
+│   ────────────────────                                                       │
+│   Ball Head:  Y = +B (24 or 34mm)                                            │
+│   Shaft:      Y = 0 to +B (centered at B/2)                                  │
+│   Cam:        Y = +B + offsetY                                               │
+│   Sleeve:     Y = 0 to +sleeveH (centered at sleeveH/2)                      │
+│   Thread:     Y = 0 to -11 (centered at -5.5)                                │
+│   Dowel:      X = +32mm (or -32mm for pair)                                  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 23.9 Testing Checklist
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    IMPLEMENTATION TESTING CHECKLIST                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  □ ERR-001: Dowel stands upright (parallel to bolt shaft)                   │
+│  □ ERR-002: Dowel is visible and not overlapping with bolt                  │
+│  □ ERR-003: Changing B24 → B34 keeps interface at same position             │
+│  □ ERR-004: Cam can be rotated by changing config values                    │
+│                                                                              │
+│  Visual Tests:                                                               │
+│  ────────────                                                                │
+│  □ Bolt and dowel are parallel when viewed from side                        │
+│  □ Dowel is offset 32mm from bolt center                                    │
+│  □ No Z-fighting/flickering between components                              │
+│  □ Sleeve wraps around interface point                                      │
+│                                                                              │
+│  Functional Tests:                                                           │
+│  ─────────────────                                                           │
+│  □ Config changes reflect in 3D model                                       │
+│  □ B24 shows shorter assembly than B34                                      │
+│  □ Cam rotation changes screw slot orientation                              │
+│  □ Multiple dowels can be placed at ±32mm                                   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 23.10 Summary Table
+
+| Issue | Problem | Solution | Priority |
+|-------|---------|----------|----------|
+| **ERR-001** | `rotationX: 90` makes dowel horizontal | Change to `rotationX: 0` | 🔴 HIGH |
+| **ERR-002** | `offsetX: 0` causes overlap | Set `offsetX: 32` | ⚠️ MEDIUM |
+| **ERR-003** | Origin at ball head causes drift | Move origin to interface | 🎯 DESIGN |
+| **ERR-004** | Cam rotation hardcoded | Add config-driven rotation | 🔒 LOW |
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
 - Blum Catalog Pages 2, 5, 6, 13, 14-67, 64, 74-76, 84, 150, 410, 420, 430, 452
