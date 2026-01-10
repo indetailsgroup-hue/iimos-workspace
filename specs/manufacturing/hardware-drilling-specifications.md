@@ -1946,9 +1946,565 @@ DOOR PANEL:
 
 ---
 
+## ส่วนที่ 10: Blum AVENTOS Lift Systems (Architecture v10.0)
+
+ส่วนนี้รวบรวมข้อมูลจากไฟล์ Blum 14-67 (ระบบบานยก AVENTOS) โดยเน้น **Lift Intelligence Engine** ที่คำนวณ Power Factor และเลือกอุปกรณ์อัตโนมัติ
+
+### 10.1 Engineering Logic Highlights
+
+| Feature | Description |
+|---------|-------------|
+| **Power Factor Physics** | คำนวณค่า $LF = KH \times Weight$ เลือกเบอร์โช๊คที่รับแรงได้พอดี |
+| **Structural Milling** | สร้าง Pocket Milling สำหรับ HKi ที่ต้องฝังอุปกรณ์ลงในเนื้อไม้ |
+| **Kinematic Safety** | ตรวจสอบความหนาไม้ก่อนอนุญาตใช้รุ่นฝัง (HKi requires ≥16mm) |
+
+### 10.2 Master Hardware Database (Lift Systems)
+
+```typescript
+// src/services/hardware/hafeleDb.ts
+
+export type SystemType =
+  | 'MINIFIX_15' | 'SC_8_60' | 'TOFIX_25' | 'LAMELLO_P' | 'DOVETAIL_RAIL'
+  | 'HINGE_110' | 'HINGE_ALU_105_PUSH'
+  // --- BLUM AVENTOS ---
+  | 'AVENTOS_HKI'     // รุ่นฝังใน (Integrated)
+  | 'AVENTOS_HF_TOP'; // รุ่นบานพับคู่ (Bi-fold)
+
+export interface HardwareItem {
+  id: string;
+  itemNo: string;
+  name: string;
+  category: 'LIFT_MECHANISM' | 'LIFT_ARM' | 'LIFT_COVER' | 'HINGE_CUP';
+  specs: {
+    powerFactorMin?: number;
+    powerFactorMax?: number;
+    minCabinetHeight?: number;
+    maxCabinetHeight?: number;
+    isIntegrated?: boolean;          // True = ต้องกัดร่องฝัง
+    millSpec?: { w: number; h: number; d: number; r: number }; // Milling Dimensions
+  };
+}
+
+export const HAFELE_MASTER_DB = {
+  lifts: {
+    // =================================================================
+    // AVENTOS HKi (Integrated) - PDF Page 5
+    // Requires Side Panel Milling: ~128x265mm, Depth 12mm (for 16mm panel)
+    // =================================================================
+
+    // Weak (420-1610)
+    hki_2300: {
+      id: 'hki_24k2300', itemNo: '24K2300',
+      name: 'AVENTOS HKi (LF 420-1610)',
+      category: 'LIFT_MECHANISM',
+      specs: {
+        powerFactorMin: 420, powerFactorMax: 1610,
+        isIntegrated: true,
+        millSpec: { w: 128, h: 265, d: 12, r: 4 }
+      }
+    },
+    // Medium (930-2800)
+    hki_2500: {
+      id: 'hki_24k2500', itemNo: '24K2500',
+      name: 'AVENTOS HKi (LF 930-2800)',
+      category: 'LIFT_MECHANISM',
+      specs: {
+        powerFactorMin: 930, powerFactorMax: 2800,
+        isIntegrated: true,
+        millSpec: { w: 128, h: 265, d: 12, r: 4 }
+      }
+    },
+    // Strong (1730-5200)
+    hki_2700: {
+      id: 'hki_24k2700', itemNo: '24K2700',
+      name: 'AVENTOS HKi (LF 1730-5200)',
+      category: 'LIFT_MECHANISM',
+      specs: {
+        powerFactorMin: 1730, powerFactorMax: 5200,
+        isIntegrated: true,
+        millSpec: { w: 128, h: 265, d: 12, r: 4 }
+      }
+    },
+    // X-Strong (2600-7800)
+    hki_2800: {
+      id: 'hki_24k2800', itemNo: '24K2800',
+      name: 'AVENTOS HKi (LF 2600-7800)',
+      category: 'LIFT_MECHANISM',
+      specs: {
+        powerFactorMin: 2600, powerFactorMax: 7800,
+        isIntegrated: true,
+        millSpec: { w: 128, h: 265, d: 12, r: 4 }
+      }
+    },
+
+    // =================================================================
+    // AVENTOS HF top (Bi-Fold) - PDF Page 13
+    // =================================================================
+
+    // Mechanisms (Set)
+    hf_2500: {
+      id: 'hf_22f2500', itemNo: '22F2500',
+      name: 'HF top Mech (LF 2700-13500)',
+      category: 'LIFT_MECHANISM',
+      specs: { powerFactorMin: 2700, powerFactorMax: 13500 }
+    },
+    hf_2800: {
+      id: 'hf_22f2800', itemNo: '22F2800',
+      name: 'HF top Mech (LF 10000-19300)',
+      category: 'LIFT_MECHANISM',
+      specs: { powerFactorMin: 10000, powerFactorMax: 19300 }
+    },
+
+    // Telescopic Arms (Selected by Cabinet Height KH)
+    hf_arm_35: {
+      id: 'hf_arm_35', itemNo: '20F3500',
+      name: 'HF Arm (KH 560-710)',
+      category: 'LIFT_ARM',
+      specs: { minCabinetHeight: 560, maxCabinetHeight: 710 }
+    },
+    hf_arm_38: {
+      id: 'hf_arm_38', itemNo: '20F3800',
+      name: 'HF Arm (KH 700-900)',
+      category: 'LIFT_ARM',
+      specs: { minCabinetHeight: 700, maxCabinetHeight: 900 }
+    },
+    hf_arm_39: {
+      id: 'hf_arm_39', itemNo: '20F3900',
+      name: 'HF Arm (KH 760-1040)',
+      category: 'LIFT_ARM',
+      specs: { minCabinetHeight: 760, maxCabinetHeight: 1040 }
+    },
+
+    // Center Hinge (Finger Safety)
+    hf_center_hinge: {
+      id: 'hf_ctr', itemNo: '78Z5550',
+      name: 'CLIP top Center Hinge',
+      category: 'HINGE_CUP',
+      specs: { cupDia: 35 }
+    },
+  },
+
+  // Cover Caps
+  lift_covers: {
+    hki_cover: {
+      id: 'hki_cov', itemNo: '24K8000',
+      name: 'HKi Cover Set',
+      category: 'LIFT_COVER',
+      specs: {}
+    },
+  }
+};
+```
+
+### 10.3 Lift Intelligence Engine
+
+```typescript
+// src/services/engineering/liftEngine.ts
+import { HAFELE_MASTER_DB, HardwareItem, SystemType } from '../hardware/hafeleDb';
+
+export interface LiftPlan {
+  isValid: boolean;
+  powerFactor: number;
+  specs: {
+    mechanism: HardwareItem;
+    arm?: HardwareItem;
+    centerHinge?: HardwareItem;
+  };
+  meta: {
+    millPocket?: { x: number; y: number; w: number; h: number; d: number; r: number };
+    drillPos?: { x: number; y: number };
+  };
+  issues: string[];
+}
+
+interface Options {
+  cabinetHeight: number;       // KH
+  frontWeight: number;         // FG (Combined Weight)
+  system: SystemType;
+  sideThickness: number;       // SWD
+}
+
+export const calculateLiftPlan = (opts: Options): LiftPlan => {
+  const { cabinetHeight, frontWeight, system, sideThickness } = opts;
+  const issues: string[] = [];
+  const db = HAFELE_MASTER_DB.lifts;
+
+  // 1. CALCULATE POWER FACTOR (LF)
+  // Formula: LF = KH (mm) * FG (kg)
+  const LF = cabinetHeight * frontWeight;
+
+  let mechanism: HardwareItem | undefined;
+  let arm: HardwareItem | undefined;
+  let centerHinge: HardwareItem | undefined;
+
+  // 2. MECHANISM SELECTION
+  if (system === 'AVENTOS_HKI') {
+    // Validation: Side Panel Thickness (Page 5: min 16mm)
+    if (sideThickness < 16) {
+      issues.push(
+        `AVENTOS HKi requires side panel thickness ≥ 16mm (Current: ${sideThickness}mm)`
+      );
+    }
+
+    // Select HKi based on LF
+    const candidates = [db.hki_2300, db.hki_2500, db.hki_2700, db.hki_2800];
+    mechanism = candidates.find(
+      m => LF >= m.specs.powerFactorMin! && LF <= m.specs.powerFactorMax!
+    );
+
+  } else if (system === 'AVENTOS_HF_TOP') {
+    // Select HF based on LF
+    if (LF >= 2600 && LF <= 13500) mechanism = db.hf_2500;
+    else if (LF > 13500 && LF <= 19300) mechanism = db.hf_2800;
+
+    // Select Arm based on KH
+    const arms = [db.hf_arm_35, db.hf_arm_38, db.hf_arm_39];
+    arm = arms.find(
+      a => cabinetHeight >= a.specs.minCabinetHeight! &&
+           cabinetHeight <= a.specs.maxCabinetHeight!
+    );
+
+    if (!arm) {
+      issues.push(`No telescopic arm found for Cabinet Height ${cabinetHeight}mm`);
+    }
+
+    centerHinge = db.hf_center_hinge;
+  }
+
+  if (!mechanism) {
+    issues.push(`Power Factor ${Math.round(LF)} out of range for ${system}`);
+  }
+
+  // 3. MANUFACTURING META
+  let millPocket = undefined;
+  let drillPos = undefined;
+
+  if (mechanism && mechanism.specs.isIntegrated) {
+    // === HKi MILLING (Page 6) ===
+    // Y Position: Approx 22mm from top inner edge
+    // X Position: 12mm from front edge (approx)
+    const m = mechanism.specs.millSpec!;
+    millPocket = {
+      x: 50, // Offset for CNC origin
+      y: 22, // Offset from Top
+      w: m.w, h: m.h, d: m.d, r: m.r
+    };
+  } else if (mechanism) {
+    // === HF DRILLING (Page 20) ===
+    // Top pin 47mm from top edge, 37mm from front
+    drillPos = { x: 37, y: 47 };
+  }
+
+  return {
+    isValid: issues.length === 0 && !!mechanism,
+    powerFactor: LF,
+    specs: { mechanism: mechanism!, arm, centerHinge },
+    meta: { millPocket, drillPos },
+    issues
+  };
+};
+```
+
+### 10.4 Power Factor Calculation Formula
+
+```
+POWER FACTOR FORMULA:
+
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│   LF = KH × FG                                                  │
+│                                                                 │
+│   Where:                                                        │
+│   • LF = Power Factor (Lift Factor)                             │
+│   • KH = Cabinet Height (mm)                                    │
+│   • FG = Front Weight (kg) - Combined weight of all panels      │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+EXAMPLE:
+- Cabinet Height (KH): 600mm
+- Front Weight (FG): 4kg (single door)
+- LF = 600 × 4 = 2400
+
+→ Select: AVENTOS HKi 24K2500 (LF 930-2800)
+```
+
+### 10.5 AVENTOS HKi Power Factor Selection
+
+| Item No. | Power Factor Range | Application |
+|----------|-------------------|-------------|
+| 24K2300 | 420 - 1610 | Light fronts |
+| 24K2500 | 930 - 2800 | Standard fronts |
+| 24K2700 | 1730 - 5200 | Heavy fronts |
+| 24K2800 | 2600 - 7800 | Extra heavy fronts |
+
+### 10.6 AVENTOS HF top Configuration
+
+| Component | Item No. | Range/Specification |
+|-----------|----------|---------------------|
+| **Mechanism (Light)** | 22F2500 | LF 2700-13500 |
+| **Mechanism (Heavy)** | 22F2800 | LF 10000-19300 |
+| **Arm 35** | 20F3500 | KH 560-710mm |
+| **Arm 38** | 20F3800 | KH 700-900mm |
+| **Arm 39** | 20F3900 | KH 760-1040mm |
+| **Center Hinge** | 78Z5550 | Door-to-door connection |
+
+### 10.7 CAM Generator for Lift Systems
+
+```typescript
+// src/services/cam/generators/liftOp.ts
+import { calculateLiftPlan } from '../../engineering/liftEngine';
+import { MachineOp } from './types';
+
+export const generateLiftOps = (
+  sideId: string,
+  doorId: string,
+  opts: {
+    cabinetHeight: number;
+    frontWeight: number;
+    system: SystemType;
+    sideThickness: number;
+  }
+): MachineOp[] => {
+  const plan = calculateLiftPlan(opts);
+  if (!plan.isValid) return [];
+
+  const ops: MachineOp[] = [];
+  const { mechanism, centerHinge } = plan.specs;
+
+  // === A. AVENTOS HKi (POCKET MILLING) ===
+  if (plan.meta.millPocket) {
+    const m = plan.meta.millPocket;
+
+    // Side Panel Milling
+    ops.push({
+      id: `${sideId}-hki-pocket`,
+      type: 'MILL_POCKET',
+      face: 'FACE', // Inner Face
+      x: m.x,
+      y: m.y,
+      params: {
+        length: m.h, // 265mm
+        width: m.w,  // 128mm
+        depth: m.d,  // 12mm (Leave 4mm skin on 16mm panel)
+        cornerR: m.r // 4mm corner radius
+      },
+      hardwareId: mechanism.itemNo
+    });
+
+    // Front Fixing Bracket
+    ops.push({
+      id: `${doorId}-hki-bracket`,
+      type: 'DRILL',
+      face: 'FACE',
+      x: 50,
+      y: 150,
+      diameter: 5,
+      depth: 10,
+      hardwareId: 'HKI-BRACKET'
+    });
+  }
+
+  // === B. AVENTOS HF TOP (SURFACE DRILLING) ===
+  else if (plan.meta.drillPos) {
+    const d = plan.meta.drillPos;
+
+    // 1. Side Panel Mechanism (2 pins)
+    [0, 32].forEach(off => {
+      ops.push({
+        id: `${sideId}-hf-mech-${off}`,
+        type: 'DRILL',
+        face: 'FACE',
+        x: d.x,
+        y: d.y + off,
+        diameter: 5,
+        depth: 13,
+        hardwareId: mechanism.itemNo
+      });
+    });
+
+    // 2. Center Hinge (Door-to-Door)
+    if (centerHinge) {
+      ops.push({
+        id: `${doorId}-hf-center`,
+        type: 'DRILL',
+        face: 'FACE',
+        x: 21.5,
+        y: 30, // Standard Hinge Position
+        diameter: 35,
+        depth: 12,
+        hardwareId: centerHinge.itemNo
+      });
+    }
+  }
+
+  return ops;
+};
+```
+
+### 10.8 HKi Milling Specification
+
+```
+AVENTOS HKi POCKET MILLING (Page 6):
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    CABINET SIDE PANEL                           │
+│                                                                 │
+│    ┌──────────────────────────────────────┐                     │
+│    │                                      │ ← 22mm from top     │
+│    │    ┌────────────────────────────┐    │                     │
+│    │    │                            │    │                     │
+│    │    │      POCKET AREA           │    │                     │
+│    │    │      128mm × 265mm         │    │                     │
+│    │    │      Depth: 12mm           │    │                     │
+│    │    │      Corner R: 4mm         │    │                     │
+│    │    │                            │    │                     │
+│    │    └────────────────────────────┘    │                     │
+│    │                                      │                     │
+│    └──────────────────────────────────────┘                     │
+│                                                                 │
+│    ← 50mm from front edge                                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+CRITICAL: Side Panel Thickness must be ≥ 16mm
+         Pocket depth 12mm leaves 4mm skin
+```
+
+### 10.9 HF top Drilling Reference
+
+```
+AVENTOS HF top DRILLING (Page 20):
+
+CABINET SIDE PANEL:
+┌─────────────────────────────────────────────────────────────────┐
+│                         TOP                                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ○ ←── 47mm from top                                            │
+│  │                                                               │
+│  ○ ←── 47mm + 32mm = 79mm from top                              │
+│  ↑                                                               │
+│  37mm from front edge                                            │
+│                                                                  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+
+DOOR PANEL (Bi-Fold Center Hinge):
+┌─────────────────────────────────────────┐
+│           TOP DOOR (Bottom Edge)        │
+│                                         │
+│    ●──────────●──────────●              │ ← Center Hinge Cups
+│   21.5mm    Center     21.5mm           │    35mm diameter
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+### 10.10 Lift System Comparison
+
+| Feature | AVENTOS HKi | AVENTOS HF top |
+|---------|-------------|----------------|
+| **Type** | Integrated (Hidden) | Bi-Fold (Surface) |
+| **Installation** | Pocket Milling | Surface Mounting |
+| **Min Panel Thickness** | 16mm | 16mm |
+| **Power Factor Range** | 420-7800 | 2700-19300 |
+| **Arm Type** | Integrated | Telescopic |
+| **Door Configuration** | Single | Bi-Fold (2 doors) |
+| **Aesthetics** | Premium (Hidden) | Standard |
+| **Price Level** | Premium | Standard |
+
+### 10.11 Complete Implementation Example
+
+```typescript
+// Example: Wall Cabinet with AVENTOS HKi
+
+const cabinetConfig = {
+  width: 900,
+  height: 600,
+  depth: 350,
+  sideThickness: 18  // 18mm panel (≥16mm required)
+};
+
+const frontWeight = 4; // kg
+
+// Generate Lift Plan
+const liftPlan = calculateLiftPlan({
+  cabinetHeight: cabinetConfig.height,
+  frontWeight: frontWeight,
+  system: 'AVENTOS_HKI',
+  sideThickness: cabinetConfig.sideThickness
+});
+
+console.log('Lift Plan:');
+console.log('  Power Factor:', liftPlan.powerFactor);        // 2400
+console.log('  Mechanism:', liftPlan.specs.mechanism.itemNo); // 24K2500
+console.log('  Valid:', liftPlan.isValid);                   // true
+
+// Generate CAM Operations
+const ops = generateLiftOps('SIDE-L', 'DOOR-001', {
+  cabinetHeight: cabinetConfig.height,
+  frontWeight: frontWeight,
+  system: 'AVENTOS_HKI',
+  sideThickness: cabinetConfig.sideThickness
+});
+
+console.log('Operations:', ops.length);  // 2 (pocket + bracket)
+console.log('Pocket Milling:', ops[0].params);
+// { length: 265, width: 128, depth: 12, cornerR: 4 }
+```
+
+### 10.12 Safety Validation Rules
+
+```typescript
+// Validation rules for lift systems
+
+function validateLiftConfiguration(opts: LiftOptions): ValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // 1. Panel Thickness Check (HKi only)
+  if (opts.system === 'AVENTOS_HKI' && opts.sideThickness < 16) {
+    errors.push('HKi requires minimum 16mm side panel thickness');
+  }
+
+  // 2. Power Factor Range Check
+  const LF = opts.cabinetHeight * opts.frontWeight;
+  if (opts.system === 'AVENTOS_HKI') {
+    if (LF < 420) errors.push('Power Factor too low for HKi (min: 420)');
+    if (LF > 7800) errors.push('Power Factor too high for HKi (max: 7800)');
+  } else if (opts.system === 'AVENTOS_HF_TOP') {
+    if (LF < 2700) errors.push('Power Factor too low for HF (min: 2700)');
+    if (LF > 19300) errors.push('Power Factor too high for HF (max: 19300)');
+  }
+
+  // 3. Cabinet Height Range (HF Arm Selection)
+  if (opts.system === 'AVENTOS_HF_TOP') {
+    if (opts.cabinetHeight < 560) {
+      errors.push('Cabinet too short for HF (min: 560mm)');
+    }
+    if (opts.cabinetHeight > 1040) {
+      errors.push('Cabinet too tall for HF (max: 1040mm)');
+    }
+  }
+
+  // 4. Weight Warning
+  if (opts.frontWeight > 15) {
+    warnings.push('Front weight exceeds 15kg - consider reinforcement');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+```
+
+---
+
 **เอกสารอ้างอิง:**
 - Blum Technical Documentation
-- Blum Catalog Pages 2, 64, 74-76, 84, 150, 410, 420, 430, 452
+- Blum Catalog Pages 2, 5, 6, 13, 14-67, 64, 74-76, 84, 150, 410, 420, 430, 452
 - Hettich Product Catalog
 - Häfele Furniture Fittings Handbook
 - European Kitchen Cabinet Standards (EN 16121)
