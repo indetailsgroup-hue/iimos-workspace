@@ -247,6 +247,70 @@ const UNKNOWN_RULE: NormalizationRule = {
 };
 
 // ============================================================================
+// Not-Ready Detection (HTTP 409 = business state, NOT a crash)
+// ============================================================================
+
+/**
+ * HTTP status the factory API returns when a job cannot be verified yet
+ * (spec still DRAFT, or no packet recorded). See supabase/functions/factory-api.
+ */
+export const NOT_READY_HTTP_STATUS = 409;
+
+/** Operator-facing summary for the not-ready state (Thai) */
+export const NOT_READY_SUMMARY_TH =
+  "งานยังไม่พร้อมตรวจ — ต้อง RELEASED + มี packet ก่อน";
+
+/**
+ * Error payload strings the backend uses for the not-ready state.
+ * Kept narrow on purpose - a jobId containing "409" must not match.
+ */
+const NOT_READY_MESSAGE_PATTERNS: RegExp[] = [
+  /\b(?:API|HTTP|status|failed):?\s*409\b/i,
+  /no packet recorded/i,
+  /no packet to export/i,
+  /requires RELEASED spec/i,
+  /spec is DRAFT/i,
+  /packet not uploaded yet/i,
+];
+
+/**
+ * Is this error the "job not ready to verify" business state?
+ *
+ * Status code is the primary signal; message patterns are a fallback for
+ * callers that lose the status (e.g. a bare `new Error("...409")`).
+ */
+export function isNotReadyError(error: unknown): boolean {
+  const status = (error as { status?: number } | null | undefined)?.status;
+  if (status === NOT_READY_HTTP_STATUS) return true;
+
+  const message =
+    error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  if (!message) return false;
+
+  return NOT_READY_MESSAGE_PATTERNS.some((p) => p.test(message));
+}
+
+/**
+ * Build the NOT_READY response.
+ *
+ * verdict is NOT "FAIL": nothing failed verification, the job simply is not in a
+ * verifiable state yet. Export stays locked because only PASS/PASS_WITH_WARN unlock it.
+ *
+ * @param log - Raw server/error text, shown VERBATIM to the operator
+ */
+export function buildNotReadyResponse(log: string): VerifyApiResponse {
+  return {
+    verdict: "NOT_READY",
+    code: "E_JOB_NOT_READY",
+    summary: NOT_READY_SUMMARY_TH,
+    log,
+    timestamp: new Date().toISOString(),
+    details: { httpStatus: NOT_READY_HTTP_STATUS },
+    checks: [],
+  };
+}
+
+// ============================================================================
 // Details Extraction (Deterministic)
 // ============================================================================
 
@@ -452,6 +516,12 @@ function normalizeLegacy(raw: VerifyRawResult): VerifyApiResponse {
 export function normalizeError(error: Error, timeoutMs?: number): VerifyApiResponse {
   const message = error.message.toLowerCase();
   const log = error.message + (error.stack ? `\n\n${error.stack}` : "");
+
+  // Job not ready (HTTP 409) is a workflow state, not a verification failure.
+  // Must be checked first - "no packet recorded" would otherwise match /missing/ etc.
+  if (isNotReadyError(error)) {
+    return buildNotReadyResponse(log);
+  }
 
   // Map error message to exit code equivalent
   let exitCode = 90; // Unknown

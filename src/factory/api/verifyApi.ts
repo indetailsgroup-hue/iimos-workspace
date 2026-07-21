@@ -6,6 +6,7 @@
 
 import { apiFetch } from "./client";
 import type { VerifyApiResponse } from "../types/job";
+import { isNotReadyError, buildNotReadyResponse } from "../utils/verifyNormalizer";
 
 // Try a few canonical paths; stop at first non-404 success.
 // This keeps FE compatible across server route prefixes.
@@ -40,6 +41,14 @@ export async function verifyJobApi(jobId: string): Promise<VerifyApiResponse> {
       // Only continue on 404 (endpoint mismatch). Other errors are real.
       const err = e as { status?: number };
       if (err?.status === 404) continue;
+      // 409 = job not verifiable yet (spec not RELEASED / no packet recorded).
+      // This is a legitimate business state, not an error - return a verdict so the
+      // UI does not render it as a verifier crash.
+      if (isNotReadyError(e)) {
+        return buildNotReadyResponse(
+          e instanceof Error ? e.message : `API ${err?.status ?? 409}`
+        );
+      }
       throw e;
     }
   }

@@ -26,6 +26,7 @@ import type {
   VerifyDetails,
 } from "../types/job";
 import { getErrorCategory, isRetryable } from "../types/job";
+import { isNotReadyError, buildNotReadyResponse } from "../utils/verifyNormalizer";
 import { useFactoryStore } from "../state/factoryStore";
 
 // ============================================================================
@@ -79,6 +80,13 @@ const ERROR_MESSAGES: Record<VerifyErrorCode, ErrorMessage> = {
     en: "Verification failed (unknown error)",
     action: "ติดต่อ IT Support พร้อมแนบ log",
     banner: "UNKNOWN ERROR — ห้ามผลิต",
+  },
+  // STATE (not an error - job is not ready to be verified yet)
+  E_JOB_NOT_READY: {
+    th: "งานยังไม่พร้อมตรวจ",
+    en: "Job is not ready to verify yet",
+    action: "ปล่อยสเปกให้เป็น RELEASED และอัปโหลด packet ก่อน แล้วค่อยกดตรวจใหม่",
+    banner: "ยังไม่พร้อมตรวจ — ต้อง RELEASED + มี packet ก่อน",
   },
   // PACKET
   E_PACKET_PARSE: {
@@ -221,6 +229,7 @@ const CATEGORY_INFO: Record<VerifyErrorCategory, { color: string; label: string;
   TRUST: { color: "#ef4444", label: "TRUST", icon: "🔐" },
   GATE: { color: "#ef4444", label: "GATE", icon: "🚧" },
   ENV: { color: "#3b82f6", label: "ENV", icon: "🏭" },
+  STATE: { color: "#3b82f6", label: "STATE", icon: "⏳" },
 };
 
 // ============================================================================
@@ -529,6 +538,12 @@ function parseErrorToApiResponse(err: unknown, timeoutMs: number): VerifyApiResp
     const message = err.message.toLowerCase();
     log = err.message + (err.stack ? `\n\n${err.stack}` : "");
 
+    // Safety net: HTTP 409 means the job is not verifiable yet. The store already
+    // returns NOT_READY for it, but never let a business state reach the CRASH default.
+    if (isNotReadyError(err)) {
+      return buildNotReadyResponse(log);
+    }
+
     if (message === "timeout" || message.includes("timeout")) {
       code = "E_VERIFY_TIMEOUT";
       log = `Verification exceeded ${Math.floor(timeoutMs / 1000)} seconds timeout`;
@@ -673,10 +688,13 @@ interface VerdictBannerProps {
 function VerdictBanner({ verdict, code, summary }: VerdictBannerProps): React.ReactElement {
   const isPass = verdict === "PASS";
   const isWarn = verdict === "PASS_WITH_WARN";
-  const bgColor = isPass ? "#22c55e20" : isWarn ? "#f59e0b20" : "#ef444420";
-  const borderColor = isPass ? "#22c55e" : isWarn ? "#f59e0b" : "#ef4444";
-  const textColor = isPass ? "#22c55e" : isWarn ? "#f59e0b" : "#ef4444";
-  const icon = isPass ? "✓" : isWarn ? "⚠" : "✕";
+  // NOT_READY is a workflow state, not a failure - render it neutral (blue), never red.
+  const isNotReady = verdict === "NOT_READY";
+  const color = isPass ? "#22c55e" : isWarn ? "#f59e0b" : isNotReady ? "#3b82f6" : "#ef4444";
+  const bgColor = `${color}20`;
+  const borderColor = color;
+  const textColor = color;
+  const icon = isPass ? "✓" : isWarn ? "⚠" : isNotReady ? "⏳" : "✕";
   const banner = ERROR_MESSAGES[code]?.banner || summary;
 
   return (
@@ -783,8 +801,10 @@ interface VerifierLogProps {
 
 function VerifierLog({ log, verdict, showFullLog, onToggle, onCopy, copied }: VerifierLogProps): React.ReactElement {
   const isPass = verdict === "PASS" || verdict === "PASS_WITH_WARN";
-  const borderColor = isPass ? "#22c55e40" : "#ef444440";
-  const textColor = isPass ? "#22c55e" : "#ef4444";
+  const isNotReady = verdict === "NOT_READY";
+  const baseColor = isPass ? "#22c55e" : isNotReady ? "#3b82f6" : "#ef4444";
+  const borderColor = `${baseColor}40`;
+  const textColor = baseColor;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

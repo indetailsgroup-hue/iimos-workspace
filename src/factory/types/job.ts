@@ -75,8 +75,11 @@ export interface JobDetailData extends JobSummary {
  * - PASS: Safe to produce
  * - FAIL: DO NOT produce
  * - PASS_WITH_WARN: Can produce but with warning (e.g., audit unknown)
+ * - NOT_READY: Job is not in a verifiable state yet (spec not RELEASED / no packet
+ *   recorded). Verification never ran — this is a workflow state, NOT a failure.
+ *   Export stays locked (same as any non-PASS verdict).
  */
-export type VerifyVerdict = "PASS" | "FAIL" | "PASS_WITH_WARN" | "ERROR";
+export type VerifyVerdict = "PASS" | "FAIL" | "PASS_WITH_WARN" | "ERROR" | "NOT_READY";
 
 /** @deprecated Use VerifyVerdict instead */
 export type VerifyResult = VerifyVerdict;
@@ -88,8 +91,9 @@ export type VerifyResult = VerifyVerdict;
  * - TRUST: Signature/key/audit failures
  * - GATE: Manufacturing rules failures (depth, tools, etc.)
  * - ENV: Machine profile/config mismatch
+ * - STATE: Job workflow state — nothing is broken, the job is just not ready yet
  */
-export type VerifyErrorCategory = "SYSTEM" | "PACKET" | "TRUST" | "GATE" | "ENV";
+export type VerifyErrorCategory = "SYSTEM" | "PACKET" | "TRUST" | "GATE" | "ENV" | "STATE";
 
 /**
  * Factory-Grade Error Codes
@@ -133,6 +137,8 @@ export type VerifyErrorCode =
   | "E_GATE_DEPTH"          // Depth exceeds material thickness
   | "E_GATE_TOOL"           // Required tool not available
   | "E_GATE_CLEARANCE"      // Insufficient clearance
+  // STATE (no exit code - verification never ran)
+  | "E_JOB_NOT_READY"       // HTTP 409: spec not RELEASED / no packet recorded yet
   // Warnings (80) - not blockers
   | "W_AUDIT_UNKNOWN"       // Exit 80: Audit verification unavailable (still PASS)
   | "W_AUDIT_PENDING"       // Audit not yet processed
@@ -189,6 +195,10 @@ export interface VerifyCheck {
  * Error Category Mapping
  */
 export function getErrorCategory(code: VerifyErrorCode): VerifyErrorCategory {
+  // STATE (job not ready - nothing is broken)
+  if (code === "E_JOB_NOT_READY") {
+    return "STATE";
+  }
   // SYSTEM errors (verifier issues)
   if (code.startsWith("E_VERIFY_")) {
     return "SYSTEM";
@@ -219,7 +229,9 @@ export function getErrorCategory(code: VerifyErrorCode): VerifyErrorCategory {
  * Check if error code allows retry
  */
 export function isRetryable(code: VerifyErrorCode): boolean {
-  // Only SYSTEM errors and audit warnings allow retry
+  // Only SYSTEM errors and audit warnings allow retry.
+  // E_JOB_NOT_READY is deliberately NOT retryable: retrying changes nothing until
+  // the spec is RELEASED and a packet is recorded (an operator action, not a retry).
   const retryableCodes: VerifyErrorCode[] = [
     "E_VERIFY_TIMEOUT",
     "E_VERIFY_EXEC",

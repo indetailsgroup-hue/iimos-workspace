@@ -14,10 +14,15 @@ import { describe, it, expect } from "vitest";
 import {
   normalizeVerifyResult,
   normalizeError,
+  isNotReadyError,
+  buildNotReadyResponse,
+  NOT_READY_HTTP_STATUS,
+  NOT_READY_SUMMARY_TH,
   EXIT_CODE_MAP,
   PATTERN_RULES,
 } from "../verifyNormalizer";
 import type { VerifyRawResult } from "../verifyNormalizer";
+import { getErrorCategory, isRetryable } from "../../types/job";
 import {
   GOLDEN_PASS,
   GOLDEN_FAIL_SIGNATURE,
@@ -320,6 +325,91 @@ describe("normalizeError", () => {
     const result = normalizeError(error);
 
     expect(result.log).toContain("at test.js:1:1");
+  });
+});
+
+// ============================================================================
+// Not-Ready (HTTP 409) Tests
+//
+// A 409 from the factory API means the job is not verifiable yet (spec not
+// RELEASED / no packet recorded). It is a business state - it must NEVER be
+// reported to the operator as a verifier crash or an unknown failure.
+// ============================================================================
+
+describe("not-ready (HTTP 409)", () => {
+  function apiError(message: string, status?: number): Error & { status?: number } {
+    const err: Error & { status?: number } = new Error(message);
+    if (status !== undefined) err.status = status;
+    return err;
+  }
+
+  describe("isNotReadyError", () => {
+    it("should detect an error carrying HTTP status 409", () => {
+      expect(isNotReadyError(apiError("API 409", 409))).toBe(true);
+    });
+
+    it("should detect the backend error payloads without a status", () => {
+      expect(isNotReadyError(new Error("no packet recorded"))).toBe(true);
+      expect(isNotReadyError(new Error("spec is DRAFT"))).toBe(true);
+      expect(
+        isNotReadyError(new Error("packet verification requires RELEASED spec and recorded packet"))
+      ).toBe(true);
+    });
+
+    it("should detect a bare status message (store path)", () => {
+      expect(isNotReadyError(new Error("Verification failed: 409"))).toBe(true);
+    });
+
+    it("should not match other statuses or a jobId that contains 409", () => {
+      expect(isNotReadyError(apiError("API 500", 500))).toBe(false);
+      expect(isNotReadyError(new Error("Verification failed for JOB-409-A"))).toBe(false);
+      expect(isNotReadyError(new Error("Segmentation fault"))).toBe(false);
+      expect(isNotReadyError(null)).toBe(false);
+      expect(isNotReadyError(undefined)).toBe(false);
+    });
+  });
+
+  describe("normalizeError", () => {
+    it("should map a 409 error to NOT_READY, not a crash/unknown failure", () => {
+      const result = normalizeError(apiError("API 409", 409));
+
+      expect(result.verdict).toBe("NOT_READY");
+      expect(result.code).toBe("E_JOB_NOT_READY");
+      expect(result.code).not.toBe("E_VERIFY_CRASH");
+      expect(result.summary).toBe(NOT_READY_SUMMARY_TH);
+    });
+
+    it("should not fall through to E_PACKET_MISSING for 'no packet recorded'", () => {
+      // "no packet recorded" contains neither "missing" nor "schema", but the
+      // ordering guard matters: not-ready must win over every pattern rule.
+      const result = normalizeError(new Error("no packet recorded"));
+
+      expect(result.code).toBe("E_JOB_NOT_READY");
+    });
+
+    it("should keep the server text VERBATIM in the log", () => {
+      const result = normalizeError(apiError("no packet recorded", 409));
+
+      expect(result.log).toContain("no packet recorded");
+    });
+
+    it("should categorise as STATE and not offer a retry", () => {
+      const result = normalizeError(apiError("API 409", 409));
+
+      expect(getErrorCategory(result.code)).toBe("STATE");
+      expect(isRetryable(result.code)).toBe(false);
+    });
+  });
+
+  describe("buildNotReadyResponse", () => {
+    it("should not unlock export (verdict is neither PASS nor PASS_WITH_WARN)", () => {
+      const result = buildNotReadyResponse("HTTP 409");
+
+      expect(result.verdict).not.toBe("PASS");
+      expect(result.verdict).not.toBe("PASS_WITH_WARN");
+      expect(result.checks).toEqual([]);
+      expect(result.details).toMatchObject({ httpStatus: NOT_READY_HTTP_STATUS });
+    });
   });
 });
 

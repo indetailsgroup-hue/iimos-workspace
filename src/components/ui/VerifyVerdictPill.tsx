@@ -7,7 +7,14 @@
 
 import React from 'react';
 
-export type VerdictDisplay = 'PASS' | 'PASS_WITH_WARN' | 'FAIL' | 'ERROR' | 'UNKNOWN' | 'LOADING';
+export type VerdictDisplay =
+  | 'PASS'
+  | 'PASS_WITH_WARN'
+  | 'FAIL'
+  | 'ERROR'
+  | 'NOT_READY'
+  | 'UNKNOWN'
+  | 'LOADING';
 
 interface VerifyVerdictPillProps {
   verdict: VerdictDisplay;
@@ -24,6 +31,7 @@ export function VerifyVerdictPill({ verdict, size = 'md' }: VerifyVerdictPillPro
       case 'FAIL':
         return { bg: 'rgba(239, 68, 68, 0.15)', border: '#ef4444', text: '#fca5a5' };
       case 'LOADING':
+      case 'NOT_READY':
         return { bg: 'rgba(59, 130, 246, 0.15)', border: '#3b82f6', text: '#93c5fd' };
       case 'UNKNOWN':
       default:
@@ -41,6 +49,8 @@ export function VerifyVerdictPill({ verdict, size = 'md' }: VerifyVerdictPillPro
         return '✗ FAIL';
       case 'LOADING':
         return '⟳ Loading...';
+      case 'NOT_READY':
+        return '⏳ ยังไม่พร้อมตรวจ';
       case 'UNKNOWN':
       default:
         return '? Unknown';

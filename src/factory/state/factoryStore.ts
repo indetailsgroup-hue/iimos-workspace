@@ -36,7 +36,11 @@ import type {
   ExportProfileId,
 } from "../components/export/exportTypes";
 import { isExportSuccess } from "../components/export/exportTypes";
-import { normalizeError } from "../utils/verifyNormalizer";
+import {
+  normalizeError,
+  buildNotReadyResponse,
+  NOT_READY_HTTP_STATUS,
+} from "../utils/verifyNormalizer";
 import {
   fetchExportOptionsApi,
   runGatedExportApi,
@@ -491,7 +495,23 @@ export const useFactoryStore = create<FactoryState & FactoryActions>()(
         });
 
         if (!response.ok) {
-          throw new Error(`Verification failed: ${response.status}`);
+          const body = await response.text();
+
+          // 409 = job not verifiable yet (spec not RELEASED / no packet recorded).
+          // Legitimate business state - surface it as NOT_READY, never as a crash.
+          if (response.status === NOT_READY_HTTP_STATUS) {
+            const notReady = buildNotReadyResponse(
+              `HTTP ${response.status}\n${body}`.trim()
+            );
+            setVerifyResult(notReady);
+            return notReady;
+          }
+
+          const err: Error & { status?: number } = new Error(
+            `Verification failed: ${response.status}`
+          );
+          err.status = response.status;
+          throw err;
         }
 
         // API returns VerifyApiResponse directly (already normalized on server)

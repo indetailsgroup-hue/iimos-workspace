@@ -61,6 +61,11 @@ const CATEGORY_STYLES: Record<
     bgColor: "#6366f120",
     icon: "⚙️",
   },
+  STATE: {
+    color: "#3b82f6",
+    bgColor: "#3b82f620",
+    icon: "⏳",
+  },
   UNKNOWN: {
     color: "#6b7280",
     bgColor: "#6b728020",

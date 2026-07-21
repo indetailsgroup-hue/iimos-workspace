@@ -24,4 +24,15 @@ daph-second-brain/**/*.zip
 
 *.patch
 ธุระกิจ/
+
+# Environment files — .env.example stays tracked as the template.
+# packages/field-app/.env was sitting untracked and would have been swept in by
+# `git add -A` (it holds VITE_SUPABASE_URL + ANON_KEY).
+.env
 .env.local
+.env.*
+!.env.example
+!**/.env.example
+
+# Supabase Studio scratch queries ("Untitled query NNN.sql")
+supabase/snippets/

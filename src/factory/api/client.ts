@@ -52,7 +52,9 @@ export async function apiFetch<T>(
     try {
       const body = await res.json();
       err.code = body?.code;
-      err.message = body?.reason ?? err.message;
+      // `error` is the field the factory-api edge function uses (e.g. "no packet
+      // recorded"); without it the operator only ever sees "API 409".
+      err.message = body?.reason ?? body?.error ?? err.message;
     } catch {
       // ignore parse error
     }
@@ -85,7 +87,9 @@ export async function apiFetchBlob(
     try {
       const body = await res.json();
       err.code = body?.code;
-      err.message = body?.reason ?? err.message;
+      // `error` is the field the factory-api edge function uses (e.g. "no packet
+      // recorded"); without it the operator only ever sees "API 409".
+      err.message = body?.reason ?? body?.error ?? err.message;
     } catch {
       // ignore parse error
     }

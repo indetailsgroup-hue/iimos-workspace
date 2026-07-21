@@ -54,6 +54,11 @@ function VerdictPill({ verdict, code }: VerdictPillProps) {
           background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
           color: "white",
         };
+      case "NOT_READY":
+        return {
+          background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+          color: "white",
+        };
       default:
         return {
           background: "#374151",
@@ -70,6 +75,8 @@ function VerdictPill({ verdict, code }: VerdictPillProps) {
         return "\u26A0"; // warning
       case "FAIL":
         return "\u2717"; // X
+      case "NOT_READY":
+        return "\u23f3"; // hourglass
       default:
         return "\u2717";
     }
@@ -83,6 +90,8 @@ function VerdictPill({ verdict, code }: VerdictPillProps) {
         return "PASS WITH WARNING";
       case "FAIL":
         return "FAIL - DO NOT PRODUCE";
+      case "NOT_READY":
+        return "NOT READY - ยังไม่พร้อมตรวจ";
       default:
         return String(verdict);
     }

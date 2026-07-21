@@ -393,6 +393,12 @@ Segmentation fault (core dumped)
 Exit code: 139`,
       details: { exitCode: 139 },
     },
+    E_JOB_NOT_READY: {
+      summary: "งานยังไม่พร้อมตรวจ — ต้อง RELEASED + มี packet ก่อน",
+      log: `HTTP 409
+{"ok":false,"error":"no packet recorded"}`,
+      details: { httpStatus: 409 },
+    },
     E_VERIFY_UNKNOWN: {
       summary: "ตรวจไม่สำเร็จ (unknown)",
       log: `================================================================================
