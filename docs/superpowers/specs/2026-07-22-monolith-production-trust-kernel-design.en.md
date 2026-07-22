@@ -29,9 +29,9 @@ The principal evidence driving this design is:
 
 | As-built condition | Evidence anchor | Design response |
 |---|---|---|
-| Client role and actor can originate from local storage or headers | `src/core/auth/roles.ts`, `src/core/api/stateApi.ts`, `supabase/functions/factory-api/index.ts` | Server-derived `ActorContextV1`; headers have no authority |
+| Client role and actor can originate from local storage or headers | `src/core/auth/roles.ts:67`, `src/core/api/stateApi.ts:128`, `supabase/functions/factory-api/index.ts:136` | Server-derived `ActorContextV1`; headers are display-only |
 | Node filesystem state and Supabase SQL state run in parallel and apply different export policies | `server/src/state/`, `supabase/migrations/0155_factory_state_server.sql` | Supabase/Postgres is the sole release authority; Node is a worker |
-| Supabase `factory_jobs` lacks tenant scope and has broad authenticated-read policy | `supabase/migrations/0155_factory_state_server.sql` | Tenant-bound schema, membership RLS, and tenant-scoped object paths |
+| Supabase `factory_jobs` uses a global job key and an authenticated-read policy with `using (true)` | `supabase/migrations/0155_factory_state_server.sql:9`, `supabase/migrations/0155_factory_state_server.sql:25` | Tenant-bound schema, membership RLS, and tenant-scoped object paths |
 | Multiple client paths build and download packet/Cut List/DXF artifacts | `src/components/ui/ExportPanel.tsx`, `src/factory/packet/useFactoryPacket.ts` | Artifact Class Matrix, route disposition ledger, and negative bypass tests |
 | Packet/bundle paths contain runtime time, random IDs, and browser ECDSA keys | `src/factory/packet/buildFactoryPacket.ts`, `src/core/manufacturing/release/buildBundleV2.ts` | Canonical release data, managed Ed25519, fixed packaging, and idempotent retrieval |
 | Edge verification checks only the whole-ZIP hash | `supabase/functions/factory-api/index.ts` | Standalone protocol verifier checks schema, files, signature, trust, release status, gate, and machine binding |
@@ -69,20 +69,27 @@ The principal evidence driving this design is:
 | `DTK-01` | The target is Shadow Trust-Ready and every output remains `NOT_FOR_PRODUCTION` |
 | `DTK-02` | DRAFT/FROZEN may preview or simulate; production-shaped outputs are not downloadable |
 | `DTK-03` | The server verifies the JWT and resolves tenant/org/site/user/roles from current membership |
-| `DTK-04` | Designer freezes; a distinct `RELEASE_APPROVER` releases; Factory only consumes; Admin has no implicit release authority |
+| `DTK-04` | Designer freezes; a distinct `RELEASE_APPROVER` releases; Factory only consumes; Admin needs a separate release role to release |
 | `DTK-05` | The same release revision returns the same packet bytes; a material input change creates a new revision |
 | `DTK-06` | The application holds only signer key IDs; private keys remain outside the app; production signing stays disabled until key ceremony |
-| `DTK-07` | An unknown tool or unsupported operation blocks the entire packet; no partial output or fallback |
+| `DTK-07` | An unknown tool or unsupported operation blocks the entire packet and terminates construction before a partial or fallback artifact |
 | `DTK-08` | The offline verifier has a separate executable/package graph and emits a machine-readable report |
 | `DTK-09` | Trust and release-status bundles are signed external inputs; a packet cannot authorize its own key |
 | `DTK-10` | An old release revision is immutable; an error requires revocation and a new working revision |
-| `DTK-11` | There is no hard-gate override; only soft warnings may have reasoned, expiring, four-eyes exceptions that create a new revision |
+| `DTK-11` | A hard gate always denies; only soft warnings may have reasoned, expiring, four-eyes exceptions that create a new revision |
 | `DTK-12` | Definition of Done includes contract, property, negative, hostile, golden-vector, E2E, and commit-linked CI evidence |
 | `DTK-13` | V1/V2 remain readable as history only; production-shaped output requires V3 |
-| `DTK-14` | Supabase/Postgres is the canonical release authority; Node has no authoritative filesystem state |
+| `DTK-14` | Supabase/Postgres is the sole canonical release authority; Node acts as a deterministic worker |
 | `DTK-15` | Working revision, release attempt, and release revision are separate aggregates |
-| `DTK-16` | A real shadow P2 manufacturing payload is generated but sealed in private quarantine; P3 distribution remains disabled |
+| `DTK-16` | A real shadow P2 manufacturing payload is generated but sealed in private quarantine; plaintext is available only to an isolated automated verifier and P3 distribution remains disabled |
 | `DTK-17` | RELEASE cannot be queued offline or auto-replayed; it requires fresh interactive identity and candidate hash |
+| `DTK-18` | A machine profile is an authority input only with a valid signed `MachineProfileAttestationV1` that binds scope, tool library, and postprocessor |
+| `DTK-19` | A service role is an executor, not human authority; authoritative RPCs accept immutable `VerifiedActionContextV1`, never role/name/tenant from a request body |
+| `DTK-20` | An offline verdict certifies status at bundle sequence/issuedAt; freshness requires a persistent high-water mark and trusted bootstrap checkpoint |
+| `DTK-21` | `ReleaseAttempt`, `ArtifactRecord`, and `ReleaseRevision` have separate state machines; `VOID` is not a release-revision status |
+| `DTK-22` | A soft-warning exception requires signed `WarningExceptionGrantV1`; a hard blocker always denies |
+| `DTK-23` | Evidence attestation uses a CI/workload identity key separate from the release-signing key |
+| `DTK-24` | Daph-specific JWT/site helpers are legacy compatibility only and cannot serve as Trust Kernel authority |
 
 ## 5. Architecture
 
@@ -149,7 +156,9 @@ Core data includes working revision ID, parent revision ID, tenant scope, conten
 
 ### 6.3 `ReleaseCandidate`
 
-Created at freeze. Its hash covers the canonical snapshot, gate inputs, machine capability profile, policy versions, tenant scope, and required artifact definitions. Every approval binds this candidate hash.
+Created at freeze. Its `candidateHash` covers the canonical snapshot, gate inputs including warning facts and eligibility, machine capability profile, `MachineProfileAttestationV1`, policy versions, tenant scope, and required artifact definitions. It deliberately excludes exception grants to avoid a circular hash.
+
+After exception grants are issued, the Authority computes `releaseAuthorizationHash = SHA-256(canonical({domain: "MONOLITH/ReleaseAuthorization/V1", candidateHash, sortedGrantHashes}))`; an empty grant list has one canonical representation. Candidate already covers profile, policy, and artifacts, so they are not hashed twice. Final approval, release attempt, and release certificate bind both candidate hash and release authorization hash. A grant change requires a new release authorization and attempt; after a release exists, it requires a new release revision. A change to an underlying candidate input or profile attestation requires a new freeze and candidate.
 
 ### 6.4 `ReleaseAttempt`
 
@@ -158,22 +167,33 @@ Statuses:
 - `PENDING`: preconditions passed and compile/sign/commit is in progress
 - `FAILED`: deterministic blocker or non-retryable failure
 - `PUBLISHED`: release commit succeeded and the artifact is available under environment policy
-- `VOID`: attempt or quarantined artifact is cancelled and cannot be published
+- `VOID`: the attempt was cancelled before a release revision existed and can never be published
 
-A transient signer or store failure may retry only with the same candidate hash and idempotency key.
+A transient signer or store failure may retry only with the same candidate hash and idempotency key. Idempotency scope is `(tenantId, actorUserId, candidateHash, idempotencyKey)` with a stored `requestHash`; reuse of the key with a different request hash returns `STATE_IDEMPOTENCY_MISMATCH`.
 
-### 6.5 `ReleaseRevision`
+### 6.5 `ArtifactRecordV1`
+
+Statuses:
+
+- `QUARANTINED`: unsigned payload or private source bytes not eligible for publication
+- `MATERIALIZING`: release commit succeeded and the worker is writing final bytes for the expected hash
+- `AVAILABLE`: exact bytes were stored and their hash verified, still subject to publication policy
+- `VOID`: the artifact was cancelled or failed materialization/hash verification and can never be published
+
+An artifact record binds tenant/site, artifact class, release-attempt/revision reference, content hash, expected packet hash, internal object locator, and timestamps. Artifact status is never release authority, and a raw storage locator is never exposed to the client.
+
+### 6.6 `ReleaseRevision`
 
 Statuses:
 
 - `ACTIVE`: immutable release whose signature, artifact reference, and ledger commit succeeded
 - `REVOKED`: immutable historical release that can no longer be consumed
 
-A release revision carries its release revision ID, candidate hash, content hash, expected packet hash, release certificate, approver identity, approval evidence, machine-profile binding, tenant scope, parent lineage, and authoritative timestamps.
+A release revision carries its release revision ID, candidate hash, release authorization hash, sorted warning-exception grant hashes, content hash, expected packet hash, release certificate, approver identity, approval evidence, machine-profile-attestation binding, tenant scope, parent lineage, and authoritative timestamps.
 
 The UI may project “RELEASED” when an `ACTIVE ReleaseRevision` exists, but `RELEASED` cannot be stored as mutable `WorkingRevision` state.
 
-### 6.6 Concurrent history after change
+### 6.7 Concurrent history after change
 
 After revocation or a required design change, the system can hold `REVOKED ReleaseRevision R1` and `WorkingRevision R2 = DRAFT` simultaneously. It never mutates the old release back to FROZEN or destroys history.
 
@@ -191,7 +211,15 @@ After revocation or a required design change, the system can hold `REVOKED Relea
 
 Client-supplied role or name may be a display hint only. It cannot influence authorization or authoritative audit identity.
 
-### 7.2 Role responsibilities
+JWT app metadata and the legacy helpers `current_app_roles()`, `current_site_codes()`, and `get_active_site_codes()` are compatibility data or hints only. They cannot be current-membership authority for the Trust Kernel. The system reads versioned tenant membership/location tables with revocation state from Postgres. Daph and BKK-HQ-01 are onboarding data; a migration test proves that tenant 002 can coexist without source-code changes.
+
+### 7.2 Verified action context and service-role boundary
+
+After JWT verification, the Edge calls `create_verified_action_context` with the user-scoped bearer token, never the service role. Postgres uses `auth.uid()` and current membership to create immutable short-lived `VerifiedActionContextV1` containing action-context ID, tenant/org/site, actor user ID, roles, AAL, membership version, permitted action, candidate hash, release authorization hash, request hash, issuedAt, expiresAt, and nonce, then stores it as an authoritative database record. A service role cannot create an action context.
+
+An authoritative mutation RPC accepts only the action-context ID and business identifiers bound by that context, then locks and consumes the record and rechecks scope, membership version, expiry, nonce, candidate, and release authorization hash inside its transaction. It never accepts actor role/name/tenant/site from the request body as authority. A service-role client performs downstream outbox work only after the user-authorized commit and cannot create human approval, bypass SoD, or select an object path from client input.
+
+### 7.3 Role responsibilities
 
 | Role | Allowed actions |
 |---|---|
@@ -199,16 +227,16 @@ Client-supplied role or name may be a display hint only. It cannot influence aut
 | `RELEASE_APPROVER` | Approve/reject a candidate and initiate release when not the freezer |
 | `FACTORY` | Consume only ACTIVE + verifier PASS + environment-policy-approved artifacts |
 | `SAFETY_REVOKER` | Immediately revoke an ACTIVE release with a reason |
-| `ADMIN` | Manage membership and policy, with no implicit release permission |
-| `QA_EVIDENCE` | Access sealed shadow artifacts under QA policy and audit |
+| `ADMIN` | Manage membership and policy; release requires a separate `RELEASE_APPROVER` role |
+| `QA_EVIDENCE` | Receive only hashes, reports, and evidence for a sealed shadow artifact; P2 plaintext and raw storage URLs are denied |
 
-### 7.3 Four-eyes invariant
+### 7.4 Four-eyes invariant
 
-`freezeActorUserId != releaseApproverUserId` is enforced by database constraint or transaction logic, not by the UI. An approval binds candidate hash, tenant scope, approver user ID, membership version, AAL, decision time, and reason.
+`freezeActorUserId != releaseApproverUserId` is enforced by database constraint or transaction logic, not by the UI. An approval binds candidate hash, release authorization hash, tenant scope, approver user ID, membership version, AAL, decision time, and reason.
 
 Shadow evidence records the AAL used. Production distribution remains disabled until a production policy requires and proves AAL2.
 
-### 7.4 Tenant isolation
+### 7.5 Tenant isolation
 
 - Every authoritative table carries `tenant_id`; child records use tenant-bound foreign keys
 - A job/project identifier alone is never global authority
@@ -216,23 +244,27 @@ Shadow evidence records the AAL used. Production distribution remains disabled u
 - Object paths reside under `tenantId/siteId/releaseRevisionId/contentHash`
 - The signed manifest and release certificate bind tenant/org/site
 - Any content-addressed physical deduplication remains behind logical tenant authorization and cannot expose an existence side channel
+- A service role does not waive tenant authorization; every mutation transaction binds action context, tenant foreign key, and candidate
 
 ## 8. Component contracts
 
 | Component | Input | Output | Responsibility boundary |
 |---|---|---|---|
 | `AuthContextResolver` | Verified JWT/request | `ActorContextV1` | Identity, membership, scope, roles, AAL |
+| `ActionContextBroker` | Actor + permitted action + request hash | `VerifiedActionContextV1` | Short-lived immutable authority handoff; one-time consumption |
 | `ReleaseAuthority` | Actor, action, expected candidate, idempotency | Transition/result/event | State, SoD, CAS, ledger; never builds a packet |
 | `SnapshotService` | Frozen working revision | `ReleaseSnapshotV3` | Immutable canonical input |
-| `CapabilityCompiler` | Snapshot operations + `MachineCapabilityProfileV1` | Capability report | Exhaustive support decision; no fallback |
+| `ProfileAttestationRegistry` | Profile/tool/postprocessor governance | Signed `MachineProfileAttestationV1` | Scope, validity, approval, and revocation |
+| `WarningExceptionAuthority` | Eligible warning + two approvers | Signed `WarningExceptionGrantV1` | Exact-scope expiring exception; hard blockers excluded |
+| `CapabilityCompiler` | Snapshot operations + attested `MachineCapabilityProfileV1` | Capability report | Exhaustive support decision; no fallback |
 | `PacketBuilderV3` | Approved snapshot + capability report | Canonical unsigned payload | Pure deterministic construction |
 | `ManagedSignerPort` | Fixed digest/certificate + key ID | Ed25519 signature | Private key remains outside the application |
-| `ArtifactRepository` | Tenant-scoped bytes/reference | Content-addressed record | Private write, quarantine, availability; no release authority |
+| `ArtifactRepository` | Tenant-scoped bytes/reference | `ArtifactRecordV1` | Private write, quarantine, hash verification, availability; no release authority |
 | `TrustBundleManager` | Key/revocation governance | Signed bundles | Trust roots, key validity, expiry, sequence |
 | `OfflineVerifier` | Packet + external bundles | `VerificationReportV1` | Independent validation; no builder import |
 | `EvidenceRecorder` | Run context/results/artifacts | Evidence bundle | Exact source/environment/result traceability |
 
-Contracts evolve independently: `ActorContextV1`, `TenantScopeV1`, `ReleaseSnapshotV3`, `MachineCapabilityProfileV1`, `CapabilityReportV1`, `FactoryPacketManifestV3`, `ReleaseCertificateV1`, `TrustBundleV1`, `ReleaseStatusBundleV1`, and `VerificationReportV1`.
+Contracts evolve independently: `ActorContextV1`, `VerifiedActionContextV1`, `TenantScopeV1`, `ReleaseSnapshotV3`, `MachineCapabilityProfileV1`, `MachineProfileAttestationV1`, `WarningExceptionGrantV1`, `CapabilityReportV1`, `FactoryPacketManifestV3`, `ReleaseCertificateV1`, `ArtifactRecordV1`, `TrustBundleV1`, `ReleaseStatusBundleV1`, `VerificationReportV1`, and `EvidenceAttestationV1`.
 
 ## 9. Artifact Class Matrix
 
@@ -240,10 +272,10 @@ Contracts evolve independently: `ActorContextV1`, `TenantScopeV1`, `ReleaseSnaps
 |---|---|---:|---:|---:|---:|
 | `P0_PREVIEW` | Interactive render, in-product simulation | View | View | View | Not applicable |
 | `P1_REVIEW` | Watermarked PDF/JSON without machine geometry | Optional audited download | Audited download | Audited download | Policy controlled |
-| `P2_MANUFACTURING` | Cut List CSV, DXF, CIX/G-code, full packet | Deny | Deny | Build real bytes; sealed quarantine; QA-only safe extension | Deny in this phase |
+| `P2_MANUFACTURING` | Cut List CSV, DXF, CIX/G-code, full packet | Deny | Deny | Build real bytes; sealed quarantine; isolated automated verifier only | Deny in this phase |
 | `P3_DISTRIBUTION` | Factory/operator/machine delivery | Deny | Deny | Deny | Disabled until separate production authorization |
 
-Changing the P2 extension for QA is defense in depth, not primary authority. Primary controls are private storage, access control, no Factory URL, and environment policy.
+During the shadow phase, no human, including `QA_EVIDENCE`, receives P2 plaintext, a raw object locator, or a reusable signed URL. An isolated QA runner uses workload identity to read exact bytes from the private store and exports only hashes, reports, and evidence that cannot drive production. A safe extension is defense in depth, not access control. Human plaintext inspection is out of scope and requires a separately approved secure-workstation and one-time audited-proxy policy.
 
 ## 10. Release transaction choreography
 
@@ -257,25 +289,26 @@ Changing the P2 extension for QA is defense in depth, not primary authority. Pri
 
 ### 10.2 Release
 
-1. `RELEASE_APPROVER` sends a release request with candidate hash and idempotency key
-2. Authority rechecks distinct user, membership, tenant/site scope, candidate freshness, required gates, and profile versions
-3. Create `ReleaseAttempt=PENDING`
+1. `RELEASE_APPROVER` sends a release request with candidate hash, release authorization hash, idempotency key, and request hash; the Edge asks Postgres to create `VerifiedActionContextV1` under the user bearer token
+2. Authority consumes the action context and rechecks distinct user, membership version, tenant/site scope, candidate/release-authorization freshness, required gates, profile attestation, and exception grants
+3. The database locks or creates `ReleaseAttempt=PENDING` and allocates release revision ID, monotonic release sequence, and authoritative timestamp before signing
 4. Worker reads the immutable snapshot and runs the capability compiler; any blocker fails the whole attempt
-5. Worker creates the canonical unsigned payload and stores it in private tenant quarantine
-6. Worker creates deterministic release-certificate data and requests a managed Ed25519 signature; the signature remains in memory and there is no signed downloadable object
-7. One database transaction rechecks candidate CAS and records approval, signature certificate, `ReleaseRevision=ACTIVE`, expected final packet hash, artifact reference, ledger event, and outbox
-8. If the transaction fails, discard the signature, mark the quarantine record VOID, and expose no URL
-9. After commit, the worker constructs final packet bytes from canonical payload plus the persisted certificate using fixed packaging, then stores them at the expected hash; a retry must produce the same bytes
-10. Publication policy exposes a reference only when `ReleaseRevision=ACTIVE` and artifact status is `AVAILABLE`; shadow policy still denies Factory/P3
+5. Worker creates the canonical unsigned payload and `ArtifactRecord=QUARANTINED` in the private tenant store
+6. Worker creates the deterministic release certificate from authority fields, requests a managed Ed25519 signature, assembles final packet bytes in memory with fixed packaging, and computes the expected final packet hash; no signed downloadable object exists
+7. One database transaction consumes the nonce, rechecks candidate CAS, membership, profile, and exception grants, then records approval, certificate, `ReleaseRevision=ACTIVE`, `ArtifactRecord=MATERIALIZING`, expected hash, ledger event, and outbox
+8. If the transaction fails, discard the in-memory signature/final bytes and end the flow at `VOID` attempt/artifact; release-revision creation and URL exposure occur only on the successful-commit branch
+9. After commit, the worker materializes exact final bytes reproducible from the persisted canonical payload and certificate, verifies the expected hash, then changes the artifact to `AVAILABLE` and attempt to `PUBLISHED`; a retry produces identical bytes
+10. Publication policy exposes only an opaque reference when `ReleaseRevision=ACTIVE` and `ArtifactRecord=AVAILABLE`; shadow policy still denies P2 human plaintext and Factory/P3
 
 ### 10.3 Failure rules
 
 - Automatically retry only transient signer/store failures under the same idempotency key
 - Deterministic gate/capability/schema/auth/state failures cannot be retried while hiding the reason
-- Store success + DB failure produces a private VOID artifact; no signed packet exists before commit
+- Store success + DB failure produces a private VOID artifact and VOID attempt; no release revision or signed downloadable packet exists
 - If the DB commit response is lost, an idempotency lookup returns the existing release and certificate
 - A concurrent release has one CAS winner; all others receive stable `STATE_CONFLICT`
 - Candidate change, unfreeze, or membership change invalidates the previous approval
+- A crash after commit but before materialization is recovered by outbox retry producing the exact same bytes; Factory eligibility remains closed until artifact `AVAILABLE`
 
 ### 10.4 Revoke and fork
 
@@ -313,15 +346,21 @@ Runtime clock, `Date.now()`, random IDs, filesystem ordering, and locale cannot 
 
 ### 11.3 Trust and release-status bundles
 
-`TrustBundleV1` contains scope, sequence, issuedAt, expiresAt, trusted key IDs, algorithms, validity windows, and key revocations.
+`TrustBundleV1` contains scope, sequence, issuedAt, expiresAt, trusted key IDs with key purpose (`RELEASE`, `PROFILE_ATTESTATION`, `WARNING_EXCEPTION`), algorithms, validity windows, key revocations, profile-attestation revocations, and warning-exception-grant revocations. Every revocation entry binds ID/hash, effectiveAt, and reason. A high-water mark is keyed by `(bundleType, trustScope)`.
 
-`ReleaseStatusBundleV1` contains scope, sequence, issuedAt, expiresAt, and the set of release revisions that have been revoked or voided. A valid release certificate proves that the authority issued the release; the latest unexpired bundle must prove that the revision is absent from the revoked/void set.
+`ReleaseStatusBundleV1` contains scope, sequence, issuedAt, expiresAt, and only the set of `REVOKED ReleaseRevision` IDs. `VOID` ends the flow at attempt or artifact before release-certificate/revision creation and is therefore excluded from this bundle. A valid release certificate proves that the authority issued the release; an acceptable status bundle must prove that the revision is outside the revoked set.
 
-Both are signed by a trust authority pinned by the verifier and are delivered separately from the packet. The verifier rejects expiry, sequence rollback, scope mismatch, invalid signature, or the absence of a trusted clock/clock policy capable of proving time.
+Both are signed by a trust authority pinned by the verifier and are delivered separately from the packet. The verifier rejects expiry, sequence rollback, scope mismatch, invalid signature, or a trusted clock/clock policy that fails to prove time. A key revocation declares `revocationMode` as `ALL_SIGNATURES`, `SIGNED_AT_OR_AFTER`, or `ISSUANCE_DISABLED`, together with effectiveAt and reason; the explicit mode is the sole source of semantics.
+
+An offline verifier certifies status only within “valid as of bundle sequence/issuedAt.” Displaying “currently active” requires online-current authority. It persists a high-water mark per trust scope, rejects a sequence below one already accepted, and enforces `maxOfflineStaleness` from pinned environment policy. First-use bootstrap requires trusted online provisioning or a pinned minimum-sequence checkpoint. An unavailable checkpoint, state store, trusted clock, or policy-compliant freshness returns `TRUST_FRESHNESS_UNPROVEN`. Every Factory work start refreshes within the policy window and uses current authorization instead of an old verdict.
 
 ## 12. Capability safety
 
 `MachineCapabilityProfileV1` declares machine and dialect version, supported operation types, tool identities, ranges, faces, units, coordinate conventions, and postprocessor version.
+
+A profile participates in candidate, compiler, or verifier authority only with signed `MachineProfileAttestationV1` from a Profile Attestation Authority governed by Manufacturing Engineering. The attestation binds tenant/site/machine IDs, canonical profile hash, tool-library hash, postprocessor ID/version/binary hash, profile approver identity, issuedAt, validFrom, validUntil, status, and attestation sequence. Candidate and release certificate bind attestation ID/hash. The verifier checks signature, scope, validity, sequence, and revocation from external trust data. A local-storage profile, client override, or legacy schema passes through a read-only adapter into the canonical schema and acquires authority only after successful attestation.
+
+`WarningExceptionGrantV1` binds warning code, exact entity IDs, tenant/site, candidate hash, reason, policy version, two distinct authenticated approvers, issuedAt, expiresAt, and signature from a `WARNING_EXCEPTION` authority. Only a warning declared `exceptionEligible=true` in the catalogue may receive a grant. Hard blockers and capability blockers are never eligible. The freezer and release approver may serve as the two grant approvers when both affirm the exception and are distinct users, so no additional humans are mandatory. Compiler and verifier reject an expired grant, mismatched scope/hash/entity, untrusted signer purpose, or duplicate approver. A grant change changes release authorization hash; an underlying input change requires a new candidate.
 
 `CapabilityCompiler` enumerates every operation and returns a blocker when:
 
@@ -340,14 +379,14 @@ Every service boundary uses typed `TrustResult<T>` and a stable reason-code regi
 
 | Namespace | Examples |
 |---|---|
-| `AUTH` | `AUTH_REQUIRED`, `AUTH_ANON_NOT_ALLOWED`, `AUTH_MEMBERSHIP_REVOKED`, `AUTH_SCOPE_DENIED`, `AUTH_SOD_VIOLATION` |
-| `STATE` | `STATE_CANDIDATE_STALE`, `STATE_CONFLICT`, `STATE_RELEASE_REVOKED`, `STATE_IDEMPOTENCY_MISMATCH` |
-| `GATE` | `GATE_HARD_BLOCKER`, `GATE_WARNING_EXCEPTION_EXPIRED` |
-| `CAP` | `CAP_UNKNOWN_TOOL`, `CAP_UNSUPPORTED_OPERATION`, `CAP_PROFILE_MISMATCH`, `CAP_PARAMETER_RANGE` |
+| `AUTH` | `AUTH_REQUIRED`, `AUTH_ANON_NOT_ALLOWED`, `AUTH_MEMBERSHIP_REVOKED`, `AUTH_SCOPE_DENIED`, `AUTH_SOD_VIOLATION`, `AUTH_ACTION_CONTEXT_INVALID`, `AUTH_ACTION_CONTEXT_EXPIRED` |
+| `STATE` | `STATE_CANDIDATE_STALE`, `STATE_RELEASE_AUTHORIZATION_STALE`, `STATE_CONFLICT`, `STATE_RELEASE_REVOKED`, `STATE_IDEMPOTENCY_MISMATCH` |
+| `GATE` | `GATE_HARD_BLOCKER`, `GATE_WARNING_EXCEPTION_EXPIRED`, `GATE_WARNING_EXCEPTION_MISMATCH` |
+| `CAP` | `CAP_UNKNOWN_TOOL`, `CAP_UNSUPPORTED_OPERATION`, `CAP_PROFILE_MISMATCH`, `CAP_PROFILE_ATTESTATION_INVALID`, `CAP_PROFILE_ATTESTATION_EXPIRED`, `CAP_PARAMETER_RANGE` |
 | `PACKET` | `PACKET_SCHEMA_UNSUPPORTED`, `PACKET_HASH_MISMATCH`, `PACKET_EXTRA_FILE`, `PACKET_RESOURCE_LIMIT` |
 | `CRYPTO` | `CRYPTO_SIGNER_UNAVAILABLE`, `CRYPTO_SIGNATURE_INVALID`, `CRYPTO_ALGORITHM_DENIED` |
-| `TRUST` | `TRUST_BUNDLE_EXPIRED`, `TRUST_SEQUENCE_ROLLBACK`, `TRUST_SCOPE_MISMATCH`, `TRUST_CLOCK_UNAVAILABLE` |
-| `STORE` | `STORE_QUARANTINE_FAILED`, `STORE_HASH_MISMATCH`, `STORE_ARTIFACT_UNAVAILABLE` |
+| `TRUST` | `TRUST_BUNDLE_EXPIRED`, `TRUST_SEQUENCE_ROLLBACK`, `TRUST_SCOPE_MISMATCH`, `TRUST_CLOCK_UNAVAILABLE`, `TRUST_CHECKPOINT_REQUIRED`, `TRUST_FRESHNESS_UNPROVEN` |
+| `STORE` | `STORE_QUARANTINE_FAILED`, `STORE_HASH_MISMATCH`, `STORE_ARTIFACT_UNAVAILABLE`, `STORE_PLAINTEXT_ACCESS_DENIED` |
 
 HTTP mapping: 401 for no verified human identity, 403 for scope/role/SoD denial, 409 for stale/CAS/idempotency conflict, 422 for a deterministic blocker, and 503 for a transient signer/store dependency.
 
@@ -361,6 +400,7 @@ The verifier accepts only:
 2. `TrustBundleV1`
 3. `ReleaseStatusBundleV1`
 4. Pinned verifier policy/configuration
+5. Persistent verifier state containing a trusted bootstrap checkpoint and per-scope high-water marks
 
 It validates:
 
@@ -369,12 +409,13 @@ It validates:
 - Per-file bytes/hash and canonical manifest binding
 - Release-certificate signature and key/trust validity
 - Tenant/org/site, candidate, machine-profile, and artifact-class binding
-- A valid release certificate and absence of the release revision from the latest status bundle's revoked/void entries
-- Trust/release bundle scope, sequence, expiry, and trusted-clock policy
+- A valid release certificate and absence of the release revision from an acceptable status bundle's revoked entries
+- Machine-profile attestation, release authorization hash, and warning-exception grant hashes bound into the certificate
+- Trust/release bundle scope, signature, sequence, expiry, key-revocation mode, persistent high-water mark, bootstrap checkpoint, `maxOfflineStaleness`, and trusted-clock policy
 - Gate and capability-report hashes
 - `NOT_FOR_PRODUCTION` and environment policy
 
-It emits `VerificationReportV1` containing verdict, stable reason codes, checked hashes, bundle sequences, verifier build hash, and a human summary.
+It emits `VerificationReportV1` containing verdict, stable reason codes, checked hashes, bundle sequences, verifier build hash, `validAsOf`, freshness age/checkpoint, and a human summary. Displaying “currently active” requires online-current authority.
 
 Independence is proven through a separate executable/package dependency graph. Avoiding imports alone is insufficient. Both implementations pass the same normative protocol and golden vectors.
 
@@ -391,9 +432,9 @@ Independence is proven through a separate executable/package dependency graph. A
 
 ### 15.2 Route disposition ledger
 
-Every reachable build/export/download surface appears in a machine-readable ledger with owner, artifact class, current behavior, target disposition, and negative test:
+Every reachable build/export/download surface, together with authority-input surfaces such as machine/profile schemas, tool libraries, hardware presets, gate policies, JWT/site helpers, and storage-signing routes, appears in a machine-readable ledger with owner, artifact class, current behavior, target disposition, and negative test:
 
-- `REUSE`: safe primitive without authority, such as a canonical hash helper
+- `REUSE`: pure non-authoritative primitive, such as a canonical hash helper
 - `ADAPT`: implementation reused under the V3 contract, such as deterministic ZIP after removal of runtime time
 - `READ_ONLY`: V1/V2 history and inspection with no production-shaped output
 - `BLOCK`: client download, FROZEN manufacturing export, legacy direct CNC, duplicate state mutation, or any authority bypass
@@ -405,15 +446,17 @@ Every reachable build/export/download surface appears in a machine-readable ledg
 ### 16.1 Test layers
 
 1. Contract/schema/version and reason-code tests
-2. JWT, membership, role, SoD, and cross-tenant negative tests
-3. State, CAS, idempotency, concurrency, revocation, and fork tests
-4. Capability compiler and dialect defense-in-depth tests
-5. Canonicalization, property-based determinism, and mutation tests
-6. Managed signing, trust, expiry, rollback, and revocation golden vectors
-7. Hostile packet/ZIP/fuzz/resource-limit tests
-8. Builder/verifier cross-implementation conformance
-9. Two-person E2E release and revocation flow
-10. Legacy route bypass tests for every ledger entry
+2. JWT, membership, verified-action-context, service-role-misuse, SoD, and cross-tenant negative tests
+3. State, CAS, idempotency, concurrency, revocation, artifact-materialization, and fork tests
+4. Machine-profile-attestation, tool-library-binding, capability-compiler, and dialect defense-in-depth tests
+5. Warning-exception eligibility, scope, expiry, and two-person negative tests
+6. Canonicalization, property-based determinism, and mutation tests
+7. Managed signing, trust, first-use checkpoint, expiry, rollback, staleness, key-mode, and revocation golden vectors
+8. Hostile packet/ZIP/fuzz/resource-limit tests
+9. Builder/verifier cross-implementation conformance
+10. Two-person E2E release and revocation flow
+11. P2 human-plaintext/raw-URL denial and isolated-runner tests
+12. Legacy route/authority-input bypass tests for every ledger entry, including Daph compatibility and tenant-002 coexistence
 
 ### 16.2 Golden corpus
 
@@ -430,7 +473,11 @@ Each determinism vector runs at least 100 times on Windows and Linux with pinned
 - Candidate mutation after approval
 - Membership revocation mid-flow
 - Revocation racing with publication or download
+- Crash after release commit but before artifact materialization
+- Action-context replay/expiry and service-role RPC spoofing
+- P2 raw URL or token already issued when revocation or policy change occurs
 - Attempted offline queued release
+- First-use verifier without a checkpoint and a stale-but-unexpired bundle
 - Cross-tenant object/hash guessing
 
 Every case proves that no valid downloadable orphan exists, no unauthorized state transition occurs, and the reason code is correct.
@@ -439,7 +486,7 @@ Every case proves that no valid downloadable orphan exists, no unauthorized stat
 
 The self-verifying evidence bundle contains:
 
-- Signed `evidence-manifest.json` and root hashes
+- Signed `evidence-manifest.json`, `EvidenceAttestationV1`, and root hashes
 - Git state of both roots: commit, branch, dirty files
 - Dependency lock hashes and OS/runtime/compression/signer profiles
 - Exact commands, exit codes, pass/fail/skip counts, and full machine-readable results
@@ -449,6 +496,8 @@ The self-verifying evidence bundle contains:
 - Route disposition ledger and negative results
 - Tenant isolation, hostile-packet, trust-freshness, and resource-limit reports
 - Packet, trust, release-status, and evidence artifact hashes
+
+`EvidenceAttestationV1` is signed by a CI/workload identity key separate from the release key and binds Git state of both roots, exact command/report digests, CI run/workflow identity, builder/verifier binary hashes, issuedAt, retention policy, and evidence root hash. Trust policy declares evidence-key owner, validity, rotation, and revocation.
 
 The CI artifact binds the exact commit and records dirty state. A truncated log or skipped test cannot support a passing claim.
 
@@ -464,9 +513,12 @@ All conditions must pass together:
 - Cross-platform golden outputs are 100% byte-identical
 - Standalone verifier accepts the valid corpus and rejects the mutation corpus with specified reason codes
 - Two distinct authenticated humans complete freeze/approve/release E2E
-- Revocation, VOID, stale candidate, membership revocation, and cross-tenant attacks are proven
-- P2 shadow artifacts remain in sealed quarantine and Factory/P3 access is denied
-- Evidence bundle self-verifies and binds the exact source and environment
+- Revocation, attempt/artifact VOID, stale candidate, action-context replay, membership revocation, service-role spoofing, and cross-tenant attacks are proven
+- Profile attestation and warning exception are accepted or rejected by scope, expiry, revocation, and distinct-approver rules
+- Offline verifier rejects first use without a checkpoint, sequence rollback, and a bundle beyond `maxOfflineStaleness`
+- P2 shadow artifacts remain in sealed quarantine; human plaintext/raw URL and Factory/P3 access are denied
+- Daph tenant 001 and tenant 002 coexist through data/configuration without hardcoded authority
+- Evidence bundle self-verifies, uses an evidence key separate from the release key, and binds exact source and environment
 
 ### 17.2 Production/GA remains NO-GO
 
@@ -504,12 +556,15 @@ An owner may evolve implementation inside the boundary, but cannot change a prot
 | Risk | Control |
 |---|---|
 | V3 becomes another parallel stack | Canonical authority, route ledger, no dual write, V1/V2 read-only |
-| Signed orphan | Unsigned quarantine, signature retained in memory, atomic certificate/release commit, publication after commit |
+| Signed orphan | Unsigned quarantine, final bytes/hash built in memory, atomic certificate/release/artifact commit, publication after materialization |
 | Cross-tenant leakage | Tenant-bound FK/RLS/object paths/manifest and negative matrix |
-| Shadow artifact is used for production | Sealed private P2, QA-only policy, safe extension, no Factory/P3 URL |
+| Service role bypasses RLS or SoD | Verified action context, DB recheck and nonce consumption, and no client-supplied authority fields |
+| Profile overstates capability | Signed profile attestation, tool/postprocessor hashes, validity/revocation, and canonical adapter |
+| Shadow artifact is used for production | Sealed private P2, isolated automated verifier only, deny human plaintext/raw URL, and no Factory/P3 |
 | Determinism claim exceeds evidence | Golden bytes, property tests, cross-platform runs, pinned packaging and signing profile |
 | Verifier repeats the builder defect | Separate implementation graph plus common normative vectors, not common implementation |
-| Offline revocation is stale | Short validity, monotonic sequence, trusted clock, expiry or unknown clock means rejection |
+| Offline revocation is stale | High-water mark, trusted bootstrap checkpoint, maximum staleness, monotonic sequence, trusted clock, and freshness-unproven rejection |
+| Evidence signer becomes release authority | Separate CI/workload evidence key and separate trust policy |
 | A legacy bypass remains | Machine-readable inventory and a negative test per surface |
 
 ## 21. Definition of Done for this design

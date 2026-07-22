@@ -29,9 +29,9 @@ V3 เป็น protocol และ migration boundary ที่มาแทน�
 
 | As-built condition | Evidence anchor | Design response |
 |---|---|---|
-| Client role และ actor สามารถมาจาก local storage/header | `src/core/auth/roles.ts`, `src/core/api/stateApi.ts`, `supabase/functions/factory-api/index.ts` | server-derived `ActorContextV1`; header ไม่มี authority |
+| Client role และ actor สามารถมาจาก local storage/header | `src/core/auth/roles.ts:67`, `src/core/api/stateApi.ts:128`, `supabase/functions/factory-api/index.ts:136` | server-derived `ActorContextV1`; header ใช้เพื่อแสดงผลเท่านั้น |
 | Node filesystem state กับ Supabase SQL state ทำงานคู่ขนานและให้ export policy ต่างกัน | `server/src/state/`, `supabase/migrations/0155_factory_state_server.sql` | Supabase/Postgres เป็น release authority เดียว; Node เป็น worker |
-| Supabase `factory_jobs` ไม่มี tenant scope และ authenticated read policy กว้าง | `supabase/migrations/0155_factory_state_server.sql` | tenant-bound schema, membership RLS และ tenant-scoped object paths |
+| Supabase `factory_jobs` ใช้ global job key และ authenticated read policy แบบ `using (true)` | `supabase/migrations/0155_factory_state_server.sql:9`, `supabase/migrations/0155_factory_state_server.sql:25` | tenant-bound schema, membership RLS และ tenant-scoped object paths |
 | Client สร้างและดาวน์โหลด packet/Cut List/DXF ได้หลายช่อง | `src/components/ui/ExportPanel.tsx`, `src/factory/packet/useFactoryPacket.ts` | Artifact Class Matrix + route disposition ledger + negative bypass tests |
 | Packet/bundle มีเวลาและ random ID; browser ECDSA key | `src/factory/packet/buildFactoryPacket.ts`, `src/core/manufacturing/release/buildBundleV2.ts` | canonical release data, managed Ed25519, fixed packaging และ idempotent retrieval |
 | Edge verify ตรวจเพียง whole-ZIP hash | `supabase/functions/factory-api/index.ts` | standalone protocol verifier ตรวจ schema, files, signature, trust, release status, gate และ machine binding |
@@ -69,20 +69,27 @@ V3 เป็น protocol และ migration boundary ที่มาแทน�
 | `DTK-01` | เป้าหมายคือ Shadow Trust-Ready และทุก output ยังระบุ `NOT_FOR_PRODUCTION` |
 | `DTK-02` | DRAFT/FROZEN ใช้ preview/simulation; production-shaped output ไม่สามารถดาวน์โหลดได้ |
 | `DTK-03` | JWT ถูกตรวจฝั่ง server และแปลงเป็น tenant/org/site/user/roles จาก membership ปัจจุบัน |
-| `DTK-04` | Designer freeze; `RELEASE_APPROVER` คนละ user release; Factory consume เท่านั้น; Admin ไม่มี implicit release |
+| `DTK-04` | Designer freeze; `RELEASE_APPROVER` คนละ user release; Factory consume เท่านั้น; Admin ต้องได้รับ release role แยกจึง release ได้ |
 | `DTK-05` | Release revision เดิมต้องให้ packet bytes เดิมทุกครั้ง; input สำคัญเปลี่ยนต้องได้ revision ใหม่ |
 | `DTK-06` | App ถือเพียง signer key ID; private key อยู่นอก app; production signing ปิดจนผ่าน key ceremony |
-| `DTK-07` | Unknown tool หรือ unsupported operation block ทั้ง packet; ไม่มี partial/fallback |
+| `DTK-07` | Unknown tool หรือ unsupported operation block ทั้ง packetและยุติ construction ก่อนเกิด partial/fallback artifact |
 | `DTK-08` | Offline verifier เป็น executable/package graph แยกจาก builder และคืน machine-readable report |
 | `DTK-09` | Trust bundle และ release-status bundle เป็น signed external inputs; packet ห้าม authorize key ของตัวเอง |
 | `DTK-10` | Release revision เก่า immutable; เมื่อผิดต้อง revoke และเริ่ม working revision ใหม่ |
-| `DTK-11` | Hard gate override ไม่มี; exception ใช้ได้เฉพาะ soft warning พร้อมเหตุผล วันหมดอายุ four-eyes และ revision ใหม่ |
+| `DTK-11` | Hard gate ปฏิเสธเสมอ; exception ใช้ได้เฉพาะ soft warning พร้อมเหตุผล วันหมดอายุ four-eyes และ revision ใหม่ |
 | `DTK-12` | Definition of Done ต้องมี contract, property, negative, hostile, golden, E2E และ commit-linked CI evidence |
 | `DTK-13` | V1/V2 อ่านประวัติได้เท่านั้น; production-shaped output ต้องใช้ V3 |
-| `DTK-14` | Supabase/Postgres เป็น canonical release authority; Node ไม่มี authoritative filesystem state |
+| `DTK-14` | Supabase/Postgres เป็น canonical release authority เพียงแห่งเดียว; Node ทำหน้าที่ deterministic worker |
 | `DTK-15` | Working revision, release attempt และ release revision เป็นคนละ aggregate |
-| `DTK-16` | Shadow P2 manufacturing payload ถูกสร้างจริงแต่ sealed ใน private quarantine; P3 distribution ปิด |
+| `DTK-16` | Shadow P2 manufacturing payload ถูกสร้างจริงแต่ sealed ใน private quarantine; plaintext ใช้ได้เฉพาะ isolated automated verifier และ P3 distribution ปิด |
 | `DTK-17` | RELEASE ห้าม offline queue หรือ auto-replay; ต้องมี fresh interactive identity และ candidate hash |
+| `DTK-18` | Machine profile ใช้เป็น authority input ได้เมื่อมี signed `MachineProfileAttestationV1` ที่ยัง valid และ bind scope/tool library/postprocessor เท่านั้น |
+| `DTK-19` | Service role เป็น executor ไม่ใช่ human authority; authoritative RPC รับ immutable `VerifiedActionContextV1` ไม่รับ role/name/tenant จาก request body |
+| `DTK-20` | Offline verdict รับรองสถานะ ณ bundle sequence/issuedAt; freshness ต้องมี persistent high-water mark และ trusted bootstrap checkpoint |
+| `DTK-21` | `ReleaseAttempt`, `ArtifactRecord` และ `ReleaseRevision` มี state machine แยกกัน; `VOID` ไม่ใช่สถานะของ release revision |
+| `DTK-22` | Soft-warning exception ต้องเป็น signed `WarningExceptionGrantV1`; hard blocker ปฏิเสธทุกครั้ง |
+| `DTK-23` | Evidence attestation ใช้ CI/workload identity key แยกจาก release signing key |
+| `DTK-24` | Daph-specific JWT/site helpers เป็น legacy compatibility เท่านั้นและห้ามใช้เป็น Trust Kernel authority |
 
 ## 5. Architecture
 
@@ -149,7 +156,9 @@ Node หรือ worker อื่นรับ immutable work request แล้�
 
 ### 6.3 `ReleaseCandidate`
 
-สร้างเมื่อ freeze โดย hash ครอบคลุม canonical snapshot, gate inputs, machine capability profile, policy versions, tenant scope และ required artifact definitions Approval ทุกใบ bind candidate hash นี้
+สร้างเมื่อ freeze โดย `candidateHash` ครอบคลุม canonical snapshot, gate inputs รวม warning facts/eligibility, machine capability profile, `MachineProfileAttestationV1`, policy versions, tenant scope และ required artifact definitions แต่ไม่ครอบคลุม exception grant เพื่อหลีกเลี่ยง circular hash
+
+หลังออก exception grants แล้ว Authority คำนวณ `releaseAuthorizationHash = SHA-256(canonical({domain: "MONOLITH/ReleaseAuthorization/V1", candidateHash, sortedGrantHashes}))` โดย empty grant list มี canonical representation เดียว Candidate ครอบคลุม profile/policy/artifacts อยู่แล้วจึงไม่ hash ซ้ำ Final approval, release attempt และ release certificate bind ทั้ง candidate hash และ release authorization hash การเปลี่ยน grant ทำให้ต้องสร้าง release authorization/attempt ใหม่; ถ้ามี release แล้วต้องสร้าง release revision ใหม่ การเปลี่ยน underlying candidate input หรือ profile attestation ทำให้ต้อง freeze/candidate ใหม่
 
 ### 6.4 `ReleaseAttempt`
 
@@ -158,22 +167,33 @@ Node หรือ worker อื่นรับ immutable work request แล้�
 - `PENDING`: ผ่าน precondition และกำลัง compile/sign/commit
 - `FAILED`: deterministic blocker หรือ non-retryable failure
 - `PUBLISHED`: release commit สำเร็จและ artifact พร้อมตาม environment policy
-- `VOID`: attempt หรือ quarantined artifact ถูกยกเลิกและห้าม publish
+- `VOID`: attempt ถูกยกเลิกก่อนเกิด release revision และห้ามกลับมา publish
 
-Transient signer/store failure retry ได้ด้วย candidate hash และ idempotency key เดิมเท่านั้น
+Transient signer/store failure retry ได้ด้วย candidate hash และ idempotency key เดิมเท่านั้น Idempotency scope คือ `(tenantId, actorUserId, candidateHash, idempotencyKey)` และเก็บ `requestHash`; key เดิมกับ request hash ต่างกันต้องคืน `STATE_IDEMPOTENCY_MISMATCH`
 
-### 6.5 `ReleaseRevision`
+### 6.5 `ArtifactRecordV1`
+
+สถานะ:
+
+- `QUARANTINED`: unsigned payload หรือ private source bytes ที่ยังไม่ publish
+- `MATERIALIZING`: release commit สำเร็จและ worker กำลังเขียน final bytes ตาม expected hash
+- `AVAILABLE`: exact bytes ถูกเขียนและตรวจ hash ตรงแล้ว แต่ยังขึ้นกับ publication policy
+- `VOID`: artifact ถูกยกเลิกหรือ hash/materialization ไม่สำเร็จ และห้าม publish
+
+Artifact record bind tenant/site, artifact class, release attempt/revision reference, content hash, expected packet hash, object locator ภายใน และ timestamps ห้ามใช้ artifact status เป็น release authority และห้ามเปิด raw storage locator ให้ client
+
+### 6.6 `ReleaseRevision`
 
 สถานะ:
 
 - `ACTIVE`: immutable release ที่ signature, artifact reference และ ledger commit สำเร็จ
 - `REVOKED`: release เดิมยังคง immutable แต่ห้าม consume
 
-Release revision มี release revision ID, candidate hash, content hash, expected packet hash, release certificate, approver identity, approval evidence, machine profile binding, tenant scope, parent lineage และ timestamps จาก authority
+Release revision มี release revision ID, candidate hash, release authorization hash, sorted warning-exception grant hashes, content hash, expected packet hash, release certificate, approver identity, approval evidence, machine profile-attestation binding, tenant scope, parent lineage และ timestamps จาก authority
 
 UI อาจแสดง projection ว่า “RELEASED” เมื่อมี `ACTIVE ReleaseRevision` แต่ห้ามเก็บ `RELEASED` เป็น mutable state ของ WorkingRevision
 
-### 6.6 Concurrent history after change
+### 6.7 Concurrent history after change
 
 หลัง revoke หรือเมื่อต้องแก้แบบ ระบบสามารถมี `REVOKED ReleaseRevision R1` พร้อมกับ `WorkingRevision R2 = DRAFT` ได้ ทำให้ไม่ต้องเปลี่ยนของเก่ากลับเป็น FROZEN และไม่ทำลายประวัติ
 
@@ -191,7 +211,15 @@ UI อาจแสดง projection ว่า “RELEASED” เมื่อม�
 
 Client-supplied role/name ใช้ได้เพียง display hint และต้องไม่เข้า authorization decision หรือ audit actor identity
 
-### 7.2 Role responsibilities
+JWT app-metadata และ legacy helpers `current_app_roles()`, `current_site_codes()` และ `get_active_site_codes()` เป็นข้อมูล compatibility/hint เท่านั้น ห้ามใช้เป็น current membership authority ของ Trust Kernel ระบบต้องอ่าน tenant membership/location tables ที่มี version และ revocation state จาก Postgres Daph/BKK-HQ-01 ต้องเป็น onboarding data; migration test ต้องพิสูจน์ว่า tenant 002 อยู่ร่วมได้โดยไม่แก้ source code
+
+### 7.2 Verified action context และ service-role boundary
+
+หลังตรวจ JWT แล้ว Edge เรียก `create_verified_action_context` ด้วย user-scoped bearer token ไม่ใช่ service role Postgres ใช้ `auth.uid()` และ current membership สร้าง immutable short-lived `VerifiedActionContextV1` ซึ่งมี action context ID, tenant/org/site, actor user ID, roles, AAL, membership version, permitted action, candidate hash, release authorization hash, request hash, issuedAt, expiresAt และ nonce แล้วบันทึกเป็น authoritative database record Service role ถูกห้ามสร้าง action context
+
+Authoritative mutation RPC รับเฉพาะ action context ID และ business identifiers ที่ bind อยู่ใน context จากนั้น lock/consume record และตรวจ scope, membership version, expiry, nonce, candidate และ release authorization hash ซ้ำภายใน transaction ห้ามรับ actor role/name/tenant/site จาก request body เป็น authority Service-role client ใช้ execute downstream outbox work หลัง user-authorized commit เท่านั้นและไม่สามารถสร้าง human approval, ข้าม SoD หรือเลือก object path จาก client input ได้
+
+### 7.3 Role responsibilities
 
 | Role | Allowed |
 |---|---|
@@ -199,16 +227,16 @@ Client-supplied role/name ใช้ได้เพียง display hint แล�
 | `RELEASE_APPROVER` | approve/reject candidate และ initiate release เมื่อไม่ใช่ผู้ freeze |
 | `FACTORY` | consume เฉพาะ ACTIVE + verifier PASS + environment policy อนุญาต |
 | `SAFETY_REVOKER` | revoke ACTIVE release ได้ทันที พร้อมเหตุผล |
-| `ADMIN` | จัด membership/policy แต่ไม่มี implicit release permission |
-| `QA_EVIDENCE` | เข้าถึง sealed shadow artifact ภายใต้นโยบาย QA และ audit |
+| `ADMIN` | จัด membership/policy; การ release ต้องมี `RELEASE_APPROVER` role แยก |
+| `QA_EVIDENCE` | รับเฉพาะ hash/report/evidence ของ sealed shadow artifact; P2 plaintext และ raw storage URL ถูก deny |
 
-### 7.3 Four-eyes invariant
+### 7.4 Four-eyes invariant
 
-`freezeActorUserId != releaseApproverUserId` ต้องบังคับด้วย database constraint/transaction logic ไม่ใช่ UI check Approval bind candidate hash, tenant scope, approver user ID, membership version, AAL, decision time และ reason
+`freezeActorUserId != releaseApproverUserId` ต้องบังคับด้วย database constraint/transaction logic ไม่ใช่ UI check Approval bind candidate hash, release authorization hash, tenant scope, approver user ID, membership version, AAL, decision time และ reason
 
 Shadow evidence ต้องบันทึก AAL ที่ใช้ Production distribution ยังปิดจนมี production policy ที่กำหนดและทดสอบ AAL2
 
-### 7.4 Tenant isolation
+### 7.5 Tenant isolation
 
 - ทุก authoritative table มี `tenant_id`; child rows ใช้ tenant-bound foreign keys
 - Job/project identifiers ไม่เป็น global authority โดยลำพัง
@@ -216,23 +244,27 @@ Shadow evidence ต้องบันทึก AAL ที่ใช้ Production
 - Object paths อยู่ใต้ `tenantId/siteId/releaseRevisionId/contentHash`
 - Signed manifest และ release certificate bind tenant/org/site
 - Content-addressed physical deduplication ถ้ามีต้องอยู่หลัง logical tenant authorization และห้ามเปิด existence side-channel
+- Service role ไม่ยกเว้น tenant authorization; database transaction ต้อง bind action context, tenant FK และ candidate ก่อนทุก mutation
 
 ## 8. Component contracts
 
 | Component | Input | Output | Responsibility boundary |
 |---|---|---|---|
 | `AuthContextResolver` | verified JWT/request | `ActorContextV1` | identity, membership, scope, roles, AAL |
+| `ActionContextBroker` | actor + permitted action + request hash | `VerifiedActionContextV1` | short-lived immutable authority handoff; one-time consumption |
 | `ReleaseAuthority` | actor, action, expected candidate, idempotency | transition/result/event | state, SoD, CAS, ledger; ไม่ build packet |
 | `SnapshotService` | frozen working revision | `ReleaseSnapshotV3` | immutable canonical input |
-| `CapabilityCompiler` | snapshot operations + `MachineCapabilityProfileV1` | capability report | exhaustive support decision; no fallback |
+| `ProfileAttestationRegistry` | profile/tool/postprocessor governance | signed `MachineProfileAttestationV1` | scope, validity, approval และ revocation |
+| `WarningExceptionAuthority` | eligible warning + two approvers | signed `WarningExceptionGrantV1` | exact-scope expiring exception; hard blockers excluded |
+| `CapabilityCompiler` | snapshot operations + attested `MachineCapabilityProfileV1` | capability report | exhaustive support decision; no fallback |
 | `PacketBuilderV3` | approved snapshot + capability report | canonical unsigned payload | pure deterministic construction |
 | `ManagedSignerPort` | fixed digest/certificate + key ID | Ed25519 signature | private key อยู่นอก app |
-| `ArtifactRepository` | tenant-scoped bytes/reference | content-addressed record | private write, quarantine, availability; no release authority |
+| `ArtifactRepository` | tenant-scoped bytes/reference | `ArtifactRecordV1` | private write, quarantine, hash verification, availability; no release authority |
 | `TrustBundleManager` | key/revocation governance | signed bundles | trust roots, key validity, expiry, sequence |
 | `OfflineVerifier` | packet + external bundles | `VerificationReportV1` | independent validation; no builder import |
 | `EvidenceRecorder` | run context/results/artifacts | evidence bundle | exact source/environment/result traceability |
 
-Versioned contracts แยก evolution กัน: `ActorContextV1`, `TenantScopeV1`, `ReleaseSnapshotV3`, `MachineCapabilityProfileV1`, `CapabilityReportV1`, `FactoryPacketManifestV3`, `ReleaseCertificateV1`, `TrustBundleV1`, `ReleaseStatusBundleV1`, `VerificationReportV1`
+Versioned contracts แยก evolution กัน: `ActorContextV1`, `VerifiedActionContextV1`, `TenantScopeV1`, `ReleaseSnapshotV3`, `MachineCapabilityProfileV1`, `MachineProfileAttestationV1`, `WarningExceptionGrantV1`, `CapabilityReportV1`, `FactoryPacketManifestV3`, `ReleaseCertificateV1`, `ArtifactRecordV1`, `TrustBundleV1`, `ReleaseStatusBundleV1`, `VerificationReportV1` และ `EvidenceAttestationV1`
 
 ## 9. Artifact Class Matrix
 
@@ -240,10 +272,10 @@ Versioned contracts แยก evolution กัน: `ActorContextV1`, `TenantScop
 |---|---|---:|---:|---:|---:|
 | `P0_PREVIEW` | interactive render, simulation UI | view | view | view | not applicable |
 | `P1_REVIEW` | watermarked PDF/JSON ที่ไม่มี machine geometry | optional audited download | audited download | audited download | policy-controlled |
-| `P2_MANUFACTURING` | Cut List CSV, DXF, CIX/G-code, full packet | deny | deny | build real bytes; sealed quarantine; QA-only safe extension | deny in this phase |
+| `P2_MANUFACTURING` | Cut List CSV, DXF, CIX/G-code, full packet | deny | deny | build real bytes; sealed quarantine; isolated automated verifier only | deny in this phase |
 | `P3_DISTRIBUTION` | Factory/operator/machine delivery | deny | deny | deny | disabled until separate production authorization |
 
-การเปลี่ยนนามสกุล P2 สำหรับ QA เป็น defense-in-depth ไม่ใช่ authority หลัก Authority หลักคือ private storage, access control, no factory URL และ environment policy
+ใน shadow phase มนุษย์รวมถึง `QA_EVIDENCE` ห้ามรับ P2 plaintext, raw object locator หรือ reusable signed URL Isolated QA runner ใช้ workload identity อ่าน exact bytes จาก private store, ตรวจและส่งออกเฉพาะ hash/report/evidence ที่ไม่สามารถใช้ผลิต การเปลี่ยนนามสกุลเป็นเพียง defense-in-depth ไม่ใช่ access control การตรวจ plaintext ด้วยมนุษย์อยู่นอกขอบเขตและต้องมี secure-workstation/one-time audited proxy policy ที่อนุมัติแยกต่างหาก
 
 ## 10. Release transaction choreography
 
@@ -257,25 +289,26 @@ Versioned contracts แยก evolution กัน: `ActorContextV1`, `TenantScop
 
 ### 10.2 Release
 
-1. `RELEASE_APPROVER` ส่ง release request พร้อม candidate hash และ idempotency key
-2. Authority recheck distinct user, membership, tenant/site scope, candidate freshness, required gates และ profile versions
-3. สร้าง `ReleaseAttempt=PENDING`
+1. `RELEASE_APPROVER` ส่ง release request พร้อม candidate hash, release authorization hash, idempotency key และ request hash; Edge ขอ Postgres สร้าง `VerifiedActionContextV1` ภายใต้ user bearer token
+2. Authority consume action context และ recheck distinct user, membership version, tenant/site scope, candidate/release-authorization freshness, required gates, profile attestation และ exception grants
+3. Database lock/สร้าง `ReleaseAttempt=PENDING` แล้วจัดสรร release revision ID, monotonic release sequence และ authoritative timestamp ก่อน signing
 4. Worker อ่าน immutable snapshot และรัน capability compiler; blocker ใด ๆ ทำให้ทั้ง attempt fail
-5. Worker สร้าง canonical unsigned payload และเก็บใน private tenant quarantine
-6. Worker สร้าง deterministic release certificate data และขอ managed Ed25519 signature; signature ยังอยู่ใน memory และยังไม่มี signed downloadable object
-7. Database transaction เดียวทำ CAS candidate อีกครั้ง, บันทึก approval, signature certificate, `ReleaseRevision=ACTIVE`, expected final packet hash, artifact reference, ledger event และ outbox
-8. ถ้า transaction ล้มเหลว ให้ทิ้ง signature, ทำ quarantine record เป็น VOID และไม่มี URL
-9. หลัง commit worker สร้าง final packet bytes จาก canonical payload + persisted certificate ด้วย fixed packaging แล้วเก็บตาม expected hash; retry ต้องได้ bytes เดิม
-10. Publication policy เปิด reference เมื่อ `ReleaseRevision=ACTIVE` และ artifact `AVAILABLE`; shadow policy ยังคง deny Factory/P3
+5. Worker สร้าง canonical unsigned payload และ `ArtifactRecord=QUARANTINED` ใน private tenant store
+6. Worker สร้าง deterministic release certificate จาก authority fields, ขอ managed Ed25519 signature, assemble final packet bytes ใน memory ด้วย fixed packaging และคำนวณ expected final packet hash; ยังไม่มี signed downloadable object
+7. Database transaction เดียว consume nonce, recheck candidate CAS/membership/profile/exception อีกครั้ง แล้วบันทึก approval, certificate, `ReleaseRevision=ACTIVE`, `ArtifactRecord=MATERIALIZING`, expected hash, ledger event และ outbox
+8. ถ้า transaction ล้มเหลว ให้ทิ้ง in-memory signature/final bytesและจบ flow ที่ attempt/artifact `VOID`; การสร้าง release revision และ URL เกิดได้เฉพาะ successful commit branch
+9. หลัง commit worker materialize exact final bytes ที่ต้องสร้างซ้ำได้จาก persisted canonical payload + certificate, ตรวจ expected hash แล้วเปลี่ยน artifact เป็น `AVAILABLE` และ attempt เป็น `PUBLISHED`; retry ต้องได้ bytes เดิม
+10. Publication policy เปิด opaque reference เมื่อ `ReleaseRevision=ACTIVE` และ `ArtifactRecord=AVAILABLE` เท่านั้น Shadow policyยังคง deny P2 human plaintext และ Factory/P3
 
 ### 10.3 Failure rules
 
 - Retry อัตโนมัติเฉพาะ transient signer/store failure ด้วย idempotency เดิม
 - Deterministic gate/capability/schema/auth/state failure ห้าม retry แบบซ่อนเหตุผล
-- Store success + DB failure = private VOID artifact; ไม่มี signed packet ก่อน commit
+- Store success + DB failure = private VOID artifact และ VOID attempt; ไม่มี release revision หรือ signed downloadable packet
 - DB commit response lost = retry query ด้วย idempotency แล้วคืน release/certificate เดิม
 - Concurrent release = หนึ่ง CAS ชนะ; รายอื่นได้ stable `STATE_CONFLICT`
 - Candidate เปลี่ยน, unfreeze หรือ membership เปลี่ยน = approval เก่าหมดผล
+- Crash หลัง commit ก่อน materialization = outbox retry สร้าง exact bytes เดิม; Factory eligibility ยังปิดจน artifact `AVAILABLE`
 
 ### 10.4 Revoke and fork
 
@@ -313,15 +346,21 @@ Runtime clock, `Date.now()`, random IDs, filesystem ordering หรือ locale
 
 ### 11.3 Trust and release status bundles
 
-`TrustBundleV1` มี scope, sequence, issuedAt, expiresAt, trusted key IDs, algorithms, validity windows และ key revocations
+`TrustBundleV1` มี scope, sequence, issuedAt, expiresAt, trusted key IDs พร้อม key purpose (`RELEASE`, `PROFILE_ATTESTATION`, `WARNING_EXCEPTION`), algorithms, validity windows, key revocations, profile-attestation revocations และ warning-exception-grant revocations แต่ละ revocation entry bind ID/hash, effectiveAt และ reason High-water mark แยกตาม `(bundleType, trustScope)`
 
-`ReleaseStatusBundleV1` มี scope, sequence, issuedAt, expiresAt และรายการ release revisions ที่ถูก revoke หรือ void การมี release certificate ที่ถูกต้องพิสูจน์ว่า authority เคยออก release; bundle ล่าสุดที่ยังไม่หมดอายุต้องยืนยันว่า revision นั้นไม่อยู่ในรายการ revoked/void
+`ReleaseStatusBundleV1` มี scope, sequence, issuedAt, expiresAt และรายการ `ReleaseRevision` ที่ถูก `REVOKED` เท่านั้น `VOID` จบ flow ที่ attempt/artifact ก่อนขั้นสร้าง release certificate/revision จึงถูก exclude จาก bundle การมี release certificate ที่ถูกต้องพิสูจน์ว่า authority เคยออก release; status bundle ที่ยอมรับได้ต้องยืนยันว่า revision นั้นอยู่นอกรายการ revoked
 
-ทั้งสอง signed โดย trust authority ที่ verifier pin ไว้และส่งแยกจาก packet Verifier ต้อง reject เมื่อ bundle หมดอายุ, sequence rollback, scope ไม่ตรง, signature ไม่ถูก หรือไม่มี trusted clock/clock policy ที่พิสูจน์เวลาได้
+ทั้งสอง signed โดย trust authority ที่ verifier pin ไว้และส่งแยกจาก packet Verifier ต้อง reject เมื่อ bundle หมดอายุ, sequence rollback, scope ไม่ตรง, signature ไม่ถูก หรือ trusted clock/clock policy พิสูจน์เวลาไม่สำเร็จ Key revocation ต้องระบุ `revocationMode` เป็น `ALL_SIGNATURES`, `SIGNED_AT_OR_AFTER` หรือ `ISSUANCE_DISABLED` พร้อม effectiveAt และ reason; verifier ใช้ explicit mode เป็น semantics เพียงแหล่งเดียว
+
+Offline verifier รับรองสถานะในขอบเขต “valid as of bundle sequence/issuedAt” เท่านั้น การแสดง “currently active” ต้องมี online-current authority Verifier ต้องเก็บ persistent high-water mark แยก trust scope, ปฏิเสธ sequence ต่ำกว่าที่เคยยอมรับ และบังคับ `maxOfflineStaleness` จาก pinned environment policy การ bootstrap ครั้งแรกต้องมี online trusted provisioning หรือ pinned minimum-sequence checkpoint; checkpoint/state store/trusted clock ที่ไม่พร้อมหรือ freshness เกิน policy ให้คืน `TRUST_FRESHNESS_UNPROVEN` Factory work start ทุกครั้งต้อง refresh ภายใน policy window และใช้ current authorization แทน verdict เก่า
 
 ## 12. Capability safety
 
 `MachineCapabilityProfileV1` ระบุ machine/dialect version, supported operation types, tool identities, ranges, faces, units, coordinate conventions และ postprocessor version
+
+Profile ใช้ใน candidate/compiler/verifier ได้เมื่อมี signed `MachineProfileAttestationV1` จาก Profile Attestation Authority ภายใต้ Manufacturing Engineering เท่านั้น Attestation bind tenant/site/machine IDs, canonical profile hash, tool-library hash, postprocessor ID/version/binary hash, profile approver identity, issuedAt, validFrom, validUntil, status และ attestation sequence Candidate และ release certificate bind attestation ID/hash Verifier ตรวจ signature, scope, validity, sequence และ revocation จาก external trust data Profile ที่มาจาก local storage, client override หรือ legacy schema ต้องผ่าน read-only adapter ไปยัง canonical schema และได้รับ authority หลัง attestation ผ่านเท่านั้น
+
+`WarningExceptionGrantV1` bind warning code, exact entity IDs, tenant/site, candidate hash, reason, policy version, ผู้อนุมัติ authenticated สองคนที่ต่างกัน, issuedAt, expiresAt และ signature จาก `WARNING_EXCEPTION` authority เฉพาะ warning ที่ catalogue ระบุ `exceptionEligible=true` จึงสร้าง grant ได้ Hard blocker และ capability blocker ไม่ eligible ผู้ freeze และ release approver อาจเป็นผู้อนุมัติ grant สองคนนี้ได้ถ้าทั้งคู่ยืนยัน exception และเป็นคนละ user จึงไม่บังคับให้มีมนุษย์เพิ่ม Compiler และ verifier ต้อง reject grant ที่หมดอายุ, scope/hash/entity ไม่ตรง, signer purpose ไม่ trusted หรือ approver ซ้ำ การเปลี่ยน grant ทำให้ release authorization hash เปลี่ยน และการเปลี่ยน underlying input ทำให้ต้องออก candidate ใหม่
 
 `CapabilityCompiler` ต้อง enumerate ทุก operation และคืน blocker เมื่อ:
 
@@ -340,14 +379,14 @@ Builder ห้ามสร้าง partial packet Dialect เช่น CIX ต�
 
 | Namespace | Examples |
 |---|---|
-| `AUTH` | `AUTH_REQUIRED`, `AUTH_ANON_NOT_ALLOWED`, `AUTH_MEMBERSHIP_REVOKED`, `AUTH_SCOPE_DENIED`, `AUTH_SOD_VIOLATION` |
-| `STATE` | `STATE_CANDIDATE_STALE`, `STATE_CONFLICT`, `STATE_RELEASE_REVOKED`, `STATE_IDEMPOTENCY_MISMATCH` |
-| `GATE` | `GATE_HARD_BLOCKER`, `GATE_WARNING_EXCEPTION_EXPIRED` |
-| `CAP` | `CAP_UNKNOWN_TOOL`, `CAP_UNSUPPORTED_OPERATION`, `CAP_PROFILE_MISMATCH`, `CAP_PARAMETER_RANGE` |
+| `AUTH` | `AUTH_REQUIRED`, `AUTH_ANON_NOT_ALLOWED`, `AUTH_MEMBERSHIP_REVOKED`, `AUTH_SCOPE_DENIED`, `AUTH_SOD_VIOLATION`, `AUTH_ACTION_CONTEXT_INVALID`, `AUTH_ACTION_CONTEXT_EXPIRED` |
+| `STATE` | `STATE_CANDIDATE_STALE`, `STATE_RELEASE_AUTHORIZATION_STALE`, `STATE_CONFLICT`, `STATE_RELEASE_REVOKED`, `STATE_IDEMPOTENCY_MISMATCH` |
+| `GATE` | `GATE_HARD_BLOCKER`, `GATE_WARNING_EXCEPTION_EXPIRED`, `GATE_WARNING_EXCEPTION_MISMATCH` |
+| `CAP` | `CAP_UNKNOWN_TOOL`, `CAP_UNSUPPORTED_OPERATION`, `CAP_PROFILE_MISMATCH`, `CAP_PROFILE_ATTESTATION_INVALID`, `CAP_PROFILE_ATTESTATION_EXPIRED`, `CAP_PARAMETER_RANGE` |
 | `PACKET` | `PACKET_SCHEMA_UNSUPPORTED`, `PACKET_HASH_MISMATCH`, `PACKET_EXTRA_FILE`, `PACKET_RESOURCE_LIMIT` |
 | `CRYPTO` | `CRYPTO_SIGNER_UNAVAILABLE`, `CRYPTO_SIGNATURE_INVALID`, `CRYPTO_ALGORITHM_DENIED` |
-| `TRUST` | `TRUST_BUNDLE_EXPIRED`, `TRUST_SEQUENCE_ROLLBACK`, `TRUST_SCOPE_MISMATCH`, `TRUST_CLOCK_UNAVAILABLE` |
-| `STORE` | `STORE_QUARANTINE_FAILED`, `STORE_HASH_MISMATCH`, `STORE_ARTIFACT_UNAVAILABLE` |
+| `TRUST` | `TRUST_BUNDLE_EXPIRED`, `TRUST_SEQUENCE_ROLLBACK`, `TRUST_SCOPE_MISMATCH`, `TRUST_CLOCK_UNAVAILABLE`, `TRUST_CHECKPOINT_REQUIRED`, `TRUST_FRESHNESS_UNPROVEN` |
+| `STORE` | `STORE_QUARANTINE_FAILED`, `STORE_HASH_MISMATCH`, `STORE_ARTIFACT_UNAVAILABLE`, `STORE_PLAINTEXT_ACCESS_DENIED` |
 
 HTTP mapping: 401 ไม่มี verified human identity, 403 scope/role/SoD denied, 409 stale/CAS/idempotency conflict, 422 deterministic blocker, 503 transient signer/store dependency
 
@@ -361,6 +400,7 @@ Verifier รับเพียง:
 2. `TrustBundleV1`
 3. `ReleaseStatusBundleV1`
 4. verifier policy/config ที่ pin ไว้
+5. persistent verifier state ที่มี trusted bootstrap checkpoint และ per-scope high-water marks
 
 Verifier ตรวจ:
 
@@ -369,12 +409,13 @@ Verifier ตรวจ:
 - per-file bytes/hash และ canonical manifest binding
 - release certificate signature และ key/trust validity
 - tenant/org/site, candidate, machine profile และ artifact-class binding
-- release certificate ถูกต้อง และ release revision ไม่อยู่ใน revoked/void entries ของ status bundle ล่าสุด
-- trust/release bundle scope, sequence, expiry และ trusted clock policy
+- release certificate ถูกต้อง และ release revision ไม่อยู่ใน revoked entries ของ status bundle ที่ยอมรับได้
+- machine-profile attestation, release authorization hash และ warning-exception grant hashes ที่ bind ใน certificate
+- trust/release bundle scope, signature, sequence, expiry, key-revocation mode, persistent high-water mark, bootstrap checkpoint, `maxOfflineStaleness` และ trusted clock policy
 - gate and capability report hashes
 - `NOT_FOR_PRODUCTION`/environment policy
 
-ผลคือ `VerificationReportV1` ที่มี verdict, stable reason codes, checked hashes, bundle sequences, verifier build hash และ human summary
+ผลคือ `VerificationReportV1` ที่มี verdict, stable reason codes, checked hashes, bundle sequences, verifier build hash, `validAsOf`, freshness age/checkpoint และ human summary การแสดงคำว่า “currently active” ต้องมี online-current authority
 
 ความเป็นอิสระต้องพิสูจน์ด้วย executable/package dependency graph แยกจาก builder การไม่ import อย่างเดียวไม่พอ ทั้งสอง implementation ต้องผ่าน normative protocol และ golden vectors เดียวกัน
 
@@ -391,9 +432,9 @@ Verifier ตรวจ:
 
 ### 15.2 Route disposition ledger
 
-ทุก reachable build/export/download surface ต้องอยู่ใน machine-readable ledger พร้อม owner, artifact class, current behavior, target disposition และ negative test:
+ทุก reachable build/export/download surface รวมถึง authority-input surfaces เช่น machine/profile schemas, tool libraries, hardware presets, gate policies, JWT/site helpers และ storage-signing routes ต้องอยู่ใน machine-readable ledger พร้อม owner, artifact class, current behavior, target disposition และ negative test:
 
-- `REUSE`: primitive ที่ปลอดภัยและไม่มี authority เช่น canonical hash helper
+- `REUSE`: pure non-authoritative primitive เช่น canonical hash helper
 - `ADAPT`: implementation ที่นำมาใช้ภายใต้ V3 contract เช่น deterministic ZIP หลังเอา runtime time ออก
 - `READ_ONLY`: V1/V2 history/inspection; สร้าง production-shaped output ไม่ได้
 - `BLOCK`: client download, FROZEN manufacturing export, legacy direct CNC, duplicate state mutation หรือ route ที่ bypass authority
@@ -405,15 +446,17 @@ Verifier ตรวจ:
 ### 16.1 Test layers
 
 1. Contract/schema/version and reason-code tests
-2. JWT, membership, role, SoD และ cross-tenant negative tests
-3. State, CAS, idempotency, concurrency, revoke และ fork tests
-4. Capability compiler และ dialect defense-in-depth tests
-5. Canonicalization, property-based determinism และ mutation tests
-6. Managed signing, trust, expiry, rollback และ revocation golden vectors
-7. Hostile packet/ZIP/fuzz/resource-limit tests
-8. Builder/verifier cross-implementation conformance
-9. Two-person E2E release/revoke flow
-10. Legacy route bypass tests ครบทุก ledger entry
+2. JWT, membership, verified-action-context, service-role misuse, SoD และ cross-tenant negative tests
+3. State, CAS, idempotency, concurrency, revoke, artifact materialization และ fork tests
+4. Machine-profile attestation, tool-library binding, capability compiler และ dialect defense-in-depth tests
+5. Warning exception eligibility/scope/expiry/two-person negative tests
+6. Canonicalization, property-based determinism และ mutation tests
+7. Managed signing, trust, first-use checkpoint, expiry, rollback, staleness, key-mode และ revocation golden vectors
+8. Hostile packet/ZIP/fuzz/resource-limit tests
+9. Builder/verifier cross-implementation conformance
+10. Two-person E2E release/revoke flow
+11. P2 human-plaintext/raw-URL denial และ isolated-runner tests
+12. Legacy route/authority-input bypass tests ครบทุก ledger entry รวม Daph compatibility และ tenant 002 coexistence
 
 ### 16.2 Golden corpus
 
@@ -430,7 +473,11 @@ Corpus ครอบคลุม canonical JSON edge cases, Unicode, decimals, un
 - candidate mutation after approval
 - membership revoked mid-flow
 - revoke racing with publication/download
+- crash หลัง release commit ก่อน artifact materialization
+- action context replay/expiry และ service-role RPC spoof
+- P2 raw URL/token issued แล้ว revoke หรือ policy เปลี่ยน
 - attempted offline queued release
+- first-use verifier ไม่มี checkpoint และ stale-but-unexpired bundle
 - cross-tenant object/hash guessing
 
 ทุก case ต้องพิสูจน์ว่าไม่มี valid downloadable orphan, ไม่มี unauthorized state transition และ reason code ถูกต้อง
@@ -439,7 +486,7 @@ Corpus ครอบคลุม canonical JSON edge cases, Unicode, decimals, un
 
 Evidence bundle แบบ self-verifying ประกอบด้วย:
 
-- signed `evidence-manifest.json` และ root hashes
+- signed `evidence-manifest.json`, `EvidenceAttestationV1` และ root hashes
 - Git state ของทั้งสอง roots: commit, branch, dirty files
 - dependency lock hashes, OS/runtime/compression/signer profiles
 - exact commands, exit codes, pass/fail/skip และ full machine-readable results
@@ -449,6 +496,8 @@ Evidence bundle แบบ self-verifying ประกอบด้วย:
 - route disposition ledger และ negative results
 - tenant isolation, hostile packet, trust freshness และ resource-limit reports
 - packet/trust/release-status/evidence artifact hashes
+
+`EvidenceAttestationV1` signed ด้วย CI/workload identity key ที่แยกจาก release key และ bind Git state ของทั้งสอง roots, exact command/report digests, CI run/workflow identity, builder/verifier binary hashes, issuedAt, retention policy และ evidence root hash Trust policy ต้องระบุ key owner, validity, rotation และ revocation ของ evidence key
 
 CI artifact ต้องผูก exact commit และระบุ dirty state ห้ามสรุปว่า pass จาก log ที่ถูกตัดหรือ test ที่ถูก skip
 
@@ -464,9 +513,12 @@ CI artifact ต้องผูก exact commit และระบุ dirty state
 - Cross-platform golden outputs byte-identical 100%
 - Standalone verifier ผ่าน valid corpus และ reject mutation corpus ด้วย reason codes ที่กำหนด
 - Two distinct authenticated humans ทำ freeze/approve/release E2E สำเร็จ
-- Revoke, VOID, stale candidate, membership revocation และ cross-tenant attack ถูกพิสูจน์
-- P2 shadow artifacts อยู่ใน sealed quarantine และ Factory/P3 access ถูก deny
-- Evidence bundle self-verifies และผูก exact source/environment
+- Revoke, attempt/artifact VOID, stale candidate, action-context replay, membership revocation, service-role spoof และ cross-tenant attack ถูกพิสูจน์
+- Profile attestation และ warning exception ถูก accept/reject ตาม scope, expiry, revocation และ distinct approvers
+- Offline verifier ปฏิเสธ first-use ที่ไม่มี checkpoint, rollback และ bundle ที่เกิน `maxOfflineStaleness`
+- P2 shadow artifacts อยู่ใน sealed quarantine; human plaintext/raw URL และ Factory/P3 access ถูก deny
+- Daph tenant 001 และ tenant 002 อยู่ร่วมกันด้วย data/config โดยไม่มี hardcoded authority
+- Evidence bundle self-verifies, ใช้ evidence key แยกจาก release key และผูก exact source/environment
 
 ### 17.2 Production/GA remains NO-GO
 
@@ -504,12 +556,15 @@ Owner สามารถพัฒนา implementation ภายใน boundary 
 | Risk | Control |
 |---|---|
 | V3 กลายเป็น stack เพิ่มอีกชุด | canonical authority, route ledger, no dual write, V1/V2 read-only |
-| Signed orphan | unsigned quarantine, signature kept in memory, atomic certificate/release commit, publish after commit |
+| Signed orphan | unsigned quarantine, final bytes/hash สร้างใน memory, atomic certificate/release/artifact commit, publish after materialization |
 | Cross-tenant leakage | tenant-bound FK/RLS/object paths/manifest and negative matrix |
-| Shadow artifact ถูกนำไปผลิต | sealed private P2, QA-only policy, safe extension, no Factory/P3 URL |
+| Service role ข้าม RLS/SoD | verified action context, DB recheck/nonce consumption และห้าม client-supplied authority fields |
+| Profile ประกาศ capability เกินจริง | signed profile attestation, tool/postprocessor hashes, validity/revocation และ canonical adapter |
+| Shadow artifact ถูกนำไปผลิต | sealed private P2, isolated automated verifier only, deny human plaintext/raw URL และ no Factory/P3 |
 | Determinism claim เกินจริง | golden bytes, property tests, cross-platform runs, pinned packaging/signing profile |
 | Verifier bugเหมือน builder | separate implementation graph + shared normative vectors, not shared implementation |
-| Offline revocation stale | short validity, sequence monotonicity, trusted clock, expired/unknown = reject |
+| Offline revocation stale | high-water mark, trusted bootstrap checkpoint, max staleness, monotonic sequence, trusted clock และ freshness-unproven = reject |
+| Evidence signer กลายเป็น release authority | separate CI/workload evidence key และ trust policy แยก |
 | Legacy bypass เหลืออยู่ | machine-readable inventory + negative test ต่อ surface |
 
 ## 21. Definition of Done for this design
