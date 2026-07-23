@@ -8,6 +8,17 @@
 # NEVER --deep. A commit hook that re-ran absence searches over the code tree
 # would be slow enough that the first person it annoyed would delete it.
 #
+# KNOWN LIMITATIONS, recorded by the final cross-vendor review rather than
+# fixed, because this layer is bypassable by design and CI is the authority:
+#   1. Partial staging: the linters read the WORKING-TREE file at each staged
+#      path, not the staged blob. Staging a bad version and then overwriting
+#      the working tree with a clean one commits the bad blob past this hook.
+#      CI lints the committed tree and catches it on push.
+#   2. A docs file written by any tool other than Claude Code's Write/Edit
+#      meets no guardrail before this hook. It only runs where
+#      tools/hooks/install-hooks.py has been run; the governance clone was
+#      activated 2026-07-23.
+#
 # Run from the repo root so the committed ledger `tools/.lint_allowlist` is the
 # authority. A grandfathered file staged unchanged stays green because it is
 # judged against its recorded per-file ceiling, whether it is linted alone or
