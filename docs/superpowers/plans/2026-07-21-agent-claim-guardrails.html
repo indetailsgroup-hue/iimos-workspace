@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>Agent Claim Guardrails Implementation Plan</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>Agent Claim Guardrails Implementation Plan</h1>
+<blockquote><h2>✅ STATUS: COMPLETED 2026-07-23 — DO NOT RE-EXECUTE THIS PLAN</h2>
+<p>All 7 tasks were executed, twice-reviewed (Claude adversarial workflows + GPT-5.6 Sol cross-vendor), and committed on <code>guardrails/claim-linters</code>: <code>fc99947</code> (Tasks 1+4), <code>11ddd0e</code> (2+3), <code>9c0ab40</code> (5), <code>7d8afab</code> (6), <code>9261ce3</code> (7). Execution record: <code>.superpowers/sdd/progress.md</code>. Checkboxes below are historical. Re-running RED steps against this now-GREEN code would overwrite reviewed work — the exact trap recorded at <code>worktrees/review-pr31/WORKTREE-SCOPE.en.md</code>.</p></blockquote>
+<blockquote><p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p></blockquote>
+<p><strong>Goal:</strong> Turn two agreements from the 2026-07-21 grill into mechanisms that fire on the shape of written output, so a negative capability claim cannot be published without search evidence and a certification cannot be published without adversarial evidence.</p>
+<p><strong>Estimated tasks:</strong> 7 | <strong>Estimated time:</strong> ~230 min | <strong>Touches:</strong> tools/ · tests/ · docs template</p>
+<h2>Current Problem / Current Solution</h2>
+<p>On 2026-07-21 an agent produced 12 recorded errors in one session. Seven shared a single signature: a search was run one way, it found nothing, and the result was published as absence. Examples, all wrong: <em>"ADR-065 does not exist"</em> (it is at <code>.kiro/steering/architecture-decisions.md:694</code>), <em>"431 test files"</em> (counted <code>node_modules</code>; real figure 259), <em>"HOMAG publishes no API"</em> (read marketing pages, not the technical portal).</p>
+<p>Two tools now exist and are tested:</p>
+<div class="tablewrap"><table><thead><tr><th>Tool</th><th>Covers</th></tr></thead><tbody>
+<tr><td><code>tools/verify_absence.py</code></td><td>4 search methods × 2 roots × spelling variants, EN+TH; a negative result explicitly refuses to license the words "does not exist"</td></tr>
+<tr><td><code>tools/change_budget.py</code></td><td>snapshot/check with content digests; exit 1 when changes fall outside the declared budget</td></tr>
+</tbody></table></div>
+<p><strong>Both are opt-in.</strong> Nothing forces either to run. That is the whole problem: the rule against publishing unverified absence was already written down in the Evidence Ledger §8 — by the same agent — and was violated four more times after being authored. Rules that depend on the agent noticing its own risk have a 100% failure rate in the recorded data.</p>
+<p>Two grill decisions remain agreements rather than mechanisms:</p>
+<ul>
+<li><strong>Item 1</strong> — a document making a negative capability claim must carry a pasted <code>verify_absence</code> evidence block.</li>
+<li><strong>Item 3</strong> — a sentence certifying something is safe/clean/passing must be preceded by an adversarial check.</li>
+</ul>
+<h2>Proposed Approach</h2>
+<p>Build two linters that detect the <strong>shape of the sentence</strong>, not the agent's intent, and fail the build when the required evidence is absent.</p>
+<p>The governing principle from the grill:</p>
+<blockquote><p>A mechanism must be triggered by the shape of output or an observable state, never by the agent recognising it is at risk.</p></blockquote>
+<p>The central design problem is <strong>false positives</strong>. Thai prose contains <code>ไม่มี</code> constantly (<code>ไม่มีปัญหา</code>, <code>ไม่มีอะไรเพิ่ม</code>), and a linter that fires on every occurrence becomes noise, gets disabled, and leaves the project worse off than with no linter at all.</p>
+<p>The narrowing rule: <strong>flag only a negative word co-occurring with a named artifact</strong> — a backticked identifier, a file path, an ADR id, or a <code>CamelCase</code>/<code>snake_case</code> symbol. Every one of the seven recorded failures had that shape (<code>ADR-065</code>, <code>computePanelCutSize</code>, <code>tenant_id</code>, <code>API</code>, <code>MPR exporter</code>). Ordinary prose does not.</p>
+<p>Shared detection logic lives in one module so both linters, and their regression corpus, agree on what a claim is.</p>
+<h2>Side by Side</h2>
+<div class="tablewrap"><table><thead><tr><th>Scenario</th><th>Before</th><th>After</th></tr></thead><tbody>
+<tr><td>Agent writes "<code>computePanelCutSize</code> is not implemented anywhere" in a doc</td><td>Published as fact; corrected hours later by an unrelated tool run</td><td><code>lint_claims</code> exits 1 at that line: negative claim about a named symbol with no evidence block</td></tr>
+<tr><td>Agent writes "the guard is safe" about <code>rm -rf</code></td><td>Published; an adversary later found the guard is a prefix check that <code>/tmp/../home</code> walks out of</td><td><code>lint_certifications</code> exits 1: certification with no adversary marker</td></tr>
+<tr><td>Agent runs <code>verify_absence</code> and pastes the output</td><td>No difference — evidence was optional</td><td>Lint passes; the evidence block is the citation</td></tr>
+<tr><td>Doc says "ไม่มีปัญหาเรื่องนี้" in ordinary prose</td><td>n/a</td><td>Not flagged — no named artifact in the sentence</td></tr>
+</tbody></table></div>
+<h2>Assumptions &amp; Risks</h2>
+<ul>
+<li><strong>Assumed:</strong> the co-occurrence rule (negative word + named artifact) is narrow enough to keep the false-positive rate low enough that nobody disables the linter. This is the plan's main bet and Task 1 must measure it against the existing <code>docs/</code> corpus, not assume it.</li>
+<li><strong>Assumed:</strong> <code>python -m unittest discover -s tests -t .</code> remains the runner. Verified today: 27 tests, OK.</li>
+<li><strong>Assumed:</strong> agents paste tool output into documents rather than linking it. If they link, the evidence-block detector needs a second accepted form.</li>
+<li><strong>Risk:</strong> the linter fires on the many existing docs written before this rule. Task 4 must measure the backlog and decide grandfathering explicitly rather than silently weakening the rule.</li>
+<li><strong>Risk:</strong> an agent satisfies the linter by pasting a <em>stale or unrelated</em> <code>verify_absence</code> block. The linter checks presence and term match, not freshness. Named as a known gap, not solved here.</li>
+<li><strong>Risk:</strong> certification phrases are far more open-ended than negation phrases. The Task 3 inventory will be incomplete on the first pass; the regression corpus is what grows it.</li>
+</ul>
+<h2>Impact</h2>
+<ul>
+<li>A negative capability claim cannot reach a committed document without search evidence attached.</li>
+<li>A safety or pass certification cannot reach a committed document without an adversary marker.</li>
+<li>Both failures become greppable by the owner, so skipping the mechanism is visible rather than silent.</li>
+<li>The regression corpus makes each recorded error permanently non-repeatable, which is the only property the 2026-07-21 data supports.</li>
+</ul>
+<hr>
+<h2>Task Overview</h2>
+<blockquote><p><strong>For implementation tasks:</strong> REQUIRED SUB-SKILL: Use superpowers:test-driven-development before editing production code. Each task is a RED -&gt; GREEN -&gt; REFACTOR slice. <strong>Parallel-first:</strong> Spawn separate sub-agents for independent lanes. Do not parallelize tasks that can race on the same files, migrations, generated artifacts, or shared state.</p></blockquote>
+<ol>
+<li><strong>Claim detection library</strong> - Lane A | Can run together: <code>Task 4</code> | Must wait for: <code>none</code> | TDD slice: sentence-classification tests over EN+TH fixtures, including attributed and refuted claims -&gt; <code>tools/claim_detect.py</code> -&gt; false-positive rate measured against real <code>docs/</code> (baseline: 402 negative + 190 certification hits across 171 docs)</li>
+<li><strong>Negative-claim linter (Item 1)</strong> - Lane B | Can run together: <code>Task 3</code> | Must wait for: <code>Task 1</code> | TDD slice: doc fixture with unevidenced absence claim exits 1 -&gt; <code>tools/lint_claims.py</code> -&gt; exit 0 once evidence block added</li>
+<li><strong>Certification linter (Item 3)</strong> - Lane C | Can run together: <code>Task 2</code> | Must wait for: <code>Task 1</code> | TDD slice: doc fixture certifying "safe" without adversary marker exits 1 -&gt; <code>tools/lint_certifications.py</code> -&gt; exit 0 with marker</li>
+<li><strong>Evidence block format + doc template</strong> - Lane D (docs/config-only) | Can run together: <code>Task 1</code> | Must wait for: <code>none</code> | Verification: <code>render_docs.py</code> renders the block; format is machine-parseable by Task 2</li>
+<li><strong>Regression corpus from the 12 recorded errors</strong> - Lane E | Can run together: <code>none</code> | Must wait for: <code>Task 2</code>, <code>Task 3</code> | TDD slice: each recorded 2026-07-21 error becomes a fixture the linters must catch -&gt; tune detectors -&gt; all 12 caught or explicitly out of scope</li>
+<li><strong>Allowlist + deep mode</strong> - Sequential | Can run together: <code>none</code> | Must wait for: <code>Task 5</code> | TDD slice: allowlisted file fails when its hit count rises -&gt; <code>--write-allowlist</code> + <code>--deep</code> -&gt; debt printed on every run</li>
+<li><strong>Three-layer enforcement</strong> - Sequential | Can run together: <code>none</code> | Must wait for: <code>Task 6</code> | Verification: a branch with a deliberately unevidenced claim must fail CI</li>
+</ol>
+<hr>
+<h3>Task 1: Claim detection library</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>tools/claim_detect.py</code></li>
+<li>Create: <code>tests/agent_guardrails/__init__.py</code></li>
+<li>Test: <code>tests/agent_guardrails/test_claim_detect.py</code></li>
+</ul>
+<p><strong>Parallelization:</strong></p>
+<ul>
+<li>Can run with: <code>Task 4</code></li>
+<li>Must wait for: <code>none</code></li>
+<li>Race risk: none — new files only</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 0: Load the TDD discipline</strong></li>
+</ul>
+<p>Use <code>superpowers:test-driven-development</code> before editing production code. RED -&gt; GREEN -&gt; REFACTOR.</p>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<pre><code class="language-python">from tools.claim_detect import find_negative_claims, find_certifications
+
+def test_flags_negation_with_named_symbol():
+    hits = find_negative_claims("`computePanelCutSize` is not implemented anywhere.")
+    assert len(hits) == 1
+    assert hits[0].term == "computePanelCutSize"
+
+def test_flags_thai_negation_with_named_symbol():
+    hits = find_negative_claims("`ADR-065` ไม่มีอยู่ในทั้งสองราก")
+    assert len(hits) == 1
+
+def test_ignores_ordinary_thai_prose():
+    assert find_negative_claims("ตรวจแล้วไม่มีปัญหาอะไรเพิ่มเติม") == []
+
+def test_ignores_negation_without_named_artifact():
+    assert find_negative_claims("There is no reason to rush this.") == []
+
+def test_flags_certification():
+    hits = find_certifications("The `rm -rf` guard is safe.")
+    assert len(hits) == 1</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the test and confirm it fails for the expected reason</strong></li>
+</ul>
+<pre><code>python -m unittest tests.agent_guardrails.test_claim_detect -v</code></pre>
+<p>Expected: FAIL on missing module <code>tools.claim_detect</code>, not on syntax or fixture errors.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the minimal code</strong></li>
+</ul>
+<p><code>find_negative_claims(text)</code> returns hits where a negation marker and a named artifact occur in the same sentence.</p>
+<ul>
+<li>Negation markers EN: <code>does not exist</code>, <code>there is no</code>, <code>is absent</code>, <code>not implemented</code>, <code>not found</code>, <code>lacks</code>, <code>no … anywhere</code>, <code>missing</code></li>
+<li>Negation markers TH: <code>ไม่มี</code>, <code>ขาด</code>, <code>ไม่พบ</code>, <code>ไม่ได้มี</code>, <code>หายไป</code></li>
+<li>Named artifact: backticked span, a path containing <code>/</code> or <code>\</code>, <code>ADR-\d+</code>, or a <code>camelCase</code>/<code>snake_case</code>/<code>SCREAMING_CASE</code> token of length ≥ 4</li>
+</ul>
+<p><code>find_certifications(text)</code> uses the same sentence split with certification markers: <code>is safe</code>, <code>is clean</code>, <code>passes</code>, <code>verified</code>, <code>no issues</code>, <code>works correctly</code>, <code>ปลอดภัย</code>, <code>สะอาด</code>, <code>ผ่านแล้ว</code>, <code>เรียบร้อย</code>, <code>ไม่มีปัญหา</code>.</p>
+<p>Sentence splitting must handle Thai, which does not use spaces between words or a full stop. Split on newline, <code>.</code> followed by whitespace, <code>·</code>, and <code>—</code>.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run the test and confirm it passes</strong></li>
+</ul>
+<pre><code>python -m unittest tests.agent_guardrails.test_claim_detect -v</code></pre>
+<ul>
+<li>[ ] <strong>Step 5: Measure the false-positive rate before refactoring</strong></li>
+</ul>
+<p>This step is the plan's main bet and must produce a number, not an impression.</p>
+<pre><code>python -c "from tools.claim_detect import find_negative_claims, find_certifications; import pathlib,sys; docs=list(pathlib.Path('docs').rglob('*.md')); n=sum(len(find_negative_claims(p.read_text(encoding='utf-8'))) for p in docs); c=sum(len(find_certifications(p.read_text(encoding='utf-8'))) for p in docs); print(f'{len(docs)} docs, {n} negative-claim hits, {c} certification hits')"</code></pre>
+<p>Then hand-inspect 20 random hits. If more than ~30% are ordinary prose rather than real claims, tighten the named-artifact rule before continuing — a noisy linter will be disabled, and a disabled linter is worse than none. Record the measured rate in the module docstring.</p>
+<hr>
+<h3>Task 2: Negative-claim linter (Item 1)</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>tools/lint_claims.py</code></li>
+<li>Test: <code>tests/agent_guardrails/test_lint_claims.py</code></li>
+<li>Create: <code>tests/agent_guardrails/fixtures/unevidenced_absence.md</code></li>
+<li>Create: <code>tests/agent_guardrails/fixtures/evidenced_absence.md</code></li>
+</ul>
+<p><strong>Parallelization:</strong></p>
+<ul>
+<li>Can run with: <code>Task 3</code></li>
+<li>Must wait for: <code>Task 1</code> — imports <code>claim_detect</code></li>
+<li>Race risk: none — separate files from Task 3</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 0: Load the TDD discipline</strong></li>
+</ul>
+<p>Use <code>superpowers:test-driven-development</code>. RED -&gt; GREEN -&gt; REFACTOR.</p>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<pre><code class="language-python">def test_unevidenced_absence_claim_fails(tmp_path):
+    assert lint_file(FIXTURES / "unevidenced_absence.md") != []
+
+def test_evidenced_absence_claim_passes(tmp_path):
+    assert lint_file(FIXTURES / "evidenced_absence.md") == []
+
+def test_evidence_must_match_the_claimed_term():
+    # a verify_absence block for a DIFFERENT term does not satisfy the claim
+    assert lint_file(FIXTURES / "mismatched_evidence.md") != []</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the test and confirm it fails for the expected reason</strong></li>
+</ul>
+<pre><code>python -m unittest tests.agent_guardrails.test_lint_claims -v</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Implement the minimal code</strong></li>
+</ul>
+<p>For each negative claim found by <code>claim_detect</code>, search the surrounding document for an evidence block whose recorded term matches the claimed artifact. Accept the format defined in Task 4. Report <code>file:line: unevidenced absence claim about '&lt;term&gt;'</code> and exit 1 when any remain.</p>
+<p>CLI: <code>python tools/lint_claims.py [paths...]</code>, defaulting to <code>docs/</code>. Never walk <code>determined-williams/</code> or <code>worktrees/</code> — both hold uncommitted third-party work.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run the test and confirm it passes</strong></li>
+</ul>
+<pre><code>python -m unittest tests.agent_guardrails.test_lint_claims -v</code></pre>
+<ul>
+<li>[ ] <strong>Step 5: Refactor only after green</strong></li>
+</ul>
+<hr>
+<h3>Task 3: Certification linter (Item 3)</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>tools/lint_certifications.py</code></li>
+<li>Test: <code>tests/agent_guardrails/test_lint_certifications.py</code></li>
+<li>Create: <code>tests/agent_guardrails/fixtures/bare_certification.md</code></li>
+<li>Create: <code>tests/agent_guardrails/fixtures/adversary_backed_certification.md</code></li>
+</ul>
+<p><strong>Parallelization:</strong></p>
+<ul>
+<li>Can run with: <code>Task 2</code></li>
+<li>Must wait for: <code>Task 1</code> — imports <code>claim_detect</code></li>
+<li>Race risk: none — separate files from Task 2</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 0: Load the TDD discipline</strong></li>
+</ul>
+<p>Use <code>superpowers:test-driven-development</code>. RED -&gt; GREEN -&gt; REFACTOR.</p>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<pre><code class="language-python">def test_bare_certification_fails():
+    assert lint_file(FIXTURES / "bare_certification.md") != []
+
+def test_certification_with_adversary_marker_passes():
+    assert lint_file(FIXTURES / "adversary_backed_certification.md") == []
+
+def test_certification_with_command_output_passes():
+    # a pasted command + its output is also acceptable evidence
+    assert lint_file(FIXTURES / "command_backed_certification.md") == []</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run the test and confirm it fails for the expected reason</strong></li>
+</ul>
+<pre><code>python -m unittest tests.agent_guardrails.test_lint_certifications -v</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Implement the minimal code</strong></li>
+</ul>
+<p>Accept two evidence forms adjacent to the certification: an <code>&lt;!-- adversary: &lt;label&gt; --&gt;</code> marker, or a fenced code block containing a command and its output. Report <code>file:line: uncorroborated certification</code> and exit 1.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run the test and confirm it passes</strong></li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 5: Refactor only after green</strong></li>
+</ul>
+<hr>
+<h3>Task 4: Evidence block format + doc template</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>docs/_templates/evidence-block.md</code></li>
+<li>Modify: <code>tools/render_docs.py</code> — only if the block renders badly; verify first</li>
+</ul>
+<p><strong>Parallelization:</strong></p>
+<ul>
+<li>Can run with: <code>Task 1</code></li>
+<li>Must wait for: <code>none</code></li>
+<li>Race risk: <code>tools/render_docs.py</code> is shared with no other task in this plan, but confirm no other agent is editing it before modifying</li>
+</ul>
+<p><strong>Docs/config-only exception:</strong> this task defines a text format and has no runtime behavior of its own. A failing behavior test belongs in Task 2, which consumes the format. Verification below is the smallest meaningful check.</p>
+<ul>
+<li>[ ] <strong>Step 1: Define the format</strong></li>
+</ul>
+<pre><code class="language-markdown">&lt;!-- verify_absence: computePanelCutSize @ 2026-07-21 --&gt;</code></pre>
+<pre><code># verify_absence — computePanelCutSize
+variants searched (5): ...
+RESULT: NOT LOCATED by any method above.</code></pre>
+<pre><code>
+The HTML comment carries the machine-readable term and date; the fenced block carries the human-readable proof. Task 2 parses the comment, not the prose.
+
+- [ ] **Step 2: Verify it renders**
+</code></pre>
+<p>python tools/render_docs.py docs/_templates/evidence-block.md</p>
+<pre><code>
+Expected: exit 0; open the HTML and confirm the fenced block is readable and the HTML comment does not leak into visible text.
+
+- [ ] **Step 3: Measure the existing backlog**
+</code></pre>
+<p>python tools/lint_claims.py docs/ | wc -l</p>
+<pre><code>
+Record the count. Decide explicitly with the owner whether to grandfather existing documents by date or to fix them. **Do not weaken the detector to make the number small** — that converts a real backlog into a hidden one.
+
+---
+
+### Task 5: Regression corpus from the 12 recorded errors
+
+**Files:**
+
+- Create: `tests/agent_guardrails/test_recorded_failures.py`
+- Create: `tests/agent_guardrails/fixtures/recorded/*.md`
+
+**Parallelization:**
+
+- Can run with: `none`
+- Must wait for: `Task 2`, `Task 3` — needs both linters
+- Race risk: tunes detector thresholds in `tools/claim_detect.py`, which Tasks 2 and 3 depend on; must not run concurrently with them
+
+- [ ] **Step 0: Load the TDD discipline**
+
+Use `superpowers:test-driven-development`. RED -&gt; GREEN -&gt; REFACTOR.
+
+- [ ] **Step 1: Write the failing test**
+
+One fixture per recorded 2026-07-21 error, using the actual published wording. Sources: `docs/reports/2026-07-21-monolith-repository-production-readiness-baseline.en.md` §1, `docs/research/2026-07-21-monolith-vendor-standards-evidence-ledger.en.md` §6, and `docs/research/competitors/pplx-corpus-errata.md`.
+</code></pre>
+<p>RECORDED = [ ("adr_065",        "<code>ADR-065</code>: No file found anywhere in either root", "negative"), ("cut_size",       "<code>computePanelCutSize</code> is not implemented anywhere", "negative"), ("no_api",         "No page mentions an <code>API</code> at all",                 "negative"), ("test_count",     "431 test files exist under <code>determined-williams/</code>", "count"), ("rm_guard",       "The <code>rm -rf</code> guard is safe",                        "certification"), ("only_touched",   "Only the intended files in <code>docs/plans/</code> were touched", "certification"),</p>
+<h1>... one entry per recorded error</h1>
+<p>]</p>
+<p>def test_every_recorded_failure_is_caught(): missed = [name for name, text, kind in RECORDED if not _detected(text, kind)] assert missed == [], f"regression corpus not caught: {missed}"</p>
+<pre><code>
+- [ ] **Step 2: Run the test and confirm it fails for the expected reason**
+</code></pre>
+<p>python -m unittest tests.agent_guardrails.test_recorded_failures -v</p>
+<pre><code>
+Expected: FAIL listing the specific recorded errors the current detectors miss.
+
+- [ ] **Step 3: Tune the detectors until every recorded failure is caught**
+
+Tune `tools/claim_detect.py`. After each change re-run Task 1's false-positive measurement — tightening recall usually costs precision, and the trade must stay inside the threshold set in Task 1 Step 5.
+
+Any recorded error the shape-based detectors cannot catch — the "one hour" estimate and the wrong-shadowing warning are the likely two — must be listed explicitly in the test file as out of scope with a one-line reason. **Do not delete them from the corpus to make the suite green.**
+
+- [ ] **Step 4: Run the full suite and confirm nothing else broke**
+</code></pre>
+<p>python -m unittest discover -s tests -t .</p>
+<pre><code>
+Expected: the pre-existing 27 tests still pass, plus the new guardrail tests.
+
+- [ ] **Step 5: Refactor only after green**
+
+---
+
+## Owner decisions — resolved 2026-07-21
+
+All three previously-open items were decided by the owner. Measurements were taken before deciding, not after.
+
+### Measured backlog
+</code></pre>
+<p>docs scanned        : 171 negative-claim hits : 402  across 49 files certification hits  : 190  across 50 files</p>
+<pre><code>
+Top offenders are the documents written on 2026-07-21 to *record and refute* claims —
+`plans-review-worktree-review-pr31.th.md` (71), `ima-audit-independent-claim-verification.th.md` (53),
+`pplx-corpus-errata.md` (19).
+
+**This changes the design.** Those files trip the detector because their whole purpose is quoting a
+false claim and refuting it. A sentence like *"Perplexity claimed System 32 was absent — refuted at
+`policy.ts:150`"* contains a negation and a named artifact while being the exact opposite of an
+unevidenced claim. **A naive detector fires hardest on the most careful documents.** Task 1 must
+therefore also recognise:
+
+- **attributed claims** — negation inside a quote, or following `claimed`, `said`, `reported`, `อ้างว่า`, `ระบุว่า`
+- **refuted claims** — a negation followed within the same or next sentence by a `file:line`, a commit sha, or a `CONTRADICTED`/`REFUTED` verdict marker
+
+Neither form requires a `verify_absence` block. Add these as failing tests in Task 1 Step 1.
+
+### Decision 1 — Grandfathering: shrinking allowlist
+
+`tools/.lint_allowlist` records `path&lt;TAB&gt;accepted_hit_count` captured at adoption. A file in the
+allowlist passes at or below its recorded count and **fails if the count increases**. Files not in
+the allowlist must be clean.
+
+- Chosen over fixing all 402 (many are legitimate attributed or refuted claims) and over date-based
+  grandfathering (which hides the debt).
+- **Accepted downside:** an allowlist prevents regression but does not force progress. If nobody
+  reduces the numbers they stay forever. The total is printed on every run so the debt stays visible.
+
+### Decision 2 — Evidence freshness: re-run the search in CI
+
+The real staleness risk is not the document changing — it is the **repository** changing. If
+`computePanelCutSize` is implemented tomorrow, a correct "not located" claim becomes false with no
+edit to any document.
+
+- **local mode** (default): presence and term match only. Milliseconds.
+- **`--deep` mode** (CI): re-run `verify_absence` for every claimed term and **fail if the term is now
+  found**. A dead claim surfaces immediately.
+
+Chosen over a fixed TTL (an invented number), document mtime (measures the wrong thing), and HEAD-sha
+pinning (goes stale every commit, becomes noise, gets disabled).
+
+- **Accepted downside:** re-running hundreds of terms is slow. Mitigation: `--deep` runs only for terms
+  in files touched by the diff, plus a full nightly sweep.
+
+### Decision 3 — Enforcement: three layers
+
+| Layer | Fires when | Bypassable |
+|---|---|---|
+| Claude Code `PostToolUse` hook on `Write`/`Edit` matching `docs/**.md` | the moment an agent writes the file | not by the agent; the owner can disable it in settings |
+| `git` pre-commit hook | at commit; also catches human edits | yes, `--no-verify` |
+| CI job | on push / PR | **no** |
+
+All three. The first two are fast feedback; **CI is the only layer with actual authority.**
+
+**This is not 100% coverage and must not be described as such.** Linters read files. A claim made in
+chat is read by no linter, and the grill established that every recorded error was spoken in chat
+before it reached a document. The chat-wording rule from grill decision 2 remains a convention
+enforced only by the owner grepping for banned phrasing. Claiming complete coverage here would be the
+same class of error this plan exists to prevent.
+
+---
+
+### Task 6: Allowlist and deep mode
+
+**Files:**
+
+- Create: `tools/.lint_allowlist`
+- Modify: `tools/lint_claims.py` — add `--deep` and allowlist handling
+- Test: `tests/agent_guardrails/test_allowlist.py`
+
+**Parallelization:**
+
+- Can run with: `none`
+- Must wait for: `Task 5` — thresholds must be settled before the allowlist is captured
+- Race risk: edits `tools/lint_claims.py`, owned by Task 2
+
+- [ ] **Step 0: Load the TDD discipline**
+
+- [ ] **Step 1: Write the failing test**
+</code></pre>
+<p>def test_allowlisted_file_passes_at_recorded_count(): assert lint([FIX / "grandfathered.md"], allowlist={"grandfathered.md": 3}) == []</p>
+<p>def test_allowlisted_file_fails_when_count_increases(): assert lint([FIX / "grandfathered.md"], allowlist={"grandfathered.md": 2}) != []</p>
+<p>def test_attributed_claim_is_not_flagged(): assert find_negative_claims("Perplexity claimed <code>System 32</code> does not exist.") == []</p>
+<p>def test_refuted_claim_is_not_flagged(): assert find_negative_claims("Claimed absent — refuted at <code>policy.ts:150</code>.") == []</p>
+<p>def test_deep_mode_fails_when_term_is_now_found():</p>
+<h1>evidence says NOT LOCATED, but verify_absence finds it today</h1>
+<p>assert lint([FIX / "dead_claim.md"], deep=True) != []</p>
+<pre><code>
+- [ ] **Step 2: Run and confirm failure**
+</code></pre>
+<p>python -m unittest tests.agent_guardrails.test_allowlist -v</p>
+<pre><code>
+- [ ] **Step 3: Implement**
+
+Capture the allowlist only after Task 5 has settled the detectors:
+</code></pre>
+<p>python tools/lint_claims.py docs/ --write-allowlist</p>
+<pre><code>
+- [ ] **Step 4: Run and confirm pass**
+
+- [ ] **Step 5: Print the debt on every run**
+
+Every invocation ends with `allowlisted debt: N hits across M files`. A number nobody sees is a number
+nobody reduces.
+
+---
+
+### Task 7: Three-layer enforcement
+
+**Files:**
+
+- Create: `.github/workflows/claim-guardrails.yml`
+- Create: `tools/hooks/pre-commit`
+- Modify: `~/.claude/settings.json` — `PostToolUse` hook (owner-approved change outside the repo)
+
+**Parallelization:**
+
+- Can run with: `none`
+- Must wait for: `Task 6` — enforcing a linter that still has an unsettled allowlist will block all work
+- Race risk: `~/.claude/settings.json` is user-global; read it, merge, never overwrite. It already
+  carries an `env` block and a `permissions.allow` list that must survive.
+
+**Docs/config-only exception:** these are wiring, not behavior. The behavior is tested in Tasks 2, 3,
+5 and 6. Verification below is the smallest meaningful check per layer.
+
+- [ ] **Step 1: CI — the authoritative layer, build this first**
+</code></pre>
+<ul>
+<li>run: python tools/lint_claims.py docs/ --deep</li>
+<li>run: python tools/lint_certifications.py docs/</li>
+</ul>
+<pre><code>
+Verify by pushing a branch containing a deliberately unevidenced claim and confirming the job fails.
+**A gate that has never been seen to fail has not been verified.**
+
+- [ ] **Step 2: pre-commit**
+
+Local mode only — a commit hook that re-runs searches would be too slow and would be removed.
+
+- [ ] **Step 3: Claude Code PostToolUse hook**
+
+Matcher on `Write|Edit` where the path matches `docs/.*\.md`. Runs local mode against the single file.
+Merge into the existing `settings.json`; do not replace it.
+
+- [ ] **Step 4: Verify each layer independently**
+
+Three separate checks, one per layer. Confirm the CI layer still fails when the other two are
+disabled — it is the only layer that cannot be bypassed, so it must stand alone.
+</code></pre>
+</main></body>
+</html>
