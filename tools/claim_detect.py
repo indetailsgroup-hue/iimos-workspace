@@ -40,7 +40,8 @@ unevidenced claim. A naive detector fires hardest on the most careful writing in
 the corpus, which is precisely how a linter earns its way into `# noqa`. So:
 
     attributed   the negation sits inside quotes, or follows claimed / said /
-                 reported / อ้าง / ระบุ — somebody else's claim, not yours
+                 reported — or Thai อ้าง / ระบุ *reporting* a claim (followed by
+                 ว่า, a colon, or a quote), not the ordinary verbs "cite"/"specify"
     refuted      the negation is answered, in the same or the next sentence, by
                  a file:line, a commit sha, or a CONTRADICTED / REFUTED verdict
 
@@ -92,27 +93,85 @@ later reader will otherwise take them for accidents:
    is not an adversarial check, and Task 3 exists to demand an adversarial check.
    Silencing "`exportDxf` passes. See `exporter.ts:88`." would gut that linter.
 
+What Task 5 changed (marker tuning for the recorded corpus)
+----------------------------------------------------------
+Four of the ten recorded 2026-07-21 probes were still missed after Task 1, so
+Task 5 owns marker tuning and closed them, each with a test naming the probe:
+
+  * `not located` (EN) — the wording `verify_absence` *licenses* on a negative
+    result (review finding O-4). It was the one authoritative absence phrasing no
+    linter inspected; the evidence-block template now passes honestly (its own
+    claim detected and satisfied) rather than vacuously. ไม่พบใน is already
+    covered by ไม่พบ.
+  * `no … mentions X` — the shape of "no page mentions API" / "no production-zone
+    page mentions tapio".
+  * `not current` — "`PROVENANCE.md` is not current", a staleness claim about a
+    named artifact.
+  * `only … were touched/changed` (certification) — the change-scope claim
+    change_budget.py checks; "only the intended files were touched".
+
+Two review defects were also closed here:
+
+  * M2 (inline-code false positive). A UI message quoted inside a backtick span
+    fired because a period-plus-space *inside* the span split it, leaving each
+    half with an unbalanced backtick that `_mask_shown_spans` could not mask.
+    `split_sentences` now ignores separators that fall inside an inline-code
+    span, so markers inside the span stay muted while a named artifact written in
+    backticks still counts. Cost: one *evidenced* claim on a row with a
+    malformed (unbalanced) backtick is no longer flagged, because the stray
+    backtick makes `_INLINE_CODE` mis-pair the span — a data-quality artefact of
+    one document, disclosed rather than special-cased.
+  * M3 (Thai attribution over-suppression, the Task 1 survivor). ระบุ / อ้าง are
+    attribution only when a ว่า particle, colon, or opening quote follows within
+    a short window; see `_ATTRIBUTION_MARKERS`.
+
 Measured false-positive rate
 ----------------------------
-Against the live `docs/` corpus, Python 3.14, 2026-07-21:
+Against the live `docs/` corpus, Python 3.14:
 
-    172 docs, 104 negative-claim hits, 5 certification hits
+    2026-07-21 (Task 1):   172 docs, 104 negative, 5 certification
+    2026-07-22 (pre-Task5):178 docs, 105 negative, 5 certification
+    2026-07-23 (Task 5 + cross-vendor fixes): 178 docs, 111 negative in 26
+                                              files, 5 certification
 
-The naive detector recorded in the plan scored 402 negative and 190
-certification hits over the same corpus (171 docs then; this file's own plan
-document is the 172nd).
+The delta against the fc99947 baseline decomposes exactly, verified by
+hit-level diffs at each step: +7 Thai-attribution recoveries (M3), +1 template
+`not located` hit (M1; evidenced, so lint_claims still passes the template and
+reports 110 in 25 files), -1 disclosed M2 loss (playbook.en.md:846, unbalanced
+backtick), -1 correct suppression from the cross-vendor fixes
+(homag-reference-corrections.md:92 — `ระบุไว้ชัดตามปลายทาง 3 เส้น:` is
+attribution the 10-char window was too narrow to see) = net +6. The three
+probe-closing markers added zero corpus hits outside the fixtures. An earlier
+revision of this docstring recorded 115 (+10); that number did not reproduce —
+three independent reviewers and the orchestrator all measured 112 before the
+cross-vendor fixes — and the correction is recorded here rather than deleted,
+because a calibration baseline that was itself wrong is exactly the failure
+this module polices. The naive detector in the plan scored 402 negative / 190
+certification over this corpus.
 
-Hand inspection of the current output:
+Hand inspection of the tuned output — 20 random negative hits at two independent
+seeds, classified against the Task 1 standard (an assertion that a *findable*
+thing is absent is a real claim; idiom, requirement, denial, reported-past-error
+and pure description are prose):
 
-    negative claims   20 sampled   16 real / 4 prose    20% false positive
-    certifications     5 sampled    4 real / 1 prose    20% false positive
-                       (5 is the whole population, not a sample)
+    negative claims   20 sampled (x2 seeds)   15 real / 5 prose   25% prose
+    certifications     5 sampled (whole pop.)  4 real / 1 prose    20% prose
 
-against 55% and 92% before the corpus-driven rules. The four surviving negative
-false positives are a commitment line ("no force-push, no `--no-verify`"), a
-validation instruction ("check that there is no `,` in any value"), a dense
-evidence table row, and — with some justice — this project's own plan file
-saying "Expected: FAIL on missing module `tools.claim_detect`".
+against the 20.9% negative baseline and the plan's ~30% prose ceiling. The five
+prose survivors are the pre-existing classes — a denied absence ("does not prove
+X is absent"), a requirement ("no image-only equivalence [allowed]"), the idiom
+ไม่มีทาง in a "does-not-prove" column, a reported-past-error the correction is
+disavowing ("an earlier revision stated `ADR-065` did not exist" — `stated` is
+not an attribution marker), plus one M3 side effect (a denied absence, "not that
+they lack capability").
+
+M3 measured in isolation on the live corpus: the bounded rule recovers 7 hits
+the old unbounded rule suppressed (≈4 real absence claims — e.g. "107 spec docs
+with no ADR file", "no protocol/controller/tapio documented" — and ≈3 prose) and
+loses **zero** relative to the old rule; both pinned attributions
+(`**รายงานระบุ:**`, `ระบุชัดว่า`) stay exempt. A missed real claim is the costly
+error this project exists to prevent, so recovering real claims at that ratio is
+a net gain; the choice is recorded here rather than argued.
 
 These numbers describe *this* corpus, not a guarantee. They are recorded so a
 future change to these rules is compared against a measurement instead of
@@ -165,6 +224,21 @@ _NEGATION_MARKERS = tuple(
         # "no … anywhere" — the shape of "no MPR exporter anywhere in the repo".
         # Bounded so it cannot reach across a whole paragraph.
         r"\bno\b[^\n]{0,80}?\banywhere\b",
+        # "not located" is the exact wording verify_absence *licenses* on a
+        # negative result. Without it the most authoritative-sounding absence
+        # sentence in the project — the one the guardrail itself prints, and the
+        # one the evidence-block template teaches — is the phrasing no linter
+        # inspects (review finding O-4). The Thai equivalent ไม่พบใน is already
+        # covered by ไม่พบ below.
+        r"not located",
+        # "no page mentions X" / "no production-zone page mentions X" — an absence
+        # claim about a named thing that a search over pages would settle.
+        # Catches the recorded `no_api` and `tapio` misses.
+        r"\bno\b[^\n]{0,80}?\bmentions?\b",
+        # "X is not current" — a staleness claim about a named artifact, settled
+        # by the git comparison the sentence does not show. Catches the recorded
+        # `skills_behind` miss ("`PROVENANCE.md` is not current").
+        r"\bnot current\b",
     )
 ) + tuple(
     re.compile(p)
@@ -195,6 +269,12 @@ _CERTIFICATION_MARKERS = tuple(
         r"\bverified\s+(?:by|that|against)\b",
         r"no issues",
         r"works correctly",
+        # "only X were touched / changed" — a change-scope certification, exactly
+        # the claim change_budget.py exists to check. An adversary later found the
+        # 2026-07-21 "only the intended files were touched" claim did not add up.
+        # Bounded so "only" and the verb stay in one clause. Catches the recorded
+        # `only_touched` miss.
+        r"\bonly\b[^\n]{0,60}?\b(?:were|was|are|is|got)\s+(?:touched|changed|modified|affected|edited)\b",
     )
 ) + tuple(
     re.compile(p)
@@ -209,10 +289,28 @@ _CERTIFICATION_MARKERS = tuple(
     )
 )
 
-# ระบุ and อ้าง are matched without the ว่า particle: the corpus writes
-# "**รายงานระบุ:**" with a colon at least as often as "ระบุว่า".
+# English reporting verbs suppress zero real claims and are matched bare. The
+# Thai ระบุ / อ้าง are *also* ordinary verbs ("specify" / "cite"), and matching
+# them bare over the whole sentence prefix suppressed 15 hits corpus-wide, ~3-4
+# of them genuine claims (Task 1 review survivor). They are attribution only when
+# they actually report a claim — followed, within a short window, by the ว่า
+# particle, a colon, or an opening quote. The window (not an immediate lookahead)
+# is what keeps ระบุชัดว่า ("states clearly that", ชัด between ระบุ and ว่า) bound;
+# the colon and quote alternatives are what keep the pinned "**รายงานระบุ:**"
+# form bound, which a naive ว่า-only rule would break. Measured on the live docs/
+# corpus: this recovers genuine claims while the two pinned attributions stay
+# exempt and the false-positive rate stays inside the Task 1 threshold — see the
+# module docstring's "Measured false-positive rate".
+#
+# The window is 25 characters, not the original 10: the cross-vendor reviewer
+# produced natural Thai report prose — "รายงานการตรวจสอบระบุอย่างชัดเจนในบทสรุปว่า …"
+# — where 19 characters of modifiers sit between ระบุ and ว่า, and the 10-char
+# bound wrongly flagged genuine attribution. Widening costs nothing measurable:
+# the recovered ordinary-verb hits contain no ว่า/colon/quote at any distance,
+# so they stay recovered.
 _ATTRIBUTION_MARKERS = re.compile(
-    r"\b(?:claimed|claims|said|says|reported|reports)\b|อ้าง|ระบุ",
+    r"\b(?:claimed|claims|said|says|reported|reports)\b"
+    r"|(?:อ้าง|ระบุ)(?=[^\n]{0,25}?(?:ว่า|[:：\"“”`「]))",
     re.IGNORECASE,
 )
 
@@ -236,7 +334,16 @@ _COMMIT_SHA = re.compile(r"\b(?=[0-9a-f]{7,40}\b)[0-9a-f]*\d[0-9a-f]*\b")
 _VERDICT_MARKER = re.compile(r"\b(?:CONTRADICTED|REFUTED)\b", re.IGNORECASE)
 
 # Regions whose contents are shown rather than asserted.
-_INLINE_CODE = re.compile(r"`[^`\n]*`")
+#
+# Code spans are paired CommonMark-style: a run of N backticks closes only
+# against an equal run. The first version paired single backticks, so the
+# ordinary Markdown idiom for showing a literal backtick — `` ` `` — mis-paired
+# every backtick after it, merged the surrounding sentences into one, and both
+# masked real claims and let an unrelated citation drift into a negation's
+# refutation window. Found by the cross-vendor reviewer by reasoning, then
+# reproduced by execution; the corpus carries 373 double-backtick spans across
+# 22 files, so this was live exposure, not a curiosity.
+_INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`)((?:(?!\1).)+?)\1(?!`)")
 _QUOTED = re.compile(r"\"[^\"\n]*\"|“[^”\n]*”")
 
 _MIN_TOKEN_LEN = 4
@@ -300,10 +407,26 @@ def find_certifications(text: str) -> list[Hit]:
 
 
 def split_sentences(text: str) -> list[Sentence]:
-    """Split `text` into citable units. Empty runs are dropped."""
+    """Split `text` into citable units. Empty runs are dropped.
+
+    A separator that falls *inside* an inline-code span is ignored: a
+    "`… machine post. No groove …`" — a period-plus-space within a backtick span
+    — must not break the span in two. Were it split, each half would hold one
+    unbalanced backtick, which `_mask_shown_spans` cannot recognise as code, so
+    the markers displayed inside the span would fire. The separators are found in
+    the original text (not a blanked copy) so nothing shifts a boundary or drops
+    a leading artifact; only the ones landing inside a span are dropped.
+    """
+    spans = [(m.start(), m.end()) for m in _INLINE_CODE.finditer(text)]
+
+    def _inside_code(pos: int) -> bool:
+        return any(start <= pos < end for start, end in spans)
+
     out: list[Sentence] = []
     pos = 0
     for sep in _SEPARATOR.finditer(text):
+        if _inside_code(sep.start()):
+            continue
         _append(out, text, pos, sep.start())
         pos = sep.end()
     _append(out, text, pos, len(text))

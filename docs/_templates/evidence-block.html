@@ -127,8 +127,9 @@ under a name that shares no substring with the term.</code></pre>
 <p>It proves that on the recorded date, the four search methods over the listed roots returned nothing for that term and its spelling variants.</p>
 <p>It does <strong>not</strong> prove the artifact does not exist. It says nothing about places the tool cannot reach — binary assets, vendor documentation, external services, other branches, names sharing no substring with the term — and nothing about the repository as it stands today, since an artifact added after the search date makes a correct block describe a claim that is now false.</p>
 <h2>Wording</h2>
-<p><code>verify_absence</code> deliberately refuses to license the words "does not exist" on a negative result. This block does not restore that licence, and neither does any number of blocks. Use the tool's own sentence:</p>
-<blockquote><p><code>TERM</code> was not located in N root(s) by filename, content, git-tracked, and git-history search on YYYY-MM-DD.</p></blockquote>
-<p>Do not upgrade it to "does not exist", "there is no <code>TERM</code>", "<code>TERM</code> is not implemented anywhere", or "confirmed absent". Each of those asserts something the search did not establish. If you need the stronger claim, you need a stronger method than this tool — searching harder in the same places cannot produce it.</p>
+<p><code>verify_absence</code> deliberately refuses to license the words "does not exist" on a negative result. This block does not restore that licence, and neither does any number of blocks. Use the tool's own sentence — this is the licensed <em>format</em>, with <code>TERM</code>, <code>N</code> and the date filled in from your own run:</p>
+<pre><code>TERM was not located in N root(s) by filename, content, git-tracked, and
+git-history search on YYYY-MM-DD.</code></pre>
+<p><code>not located</code> is a linted phrase: written about a real artifact outside a fence, it is a negative claim and needs its own evidence block, exactly like the worked example above. Do not upgrade it to "does not exist", "there is no <code>TERM</code>", "<code>TERM</code> is not implemented anywhere", or "confirmed absent". Each of those asserts something the search did not establish. If you need the stronger claim, you need a stronger method than this tool — searching harder in the same places cannot produce it.</p>
 </main></body>
 </html>

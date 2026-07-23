@@ -114,12 +114,17 @@ makes a correct block describe a claim that is now false.
 
 `verify_absence` deliberately refuses to license the words "does not exist" on a
 negative result. This block does not restore that licence, and neither does any
-number of blocks. Use the tool's own sentence:
+number of blocks. Use the tool's own sentence — this is the licensed *format*,
+with `TERM`, `N` and the date filled in from your own run:
 
-> `TERM` was not located in N root(s) by filename, content, git-tracked, and
-> git-history search on YYYY-MM-DD.
+```
+TERM was not located in N root(s) by filename, content, git-tracked, and
+git-history search on YYYY-MM-DD.
+```
 
-Do not upgrade it to "does not exist", "there is no `TERM`", "`TERM` is not
+`not located` is a linted phrase: written about a real artifact outside a fence,
+it is a negative claim and needs its own evidence block, exactly like the worked
+example above. Do not upgrade it to "does not exist", "there is no `TERM`", "`TERM` is not
 implemented anywhere", or "confirmed absent". Each of those asserts something
 the search did not establish. If you need the stronger claim, you need a
 stronger method than this tool — searching harder in the same places cannot
