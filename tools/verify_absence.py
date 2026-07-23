@@ -77,9 +77,9 @@ def variants(term: str) -> list[str]:
     return sorted(o for o in out if o)
 
 
-def walk(root: Path, exts: set[str] | None):
+def walk(root: Path, exts: set[str] | None, exclude: frozenset[str] = frozenset()):
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and d not in exclude]
         for fn in filenames:
             if fn in SKIP_FILES:
                 continue
@@ -92,9 +92,10 @@ def walk(root: Path, exts: set[str] | None):
             yield p
 
 
-def search_content(root: Path, pats: list[re.Pattern], exts, limit: int):
+def search_content(root: Path, pats: list[re.Pattern], exts, limit: int,
+                   exclude: frozenset[str] = frozenset()):
     hits = []
-    for p in walk(root, exts):
+    for p in walk(root, exts, exclude):
         try:
             text = p.read_text(encoding="utf-8", errors="replace")
         except (OSError, ValueError):
@@ -107,10 +108,10 @@ def search_content(root: Path, pats: list[re.Pattern], exts, limit: int):
     return hits, False
 
 
-def search_names(root: Path, pats: list[re.Pattern]):
+def search_names(root: Path, pats: list[re.Pattern], exclude: frozenset[str] = frozenset()):
     out = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and d not in exclude]
         for name in list(dirnames) + filenames:
             if any(pat.search(name) for pat in pats):
                 out.append(Path(dirpath) / name)
@@ -150,8 +151,15 @@ def main(argv: list[str]) -> int:
                     help="repeatable; defaults to the two known roots")
     ap.add_argument("--ext", default=None,
                     help="comma-separated extensions to restrict content search, e.g. .ts,.tsx")
+    ap.add_argument("--exclude", action="append", default=None, metavar="NAME",
+                    help="repeatable; directory name to skip at any depth, in addition to the "
+                         "standard build/vcs trees. Used by lint_claims --deep to drop docs/ so "
+                         "the search sees the code, not the prose asserting things about it.")
     ap.add_argument("--limit", type=int, default=40)
     a = ap.parse_args(argv)
+
+    exclude = frozenset(a.exclude or ())
+    exclude_pathspecs = [f":(exclude){name}" for name in sorted(exclude)]
 
     here = Path(__file__).resolve().parent.parent
     roots = [Path(r) for r in a.root] if a.root else [here, here / "determined-williams"]
@@ -174,6 +182,8 @@ def main(argv: list[str]) -> int:
         print(f"  - {r}")
     print(f"content extensions: {'all text types' if exts is None else ', '.join(sorted(exts))}")
     print(f"excluded directories: {', '.join(sorted(SKIP_DIRS))}")
+    if exclude:
+        print(f"additional exclusions (this run): {', '.join(sorted(exclude))}")
     print("encoding: utf-8 (Thai comments and identifiers are in scope)")
 
     found = False
@@ -181,7 +191,7 @@ def main(argv: list[str]) -> int:
     for r in roots:
         print(f"\n## {r}")
 
-        names = search_names(r, pats)
+        names = search_names(r, pats, exclude)
         print(f"\n### filename / directory-name matches: {len(names)}")
         for p in names[:15]:
             print(f"  {p.relative_to(r)}")
@@ -189,7 +199,7 @@ def main(argv: list[str]) -> int:
             print(f"  … and {len(names) - 15} more")
         found = found or bool(names)
 
-        hits, truncated = search_content(r, pats, exts, a.limit)
+        hits, truncated = search_content(r, pats, exts, a.limit, exclude)
         print(f"\n### content matches: {len(hits)}{'+ (truncated)' if truncated else ''}")
         for p, ln, txt in hits[:20]:
             print(f"  {p.relative_to(r)}:{ln}: {txt}")
@@ -197,7 +207,10 @@ def main(argv: list[str]) -> int:
             print(f"  … and {len(hits) - 20} more")
         found = found or bool(hits)
 
-        res = git(r, "grep", "-rniI", "-e", a.term)
+        grep_args = ["grep", "-rniI", "-e", a.term]
+        if exclude_pathspecs:
+            grep_args += ["--", ".", *exclude_pathspecs]
+        res = git(r, *grep_args)
         if res is None:
             print("\n### git grep (tracked files): NOT SEARCHED — not a git repository, or git unavailable")
         elif res[0] == "no-match":
@@ -211,7 +224,7 @@ def main(argv: list[str]) -> int:
                 print(f"  … and {len(lines) - 10} more")
             found = found or bool(lines)
 
-        res = git(r, "log", "--oneline", "-S", a.term, "--", ".")
+        res = git(r, "log", "--oneline", "-S", a.term, "--", ".", *exclude_pathspecs)
         if res is None:
             print("### git history: NOT SEARCHED — not a git repository, or git unavailable")
         elif res[0] == "no-match":

@@ -56,12 +56,19 @@ Usage
 -----
     python tools/lint_certifications.py                # defaults to docs/
     python tools/lint_certifications.py docs/adr path/to/one.md
+    python tools/lint_certifications.py docs/ --write-allowlist  # (re)capture the ledger
+
+The existing corpus carries 5 uncorroborated certifications, so the same
+shrinking allowlist that grandfathers `lint_claims` grandfathers this linter too
+(`tools/.lint_allowlist`, shared, namespaced by linter). A listed file passes at
+or below its recorded count and fails when it rises; an unlisted file must be
+clean. Every run ends with the grandfathered debt.
 
 Exit codes
 ----------
-    0  every certification carries evidence
-    1  at least one uncorroborated certification  -> do NOT publish
-    2  usage error (a named path does not exist)
+    0  every certification carries evidence, within the allowlist
+    1  an uncorroborated certification beyond the allowlist  -> do NOT publish
+    2  usage error (a named path does not exist, or is an excluded tree)
 """
 
 from __future__ import annotations
@@ -78,6 +85,17 @@ try:  # importable as `tools.lint_certifications` and runnable as a script
 except ModuleNotFoundError:  # pragma: no cover - exercised by the CLI, not tests
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from tools.claim_detect import find_certifications
+
+# The shrinking allowlist is shared with lint_claims (orchestrator scope
+# extension): Task 7's CI runs this linter too, and a gate red on day one against
+# the existing 5-certification corpus is a gate that gets deleted.
+from tools.lint_allowlist import (  # noqa: E402
+    DEFAULT_ALLOWLIST_PATH,
+    LINT_CERTIFICATIONS,
+    Allowlist,
+    debt_line,
+    rel_key,
+)
 
 DEFAULT_PATH = "docs"
 
@@ -420,6 +438,13 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(
         description="Refuse certifications that carry no adversarial evidence.")
     ap.add_argument("paths", nargs="*", help=f"files or directories (default: {DEFAULT_PATH})")
+    ap.add_argument("--write-allowlist", dest="write_allowlist", action="store_true",
+                    help="(re)capture the shrinking allowlist from this run's counts and exit.")
+    ap.add_argument("--accept-regression", dest="accept_regression", action="store_true",
+                    help="with --write-allowlist, permit raising a count or grandfathering a new "
+                         "dirty file. Off by default: the ledger may only shrink.")
+    ap.add_argument("--allowlist", type=Path, default=DEFAULT_ALLOWLIST_PATH,
+                    help="path to the ledger (default: tools/.lint_allowlist).")
     a = ap.parse_args(argv)
 
     paths = a.paths or [DEFAULT_PATH]
@@ -441,28 +466,61 @@ def main(argv: list[str]) -> int:
         return 2
 
     files = collect_files(paths)
-    findings = [f for fp in files for f in lint_file(fp)]
+    findings_by_file = {rel_key(fp): lint_file(fp) for fp in files}
+    counts = {k: len(v) for k, v in findings_by_file.items()}
 
-    for f in findings:
-        print(f.report())
+    if a.write_allowlist:
+        return _write_allowlist(counts, a.allowlist, a.accept_regression)
 
-    if not findings:
-        print(f"checked {len(files)} document(s): every certification carries evidence.")
-        return 0
+    allowlist = Allowlist.load(a.allowlist)
+    ev = allowlist.evaluate(LINT_CERTIFICATIONS, counts)
 
-    print()
-    print(f"checked {len(files)} document(s)")
-    print(f"{len(findings)} certification(s) with no adversarial evidence beside them, "
-          f"in {len({f.path for f in findings})} document(s)")
-    print()
-    print("Attach one of these next to each sentence above, within "
-          f"{WINDOW_LINES} lines:")
-    print("  <!-- adversary: what you attacked it with, and what happened -->")
-    print("  a fenced console block holding the command you ran and its output")
-    print()
-    print("Neither is proof the check happened. Both make skipping it a written,")
-    print("attributable statement instead of a silence.")
-    return 1
+    # Print the raw findings for every file over its grandfathered count. Findings
+    # at or below the count are suppressed (that is what grandfathering buys) but
+    # stay counted in the debt line.
+    printed = 0
+    for path in sorted(r.path for r in ev.regressions):
+        for f in findings_by_file.get(path, []):
+            print(f.report())
+            printed += 1
+
+    if ev.regressions:
+        print()
+        print(f"checked {len(files)} document(s)")
+        print(f"{printed} certification(s) beyond the allowlist, "
+              f"in {len(ev.regressions)} document(s)")
+        print()
+        print("Attach one of these next to each sentence above, within "
+              f"{WINDOW_LINES} lines:")
+        print("  <!-- adversary: what you attacked it with, and what happened -->")
+        print("  a fenced console block holding the command you ran and its output")
+        print()
+        print("Neither is proof the check happened. Both make skipping it a written,")
+        print("attributable statement instead of a silence.")
+    else:
+        print(f"checked {len(files)} document(s): every certification carries evidence "
+              f"(within the allowlist).")
+
+    for tightening in ev.tightenings:
+        print(f"tighten: {tightening}")
+
+    print(debt_line(LINT_CERTIFICATIONS, allowlist))
+    return 1 if ev.regressions else 0
+
+
+def _write_allowlist(counts: dict[str, int], path: Path, accept_regression: bool) -> int:
+    """Recapture the lint_certifications entries, refusing to loosen unless permitted."""
+    allowlist = Allowlist.load(path)
+    updated, refusals = allowlist.rewrite(LINT_CERTIFICATIONS, counts, accept_regression)
+    updated.write(path)
+    listed = updated.entries.get(LINT_CERTIFICATIONS, {})
+    print(f"wrote {len(listed)} lint_certifications record(s) to {rel_key(path)}")
+    for refusal in refusals:
+        print(f"refused: {refusal}")
+    print(debt_line(LINT_CERTIFICATIONS, updated))
+    # Same rule as lint_claims: a capture that refused entries must not report
+    # success. The write still happens; the exit code carries the refusals.
+    return 1 if refusals else 0
 
 
 if __name__ == "__main__":

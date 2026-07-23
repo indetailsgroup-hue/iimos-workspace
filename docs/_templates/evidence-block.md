@@ -39,17 +39,17 @@ line, and put the pair directly after the paragraph making the claim.
 
 ## Worked example
 
-`computeEdgebandAllowance` was not located in 2 root(s) by filename, content,
-git-tracked, and git-history search on 2026-07-21.
+`sampleEdgebandAllowance` was not located in 2 root(s) by filename, content,
+git-tracked, and git-history search on 2026-07-23.
 
-<!-- verify_absence: computeEdgebandAllowance @ 2026-07-21 -->
+<!-- verify_absence: sampleEdgebandAllowance @ 2026-07-23 -->
 
 ```
-$ python tools/verify_absence.py computeEdgebandAllowance --root docs --root tools
+$ python tools/verify_absence.py sampleEdgebandAllowance --root docs --root tools
 
-# verify_absence — computeEdgebandAllowance
+# verify_absence — sampleEdgebandAllowance
 
-variants searched (5): COMPUTEEDGEBANDALLOWANCE, compute-edgeband-allowance, computeEdgebandAllowance, compute_edgeband_allowance, computeedgebandallowance
+variants searched (5): SAMPLEEDGEBANDALLOWANCE, sample-edgeband-allowance, sampleEdgebandAllowance, sample_edgeband_allowance, sampleedgebandallowance
 roots: 2
   - docs
   - tools
@@ -81,7 +81,7 @@ RESULT: NOT LOCATED by any method above.
 This still does NOT license the words "does not exist".
 The only wording this output supports is:
 
-    "computeEdgebandAllowance was not located in 2 root(s) by filename,
+    "sampleEdgebandAllowance was not located in 2 root(s) by filename,
      content, git-tracked, and git-history search on <date>."
 
 Absence remains UNKNOWN until a search of the places this tool cannot
