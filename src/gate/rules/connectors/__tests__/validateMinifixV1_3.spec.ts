@@ -472,6 +472,11 @@ describe('v1.3 GAP 10: DrillMapPoint.status propagation', () => {
 // GAP 2: BALL_TO_POCKET diagnostic
 // ============================================
 
+// v1.4: this diagnostic moved off MONO_MINIFIX_POCKET_CENTER_MISMATCH (which it
+// shared with validateTargetPocketCenter's WARNING) onto its own code, and it now
+// measures against the generator's Dim A pocket centre (panelThickness/2) and the
+// declared Y_MISMATCH_MM / COAXIAL_RADIAL_MM tolerances instead of an inline 1.0mm.
+// Full contract: __tests__/minifixBallToPocketDiagnostic.spec.ts
 describe('v1.3 GAP 2: BALL_TO_POCKET diagnostic', () => {
   it('should emit INFO when BALL_TO_POCKET auto-correction is significant', () => {
     // Create a pair where bolt is intentionally misaligned
@@ -488,20 +493,33 @@ describe('v1.3 GAP 2: BALL_TO_POCKET diagnostic', () => {
     // The default BALL_TO_POCKET mode auto-corrects B to C,
     // but diagnostic should report the gap
     const diagFindings = result.findings.filter(
-      f => f.code === 'MONO_MINIFIX_POCKET_CENTER_MISMATCH' && f.severity === 'INFO'
+      f => f.code === 'MONO_MINIFIX_BALL_AUTOCORRECTED_TO_POCKET' && f.severity === 'INFO'
     );
     expect(diagFindings.length).toBeGreaterThanOrEqual(1);
     expect(diagFindings[0].measured?.auto_correction_distance_mm).toBeGreaterThan(1.0);
+    expect(diagFindings[0].measured?.y_deviation_mm).toBeCloseTo(11, 9); // |80 − (100 − 18/2)|
   });
 
   it('should NOT emit diagnostic when bolt is well-aligned', () => {
-    const { cam, bolt } = makeValidPair('diag');
+    // v1.4: "well-aligned" now means aligned to the GENERATOR's pocket centre
+    // (Dim A = panelThickness/2 = 9mm), not to camDepth/2. makeValidPair still
+    // encodes the camDepth/2 convention (bolt Y = 93.25) because the ERROR-rule
+    // suites depend on it, so this case is built explicitly.
+    const cam = makeCam({ id: 'cam-diag2', y: 100, pairedHoleId: 'bolt-diag2' });
+    const dimA = 18 / 2;
+    const pocketY = 100 - dimA; // 91
+    const bolt = makeBolt({
+      id: 'bolt-diag2',
+      position: [9.5, pocketY, 0], // ball centre = position + [-1,0,0] * 9.5 = pocket centre
+      normal: [-1, 0, 0],
+      boltDirection: [-1, 0, 0],
+    });
 
     const drillMap = onePanel([cam, bolt]);
     const result = validateMinifixGate(drillMap);
 
     const diagFindings = result.findings.filter(
-      f => f.code === 'MONO_MINIFIX_POCKET_CENTER_MISMATCH' && f.severity === 'INFO'
+      f => f.code === 'MONO_MINIFIX_BALL_AUTOCORRECTED_TO_POCKET'
     );
     expect(diagFindings).toHaveLength(0);
   });

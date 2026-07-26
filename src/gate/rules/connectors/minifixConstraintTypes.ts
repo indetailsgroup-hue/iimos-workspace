@@ -119,7 +119,12 @@ export type MinifixConstraintCode =
   | 'MONO_MINIFIX_BOLT_EDGE_CLEARANCE'
   | 'MONO_MINIFIX_BOLT_DIRECTION_MISMATCH'
   | 'MONO_MINIFIX_POCKET_CENTER_MISMATCH'
-  | 'MONO_MINIFIX_POINT_STATUS_PROPAGATED';
+  | 'MONO_MINIFIX_POINT_STATUS_PROPAGATED'
+  // v1.4: BALL_TO_POCKET alignment report.
+  // Was emitted under MONO_MINIFIX_POCKET_CENTER_MISMATCH, colliding with
+  // validateTargetPocketCenter's WARNING of the same code but a different
+  // meaning; anything filtering by code alone conflated the two.
+  | 'MONO_MINIFIX_BALL_AUTOCORRECTED_TO_POCKET';
 
 // ============================================
 // CONSTRAINT DEFINITIONS
@@ -473,6 +478,23 @@ export const MINIFIX_CONSTRAINTS: MinifixConstraint[] = [
     failure: {
       code: 'MONO_MINIFIX_POCKET_CENTER_MISMATCH',
       message: 'Declared targetPocketCenter differs from computed pocket center; possible consistency issue.',
+    },
+  },
+  // ---- v1.4: BALL_TO_POCKET alignment report ----
+  {
+    id: 'MONO-MINIFIX-DIAG-003',
+    name: 'Report the alignment a fixed-offset solve would have measured',
+    type: 'cross_check',
+    severity: 'INFO',
+    tolerance: {
+      y_mismatch_mm: MINIFIX_TOLERANCES.Y_MISMATCH_MM,
+      coaxial_radial_mm: MINIFIX_TOLERANCES.COAXIAL_RADIAL_MM,
+    },
+    failure: {
+      code: 'MONO_MINIFIX_BALL_AUTOCORRECTED_TO_POCKET',
+      message:
+        'Solve mode BALL_TO_POCKET placed the ball centre on the pocket centre, so MONO-MINIFIX-Y-001 and ' +
+        'MONO-MINIFIX-COAX-001 measure zero and cannot fire; this reports what a fixed-offset solve would have measured.',
     },
   },
   {

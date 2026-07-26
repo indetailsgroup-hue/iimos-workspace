@@ -203,6 +203,12 @@ describe('validateMinifixGate (snapshot: combined errors)', () => {
     expect(normalizeResult(result)).toMatchSnapshot();
   });
 
+  // v1.4: the snapshot gained two INFO MONO_MINIFIX_BALL_AUTOCORRECTED_TO_POCKET
+  // findings (one per pair). makeValidPair is "valid" under the camDepth/2
+  // pocket-centre convention (bolt Y = 100 − 13.5/2 = 93.25), while the
+  // BALL_TO_POCKET diagnostic now measures against the GENERATOR's Dim A
+  // convention (100 − 18/2 = 91), so it truthfully reports these fixtures as
+  // 2.25mm off. Errors/warnings are unchanged; nothing new blocks.
   it('full validation pass (valid multi-pair Y alignment)', () => {
     const pair1 = makeValidPair('1');
     const pair2 = makeValidPair('2');

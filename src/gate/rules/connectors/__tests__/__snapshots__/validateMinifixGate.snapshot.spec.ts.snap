@@ -288,6 +288,26 @@ exports[`validateMinifixGate (snapshot: combined errors) > full validation pass 
       },
     },
     {
+      "code": "MONO_MINIFIX_BALL_AUTOCORRECTED_TO_POCKET",
+      "entityIds": [
+        "bolt-1",
+        "cam-1",
+      ],
+      "measured": {
+        "auto_correction_distance_mm": 2.3048861143232218,
+        "axial_deviation_mm": -0.5,
+        "radial_deviation_mm": 2.25,
+        "y_deviation_mm": 2.25,
+      },
+      "message": "Solve mode BALL_TO_POCKET placed the bolt ball centre exactly on the cam pocket centre, so MONO_MINIFIX_Y_MISMATCH and MONO_MINIFIX_NOT_COAXIAL both measure zero and no ERROR can fire for this pair. Solved with FIXED_BALL_OFFSET instead (ball offset 9.5mm), the ball centre would sit 2.25mm off in Y (tolerance 0.2mm) and 2.25mm off the bolt axis radially (tolerance 0.2mm). Axial component -0.50mm is reported for information only — no rule gates on it. This is a report, not a refusal.",
+      "severity": "INFO",
+      "suggestedFix": undefined,
+      "tolerance": {
+        "coaxial_radial_mm": 0.2,
+        "y_mismatch_mm": 0.2,
+      },
+    },
+    {
       "code": "MONO_MINIFIX_BOLT_DEPTH_EXCEEDS_PANEL",
       "entityIds": [
         "bolt-2",
@@ -302,6 +322,26 @@ exports[`validateMinifixGate (snapshot: combined errors) > full validation pass 
       "suggestedFix": undefined,
       "tolerance": {
         "min_remaining_mm": 2,
+      },
+    },
+    {
+      "code": "MONO_MINIFIX_BALL_AUTOCORRECTED_TO_POCKET",
+      "entityIds": [
+        "bolt-2",
+        "cam-2",
+      ],
+      "measured": {
+        "auto_correction_distance_mm": 2.3048861143232218,
+        "axial_deviation_mm": -0.5,
+        "radial_deviation_mm": 2.25,
+        "y_deviation_mm": 2.25,
+      },
+      "message": "Solve mode BALL_TO_POCKET placed the bolt ball centre exactly on the cam pocket centre, so MONO_MINIFIX_Y_MISMATCH and MONO_MINIFIX_NOT_COAXIAL both measure zero and no ERROR can fire for this pair. Solved with FIXED_BALL_OFFSET instead (ball offset 9.5mm), the ball centre would sit 2.25mm off in Y (tolerance 0.2mm) and 2.25mm off the bolt axis radially (tolerance 0.2mm). Axial component -0.50mm is reported for information only — no rule gates on it. This is a report, not a refusal.",
+      "severity": "INFO",
+      "suggestedFix": undefined,
+      "tolerance": {
+        "coaxial_radial_mm": 0.2,
+        "y_mismatch_mm": 0.2,
       },
     },
   ],

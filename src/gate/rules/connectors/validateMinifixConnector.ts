@@ -99,6 +99,52 @@ function pointToLineDistance(point: Vec3, linePoint: Vec3, lineDir: Vec3): numbe
 }
 
 // ============================================
+// DEVIATION MEASURES
+// ============================================
+// Single source for the two critical alignment quantities. validateYMatch and
+// validateCoaxial gate on these; the BALL_TO_POCKET diagnostic — which is the
+// only alignment report a production user ever sees, because production runs
+// with B forced onto C — reports the same two quantities so a consumer can tell
+// which rule is implicated. Exported so tests can measure the same way.
+
+/**
+ * MONO-MINIFIX-Y-001 measure: height deviation between ball centre and pocket
+ * centre (Y-up coordinate system).
+ */
+export function minifixYDeviation(ballCenter: Vec3, pocketCenter: Vec3): number {
+  return Math.abs(ballCenter.y - pocketCenter.y);
+}
+
+/**
+ * MONO-MINIFIX-COAX-001 measure: perpendicular distance from the pocket centre
+ * to the bolt axis passing through the ball centre.
+ */
+export function minifixRadialDeviation(
+  pocketCenter: Vec3,
+  ballCenter: Vec3,
+  boltAxis: Vec3
+): number {
+  return pointToLineDistance(pocketCenter, ballCenter, vec3Normalize(boltAxis));
+}
+
+/**
+ * Component of (ballCenter − pocketCenter) ALONG the bolt axis.
+ * Positive = the ball centre sits past the pocket centre in the direction the
+ * bolt axis points.
+ *
+ * NOTHING in this repository gates on this quantity and no tolerance for it
+ * exists here. It is reported for information only, so that a large 3-D gap is
+ * not mistaken for an alignment fault that either ERROR rule would have caught.
+ */
+export function minifixAxialDeviation(
+  ballCenter: Vec3,
+  pocketCenter: Vec3,
+  boltAxis: Vec3
+): number {
+  return vec3Dot(vec3Subtract(ballCenter, pocketCenter), vec3Normalize(boltAxis));
+}
+
+// ============================================
 // CONSTRAINT VALIDATORS
 // ============================================
 
@@ -174,11 +220,10 @@ function validateCoaxial(
 ): void {
   // For coaxial check, we measure perpendicular distance from ball center to bolt axis
   // The ball center should lie on the line from bolt origin through cam center
-  const boltAxis = vec3Normalize(bolt.frame.axis);
-  const radialOffset = pointToLineDistance(
+  const radialOffset = minifixRadialDeviation(
     cam.geometry.pocketCenter,
     bolt.geometry.ballCenter,
-    boltAxis
+    bolt.frame.axis
   );
 
   if (radialOffset > MINIFIX_TOLERANCES.COAXIAL_RADIAL_MM) {
@@ -214,7 +259,7 @@ function validateYMatch(
   findings: MinifixGateFinding[]
 ): void {
   // Y-up: Y is vertical (height), check height alignment
-  const dy = Math.abs(bolt.geometry.ballCenter.y - cam.geometry.pocketCenter.y);
+  const dy = minifixYDeviation(bolt.geometry.ballCenter, cam.geometry.pocketCenter);
 
   if (dy > MINIFIX_TOLERANCES.Y_MISMATCH_MM) {
     const constraint = MINIFIX_CONSTRAINTS.find(c => c.id === 'MONO-MINIFIX-Y-001')!;
@@ -966,24 +1011,65 @@ export function validateMinifixGate(
     validateBoltDirectionAlignment(bolt, genBoltAxis, allFindings);
     validateTargetPocketCenter(bolt, genPocketCenter, allFindings);
 
-    // v1.3: BALL_TO_POCKET diagnostic - compute what FIXED_BALL_OFFSET B would be
+    // v1.4: BALL_TO_POCKET diagnostic — the ONLY alignment report a production
+    // user ever sees.
+    //
+    // Production calls validateMinifixGate(drillMap) with no options
+    // (src/gate/ui/SafetyPanel.tsx:201), so solveMode is BALL_TO_POCKET, which
+    // sets ballCenter = targetCamCenter verbatim (drillMapToMinifixPair.ts:156-162).
+    // validateYMatch and validateCoaxial therefore both measure exactly zero and
+    // can never fire. This INFO stands in for them, so it reports:
+    //   - the SAME two quantities they measure (minifixYDeviation /
+    //     minifixRadialDeviation — the very functions those rules gate on),
+    //   - against the SAME declared tolerances (MINIFIX_TOLERANCES.Y_MISMATCH_MM
+    //     / COAXIAL_RADIAL_MM), not an inline number,
+    //   - against genPocketCenter above, i.e. the generator's Dim A convention
+    //     (panelThickness/2), the migration 075ceacf already made for the
+    //     sibling cross-checks. Measuring against pair.cam.geometry.pocketCenter
+    //     (camDepth/2) added a constant 2.25mm on every pair of a normal cabinet.
+    // The axial component is reported but NOT gated: no tolerance for it exists
+    // in this repo, and neither ERROR rule penalises it.
+    // Severity stays INFO — this reports, it does not refuse.
     if (!solveMode || solveMode === 'BALL_TO_POCKET') {
       const diagAxis: Vec3 = bolt.boltDirection
         ? vec3Normalize({ x: bolt.boltDirection[0], y: bolt.boltDirection[1], z: bolt.boltDirection[2] })
         : vec3Normalize({ x: bolt.normal[0], y: bolt.normal[1], z: bolt.normal[2] });
       const diagA: Vec3 = { x: bolt.position[0], y: bolt.position[1], z: bolt.position[2] };
       const diagB = vec3Add(diagA, vec3Scale(diagAxis, ballHeadOffset));
-      const C = pair.cam.geometry.pocketCenter;
+      const C = genPocketCenter;
       const diagDistance = vec3Length(vec3Subtract(diagB, C));
 
-      // Only report if gap is significant (> 1mm suggests real misalignment)
-      if (diagDistance > 1.0) {
+      const yDeviation = minifixYDeviation(diagB, C);
+      const radialDeviation = minifixRadialDeviation(C, diagB, diagAxis);
+      const axialDeviation = minifixAxialDeviation(diagB, C, diagAxis);
+
+      const yOverTolerance = yDeviation > MINIFIX_TOLERANCES.Y_MISMATCH_MM;
+      const radialOverTolerance = radialDeviation > MINIFIX_TOLERANCES.COAXIAL_RADIAL_MM;
+
+      if (yOverTolerance || radialOverTolerance) {
         allFindings.push({
           severity: 'INFO',
-          code: 'MONO_MINIFIX_POCKET_CENTER_MISMATCH',
+          code: 'MONO_MINIFIX_BALL_AUTOCORRECTED_TO_POCKET',
           entityIds: [bolt.id, cam.id],
-          message: `BALL_TO_POCKET auto-correction moved ball center ${diagDistance.toFixed(2)}mm. Fixed-offset B would differ from C.`,
-          measured: { auto_correction_distance_mm: diagDistance },
+          message:
+            `Solve mode BALL_TO_POCKET placed the bolt ball centre exactly on the cam pocket centre, ` +
+            `so MONO_MINIFIX_Y_MISMATCH and MONO_MINIFIX_NOT_COAXIAL both measure zero and no ERROR can fire for this pair. ` +
+            `Solved with FIXED_BALL_OFFSET instead (ball offset ${ballHeadOffset}mm), the ball centre would sit ` +
+            `${yDeviation.toFixed(2)}mm off in Y (tolerance ${MINIFIX_TOLERANCES.Y_MISMATCH_MM}mm) and ` +
+            `${radialDeviation.toFixed(2)}mm off the bolt axis radially (tolerance ${MINIFIX_TOLERANCES.COAXIAL_RADIAL_MM}mm). ` +
+            `Axial component ${axialDeviation.toFixed(2)}mm is reported for information only — no rule gates on it. ` +
+            `This is a report, not a refusal.`,
+          measured: {
+            y_deviation_mm: yDeviation,
+            radial_deviation_mm: radialDeviation,
+            axial_deviation_mm: axialDeviation,
+            /** Retained for downstream consumers: full 3-D |B − C|. */
+            auto_correction_distance_mm: diagDistance,
+          },
+          tolerance: {
+            y_mismatch_mm: MINIFIX_TOLERANCES.Y_MISMATCH_MM,
+            coaxial_radial_mm: MINIFIX_TOLERANCES.COAXIAL_RADIAL_MM,
+          },
         });
       }
     }
