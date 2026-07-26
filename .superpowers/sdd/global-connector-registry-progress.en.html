@@ -55,7 +55,7 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <body><main>
 <h1>Global Connector Registry — SDD Progress Ledger</h1>
 <h2>Task 1: Paired worktrees and baseline gates</h2>
-<p><strong>Recorded:</strong> 26–27 July 2026 <strong>Status:</strong> COMPLETE <strong>Edition:</strong> English (canonical unsuffixed Markdown) <strong>Companions:</strong> <code>global-connector-registry-progress.en.html</code>, <code>global-connector-registry-progress.th.md</code>, <code>global-connector-registry-progress.th.html</code> <strong>Historical stop condition (superseded):</strong> The first required parent baseline exited nonzero because its tracked test input was absent from the isolated baseline. Per the implementation plan, no later baseline command was run in that initial execution. <strong>Closeout:</strong> Owner-authorized baseline adoption and verifier migration resolved the two recorded baseline gaps. Fresh parent and isolated-runtime Task 1 gates passed on 27 July 2026. Task 2 is COMPLETE; Task 3 has not started.</p>
+<p><strong>Recorded:</strong> 26–27 July 2026 <strong>Status:</strong> COMPLETE <strong>Edition:</strong> English (canonical unsuffixed Markdown) <strong>Companions:</strong> <code>global-connector-registry-progress.en.html</code>, <code>global-connector-registry-progress.th.md</code>, <code>global-connector-registry-progress.th.html</code> <strong>Historical stop condition (superseded):</strong> The first required parent baseline exited nonzero because its tracked test input was absent from the isolated baseline. Per the implementation plan, no later baseline command was run in that initial execution. <strong>Closeout:</strong> Owner-authorized baseline adoption and verifier migration resolved the two recorded baseline gaps. Fresh parent and isolated-runtime Task 1 gates passed on 27 July 2026. Tasks 2 and 3 are COMPLETE; Task 4 has not started.</p>
 <h2>Paired isolated worktrees</h2>
 <h3>Parent governance/bootstrap worktree</h3>
 <ul>
@@ -218,7 +218,7 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
 <h2>Task boundary and residual concerns</h2>
 <ul>
 <li>Task 1 is closed only for paired baseline establishment and its accepted remediation.</li>
-<li>Task 2 is COMPLETE; Task 3 has not started.</li>
+<li>Tasks 2 and 3 are COMPLETE; Task 4 has not started.</li>
 <li>No runtime/source product code was changed, and no runtime branch was integrated.</li>
 <li>No push or merge was performed.</li>
 <li>The manifest report retained <code>DONE_WITH_CONCERNS</code> because the two migrations were unresolved at that point; this closeout preserves that history and records their later accepted resolution.</li>
@@ -226,7 +226,7 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
 <li>Production readiness remains outside this task and requires physical qualification plus owner ratification.</li>
 </ul>
 <h2>Task 2 closeout — 27 July 2026</h2>
-<p><strong>Status:</strong> COMPLETE <strong>Task 2 base:</strong> <code>e048ec3fb765ab53ae0f3778dfbe3a3483129711</code> <strong>Implementation commit:</strong> <code>84e9b16141fad33be2921cbfcd4796120ac7260b</code> <strong>Next boundary:</strong> Task 3 has not started.</p>
+<p><strong>Status:</strong> COMPLETE <strong>Task 2 base:</strong> <code>e048ec3fb765ab53ae0f3778dfbe3a3483129711</code> <strong>Implementation commit:</strong> <code>84e9b16141fad33be2921cbfcd4796120ac7260b</code> <strong>Historical next boundary at Task 2 closeout:</strong> Task 3 had not started. <strong>Current boundary:</strong> Task 3 is COMPLETE; Task 4 has not started.</p>
 <h3>Accepted verifier compatibility correction</h3>
 <p>Before Task 2, accepted commit <code>e048ec3fb765ab53ae0f3778dfbe3a3483129711</code> corrected the verifier so the frozen legacy governed cohort is selected by explicit module names:</p>
 <ul>
@@ -276,7 +276,53 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
 <li>It establishes no production or manufacturing authority. NOT-FOR-PRODUCTION remains unchanged.</li>
 <li>Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.</li>
 <li>No push or merge was performed.</li>
-<li>Task 3 is next and has not started.</li>
+<li>Task 3 is COMPLETE. Task 4 is next and has not started.</li>
+</ul>
+<h2>Task 3 closeout — 27 July 2026</h2>
+<p><strong>Status:</strong> COMPLETE <strong>Task 3 base:</strong> <code>3a29be5ecb69ecb99dac1d2500b57ace9c9b572a</code> <strong>Implementation commit:</strong> <code>24c83de030013e8fde7d9240de4ea5f116dc1d92</code> <strong>Next boundary:</strong> Task 4 is next and has not started.</p>
+<h3>Authorized Task 3 paths</h3>
+<p>Implementation commit <code>24c83de030013e8fde7d9240de4ea5f116dc1d92</code> changed exactly these four paths:</p>
+<ol>
+<li><code>packages/component-master/src/monolith_component_master/evidence.py</code></li>
+<li><code>tests/component_master/registry/test_evidence.py</code></li>
+<li><code>data/component-master/registry/v1/.gitignore</code></li>
+<li><code>data/component-master/registry/v1/evidence-manifest.jsonl</code></li>
+</ol>
+<p>No owner-root or nested-runtime file was changed.</p>
+<h3>Exact evidence-vault foundation contract</h3>
+<ul>
+<li>Immutable <code>SourceSnapshot</code> and <code>FieldAssertion</code> records have exact frozen field shapes. <code>SourceSnapshot</code> records source metadata and an exact lowercase SHA-256 digest; <code>FieldAssertion</code> records the entity field, value, source, locator, reviewer, and literal review state.</li>
+<li><code>verify_source_hash</code> computes SHA-256 over the exact supplied bytes-like content without mutating caller input.</li>
+<li><code>EvidenceVault.register</code> is a type-directed, fail-closed registration boundary. Source registration requires hash-matching bytes and stores a defensive immutable copy; source and assertion duplicate IDs are rejected before mapping replacement.</li>
+<li>A <code>VERIFIED</code> assertion requires a registered source, a nonblank locator and reviewer, and stored source bytes that still match the registered digest. An unregistered remote-source candidate may be registered only while it remains literally <code>PENDING</code>; there is no promotion or deletion API.</li>
+<li>Source and assertion lookup is deterministic and returns <code>None</code> when the exact ID is absent.</li>
+<li>The anchored <code>/_source-cache/</code> rule ignores only the sibling source cache. The tracked evidence manifest remains visible and contains zero records, so Task 3 fabricates no OEM evidence.</li>
+</ul>
+<h3>TDD, verification, and review evidence</h3>
+<div class="tablewrap"><table><thead><tr><th>Gate</th><th>Accepted result</th></tr></thead><tbody>
+<tr><td>RED before production code</td><td><code>python -m unittest tests.component_master.registry.test_evidence -v</code> exited <code>1</code> with the expected <code>ModuleNotFoundError</code> because <code>monolith_component_master.evidence</code> did not exist.</td></tr>
+<tr><td>Targeted evidence GREEN</td><td>24/24 evidence tests passed; <code>OK</code>.</td></tr>
+<tr><td>Task 2 registry + legacy seed</td><td>34/34 tests passed: 24 registry contracts + 10 seed-integrity contracts; <code>OK</code>.</td></tr>
+<tr><td>Focused verifier contracts</td><td>12/12 tests passed; <code>OK</code>.</td></tr>
+<tr><td>Dynamic full discovery</td><td>318/318 tests passed: the prior Task 2 total of 294 + exactly 24 Task 3 evidence tests; <code>OK</code>.</td></tr>
+<tr><td>Single clean-HEAD verifier</td><td>Schema <code>1.1.0</code>; 13/13 checks passed; governed suites exact 20 + 7; dynamic suite 318; Python compile and Git evidence passed.</td></tr>
+<tr><td>Fresh review</td><td>Spec <code>ACCEPTED</code>; Quality <code>ACCEPTED</code>; overall verdict <code>ACCEPTED</code>; no findings.</td></tr>
+</tbody></table></div>
+<h3>Evidence integrity and cleanup</h3>
+<ul>
+<li>Accepted Task 3 report: <code>.superpowers/sdd/task-3-evidence-vault-report.md</code>; 7,144 bytes; SHA-256 <code>42e45e1d69e8c81bd801b86197cfdd4b0603d7527469670c7f082cd5059ea224</code>.</li>
+<li>Accepted native full-index binary review package: <code>.superpowers/sdd/task-3-evidence-vault-review-package.diff</code>; 22,541 bytes; SHA-256 <code>15ab2f449c402652ccd36a57c10811d165e8c785ac1bf3cf83e670a0daff2ca2</code>; reverse-apply validation passed at the implementation HEAD.</li>
+<li>Generated clean-HEAD verifier summary before cleanup: 66,350 bytes; SHA-256 <code>d7c5211f98eb2bd24094eda8f9f65a4c4e897bc8e6292faf203def4448b2dff4</code>.</li>
+<li>The ignored verifier summary and all generated caches were removed after capture. The implementation worktree finished clean.</li>
+</ul>
+<h3>Task 3 authority boundary</h3>
+<ul>
+<li>Task 3 establishes an in-memory evidence-vault foundation only.</li>
+<li>It does not add network fetching, a filesystem vault service, signatures, release authority, ingestion or promotion, populated OEM evidence, runtime integration, or Task 4 behavior.</li>
+<li>It establishes no manufacturing or production authority. NOT-FOR-PRODUCTION remains unchanged.</li>
+<li>Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.</li>
+<li>No push or merge was performed.</li>
+<li>Task 4 is next and has not started.</li>
 </ul>
 </main></body>
 </html>

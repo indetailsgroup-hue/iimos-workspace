@@ -55,7 +55,7 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <body><main>
 <h1>Global Connector Registry — บัญชีความคืบหน้า SDD</h1>
 <h2>งานที่ 1: Worktree แบบคู่และ baseline gate</h2>
-<p><strong>บันทึกเมื่อ:</strong> 26–27 กรกฎาคม 2026 <strong>สถานะ:</strong> COMPLETE <strong>ฉบับ:</strong> ภาษาไทย <strong>ไฟล์คู่กัน:</strong> <code>global-connector-registry-progress.md</code> (Markdown ภาษาอังกฤษ), <code>global-connector-registry-progress.en.html</code>, <code>global-connector-registry-progress.th.html</code> <strong>เงื่อนไขที่ทำให้หยุดในอดีต (ถูกแทนที่แล้ว):</strong> baseline แรกของ parent ที่แผนกำหนดจบด้วยสถานะไม่เป็นศูนย์ เพราะไม่มี test input ที่ tracked อยู่ใน isolated baseline ตามแผน implementation จึงไม่ได้รันคำสั่ง baseline หลังจากนั้นในการทำงานรอบแรก <strong>การปิดงาน:</strong> การ adopt baseline และ migrate verifier ที่เจ้าของอนุมัติได้แก้ช่องว่าง baseline สองรายการแล้ว Gate ของ parent และ isolated runtime สำหรับงานที่ 1 ผ่านใหม่เมื่อ 27 กรกฎาคม 2026 งานที่ 2 COMPLETE แล้ว และยังไม่ได้เริ่มงานที่ 3</p>
+<p><strong>บันทึกเมื่อ:</strong> 26–27 กรกฎาคม 2026 <strong>สถานะ:</strong> COMPLETE <strong>ฉบับ:</strong> ภาษาไทย <strong>ไฟล์คู่กัน:</strong> <code>global-connector-registry-progress.md</code> (Markdown ภาษาอังกฤษ), <code>global-connector-registry-progress.en.html</code>, <code>global-connector-registry-progress.th.html</code> <strong>เงื่อนไขที่ทำให้หยุดในอดีต (ถูกแทนที่แล้ว):</strong> baseline แรกของ parent ที่แผนกำหนดจบด้วยสถานะไม่เป็นศูนย์ เพราะไม่มี test input ที่ tracked อยู่ใน isolated baseline ตามแผน implementation จึงไม่ได้รันคำสั่ง baseline หลังจากนั้นในการทำงานรอบแรก <strong>การปิดงาน:</strong> การ adopt baseline และ migrate verifier ที่เจ้าของอนุมัติได้แก้ช่องว่าง baseline สองรายการแล้ว Gate ของ parent และ isolated runtime สำหรับงานที่ 1 ผ่านใหม่เมื่อ 27 กรกฎาคม 2026 งานที่ 2 และงานที่ 3 COMPLETE แล้ว และยังไม่ได้เริ่มงานที่ 4</p>
 <h2>Isolated worktree แบบคู่</h2>
 <h3>Worktree ของ parent governance/bootstrap</h3>
 <ul>
@@ -218,7 +218,7 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
 <h2>ขอบเขตงานและประเด็นคงเหลือ</h2>
 <ul>
 <li>ปิดงานที่ 1 เฉพาะการจัดตั้ง paired baseline และการแก้ไขที่ยอมรับแล้ว</li>
-<li>งานที่ 2 COMPLETE แล้ว และยังไม่ได้เริ่มงานที่ 3</li>
+<li>งานที่ 2 และงานที่ 3 COMPLETE แล้ว และยังไม่ได้เริ่มงานที่ 4</li>
 <li>ไม่ได้เปลี่ยน runtime/source product code และไม่ได้รวม runtime branch</li>
 <li>ไม่ได้ push หรือ merge</li>
 <li>รายงาน manifest คงสถานะ <code>DONE_WITH_CONCERNS</code> เพราะ migration สองรายการยังไม่จบ ณ เวลานั้น Closeout นี้รักษาประวัติดังกล่าวและบันทึกการแก้ไขที่ยอมรับในภายหลัง</li>
@@ -226,7 +226,7 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
 <li>Production readiness อยู่นอกขอบเขตงานนี้ และต้องมี physical qualification พร้อม owner ratification</li>
 </ul>
 <h2>การปิดงานที่ 2 — 27 กรกฎาคม 2026</h2>
-<p><strong>สถานะ:</strong> COMPLETE <strong>Base ของงานที่ 2:</strong> <code>e048ec3fb765ab53ae0f3778dfbe3a3483129711</code> <strong>Implementation commit:</strong> <code>84e9b16141fad33be2921cbfcd4796120ac7260b</code> <strong>ขอบเขตถัดไป:</strong> ยังไม่ได้เริ่มงานที่ 3</p>
+<p><strong>สถานะ:</strong> COMPLETE <strong>Base ของงานที่ 2:</strong> <code>e048ec3fb765ab53ae0f3778dfbe3a3483129711</code> <strong>Implementation commit:</strong> <code>84e9b16141fad33be2921cbfcd4796120ac7260b</code> <strong>ขอบเขตถัดไปในอดีตเมื่อปิดงานที่ 2:</strong> ณ เวลานั้นยังไม่ได้เริ่มงานที่ 3 <strong>ขอบเขตปัจจุบัน:</strong> งานที่ 3 COMPLETE แล้ว และยังไม่ได้เริ่มงานที่ 4</p>
 <h3>การแก้ compatibility ของ verifier ที่ยอมรับแล้ว</h3>
 <p>ก่อนงานที่ 2 commit <code>e048ec3fb765ab53ae0f3778dfbe3a3483129711</code> ที่ยอมรับแล้วได้แก้ verifier ให้เลือก cohort เดิมที่มี governance และถูก freeze ไว้ด้วยชื่อ module แบบ explicit:</p>
 <ul>
@@ -276,7 +276,53 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
 <li>งานนี้ไม่ได้สร้าง production หรือ manufacturing authority และ NOT-FOR-PRODUCTION ยังคงไม่เปลี่ยนแปลง</li>
 <li>Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data</li>
 <li>ไม่ได้ push หรือ merge</li>
-<li>งานที่ 3 เป็นงานถัดไปและยังไม่ได้เริ่ม</li>
+<li>งานที่ 3 COMPLETE แล้ว งานที่ 4 เป็นงานถัดไปและยังไม่ได้เริ่ม</li>
+</ul>
+<h2>การปิดงานที่ 3 — 27 กรกฎาคม 2026</h2>
+<p><strong>สถานะ:</strong> COMPLETE <strong>Base ของงานที่ 3:</strong> <code>3a29be5ecb69ecb99dac1d2500b57ace9c9b572a</code> <strong>Implementation commit:</strong> <code>24c83de030013e8fde7d9240de4ea5f116dc1d92</code> <strong>ขอบเขตถัดไป:</strong> งานที่ 4 เป็นงานถัดไปและยังไม่ได้เริ่ม</p>
+<h3>พาธที่อนุญาตสำหรับงานที่ 3</h3>
+<p>Implementation commit <code>24c83de030013e8fde7d9240de4ea5f116dc1d92</code> เปลี่ยนพาธ exactly สี่รายการต่อไปนี้:</p>
+<ol>
+<li><code>packages/component-master/src/monolith_component_master/evidence.py</code></li>
+<li><code>tests/component_master/registry/test_evidence.py</code></li>
+<li><code>data/component-master/registry/v1/.gitignore</code></li>
+<li><code>data/component-master/registry/v1/evidence-manifest.jsonl</code></li>
+</ol>
+<p>ไม่มีการเปลี่ยนไฟล์ใน owner root หรือ nested runtime</p>
+<h3>Contract ของรากฐาน evidence vault แบบ exact</h3>
+<ul>
+<li>Record <code>SourceSnapshot</code> และ <code>FieldAssertion</code> แบบ immutable มี frozen field shape แบบ exact โดย <code>SourceSnapshot</code> บันทึก metadata ของ source และ digest SHA-256 ตัวพิมพ์เล็กแบบ exact ส่วน <code>FieldAssertion</code> บันทึก field ของ entity, value, source, locator, reviewer และ literal review state</li>
+<li><code>verify_source_hash</code> คำนวณ SHA-256 จาก bytes-like content ที่รับมาแบบ exact โดยไม่เปลี่ยน caller input</li>
+<li><code>EvidenceVault.register</code> เป็น registration boundary ที่แยกตาม type และ fail closed การ register source ต้องมีไบต์ที่ hash ตรงกันและเก็บ defensive immutable copy ส่วน ID ซ้ำของ source และ assertion ถูกปฏิเสธก่อน mapping replacement</li>
+<li>Assertion สถานะ <code>VERIFIED</code> ต้องมี source ที่ register แล้ว, locator และ reviewer ที่ไม่ว่าง และไบต์ source ที่เก็บไว้ยังต้องตรงกับ digest ที่ register ส่วน candidate ที่อ้าง remote source ซึ่งยังไม่ register สามารถ register ได้เฉพาะเมื่อคงสถานะ literal <code>PENDING</code> เท่านั้น และไม่มี promotion หรือ deletion API</li>
+<li>การ lookup source และ assertion ให้ผลแน่นอน และคืน <code>None</code> เมื่อไม่มี exact ID</li>
+<li>กฎ <code>/_source-cache/</code> ที่ anchored จะ ignore เฉพาะ source cache ข้างเคียง ส่วน evidence manifest ที่ tracked ยังมองเห็นได้และมีศูนย์ record ดังนั้นงานที่ 3 ไม่สร้างหลักฐาน OEM ปลอม</li>
+</ul>
+<h3>หลักฐาน TDD การตรวจสอบ และ review</h3>
+<div class="tablewrap"><table><thead><tr><th>Gate</th><th>ผลที่ยอมรับแล้ว</th></tr></thead><tbody>
+<tr><td>RED ก่อนมี production code</td><td><code>python -m unittest tests.component_master.registry.test_evidence -v</code> จบด้วย exit <code>1</code> พร้อม <code>ModuleNotFoundError</code> ที่คาดไว้ เพราะยังไม่มี <code>monolith_component_master.evidence</code></td></tr>
+<tr><td>Targeted evidence GREEN</td><td>ผ่าน evidence tests 24/24; <code>OK</code></td></tr>
+<tr><td>Registry ของงานที่ 2 + legacy seed</td><td>ผ่าน 34/34 tests: registry contracts 24 + seed-integrity contracts 10; <code>OK</code></td></tr>
+<tr><td>Focused verifier contracts</td><td>ผ่าน 12/12 tests; <code>OK</code></td></tr>
+<tr><td>Dynamic full discovery</td><td>ผ่าน 318/318 tests: จำนวนเดิมจากงานที่ 2 คือ 294 + Task 3 evidence tests exactly 24; <code>OK</code></td></tr>
+<tr><td>Verifier ครั้งเดียวจาก clean HEAD</td><td>Schema <code>1.1.0</code>; ผ่าน 13/13 checks; governed suites exact 20 + 7; dynamic suite 318; Python compile และหลักฐาน Git ผ่าน</td></tr>
+<tr><td>Review ใหม่</td><td>Spec <code>ACCEPTED</code>; Quality <code>ACCEPTED</code>; คำตัดสินรวม <code>ACCEPTED</code>; ไม่มี finding</td></tr>
+</tbody></table></div>
+<h3>ความสมบูรณ์ของหลักฐานและ cleanup</h3>
+<ul>
+<li>รายงานงานที่ 3 ที่ยอมรับแล้ว: <code>.superpowers/sdd/task-3-evidence-vault-report.md</code>; 7,144 ไบต์; SHA-256 <code>42e45e1d69e8c81bd801b86197cfdd4b0603d7527469670c7f082cd5059ea224</code></li>
+<li>Native full-index binary review package ที่ยอมรับแล้ว: <code>.superpowers/sdd/task-3-evidence-vault-review-package.diff</code>; 22,541 ไบต์; SHA-256 <code>15ab2f449c402652ccd36a57c10811d165e8c785ac1bf3cf83e670a0daff2ca2</code>; ผ่านการตรวจ reverse apply ที่ implementation HEAD</li>
+<li>Verifier summary ที่สร้างจาก clean HEAD ก่อน cleanup: 66,350 ไบต์; SHA-256 <code>d7c5211f98eb2bd24094eda8f9f65a4c4e897bc8e6292faf203def4448b2dff4</code></li>
+<li>ลบ verifier summary ที่ ignored และ cache ที่สร้างทั้งหมดหลังบันทึกหลักฐานแล้ว Implementation worktree จบในสภาพสะอาด</li>
+</ul>
+<h3>ขอบเขตอำนาจของงานที่ 3</h3>
+<ul>
+<li>งานที่ 3 สร้างเฉพาะรากฐาน evidence vault แบบ in-memory</li>
+<li>งานนี้ไม่ได้เพิ่ม network fetching, filesystem vault service, signature, release authority, ingestion หรือ promotion, หลักฐาน OEM ที่มีข้อมูล, runtime integration หรือ behavior ของงานที่ 4</li>
+<li>งานนี้ไม่ได้สร้าง manufacturing หรือ production authority และ NOT-FOR-PRODUCTION ยังคงไม่เปลี่ยนแปลง</li>
+<li>Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data</li>
+<li>ไม่ได้ push หรือ merge</li>
+<li>งานที่ 4 เป็นงานถัดไปและยังไม่ได้เริ่ม</li>
 </ul>
 </main></body>
 </html>

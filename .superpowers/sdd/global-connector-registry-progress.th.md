@@ -7,7 +7,7 @@
 **ฉบับ:** ภาษาไทย
 **ไฟล์คู่กัน:** `global-connector-registry-progress.md` (Markdown ภาษาอังกฤษ), `global-connector-registry-progress.en.html`, `global-connector-registry-progress.th.html`
 **เงื่อนไขที่ทำให้หยุดในอดีต (ถูกแทนที่แล้ว):** baseline แรกของ parent ที่แผนกำหนดจบด้วยสถานะไม่เป็นศูนย์ เพราะไม่มี test input ที่ tracked อยู่ใน isolated baseline ตามแผน implementation จึงไม่ได้รันคำสั่ง baseline หลังจากนั้นในการทำงานรอบแรก
-**การปิดงาน:** การ adopt baseline และ migrate verifier ที่เจ้าของอนุมัติได้แก้ช่องว่าง baseline สองรายการแล้ว Gate ของ parent และ isolated runtime สำหรับงานที่ 1 ผ่านใหม่เมื่อ 27 กรกฎาคม 2026 งานที่ 2 COMPLETE แล้ว และยังไม่ได้เริ่มงานที่ 3
+**การปิดงาน:** การ adopt baseline และ migrate verifier ที่เจ้าของอนุมัติได้แก้ช่องว่าง baseline สองรายการแล้ว Gate ของ parent และ isolated runtime สำหรับงานที่ 1 ผ่านใหม่เมื่อ 27 กรกฎาคม 2026 งานที่ 2 และงานที่ 3 COMPLETE แล้ว และยังไม่ได้เริ่มงานที่ 4
 
 ## Isolated worktree แบบคู่
 
@@ -226,7 +226,7 @@ Owner runtime แตกต่างจาก isolated baseline เนื่อ�
 ## ขอบเขตงานและประเด็นคงเหลือ
 
 - ปิดงานที่ 1 เฉพาะการจัดตั้ง paired baseline และการแก้ไขที่ยอมรับแล้ว
-- งานที่ 2 COMPLETE แล้ว และยังไม่ได้เริ่มงานที่ 3
+- งานที่ 2 และงานที่ 3 COMPLETE แล้ว และยังไม่ได้เริ่มงานที่ 4
 - ไม่ได้เปลี่ยน runtime/source product code และไม่ได้รวม runtime branch
 - ไม่ได้ push หรือ merge
 - รายงาน manifest คงสถานะ `DONE_WITH_CONCERNS` เพราะ migration สองรายการยังไม่จบ ณ เวลานั้น Closeout นี้รักษาประวัติดังกล่าวและบันทึกการแก้ไขที่ยอมรับในภายหลัง
@@ -238,7 +238,8 @@ Owner runtime แตกต่างจาก isolated baseline เนื่อ�
 **สถานะ:** COMPLETE
 **Base ของงานที่ 2:** `e048ec3fb765ab53ae0f3778dfbe3a3483129711`
 **Implementation commit:** `84e9b16141fad33be2921cbfcd4796120ac7260b`
-**ขอบเขตถัดไป:** ยังไม่ได้เริ่มงานที่ 3
+**ขอบเขตถัดไปในอดีตเมื่อปิดงานที่ 2:** ณ เวลานั้นยังไม่ได้เริ่มงานที่ 3
+**ขอบเขตปัจจุบัน:** งานที่ 3 COMPLETE แล้ว และยังไม่ได้เริ่มงานที่ 4
 
 ### การแก้ compatibility ของ verifier ที่ยอมรับแล้ว
 
@@ -296,4 +297,59 @@ Package export interface ใหม่ exactly หกรายการ ได้
 - งานนี้ไม่ได้สร้าง production หรือ manufacturing authority และ NOT-FOR-PRODUCTION ยังคงไม่เปลี่ยนแปลง
 - Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data
 - ไม่ได้ push หรือ merge
-- งานที่ 3 เป็นงานถัดไปและยังไม่ได้เริ่ม
+- งานที่ 3 COMPLETE แล้ว งานที่ 4 เป็นงานถัดไปและยังไม่ได้เริ่ม
+
+## การปิดงานที่ 3 — 27 กรกฎาคม 2026
+
+**สถานะ:** COMPLETE
+**Base ของงานที่ 3:** `3a29be5ecb69ecb99dac1d2500b57ace9c9b572a`
+**Implementation commit:** `24c83de030013e8fde7d9240de4ea5f116dc1d92`
+**ขอบเขตถัดไป:** งานที่ 4 เป็นงานถัดไปและยังไม่ได้เริ่ม
+
+### พาธที่อนุญาตสำหรับงานที่ 3
+
+Implementation commit `24c83de030013e8fde7d9240de4ea5f116dc1d92` เปลี่ยนพาธ exactly สี่รายการต่อไปนี้:
+
+1. `packages/component-master/src/monolith_component_master/evidence.py`
+2. `tests/component_master/registry/test_evidence.py`
+3. `data/component-master/registry/v1/.gitignore`
+4. `data/component-master/registry/v1/evidence-manifest.jsonl`
+
+ไม่มีการเปลี่ยนไฟล์ใน owner root หรือ nested runtime
+
+### Contract ของรากฐาน evidence vault แบบ exact
+
+- Record `SourceSnapshot` และ `FieldAssertion` แบบ immutable มี frozen field shape แบบ exact โดย `SourceSnapshot` บันทึก metadata ของ source และ digest SHA-256 ตัวพิมพ์เล็กแบบ exact ส่วน `FieldAssertion` บันทึก field ของ entity, value, source, locator, reviewer และ literal review state
+- `verify_source_hash` คำนวณ SHA-256 จาก bytes-like content ที่รับมาแบบ exact โดยไม่เปลี่ยน caller input
+- `EvidenceVault.register` เป็น registration boundary ที่แยกตาม type และ fail closed การ register source ต้องมีไบต์ที่ hash ตรงกันและเก็บ defensive immutable copy ส่วน ID ซ้ำของ source และ assertion ถูกปฏิเสธก่อน mapping replacement
+- Assertion สถานะ `VERIFIED` ต้องมี source ที่ register แล้ว, locator และ reviewer ที่ไม่ว่าง และไบต์ source ที่เก็บไว้ยังต้องตรงกับ digest ที่ register ส่วน candidate ที่อ้าง remote source ซึ่งยังไม่ register สามารถ register ได้เฉพาะเมื่อคงสถานะ literal `PENDING` เท่านั้น และไม่มี promotion หรือ deletion API
+- การ lookup source และ assertion ให้ผลแน่นอน และคืน `None` เมื่อไม่มี exact ID
+- กฎ `/_source-cache/` ที่ anchored จะ ignore เฉพาะ source cache ข้างเคียง ส่วน evidence manifest ที่ tracked ยังมองเห็นได้และมีศูนย์ record ดังนั้นงานที่ 3 ไม่สร้างหลักฐาน OEM ปลอม
+
+### หลักฐาน TDD การตรวจสอบ และ review
+
+| Gate | ผลที่ยอมรับแล้ว |
+| --- | --- |
+| RED ก่อนมี production code | `python -m unittest tests.component_master.registry.test_evidence -v` จบด้วย exit `1` พร้อม `ModuleNotFoundError` ที่คาดไว้ เพราะยังไม่มี `monolith_component_master.evidence` |
+| Targeted evidence GREEN | ผ่าน evidence tests 24/24; `OK` |
+| Registry ของงานที่ 2 + legacy seed | ผ่าน 34/34 tests: registry contracts 24 + seed-integrity contracts 10; `OK` |
+| Focused verifier contracts | ผ่าน 12/12 tests; `OK` |
+| Dynamic full discovery | ผ่าน 318/318 tests: จำนวนเดิมจากงานที่ 2 คือ 294 + Task 3 evidence tests exactly 24; `OK` |
+| Verifier ครั้งเดียวจาก clean HEAD | Schema `1.1.0`; ผ่าน 13/13 checks; governed suites exact 20 + 7; dynamic suite 318; Python compile และหลักฐาน Git ผ่าน |
+| Review ใหม่ | Spec `ACCEPTED`; Quality `ACCEPTED`; คำตัดสินรวม `ACCEPTED`; ไม่มี finding |
+
+### ความสมบูรณ์ของหลักฐานและ cleanup
+
+- รายงานงานที่ 3 ที่ยอมรับแล้ว: `.superpowers/sdd/task-3-evidence-vault-report.md`; 7,144 ไบต์; SHA-256 `42e45e1d69e8c81bd801b86197cfdd4b0603d7527469670c7f082cd5059ea224`
+- Native full-index binary review package ที่ยอมรับแล้ว: `.superpowers/sdd/task-3-evidence-vault-review-package.diff`; 22,541 ไบต์; SHA-256 `15ab2f449c402652ccd36a57c10811d165e8c785ac1bf3cf83e670a0daff2ca2`; ผ่านการตรวจ reverse apply ที่ implementation HEAD
+- Verifier summary ที่สร้างจาก clean HEAD ก่อน cleanup: 66,350 ไบต์; SHA-256 `d7c5211f98eb2bd24094eda8f9f65a4c4e897bc8e6292faf203def4448b2dff4`
+- ลบ verifier summary ที่ ignored และ cache ที่สร้างทั้งหมดหลังบันทึกหลักฐานแล้ว Implementation worktree จบในสภาพสะอาด
+
+### ขอบเขตอำนาจของงานที่ 3
+
+- งานที่ 3 สร้างเฉพาะรากฐาน evidence vault แบบ in-memory
+- งานนี้ไม่ได้เพิ่ม network fetching, filesystem vault service, signature, release authority, ingestion หรือ promotion, หลักฐาน OEM ที่มีข้อมูล, runtime integration หรือ behavior ของงานที่ 4
+- งานนี้ไม่ได้สร้าง manufacturing หรือ production authority และ NOT-FOR-PRODUCTION ยังคงไม่เปลี่ยนแปลง
+- Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data
+- ไม่ได้ push หรือ merge
+- งานที่ 4 เป็นงานถัดไปและยังไม่ได้เริ่ม

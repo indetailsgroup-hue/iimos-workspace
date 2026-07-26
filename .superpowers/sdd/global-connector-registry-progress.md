@@ -7,7 +7,7 @@
 **Edition:** English (canonical unsuffixed Markdown)
 **Companions:** `global-connector-registry-progress.en.html`, `global-connector-registry-progress.th.md`, `global-connector-registry-progress.th.html`
 **Historical stop condition (superseded):** The first required parent baseline exited nonzero because its tracked test input was absent from the isolated baseline. Per the implementation plan, no later baseline command was run in that initial execution.
-**Closeout:** Owner-authorized baseline adoption and verifier migration resolved the two recorded baseline gaps. Fresh parent and isolated-runtime Task 1 gates passed on 27 July 2026. Task 2 is COMPLETE; Task 3 has not started.
+**Closeout:** Owner-authorized baseline adoption and verifier migration resolved the two recorded baseline gaps. Fresh parent and isolated-runtime Task 1 gates passed on 27 July 2026. Tasks 2 and 3 are COMPLETE; Task 4 has not started.
 
 ## Paired isolated worktrees
 
@@ -226,7 +226,7 @@ The owner runtime has diverged from the isolated baseline because of an external
 ## Task boundary and residual concerns
 
 - Task 1 is closed only for paired baseline establishment and its accepted remediation.
-- Task 2 is COMPLETE; Task 3 has not started.
+- Tasks 2 and 3 are COMPLETE; Task 4 has not started.
 - No runtime/source product code was changed, and no runtime branch was integrated.
 - No push or merge was performed.
 - The manifest report retained `DONE_WITH_CONCERNS` because the two migrations were unresolved at that point; this closeout preserves that history and records their later accepted resolution.
@@ -238,7 +238,8 @@ The owner runtime has diverged from the isolated baseline because of an external
 **Status:** COMPLETE
 **Task 2 base:** `e048ec3fb765ab53ae0f3778dfbe3a3483129711`
 **Implementation commit:** `84e9b16141fad33be2921cbfcd4796120ac7260b`
-**Next boundary:** Task 3 has not started.
+**Historical next boundary at Task 2 closeout:** Task 3 had not started.
+**Current boundary:** Task 3 is COMPLETE; Task 4 has not started.
 
 ### Accepted verifier compatibility correction
 
@@ -296,4 +297,59 @@ The package publicly exports exactly the six new interfaces `VerificationDimensi
 - It establishes no production or manufacturing authority. NOT-FOR-PRODUCTION remains unchanged.
 - Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.
 - No push or merge was performed.
-- Task 3 is next and has not started.
+- Task 3 is COMPLETE. Task 4 is next and has not started.
+
+## Task 3 closeout — 27 July 2026
+
+**Status:** COMPLETE
+**Task 3 base:** `3a29be5ecb69ecb99dac1d2500b57ace9c9b572a`
+**Implementation commit:** `24c83de030013e8fde7d9240de4ea5f116dc1d92`
+**Next boundary:** Task 4 is next and has not started.
+
+### Authorized Task 3 paths
+
+Implementation commit `24c83de030013e8fde7d9240de4ea5f116dc1d92` changed exactly these four paths:
+
+1. `packages/component-master/src/monolith_component_master/evidence.py`
+2. `tests/component_master/registry/test_evidence.py`
+3. `data/component-master/registry/v1/.gitignore`
+4. `data/component-master/registry/v1/evidence-manifest.jsonl`
+
+No owner-root or nested-runtime file was changed.
+
+### Exact evidence-vault foundation contract
+
+- Immutable `SourceSnapshot` and `FieldAssertion` records have exact frozen field shapes. `SourceSnapshot` records source metadata and an exact lowercase SHA-256 digest; `FieldAssertion` records the entity field, value, source, locator, reviewer, and literal review state.
+- `verify_source_hash` computes SHA-256 over the exact supplied bytes-like content without mutating caller input.
+- `EvidenceVault.register` is a type-directed, fail-closed registration boundary. Source registration requires hash-matching bytes and stores a defensive immutable copy; source and assertion duplicate IDs are rejected before mapping replacement.
+- A `VERIFIED` assertion requires a registered source, a nonblank locator and reviewer, and stored source bytes that still match the registered digest. An unregistered remote-source candidate may be registered only while it remains literally `PENDING`; there is no promotion or deletion API.
+- Source and assertion lookup is deterministic and returns `None` when the exact ID is absent.
+- The anchored `/_source-cache/` rule ignores only the sibling source cache. The tracked evidence manifest remains visible and contains zero records, so Task 3 fabricates no OEM evidence.
+
+### TDD, verification, and review evidence
+
+| Gate | Accepted result |
+| --- | --- |
+| RED before production code | `python -m unittest tests.component_master.registry.test_evidence -v` exited `1` with the expected `ModuleNotFoundError` because `monolith_component_master.evidence` did not exist. |
+| Targeted evidence GREEN | 24/24 evidence tests passed; `OK`. |
+| Task 2 registry + legacy seed | 34/34 tests passed: 24 registry contracts + 10 seed-integrity contracts; `OK`. |
+| Focused verifier contracts | 12/12 tests passed; `OK`. |
+| Dynamic full discovery | 318/318 tests passed: the prior Task 2 total of 294 + exactly 24 Task 3 evidence tests; `OK`. |
+| Single clean-HEAD verifier | Schema `1.1.0`; 13/13 checks passed; governed suites exact 20 + 7; dynamic suite 318; Python compile and Git evidence passed. |
+| Fresh review | Spec `ACCEPTED`; Quality `ACCEPTED`; overall verdict `ACCEPTED`; no findings. |
+
+### Evidence integrity and cleanup
+
+- Accepted Task 3 report: `.superpowers/sdd/task-3-evidence-vault-report.md`; 7,144 bytes; SHA-256 `42e45e1d69e8c81bd801b86197cfdd4b0603d7527469670c7f082cd5059ea224`.
+- Accepted native full-index binary review package: `.superpowers/sdd/task-3-evidence-vault-review-package.diff`; 22,541 bytes; SHA-256 `15ab2f449c402652ccd36a57c10811d165e8c785ac1bf3cf83e670a0daff2ca2`; reverse-apply validation passed at the implementation HEAD.
+- Generated clean-HEAD verifier summary before cleanup: 66,350 bytes; SHA-256 `d7c5211f98eb2bd24094eda8f9f65a4c4e897bc8e6292faf203def4448b2dff4`.
+- The ignored verifier summary and all generated caches were removed after capture. The implementation worktree finished clean.
+
+### Task 3 authority boundary
+
+- Task 3 establishes an in-memory evidence-vault foundation only.
+- It does not add network fetching, a filesystem vault service, signatures, release authority, ingestion or promotion, populated OEM evidence, runtime integration, or Task 4 behavior.
+- It establishes no manufacturing or production authority. NOT-FOR-PRODUCTION remains unchanged.
+- Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.
+- No push or merge was performed.
+- Task 4 is next and has not started.
