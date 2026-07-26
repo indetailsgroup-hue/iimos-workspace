@@ -9,6 +9,8 @@ import math
 from numbers import Real
 import re
 
+from .registry_models import LifecycleState, Registry
+
 
 class Verdict(str, Enum):
     QUALIFIED = "QUALIFIED"
@@ -22,6 +24,12 @@ class ThicknessEvidenceKind(str, Enum):
     EXACT_POINT = "EXACT_POINT"
     DECLARED_RANGE = "DECLARED_RANGE"
     APPROVED_INTERPOLATION = "APPROVED_INTERPOLATION"
+
+
+class SpacingAxis(str, Enum):
+    WIDTH = "WIDTH"
+    DEPTH = "DEPTH"
+    HEIGHT = "HEIGHT"
 
 
 _CANONICAL_IDENTIFIER = re.compile(
@@ -104,6 +112,50 @@ def _copy_reason_codes(value: object) -> tuple[str, ...]:
     for reason_code in reason_codes:
         _require_nonblank(reason_code, "reason_codes")
     return reason_codes
+
+
+def _copy_nonblank_strings(
+    value: object,
+    field_name: str,
+    *,
+    require_nonempty: bool,
+    unique: bool,
+) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes, bytearray)):
+        raise TypeError(f"{field_name} must be an iterable of strings")
+    try:
+        snapshot = tuple(value)
+    except TypeError as error:
+        raise TypeError(
+            f"{field_name} must be an iterable of strings"
+        ) from error
+    if require_nonempty and not snapshot:
+        raise ValueError(
+            f"{field_name} must contain at least one value"
+        )
+    for item in snapshot:
+        _require_nonblank(item, field_name)
+    if unique and len(set(snapshot)) != len(snapshot):
+        raise ValueError(f"{field_name} must not contain duplicates")
+    return snapshot
+
+
+def _copy_optional_evidence_assertion_ids(
+    value: object,
+) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes, bytearray)):
+        raise TypeError(
+            "evidence_assertion_ids must be an iterable of strings"
+        )
+    try:
+        snapshot = tuple(value)
+    except TypeError as error:
+        raise TypeError(
+            "evidence_assertion_ids must be an iterable of strings"
+        ) from error
+    if not snapshot:
+        return ()
+    return _copy_evidence_assertion_ids(snapshot)
 
 
 @dataclass(frozen=True)
@@ -377,6 +429,402 @@ class QualificationResult:
         )
 
 
+_CABINET_TOPOLOGIES = frozenset(
+    ("base", "wall", "tall", "wardrobe", "custom")
+)
+_CABINET_MOUNTINGS = frozenset(("FLOOR", "WALL", "MOBILE"))
+
+
+@dataclass(frozen=True)
+class CabinetConfiguration:
+    width_mm: float
+    depth_mm: float
+    height_mm: float
+    topology: str
+    joints: tuple[JointConfiguration, ...]
+    load_cases: tuple[str, ...]
+    mounting: str
+    wall_substrate: str | None
+
+    def __post_init__(self) -> None:
+        for field_name in ("width_mm", "depth_mm", "height_mm"):
+            value = getattr(self, field_name)
+            _require_finite_real(value, field_name)
+            if value <= 0:
+                raise ValueError(f"{field_name} must be positive")
+
+        _require_nonblank(self.topology, "topology")
+        if self.topology not in _CABINET_TOPOLOGIES:
+            raise ValueError(
+                "topology must be one of base, wall, tall, wardrobe, custom"
+            )
+
+        if isinstance(self.joints, (str, bytes, bytearray)):
+            raise TypeError(
+                "joints must be an iterable of JointConfiguration values"
+            )
+        try:
+            joints = tuple(self.joints)
+        except TypeError as error:
+            raise TypeError(
+                "joints must be an iterable of JointConfiguration values"
+            ) from error
+        if not joints:
+            raise ValueError("joints must contain at least one joint")
+        if any(
+            not isinstance(joint, JointConfiguration)
+            for joint in joints
+        ):
+            raise TypeError(
+                "joints must contain JointConfiguration values"
+            )
+
+        load_cases = _copy_nonblank_strings(
+            self.load_cases,
+            "load_cases",
+            require_nonempty=True,
+            unique=True,
+        )
+
+        _require_nonblank(self.mounting, "mounting")
+        if self.mounting not in _CABINET_MOUNTINGS:
+            raise ValueError(
+                "mounting must be one of FLOOR, WALL, MOBILE"
+            )
+        if self.mounting == "WALL":
+            _require_nonblank(self.wall_substrate, "wall_substrate")
+        elif self.wall_substrate is not None:
+            raise ValueError(
+                "wall_substrate must be None unless mounting is WALL"
+            )
+
+        object.__setattr__(self, "joints", joints)
+        object.__setattr__(self, "load_cases", load_cases)
+
+
+@dataclass(frozen=True)
+class CabinetPolicy:
+    policy_id: str
+    connector_sku_id: str
+    topology: str
+    width_min_mm: float
+    width_max_mm: float
+    depth_min_mm: float
+    depth_max_mm: float
+    height_min_mm: float
+    height_max_mm: float
+    spacing_axis: SpacingAxis
+    max_spacing_mm: float
+    min_connector_count: int
+    max_connector_count: int
+    required_machine_capabilities: tuple[str, ...]
+    reinforcement_requirement: str | None
+    anchor_requirement: str | None
+    evidence_assertion_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        _require_prefixed_identifier(
+            self.policy_id,
+            "policy_id",
+            "policy:",
+        )
+        _require_prefixed_identifier(
+            self.connector_sku_id,
+            "connector_sku_id",
+            "sku:",
+        )
+        _require_nonblank(self.topology, "topology")
+        if self.topology not in _CABINET_TOPOLOGIES:
+            raise ValueError(
+                "topology must be one of base, wall, tall, wardrobe, custom"
+            )
+
+        dimension_fields = (
+            "width_min_mm",
+            "width_max_mm",
+            "depth_min_mm",
+            "depth_max_mm",
+            "height_min_mm",
+            "height_max_mm",
+        )
+        for field_name in dimension_fields:
+            value = getattr(self, field_name)
+            _require_finite_real(value, field_name)
+            if value <= 0:
+                raise ValueError(f"{field_name} must be positive")
+        for minimum_name, maximum_name in (
+            ("width_min_mm", "width_max_mm"),
+            ("depth_min_mm", "depth_max_mm"),
+            ("height_min_mm", "height_max_mm"),
+        ):
+            if getattr(self, maximum_name) < getattr(self, minimum_name):
+                raise ValueError(
+                    f"{maximum_name} must be greater than or equal to "
+                    f"{minimum_name}"
+                )
+
+        if not isinstance(self.spacing_axis, SpacingAxis):
+            raise TypeError("spacing_axis must be a SpacingAxis")
+        _require_finite_real(self.max_spacing_mm, "max_spacing_mm")
+        if self.max_spacing_mm <= 0:
+            raise ValueError("max_spacing_mm must be positive")
+
+        for field_name in (
+            "min_connector_count",
+            "max_connector_count",
+        ):
+            value = getattr(self, field_name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{field_name} must be an integer")
+            if value < 2:
+                raise ValueError(
+                    f"{field_name} must be at least two"
+                )
+        if self.max_connector_count < self.min_connector_count:
+            raise ValueError(
+                "max_connector_count must be greater than or equal to "
+                "min_connector_count"
+            )
+
+        capabilities = _copy_nonblank_strings(
+            self.required_machine_capabilities,
+            "required_machine_capabilities",
+            require_nonempty=False,
+            unique=True,
+        )
+        for capability in capabilities:
+            _require_canonical_identifier(
+                capability,
+                "required_machine_capabilities",
+            )
+        for field_name in (
+            "reinforcement_requirement",
+            "anchor_requirement",
+        ):
+            value = getattr(self, field_name)
+            if value is not None:
+                _require_nonblank(value, field_name)
+
+        object.__setattr__(
+            self,
+            "required_machine_capabilities",
+            capabilities,
+        )
+        object.__setattr__(
+            self,
+            "evidence_assertion_ids",
+            _copy_evidence_assertion_ids(
+                self.evidence_assertion_ids
+            ),
+        )
+
+    def matches(self, cabinet: CabinetConfiguration, joint: JointConfiguration) -> bool:
+        if not isinstance(cabinet, CabinetConfiguration):
+            raise TypeError("cabinet must be a CabinetConfiguration")
+        if not isinstance(joint, JointConfiguration):
+            raise TypeError("joint must be a JointConfiguration")
+        return (
+            self.connector_sku_id == joint.connector_sku_id
+            and self.topology == cabinet.topology
+            and self.width_min_mm
+            <= cabinet.width_mm
+            <= self.width_max_mm
+            and self.depth_min_mm
+            <= cabinet.depth_mm
+            <= self.depth_max_mm
+            and self.height_min_mm
+            <= cabinet.height_mm
+            <= self.height_max_mm
+        )
+
+
+@dataclass(frozen=True)
+class ConnectorPlacement:
+    joint_index: int
+    connector_sku_id: str
+    policy_id: str
+    connector_count: int | None
+    spacing_mm: float | None
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.joint_index, bool)
+            or not isinstance(self.joint_index, int)
+        ):
+            raise TypeError("joint_index must be an integer")
+        if self.joint_index < 0:
+            raise ValueError("joint_index must be nonnegative")
+        _require_prefixed_identifier(
+            self.connector_sku_id,
+            "connector_sku_id",
+            "sku:",
+        )
+        _require_prefixed_identifier(
+            self.policy_id,
+            "policy_id",
+            "policy:",
+        )
+
+        unresolved = (
+            self.connector_count is None and self.spacing_mm is None
+        )
+        if unresolved:
+            return
+        if self.connector_count is None or self.spacing_mm is None:
+            raise ValueError(
+                "connector_count and spacing_mm must both be set or None"
+            )
+        if (
+            isinstance(self.connector_count, bool)
+            or not isinstance(self.connector_count, int)
+        ):
+            raise TypeError("connector_count must be an integer")
+        if self.connector_count < 2:
+            raise ValueError("connector_count must be at least two")
+        _require_finite_real(self.spacing_mm, "spacing_mm")
+        if self.spacing_mm <= 0:
+            raise ValueError("spacing_mm must be positive")
+
+
+def _copy_policy_ids(value: object) -> tuple[str, ...]:
+    snapshot = _copy_nonblank_strings(
+        value,
+        "policy_ids",
+        require_nonempty=False,
+        unique=False,
+    )
+    for policy_id in snapshot:
+        _require_prefixed_identifier(
+            policy_id,
+            "policy_ids",
+            "policy:",
+        )
+    return snapshot
+
+
+def _copy_placements(value: object) -> tuple[ConnectorPlacement, ...]:
+    if isinstance(value, (str, bytes, bytearray)):
+        raise TypeError("placements must be an iterable")
+    try:
+        snapshot = tuple(value)
+    except TypeError as error:
+        raise TypeError("placements must be an iterable") from error
+    if any(
+        not isinstance(placement, ConnectorPlacement)
+        for placement in snapshot
+    ):
+        raise TypeError(
+            "placements must contain ConnectorPlacement values"
+        )
+    joint_indices = tuple(
+        placement.joint_index for placement in snapshot
+    )
+    if len(set(joint_indices)) != len(joint_indices):
+        raise ValueError(
+            "placements must not contain duplicate joint_index values"
+        )
+    return snapshot
+
+
+@dataclass(frozen=True)
+class CabinetEvaluation:
+    verdict: Verdict
+    policy_ids: tuple[str, ...]
+    placements: tuple[ConnectorPlacement, ...]
+    reinforcement_requirements: tuple[str, ...]
+    anchor_requirements: tuple[str, ...]
+    reason_codes: tuple[str, ...]
+    evidence_assertion_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.verdict, Verdict):
+            raise TypeError("verdict must be a Verdict")
+        policy_ids = _copy_policy_ids(self.policy_ids)
+        placements = _copy_placements(self.placements)
+        reinforcements = _copy_nonblank_strings(
+            self.reinforcement_requirements,
+            "reinforcement_requirements",
+            require_nonempty=False,
+            unique=True,
+        )
+        anchors = _copy_nonblank_strings(
+            self.anchor_requirements,
+            "anchor_requirements",
+            require_nonempty=False,
+            unique=True,
+        )
+        reason_codes = _copy_reason_codes(self.reason_codes)
+        if len(set(reason_codes)) != len(reason_codes):
+            raise ValueError("reason_codes must not contain duplicates")
+        evidence_ids = _copy_optional_evidence_assertion_ids(
+            self.evidence_assertion_ids
+        )
+
+        selected_policy_ids = tuple(
+            placement.policy_id for placement in placements
+        )
+        if self.verdict is Verdict.QUALIFIED:
+            if (
+                not policy_ids
+                or not placements
+                or not evidence_ids
+                or reinforcements
+                or anchors
+                or reason_codes
+                or any(
+                    placement.connector_count is None
+                    or placement.spacing_mm is None
+                    for placement in placements
+                )
+                or selected_policy_ids != policy_ids
+            ):
+                raise ValueError(
+                    "QUALIFIED requires complete concrete placements, "
+                    "matching policies and evidence, with no conditions "
+                    "or reasons"
+                )
+        elif self.verdict is Verdict.CONDITIONALLY_QUALIFIED:
+            if (
+                not policy_ids
+                or not placements
+                or not evidence_ids
+                or not (reinforcements or anchors)
+                or not reason_codes
+                or selected_policy_ids != policy_ids
+            ):
+                raise ValueError(
+                    "CONDITIONALLY_QUALIFIED requires matching policies, "
+                    "placements, evidence, requirements and reasons"
+                )
+        elif (
+            policy_ids
+            or placements
+            or reinforcements
+            or anchors
+            or not reason_codes
+            or evidence_ids
+        ):
+            raise ValueError(
+                "refusal verdicts require reasons and no manufacturing "
+                "authorization"
+            )
+
+        object.__setattr__(self, "policy_ids", policy_ids)
+        object.__setattr__(self, "placements", placements)
+        object.__setattr__(
+            self,
+            "reinforcement_requirements",
+            reinforcements,
+        )
+        object.__setattr__(self, "anchor_requirements", anchors)
+        object.__setattr__(self, "reason_codes", reason_codes)
+        object.__setattr__(
+            self,
+            "evidence_assertion_ids",
+            evidence_ids,
+        )
+
+
 def _copy_envelopes(
     envelopes: Sequence[QualificationEnvelope],
 ) -> tuple[QualificationEnvelope, ...]:
@@ -435,13 +883,278 @@ def qualify_joint(
     )
 
 
+def _copy_policies(value: object) -> tuple[CabinetPolicy, ...]:
+    if isinstance(value, (str, bytes, bytearray)):
+        raise TypeError("policies must be an iterable")
+    try:
+        snapshot = tuple(value)
+    except TypeError as error:
+        raise TypeError("policies must be an iterable") from error
+    if any(
+        not isinstance(policy, CabinetPolicy)
+        for policy in snapshot
+    ):
+        raise TypeError("policies must contain CabinetPolicy values")
+    return snapshot
+
+
+def _unique_in_order(values: Sequence[str]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(values))
+
+
+def _cabinet_refusal(
+    verdict: Verdict,
+    reason_codes: Sequence[str],
+) -> CabinetEvaluation:
+    return CabinetEvaluation(
+        verdict=verdict,
+        policy_ids=(),
+        placements=(),
+        reinforcement_requirements=(),
+        anchor_requirements=(),
+        reason_codes=_unique_in_order(reason_codes),
+        evidence_assertion_ids=(),
+    )
+
+
+def evaluate_cabinet(
+    cabinet: CabinetConfiguration,
+    registry: Registry,
+    machine_capabilities: frozenset[str],
+    *,
+    qualification_envelopes: Sequence[QualificationEnvelope] = (),
+    policies: Sequence[CabinetPolicy] = (),
+) -> CabinetEvaluation:
+    """Perform evidence-bound rule selection and connector count/spacing.
+
+    This scope is not full racking, overturning, center of gravity, or
+    structural extrapolation analysis.
+    """
+
+    if not isinstance(cabinet, CabinetConfiguration):
+        raise TypeError("cabinet must be a CabinetConfiguration")
+    if type(registry) is not Registry:
+        raise TypeError("registry must be a Registry")
+    if type(machine_capabilities) is not frozenset:
+        raise TypeError("machine_capabilities must be a frozenset")
+    for capability in machine_capabilities:
+        _require_canonical_identifier(
+            capability,
+            "machine_capabilities",
+        )
+
+    envelope_snapshot = _copy_envelopes(qualification_envelopes)
+    policy_snapshot = _copy_policies(policies)
+
+    missing_skus: list[str] = []
+    unavailable_skus: list[str] = []
+    for joint in cabinet.joints:
+        sku = registry.get_sku(joint.connector_sku_id)
+        if sku is None:
+            missing_skus.append(joint.connector_sku_id)
+            continue
+        model = registry.get_model(sku.model_id)
+        if model is None:
+            missing_skus.append(joint.connector_sku_id)
+            continue
+        if model.lifecycle not in (
+            LifecycleState.ACTIVE,
+            LifecycleState.REGION_ONLY,
+        ):
+            unavailable_skus.append(joint.connector_sku_id)
+    if missing_skus:
+        return _cabinet_refusal(
+            Verdict.INSUFFICIENT_EVIDENCE,
+            ("EXACT_CONNECTOR_SKU_NOT_FOUND",),
+        )
+    if unavailable_skus:
+        return _cabinet_refusal(
+            Verdict.DISCONTINUED_OR_UNORDERABLE,
+            ("EXACT_CONNECTOR_DISCONTINUED_OR_UNORDERABLE",),
+        )
+
+    qualification_results = tuple(
+        qualify_joint(joint, envelope_snapshot)
+        for joint in cabinet.joints
+    )
+    insufficient_results = tuple(
+        result
+        for result in qualification_results
+        if result.verdict is Verdict.INSUFFICIENT_EVIDENCE
+    )
+    if insufficient_results:
+        return _cabinet_refusal(
+            Verdict.INSUFFICIENT_EVIDENCE,
+            tuple(
+                reason
+                for result in insufficient_results
+                for reason in result.reason_codes
+            ),
+        )
+    nonqualified_results = tuple(
+        result
+        for result in qualification_results
+        if result.verdict is not Verdict.QUALIFIED
+    )
+    if nonqualified_results:
+        return _cabinet_refusal(
+            Verdict.UNQUALIFIED,
+            tuple(
+                reason
+                for result in nonqualified_results
+                for reason in result.reason_codes
+            ),
+        )
+
+    policy_matches = tuple(
+        tuple(
+            policy
+            for policy in policy_snapshot
+            if policy.matches(cabinet, joint)
+        )
+        for joint in cabinet.joints
+    )
+    if any(not matches for matches in policy_matches):
+        return _cabinet_refusal(
+            Verdict.INSUFFICIENT_EVIDENCE,
+            ("NO_PARAMETRIC_POLICY",),
+        )
+    if any(len(matches) > 1 for matches in policy_matches):
+        return _cabinet_refusal(
+            Verdict.UNQUALIFIED,
+            ("AMBIGUOUS_PARAMETRIC_POLICY",),
+        )
+    selected_policies = tuple(matches[0] for matches in policy_matches)
+
+    if any(
+        capability not in machine_capabilities
+        for policy in selected_policies
+        for capability in policy.required_machine_capabilities
+    ):
+        return _cabinet_refusal(
+            Verdict.UNQUALIFIED,
+            ("MISSING_REQUIRED_MACHINE_CAPABILITY",),
+        )
+
+    qualification_evidence_ids: list[str] = []
+    for joint, result in zip(
+        cabinet.joints,
+        qualification_results,
+        strict=True,
+    ):
+        selected_envelope = next(
+            envelope
+            for envelope in envelope_snapshot
+            if envelope.envelope_id == result.envelope_id
+            and envelope.matches(joint)
+        )
+        qualification_evidence_ids.extend(
+            selected_envelope.evidence_assertion_ids
+        )
+
+    placements: list[ConnectorPlacement] = []
+    reinforcement_requirements: list[str] = []
+    anchor_requirements: list[str] = []
+    conditional_reasons: list[str] = []
+    for joint_index, (joint, policy) in enumerate(
+        zip(cabinet.joints, selected_policies, strict=True)
+    ):
+        axis_length = {
+            SpacingAxis.WIDTH: cabinet.width_mm,
+            SpacingAxis.DEPTH: cabinet.depth_mm,
+            SpacingAxis.HEIGHT: cabinet.height_mm,
+        }[policy.spacing_axis]
+        connector_count = max(
+            policy.min_connector_count,
+            math.ceil(axis_length / policy.max_spacing_mm) + 1,
+        )
+        has_condition = (
+            policy.reinforcement_requirement is not None
+            or policy.anchor_requirement is not None
+        )
+        if connector_count > policy.max_connector_count:
+            if not has_condition:
+                return _cabinet_refusal(
+                    Verdict.UNQUALIFIED,
+                    ("CONNECTOR_COUNT_EXCEEDS_POLICY",),
+                )
+            placement = ConnectorPlacement(
+                joint_index=joint_index,
+                connector_sku_id=joint.connector_sku_id,
+                policy_id=policy.policy_id,
+                connector_count=None,
+                spacing_mm=None,
+            )
+        else:
+            placement = ConnectorPlacement(
+                joint_index=joint_index,
+                connector_sku_id=joint.connector_sku_id,
+                policy_id=policy.policy_id,
+                connector_count=connector_count,
+                spacing_mm=axis_length / (connector_count - 1),
+            )
+        placements.append(placement)
+
+        if policy.reinforcement_requirement is not None:
+            reinforcement_requirements.append(
+                policy.reinforcement_requirement
+            )
+            conditional_reasons.append(
+                "REINFORCEMENT_REQUIRED"
+            )
+        if policy.anchor_requirement is not None:
+            anchor_requirements.append(policy.anchor_requirement)
+            conditional_reasons.append("ANCHOR_REQUIRED")
+
+    policy_evidence_ids = tuple(
+        evidence_id
+        for policy in selected_policies
+        for evidence_id in policy.evidence_assertion_ids
+    )
+    evidence_ids = _unique_in_order(
+        tuple(qualification_evidence_ids) + policy_evidence_ids
+    )
+    policy_ids = tuple(
+        policy.policy_id for policy in selected_policies
+    )
+    if conditional_reasons:
+        return CabinetEvaluation(
+            verdict=Verdict.CONDITIONALLY_QUALIFIED,
+            policy_ids=policy_ids,
+            placements=tuple(placements),
+            reinforcement_requirements=_unique_in_order(
+                reinforcement_requirements
+            ),
+            anchor_requirements=_unique_in_order(
+                anchor_requirements
+            ),
+            reason_codes=_unique_in_order(conditional_reasons),
+            evidence_assertion_ids=evidence_ids,
+        )
+    return CabinetEvaluation(
+        verdict=Verdict.QUALIFIED,
+        policy_ids=policy_ids,
+        placements=tuple(placements),
+        reinforcement_requirements=(),
+        anchor_requirements=(),
+        reason_codes=(),
+        evidence_assertion_ids=evidence_ids,
+    )
+
+
 __all__ = [
+    "CabinetConfiguration",
+    "CabinetEvaluation",
+    "CabinetPolicy",
+    "ConnectorPlacement",
     "JointConfiguration",
     "MaterialConstraint",
     "MaterialInstance",
     "QualificationEnvelope",
     "QualificationResult",
+    "SpacingAxis",
     "ThicknessEvidenceKind",
     "Verdict",
+    "evaluate_cabinet",
     "qualify_joint",
 ]

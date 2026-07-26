@@ -1,0 +1,1301 @@
+"""Contracts for evidence-bound arbitrary W x D x H cabinet evaluation."""
+
+from __future__ import annotations
+
+from dataclasses import FrozenInstanceError, fields
+import math
+from pathlib import Path
+import sys
+import unittest
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+PACKAGE_SOURCE = REPOSITORY_ROOT / "packages" / "component-master" / "src"
+sys.path.insert(0, str(PACKAGE_SOURCE))
+
+from monolith_component_master.qualification import (  # noqa: E402
+    evaluate_cabinet,
+    CabinetConfiguration,
+    CabinetEvaluation,
+    CabinetPolicy,
+    ConnectorPlacement,
+    JointConfiguration,
+    MaterialConstraint,
+    MaterialInstance,
+    QualificationEnvelope,
+    SpacingAxis,
+    ThicknessEvidenceKind,
+    Verdict,
+)
+from monolith_component_master.registry_models import (  # noqa: E402
+    CommercialSku,
+    LifecycleState,
+    ProductModel,
+    Registry,
+    VerificationDimension,
+    VerificationState,
+)
+
+
+CONNECTOR_SKU_ID = "sku:demo:connector-1:EU"
+OTHER_CONNECTOR_SKU_ID = "sku:demo:connector-2:EU"
+MODEL_ID = "model:demo:connector-1"
+POLICY_ID = "policy:demo:base-width"
+ENVELOPE_ID = "envelope:demo:connector-1:mdf-plywood"
+QUALIFICATION_EVIDENCE_ID = "assertion:demo:qualification:mdf-plywood"
+POLICY_EVIDENCE_ID = "assertion:demo:policy:base-width"
+
+
+def make_material(
+    thickness_mm: float = 15.0,
+    **overrides: object,
+) -> MaterialInstance:
+    arguments: dict[str, object] = {
+        "substrate": "MDF",
+        "core": "homogeneous-fibre",
+        "density_kg_m3": 720.0,
+        "moisture_pct": 8.0,
+        "orientation": "grain-longitudinal",
+        "nominal_thickness_mm": thickness_mm,
+        "measured_thickness_mm": thickness_mm,
+        "facing_thickness_mm": 0.5,
+    }
+    arguments.update(overrides)
+    return MaterialInstance(**arguments)
+
+
+def make_constraint(
+    thickness_mm: float = 15.0,
+    **overrides: object,
+) -> MaterialConstraint:
+    arguments: dict[str, object] = {
+        "substrate": "MDF",
+        "core": "homogeneous-fibre",
+        "density_min_kg_m3": 680.0,
+        "density_max_kg_m3": 760.0,
+        "moisture_min_pct": 6.0,
+        "moisture_max_pct": 10.0,
+        "orientation": "grain-longitudinal",
+        "nominal_thickness_min_mm": thickness_mm,
+        "nominal_thickness_max_mm": thickness_mm,
+        "measured_thickness_min_mm": thickness_mm,
+        "measured_thickness_max_mm": thickness_mm,
+        "facing_thickness_min_mm": 0.0,
+        "facing_thickness_max_mm": 1.0,
+        "thickness_evidence_kind": ThicknessEvidenceKind.EXACT_POINT,
+    }
+    arguments.update(overrides)
+    return MaterialConstraint(**arguments)
+
+
+def make_joint(
+    *,
+    connector_sku_id: str = CONNECTOR_SKU_ID,
+    panel_a: MaterialInstance | None = None,
+    panel_b: MaterialInstance | None = None,
+) -> JointConfiguration:
+    return JointConfiguration(
+        connector_sku_id=connector_sku_id,
+        panel_a=panel_a or make_material(),
+        panel_b=panel_b
+        or make_material(
+            18.0,
+            substrate="plywood",
+            core="birch-plies",
+            density_kg_m3=650.0,
+            moisture_pct=9.0,
+            orientation="cross-laminated",
+            facing_thickness_mm=0.8,
+        ),
+    )
+
+
+def make_envelope(**overrides: object) -> QualificationEnvelope:
+    arguments: dict[str, object] = {
+        "envelope_id": ENVELOPE_ID,
+        "connector_sku_id": CONNECTOR_SKU_ID,
+        "panel_a": make_constraint(),
+        "panel_b": make_constraint(
+            18.0,
+            substrate="plywood",
+            core="birch-plies",
+            density_min_kg_m3=620.0,
+            density_max_kg_m3=680.0,
+            moisture_min_pct=7.0,
+            moisture_max_pct=11.0,
+            orientation="cross-laminated",
+            facing_thickness_min_mm=0.4,
+            facing_thickness_max_mm=1.2,
+        ),
+        "verdict": Verdict.QUALIFIED,
+        "evidence_assertion_ids": (QUALIFICATION_EVIDENCE_ID,),
+    }
+    arguments.update(overrides)
+    return QualificationEnvelope(**arguments)
+
+
+def make_registry(
+    *,
+    lifecycle: LifecycleState = LifecycleState.ACTIVE,
+    connector_sku_id: str = CONNECTOR_SKU_ID,
+) -> Registry:
+    model = ProductModel(
+        model_id=MODEL_ID,
+        brand_id="brand:demo",
+        name="Demo connector",
+        lifecycle=lifecycle,
+    )
+    sku = CommercialSku(
+        global_id=connector_sku_id,
+        brand_id="brand:demo",
+        model_id=MODEL_ID,
+        oem_order_code="DEMO-1",
+        region="EU",
+        pack_qty=1,
+        verification={
+            dimension: VerificationState.VERIFIED
+            for dimension in VerificationDimension
+        },
+    )
+    return Registry(models=(model,), skus=(sku,))
+
+
+def make_policy(**overrides: object) -> CabinetPolicy:
+    arguments: dict[str, object] = {
+        "policy_id": POLICY_ID,
+        "connector_sku_id": CONNECTOR_SKU_ID,
+        "topology": "base",
+        "width_min_mm": 300.0,
+        "width_max_mm": 1200.0,
+        "depth_min_mm": 250.0,
+        "depth_max_mm": 800.0,
+        "height_min_mm": 300.0,
+        "height_max_mm": 2600.0,
+        "spacing_axis": SpacingAxis.WIDTH,
+        "max_spacing_mm": 300.0,
+        "min_connector_count": 2,
+        "max_connector_count": 8,
+        "required_machine_capabilities": (),
+        "reinforcement_requirement": None,
+        "anchor_requirement": None,
+        "evidence_assertion_ids": (POLICY_EVIDENCE_ID,),
+    }
+    arguments.update(overrides)
+    return CabinetPolicy(**arguments)
+
+
+def make_cabinet(**overrides: object) -> CabinetConfiguration:
+    arguments: dict[str, object] = {
+        "width_mm": 600.0,
+        "depth_mm": 560.0,
+        "height_mm": 720.0,
+        "topology": "base",
+        "joints": (make_joint(),),
+        "load_cases": ("DEAD_LOAD",),
+        "mounting": "FLOOR",
+        "wall_substrate": None,
+    }
+    arguments.update(overrides)
+    return CabinetConfiguration(**arguments)
+
+
+def evaluate(
+    cabinet: CabinetConfiguration | None = None,
+    *,
+    registry: Registry | None = None,
+    machine_capabilities: frozenset[str] = frozenset(),
+    qualification_envelopes: object = None,
+    policies: object = None,
+) -> CabinetEvaluation:
+    return evaluate_cabinet(
+        cabinet or make_cabinet(),
+        registry or make_registry(),
+        machine_capabilities,
+        qualification_envelopes=(
+            (make_envelope(),)
+            if qualification_envelopes is None
+            else qualification_envelopes
+        ),
+        policies=(
+            (make_policy(),) if policies is None else policies
+        ),
+    )
+
+
+class RecordContractTests(unittest.TestCase):
+    def test_spacing_axis_has_only_explicit_physical_axes(self) -> None:
+        self.assertEqual(
+            {
+                "WIDTH": "WIDTH",
+                "DEPTH": "DEPTH",
+                "HEIGHT": "HEIGHT",
+            },
+            {member.name: member.value for member in SpacingAxis},
+        )
+
+    def test_cabinet_configuration_has_exact_frozen_field_shape(self) -> None:
+        cabinet = make_cabinet()
+
+        self.assertEqual(
+            [
+                "width_mm",
+                "depth_mm",
+                "height_mm",
+                "topology",
+                "joints",
+                "load_cases",
+                "mounting",
+                "wall_substrate",
+            ],
+            [field.name for field in fields(CabinetConfiguration)],
+        )
+        with self.assertRaises(FrozenInstanceError):
+            cabinet.width_mm = 900.0
+
+    def test_policy_has_exact_frozen_evidence_bearing_shape(self) -> None:
+        policy = make_policy()
+
+        self.assertEqual(
+            [
+                "policy_id",
+                "connector_sku_id",
+                "topology",
+                "width_min_mm",
+                "width_max_mm",
+                "depth_min_mm",
+                "depth_max_mm",
+                "height_min_mm",
+                "height_max_mm",
+                "spacing_axis",
+                "max_spacing_mm",
+                "min_connector_count",
+                "max_connector_count",
+                "required_machine_capabilities",
+                "reinforcement_requirement",
+                "anchor_requirement",
+                "evidence_assertion_ids",
+            ],
+            [field.name for field in fields(CabinetPolicy)],
+        )
+        with self.assertRaises(FrozenInstanceError):
+            policy.max_spacing_mm = 400.0
+
+    def test_placement_and_evaluation_have_exact_frozen_shapes(self) -> None:
+        placement = ConnectorPlacement(
+            joint_index=0,
+            connector_sku_id=CONNECTOR_SKU_ID,
+            policy_id=POLICY_ID,
+            connector_count=3,
+            spacing_mm=300.0,
+        )
+        evaluation = evaluate()
+
+        self.assertEqual(
+            [
+                "joint_index",
+                "connector_sku_id",
+                "policy_id",
+                "connector_count",
+                "spacing_mm",
+            ],
+            [field.name for field in fields(ConnectorPlacement)],
+        )
+        self.assertEqual(
+            [
+                "verdict",
+                "policy_ids",
+                "placements",
+                "reinforcement_requirements",
+                "anchor_requirements",
+                "reason_codes",
+                "evidence_assertion_ids",
+            ],
+            [field.name for field in fields(CabinetEvaluation)],
+        )
+        with self.assertRaises(FrozenInstanceError):
+            placement.connector_count = 4
+        with self.assertRaises(FrozenInstanceError):
+            evaluation.verdict = Verdict.UNQUALIFIED
+
+
+class CabinetConfigurationValidationTests(unittest.TestCase):
+    def test_dimensions_accept_arbitrary_fractional_positive_values(
+        self,
+    ) -> None:
+        cabinet = make_cabinet(
+            width_mm=600.125,
+            depth_mm=559.875,
+            height_mm=719.625,
+        )
+
+        self.assertEqual(600.125, cabinet.width_mm)
+        self.assertEqual(559.875, cabinet.depth_mm)
+        self.assertEqual(719.625, cabinet.height_mm)
+
+    def test_dimensions_reject_nonpositive_nonfinite_bool_and_nonreal(
+        self,
+    ) -> None:
+        for field_name in ("width_mm", "depth_mm", "height_mm"):
+            for value in (
+                0,
+                -0.001,
+                math.inf,
+                -math.inf,
+                math.nan,
+                True,
+                "600",
+            ):
+                with self.subTest(field=field_name, value=value):
+                    with self.assertRaises((TypeError, ValueError)):
+                        make_cabinet(**{field_name: value})
+
+    def test_topology_is_exact_and_never_inferred(self) -> None:
+        for topology in ("base", "wall", "tall", "wardrobe", "custom"):
+            with self.subTest(topology=topology):
+                self.assertEqual(
+                    topology,
+                    make_cabinet(topology=topology).topology,
+                )
+        for topology in ("BASE", "vanity", "", None):
+            with self.subTest(topology=topology):
+                with self.assertRaises((TypeError, ValueError)):
+                    make_cabinet(topology=topology)
+
+    def test_joints_are_nonempty_typed_and_defensively_snapshotted(
+        self,
+    ) -> None:
+        source = [make_joint()]
+        cabinet = make_cabinet(joints=source)
+        source.clear()
+        self.assertEqual((make_joint(),), cabinet.joints)
+
+        for value in ((), [], "one-joint", (None,), None):
+            with self.subTest(value=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    make_cabinet(joints=value)
+
+    def test_load_cases_are_nonempty_unique_typed_and_snapshotted(
+        self,
+    ) -> None:
+        source = ["DEAD_LOAD", "POINT_LOAD"]
+        cabinet = make_cabinet(load_cases=source)
+        source.append("MUTATED")
+        self.assertEqual(("DEAD_LOAD", "POINT_LOAD"), cabinet.load_cases)
+
+        for value in (
+            (),
+            [],
+            "DEAD_LOAD",
+            ("DEAD_LOAD", "DEAD_LOAD"),
+            ("",),
+            ("  ",),
+            (None,),
+            None,
+        ):
+            with self.subTest(value=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    make_cabinet(load_cases=value)
+
+    def test_mounting_and_wall_substrate_fail_closed(self) -> None:
+        wall = make_cabinet(
+            mounting="WALL",
+            wall_substrate="concrete",
+        )
+        self.assertEqual("concrete", wall.wall_substrate)
+
+        for mounting in ("FLOOR", "MOBILE"):
+            with self.subTest(mounting=mounting):
+                self.assertIsNone(
+                    make_cabinet(mounting=mounting).wall_substrate
+                )
+        for mounting in ("floor", "CEILING", "", None):
+            with self.subTest(mounting=mounting):
+                with self.assertRaises((TypeError, ValueError)):
+                    make_cabinet(mounting=mounting)
+        for substrate in (None, "", "  ", 7):
+            with self.subTest(wall_substrate=substrate):
+                with self.assertRaises((TypeError, ValueError)):
+                    make_cabinet(
+                        mounting="WALL",
+                        wall_substrate=substrate,
+                    )
+        with self.assertRaises(ValueError):
+            make_cabinet(
+                mounting="FLOOR",
+                wall_substrate="concrete",
+            )
+
+
+class CabinetPolicyValidationTests(unittest.TestCase):
+    def test_policy_identifiers_and_topology_are_exact(self) -> None:
+        for field_name, values in (
+            (
+                "policy_id",
+                ("policy:!", "rule:demo:base", "", 7),
+            ),
+            (
+                "connector_sku_id",
+                ("sku:!", "model:demo:connector", "", 7),
+            ),
+        ):
+            for value in values:
+                with self.subTest(field=field_name, value=value):
+                    with self.assertRaises((TypeError, ValueError)):
+                        make_policy(**{field_name: value})
+
+        for topology in ("base", "wall", "tall", "wardrobe", "custom"):
+            self.assertEqual(
+                topology,
+                make_policy(topology=topology).topology,
+            )
+        for topology in ("BASE", "vanity", "", None):
+            with self.subTest(topology=topology):
+                with self.assertRaises((TypeError, ValueError)):
+                    make_policy(topology=topology)
+
+    def test_policy_dimension_bounds_are_positive_finite_and_ordered(
+        self,
+    ) -> None:
+        for field_name in (
+            "width_min_mm",
+            "width_max_mm",
+            "depth_min_mm",
+            "depth_max_mm",
+            "height_min_mm",
+            "height_max_mm",
+        ):
+            for value in (0, -1, math.inf, math.nan, True, "10"):
+                with self.subTest(field=field_name, value=value):
+                    with self.assertRaises((TypeError, ValueError)):
+                        make_policy(**{field_name: value})
+
+        for minimum, maximum in (
+            ("width_min_mm", "width_max_mm"),
+            ("depth_min_mm", "depth_max_mm"),
+            ("height_min_mm", "height_max_mm"),
+        ):
+            with self.subTest(minimum=minimum, maximum=maximum):
+                with self.assertRaises(ValueError):
+                    make_policy(**{minimum: 501.0, maximum: 500.0})
+
+    def test_spacing_axis_spacing_and_counts_are_strictly_typed(
+        self,
+    ) -> None:
+        for value in ("WIDTH", None, 1):
+            with self.subTest(spacing_axis=value):
+                with self.assertRaises(TypeError):
+                    make_policy(spacing_axis=value)
+        for value in (0, -1, math.inf, math.nan, True, "300"):
+            with self.subTest(max_spacing_mm=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    make_policy(max_spacing_mm=value)
+        for field_name in (
+            "min_connector_count",
+            "max_connector_count",
+        ):
+            for value in (1, 2.5, True, "3"):
+                with self.subTest(field=field_name, value=value):
+                    with self.assertRaises((TypeError, ValueError)):
+                        make_policy(**{field_name: value})
+        with self.assertRaises(ValueError):
+            make_policy(
+                min_connector_count=5,
+                max_connector_count=4,
+            )
+
+    def test_capabilities_requirements_and_evidence_are_defensive(
+        self,
+    ) -> None:
+        capabilities = ["capability:drill", "capability:clamp"]
+        evidence = [POLICY_EVIDENCE_ID]
+        policy = make_policy(
+            required_machine_capabilities=capabilities,
+            evidence_assertion_ids=evidence,
+        )
+        capabilities.clear()
+        evidence.clear()
+        self.assertEqual(
+            ("capability:drill", "capability:clamp"),
+            policy.required_machine_capabilities,
+        )
+        self.assertEqual(
+            (POLICY_EVIDENCE_ID,),
+            policy.evidence_assertion_ids,
+        )
+
+        for value in (
+            "capability:drill",
+            ("capability:drill", "capability:drill"),
+            ("drill",),
+            ("",),
+            (None,),
+            None,
+        ):
+            with self.subTest(capabilities=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    make_policy(required_machine_capabilities=value)
+        for field_name in (
+            "reinforcement_requirement",
+            "anchor_requirement",
+        ):
+            for value in ("", "  ", 7):
+                with self.subTest(field=field_name, value=value):
+                    with self.assertRaises((TypeError, ValueError)):
+                        make_policy(**{field_name: value})
+        for value in (
+            (),
+            "assertion:demo:policy",
+            (POLICY_EVIDENCE_ID, POLICY_EVIDENCE_ID),
+            ("evidence:demo:policy",),
+            ("",),
+            (None,),
+            None,
+        ):
+            with self.subTest(evidence=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    make_policy(evidence_assertion_ids=value)
+
+
+class PlacementAndEvaluationValidationTests(unittest.TestCase):
+    def test_placement_requires_valid_joint_identity_and_paired_values(
+        self,
+    ) -> None:
+        valid = {
+            "joint_index": 0,
+            "connector_sku_id": CONNECTOR_SKU_ID,
+            "policy_id": POLICY_ID,
+            "connector_count": 3,
+            "spacing_mm": 300.0,
+        }
+        for field_name, value in (
+            ("joint_index", -1),
+            ("joint_index", True),
+            ("joint_index", 1.5),
+            ("connector_sku_id", "sku:!"),
+            ("policy_id", "rule:demo:base"),
+            ("connector_count", 1),
+            ("connector_count", True),
+            ("spacing_mm", 0),
+            ("spacing_mm", math.inf),
+        ):
+            with self.subTest(field=field_name, value=value):
+                arguments = dict(valid)
+                arguments[field_name] = value
+                with self.assertRaises((TypeError, ValueError)):
+                    ConnectorPlacement(**arguments)
+
+        for count, spacing in ((None, 300.0), (3, None)):
+            with self.subTest(count=count, spacing=spacing):
+                arguments = dict(valid)
+                arguments["connector_count"] = count
+                arguments["spacing_mm"] = spacing
+                with self.assertRaises(ValueError):
+                    ConnectorPlacement(**arguments)
+
+    def test_evaluation_snapshots_tuples_and_enforces_authorization_shape(
+        self,
+    ) -> None:
+        placement = ConnectorPlacement(
+            joint_index=0,
+            connector_sku_id=CONNECTOR_SKU_ID,
+            policy_id=POLICY_ID,
+            connector_count=3,
+            spacing_mm=300.0,
+        )
+        policy_ids = [POLICY_ID]
+        placements = [placement]
+        evidence = [POLICY_EVIDENCE_ID]
+        result = CabinetEvaluation(
+            verdict=Verdict.QUALIFIED,
+            policy_ids=policy_ids,
+            placements=placements,
+            reinforcement_requirements=(),
+            anchor_requirements=(),
+            reason_codes=(),
+            evidence_assertion_ids=evidence,
+        )
+        policy_ids.clear()
+        placements.clear()
+        evidence.clear()
+        self.assertEqual((POLICY_ID,), result.policy_ids)
+        self.assertEqual((placement,), result.placements)
+        self.assertEqual((POLICY_EVIDENCE_ID,), result.evidence_assertion_ids)
+
+        with self.assertRaises(ValueError):
+            CabinetEvaluation(
+                verdict=Verdict.QUALIFIED,
+                policy_ids=(POLICY_ID,),
+                placements=(
+                    ConnectorPlacement(
+                        joint_index=0,
+                        connector_sku_id=CONNECTOR_SKU_ID,
+                        policy_id=POLICY_ID,
+                        connector_count=None,
+                        spacing_mm=None,
+                    ),
+                ),
+                reinforcement_requirements=(),
+                anchor_requirements=(),
+                reason_codes=(),
+                evidence_assertion_ids=(POLICY_EVIDENCE_ID,),
+            )
+
+    def test_conditional_evaluation_requires_evidenced_requirements(
+        self,
+    ) -> None:
+        unresolved = ConnectorPlacement(
+            joint_index=0,
+            connector_sku_id=CONNECTOR_SKU_ID,
+            policy_id=POLICY_ID,
+            connector_count=None,
+            spacing_mm=None,
+        )
+        result = CabinetEvaluation(
+            verdict=Verdict.CONDITIONALLY_QUALIFIED,
+            policy_ids=(POLICY_ID,),
+            placements=(unresolved,),
+            reinforcement_requirements=("Add evidenced rail",),
+            anchor_requirements=(),
+            reason_codes=("REINFORCEMENT_REQUIRED",),
+            evidence_assertion_ids=(POLICY_EVIDENCE_ID,),
+        )
+        self.assertIsNone(result.placements[0].connector_count)
+
+        for changes in (
+            {
+                "reinforcement_requirements": (),
+                "anchor_requirements": (),
+            },
+            {"reason_codes": ()},
+            {"evidence_assertion_ids": ()},
+            {"policy_ids": ()},
+            {"placements": ()},
+        ):
+            arguments = {
+                "verdict": Verdict.CONDITIONALLY_QUALIFIED,
+                "policy_ids": (POLICY_ID,),
+                "placements": (unresolved,),
+                "reinforcement_requirements": ("Add evidenced rail",),
+                "anchor_requirements": (),
+                "reason_codes": ("REINFORCEMENT_REQUIRED",),
+                "evidence_assertion_ids": (POLICY_EVIDENCE_ID,),
+            }
+            arguments.update(changes)
+            with self.subTest(changes=changes):
+                with self.assertRaises(ValueError):
+                    CabinetEvaluation(**arguments)
+
+    def test_refusals_require_reasons_and_forbid_manufacturing_authority(
+        self,
+    ) -> None:
+        for verdict in (
+            Verdict.UNQUALIFIED,
+            Verdict.INSUFFICIENT_EVIDENCE,
+            Verdict.DISCONTINUED_OR_UNORDERABLE,
+        ):
+            with self.subTest(verdict=verdict, valid=True):
+                result = CabinetEvaluation(
+                    verdict=verdict,
+                    policy_ids=(),
+                    placements=(),
+                    reinforcement_requirements=(),
+                    anchor_requirements=(),
+                    reason_codes=("FAIL_CLOSED",),
+                    evidence_assertion_ids=(),
+                )
+                self.assertEqual((), result.placements)
+            for field_name, value in (
+                ("policy_ids", (POLICY_ID,)),
+                (
+                    "placements",
+                    (
+                        ConnectorPlacement(
+                            joint_index=0,
+                            connector_sku_id=CONNECTOR_SKU_ID,
+                            policy_id=POLICY_ID,
+                            connector_count=3,
+                            spacing_mm=300.0,
+                        ),
+                    ),
+                ),
+                ("reinforcement_requirements", ("rail",)),
+                ("anchor_requirements", ("anchor",)),
+                ("reason_codes", ()),
+                ("evidence_assertion_ids", (POLICY_EVIDENCE_ID,)),
+            ):
+                arguments = {
+                    "verdict": verdict,
+                    "policy_ids": (),
+                    "placements": (),
+                    "reinforcement_requirements": (),
+                    "anchor_requirements": (),
+                    "reason_codes": ("FAIL_CLOSED",),
+                    "evidence_assertion_ids": (),
+                }
+                arguments[field_name] = value
+                with self.subTest(verdict=verdict, field=field_name):
+                    with self.assertRaises(ValueError):
+                        CabinetEvaluation(**arguments)
+
+
+class CabinetEvaluationBehaviorTests(unittest.TestCase):
+    def test_three_positional_arguments_remain_valid_and_fail_closed(
+        self,
+    ) -> None:
+        result = evaluate_cabinet(
+            make_cabinet(),
+            make_registry(),
+            frozenset(),
+        )
+
+        self.assertEqual(Verdict.INSUFFICIENT_EVIDENCE, result.verdict)
+        self.assertEqual((), result.placements)
+        self.assertEqual((), result.policy_ids)
+
+    def test_registry_must_be_exact_type_and_missing_sku_never_substitutes(
+        self,
+    ) -> None:
+        with self.assertRaises(TypeError):
+            evaluate_cabinet(
+                make_cabinet(),
+                object(),
+                frozenset(),
+            )
+
+        missing = Registry(models=(), skus=())
+        result = evaluate(registry=missing)
+        self.assertEqual(Verdict.INSUFFICIENT_EVIDENCE, result.verdict)
+        self.assertEqual(("EXACT_CONNECTOR_SKU_NOT_FOUND",), result.reason_codes)
+        self.assertEqual((), result.placements)
+
+        near_only = make_registry(
+            connector_sku_id="sku:demo:connector-1.1:EU",
+        )
+        near_result = evaluate(registry=near_only)
+        self.assertEqual(
+            ("EXACT_CONNECTOR_SKU_NOT_FOUND",),
+            near_result.reason_codes,
+        )
+
+    def test_only_active_and_region_only_lifecycles_are_orderable(
+        self,
+    ) -> None:
+        for lifecycle in (LifecycleState.ACTIVE, LifecycleState.REGION_ONLY):
+            with self.subTest(lifecycle=lifecycle):
+                self.assertEqual(
+                    Verdict.QUALIFIED,
+                    evaluate(
+                        registry=make_registry(lifecycle=lifecycle)
+                    ).verdict,
+                )
+        for lifecycle in (
+            LifecycleState.PENDING,
+            LifecycleState.SUPERSEDED,
+            LifecycleState.DISCONTINUED,
+            LifecycleState.SOURCE_BLOCKED,
+        ):
+            with self.subTest(lifecycle=lifecycle):
+                result = evaluate(
+                    registry=make_registry(lifecycle=lifecycle)
+                )
+                self.assertEqual(
+                    Verdict.DISCONTINUED_OR_UNORDERABLE,
+                    result.verdict,
+                )
+                self.assertEqual(
+                    ("EXACT_CONNECTOR_DISCONTINUED_OR_UNORDERABLE",),
+                    result.reason_codes,
+                )
+                self.assertEqual((), result.placements)
+
+    def test_machine_capabilities_are_exact_canonical_frozenset(
+        self,
+    ) -> None:
+        policy = make_policy(
+            required_machine_capabilities=(
+                "capability:drill",
+                "capability:clamp",
+            ),
+        )
+        qualified = evaluate(
+            policies=(policy,),
+            machine_capabilities=frozenset(
+                ("capability:drill", "capability:clamp")
+            ),
+        )
+        self.assertEqual(Verdict.QUALIFIED, qualified.verdict)
+
+        for value in (
+            {"capability:drill", "capability:clamp"},
+            ("capability:drill", "capability:clamp"),
+            frozenset(("drill",)),
+            frozenset(("",)),
+            frozenset((None,)),
+        ):
+            with self.subTest(machine_capabilities=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    evaluate(
+                        policies=(policy,),
+                        machine_capabilities=value,
+                    )
+
+        missing = evaluate(
+            policies=(policy,),
+            machine_capabilities=frozenset(("capability:drill",)),
+        )
+        self.assertEqual(Verdict.UNQUALIFIED, missing.verdict)
+        self.assertEqual(
+            ("MISSING_REQUIRED_MACHINE_CAPABILITY",),
+            missing.reason_codes,
+        )
+        self.assertEqual((), missing.placements)
+
+    def test_every_joint_must_have_exact_qualified_envelope(self) -> None:
+        cabinet = make_cabinet(
+            joints=(
+                make_joint(),
+                make_joint(panel_a=make_material(16.0)),
+            ),
+        )
+        result = evaluate(cabinet, qualification_envelopes=(make_envelope(),))
+
+        self.assertEqual(Verdict.INSUFFICIENT_EVIDENCE, result.verdict)
+        self.assertEqual(
+            ("NO_EXACT_CONFIGURATION_EVIDENCE",),
+            result.reason_codes,
+        )
+        self.assertEqual((), result.placements)
+
+        conflicting = make_envelope(
+            envelope_id="envelope:demo:connector-1:refusal",
+            verdict=Verdict.UNQUALIFIED,
+            evidence_assertion_ids=(
+                "assertion:demo:qualification:refusal",
+            ),
+        )
+        unqualified = evaluate(
+            qualification_envelopes=(conflicting,),
+        )
+        self.assertEqual(Verdict.UNQUALIFIED, unqualified.verdict)
+        self.assertEqual(
+            ("AMBIGUOUS_OR_NONQUALIFIED_ENVELOPE",),
+            unqualified.reason_codes,
+        )
+        self.assertEqual((), unqualified.placements)
+
+    def test_no_policy_refuses_and_overlapping_policies_are_ambiguous(
+        self,
+    ) -> None:
+        no_policy = evaluate(policies=())
+        self.assertEqual(
+            Verdict.INSUFFICIENT_EVIDENCE,
+            no_policy.verdict,
+        )
+        self.assertEqual(
+            ("NO_PARAMETRIC_POLICY",),
+            no_policy.reason_codes,
+        )
+
+        duplicate = make_policy(
+            policy_id="policy:demo:base-width-overlap",
+            evidence_assertion_ids=(
+                "assertion:demo:policy:base-width-overlap",
+            ),
+        )
+        ambiguous = evaluate(policies=(make_policy(), duplicate))
+        self.assertEqual(Verdict.UNQUALIFIED, ambiguous.verdict)
+        self.assertEqual(
+            ("AMBIGUOUS_PARAMETRIC_POLICY",),
+            ambiguous.reason_codes,
+        )
+        self.assertEqual((), ambiguous.policy_ids)
+        self.assertEqual((), ambiguous.placements)
+
+    def test_policy_bounds_are_inclusive_on_all_three_dimensions(
+        self,
+    ) -> None:
+        policy = make_policy(
+            width_min_mm=300.125,
+            width_max_mm=900.875,
+            depth_min_mm=250.25,
+            depth_max_mm=650.75,
+            height_min_mm=400.375,
+            height_max_mm=2200.625,
+            max_spacing_mm=1000.0,
+        )
+        for dimensions in (
+            (300.125, 250.25, 400.375),
+            (900.875, 650.75, 2200.625),
+            (600.5, 500.5, 1200.5),
+        ):
+            with self.subTest(dimensions=dimensions):
+                cabinet = make_cabinet(
+                    width_mm=dimensions[0],
+                    depth_mm=dimensions[1],
+                    height_mm=dimensions[2],
+                )
+                self.assertEqual(
+                    Verdict.QUALIFIED,
+                    evaluate(cabinet, policies=(policy,)).verdict,
+                )
+        for dimensions in (
+            (300.124, 500.0, 720.0),
+            (900.876, 500.0, 720.0),
+            (600.0, 250.249, 720.0),
+            (600.0, 650.751, 720.0),
+            (600.0, 500.0, 400.374),
+            (600.0, 500.0, 2200.626),
+        ):
+            with self.subTest(dimensions=dimensions):
+                cabinet = make_cabinet(
+                    width_mm=dimensions[0],
+                    depth_mm=dimensions[1],
+                    height_mm=dimensions[2],
+                )
+                result = evaluate(cabinet, policies=(policy,))
+                self.assertEqual(
+                    Verdict.INSUFFICIENT_EVIDENCE,
+                    result.verdict,
+                )
+                self.assertEqual(
+                    ("NO_PARAMETRIC_POLICY",),
+                    result.reason_codes,
+                )
+
+    def test_each_topology_requires_its_own_exact_policy(self) -> None:
+        dimensions = {
+            "base": (600.125, 560.25, 720.375),
+            "wall": (700.125, 350.25, 800.375),
+            "tall": (600.125, 600.25, 2200.375),
+            "wardrobe": (900.125, 650.25, 2400.375),
+            "custom": (777.125, 444.25, 1111.375),
+        }
+        for topology, (width, depth, height) in dimensions.items():
+            with self.subTest(topology=topology):
+                cabinet = make_cabinet(
+                    width_mm=width,
+                    depth_mm=depth,
+                    height_mm=height,
+                    topology=topology,
+                )
+                policy = make_policy(
+                    policy_id=f"policy:demo:{topology}",
+                    topology=topology,
+                    width_min_mm=width,
+                    width_max_mm=width,
+                    depth_min_mm=depth,
+                    depth_max_mm=depth,
+                    height_min_mm=height,
+                    height_max_mm=height,
+                    max_spacing_mm=1000.0,
+                    evidence_assertion_ids=(
+                        f"assertion:demo:policy:{topology}",
+                    ),
+                )
+                result = evaluate(cabinet, policies=(policy,))
+                self.assertEqual(Verdict.QUALIFIED, result.verdict)
+                self.assertEqual((policy.policy_id,), result.policy_ids)
+
+                wrong = make_policy(
+                    policy_id=f"policy:demo:{topology}:wrong-topology",
+                    topology=(
+                        "wall" if topology != "wall" else "base"
+                    ),
+                    width_min_mm=width,
+                    width_max_mm=width,
+                    depth_min_mm=depth,
+                    depth_max_mm=depth,
+                    height_min_mm=height,
+                    height_max_mm=height,
+                    evidence_assertion_ids=(
+                        f"assertion:demo:policy:{topology}:wrong",
+                    ),
+                )
+                self.assertEqual(
+                    ("NO_PARAMETRIC_POLICY",),
+                    evaluate(cabinet, policies=(wrong,)).reason_codes,
+                )
+
+    def test_selected_axis_alone_controls_count_and_spacing(self) -> None:
+        cabinet = make_cabinet(
+            width_mm=1000.5,
+            depth_mm=700.25,
+            height_mm=2100.75,
+        )
+        cases = (
+            (SpacingAxis.WIDTH, 5, 250.125),
+            (SpacingAxis.DEPTH, 4, 700.25 / 3),
+            (SpacingAxis.HEIGHT, 9, 2100.75 / 8),
+        )
+        for axis, expected_count, expected_spacing in cases:
+            with self.subTest(axis=axis):
+                policy = make_policy(
+                    spacing_axis=axis,
+                    max_spacing_mm=300.0,
+                    max_connector_count=12,
+                )
+                placement = evaluate(
+                    cabinet,
+                    policies=(policy,),
+                ).placements[0]
+                self.assertEqual(expected_count, placement.connector_count)
+                self.assertEqual(expected_spacing, placement.spacing_mm)
+
+    def test_count_formula_is_deterministic_at_spacing_boundary(
+        self,
+    ) -> None:
+        boundary = evaluate(
+            make_cabinet(width_mm=600.0),
+            policies=(make_policy(max_spacing_mm=300.0),),
+        )
+        self.assertEqual(3, boundary.placements[0].connector_count)
+        self.assertEqual(300.0, boundary.placements[0].spacing_mm)
+
+        fractional = evaluate(
+            make_cabinet(width_mm=600.0001),
+            policies=(make_policy(max_spacing_mm=300.0),),
+        )
+        self.assertEqual(4, fractional.placements[0].connector_count)
+        self.assertEqual(
+            600.0001 / 3,
+            fractional.placements[0].spacing_mm,
+        )
+
+        minimum = evaluate(
+            make_cabinet(width_mm=600.0),
+            policies=(
+                make_policy(
+                    max_spacing_mm=1000.0,
+                    min_connector_count=5,
+                ),
+            ),
+        )
+        self.assertEqual(5, minimum.placements[0].connector_count)
+        self.assertEqual(150.0, minimum.placements[0].spacing_mm)
+
+    def test_excess_count_without_evidenced_condition_refuses(self) -> None:
+        result = evaluate(
+            make_cabinet(width_mm=1200.0),
+            policies=(
+                make_policy(
+                    max_spacing_mm=200.0,
+                    max_connector_count=6,
+                ),
+            ),
+        )
+
+        self.assertEqual(Verdict.UNQUALIFIED, result.verdict)
+        self.assertEqual(
+            ("CONNECTOR_COUNT_EXCEEDS_POLICY",),
+            result.reason_codes,
+        )
+        self.assertEqual((), result.placements)
+        self.assertEqual((), result.policy_ids)
+
+    def test_excess_count_with_evidenced_condition_never_guesses_placement(
+        self,
+    ) -> None:
+        cases = (
+            (
+                {
+                    "reinforcement_requirement": "Add qualified steel rail",
+                },
+                ("Add qualified steel rail",),
+                (),
+                ("REINFORCEMENT_REQUIRED",),
+            ),
+            (
+                {
+                    "anchor_requirement": "Use qualified concrete anchor",
+                },
+                (),
+                ("Use qualified concrete anchor",),
+                ("ANCHOR_REQUIRED",),
+            ),
+            (
+                {
+                    "reinforcement_requirement": "Add qualified steel rail",
+                    "anchor_requirement": "Use qualified concrete anchor",
+                },
+                ("Add qualified steel rail",),
+                ("Use qualified concrete anchor",),
+                ("REINFORCEMENT_REQUIRED", "ANCHOR_REQUIRED"),
+            ),
+        )
+        for changes, reinforcements, anchors, reasons in cases:
+            with self.subTest(changes=changes):
+                policy = make_policy(
+                    max_spacing_mm=200.0,
+                    max_connector_count=6,
+                    **changes,
+                )
+                result = evaluate(
+                    make_cabinet(width_mm=1200.0),
+                    policies=(policy,),
+                )
+                self.assertEqual(
+                    Verdict.CONDITIONALLY_QUALIFIED,
+                    result.verdict,
+                )
+                self.assertEqual(reinforcements, result.reinforcement_requirements)
+                self.assertEqual(anchors, result.anchor_requirements)
+                self.assertEqual(reasons, result.reason_codes)
+                self.assertEqual(1, len(result.placements))
+                self.assertIsNone(result.placements[0].connector_count)
+                self.assertIsNone(result.placements[0].spacing_mm)
+                self.assertIn(POLICY_EVIDENCE_ID, result.evidence_assertion_ids)
+
+    def test_evidenced_condition_is_conditional_even_when_count_fits(
+        self,
+    ) -> None:
+        policy = make_policy(
+            reinforcement_requirement="Add qualified back rail",
+            anchor_requirement="Use qualified wall anchor",
+        )
+        result = evaluate(policies=(policy,))
+
+        self.assertEqual(Verdict.CONDITIONALLY_QUALIFIED, result.verdict)
+        self.assertEqual(3, result.placements[0].connector_count)
+        self.assertEqual(300.0, result.placements[0].spacing_mm)
+        self.assertEqual(
+            ("Add qualified back rail",),
+            result.reinforcement_requirements,
+        )
+        self.assertEqual(
+            ("Use qualified wall anchor",),
+            result.anchor_requirements,
+        )
+
+    def test_tall_cabinets_have_no_height_only_anchor_inference(
+        self,
+    ) -> None:
+        cabinet = make_cabinet(
+            width_mm=600.0,
+            depth_mm=600.0,
+            height_mm=2500.0,
+            topology="tall",
+        )
+        plain_policy = make_policy(
+            policy_id="policy:demo:tall",
+            topology="tall",
+            evidence_assertion_ids=(
+                "assertion:demo:policy:tall",
+            ),
+        )
+        qualified = evaluate(cabinet, policies=(plain_policy,))
+        self.assertEqual(Verdict.QUALIFIED, qualified.verdict)
+        self.assertEqual((), qualified.anchor_requirements)
+
+        no_policy = evaluate(cabinet, policies=())
+        self.assertEqual(
+            Verdict.INSUFFICIENT_EVIDENCE,
+            no_policy.verdict,
+        )
+        self.assertEqual(
+            ("NO_PARAMETRIC_POLICY",),
+            no_policy.reason_codes,
+        )
+
+    def test_results_include_only_selected_envelope_and_policy_evidence(
+        self,
+    ) -> None:
+        result = evaluate()
+
+        self.assertEqual(Verdict.QUALIFIED, result.verdict)
+        self.assertEqual((POLICY_ID,), result.policy_ids)
+        self.assertEqual(
+            (QUALIFICATION_EVIDENCE_ID, POLICY_EVIDENCE_ID),
+            result.evidence_assertion_ids,
+        )
+        self.assertEqual((), result.reason_codes)
+
+    def test_multiple_joints_get_one_policy_placement_each(self) -> None:
+        cabinet = make_cabinet(joints=(make_joint(), make_joint()))
+        result = evaluate(cabinet)
+
+        self.assertEqual(Verdict.QUALIFIED, result.verdict)
+        self.assertEqual((0, 1), tuple(
+            placement.joint_index for placement in result.placements
+        ))
+        self.assertEqual(
+            (POLICY_ID, POLICY_ID),
+            result.policy_ids,
+        )
+
+    def test_inputs_are_snapshotted_and_repeated_results_are_identical(
+        self,
+    ) -> None:
+        cabinet = make_cabinet()
+        registry = make_registry()
+        envelope_source = [make_envelope()]
+        policy_source = [make_policy()]
+        original_envelopes = list(envelope_source)
+        original_policies = list(policy_source)
+
+        first = evaluate_cabinet(
+            cabinet,
+            registry,
+            frozenset(),
+            qualification_envelopes=(
+                envelope for envelope in envelope_source
+            ),
+            policies=(policy for policy in policy_source),
+        )
+        second = evaluate_cabinet(
+            cabinet,
+            registry,
+            frozenset(),
+            qualification_envelopes=envelope_source,
+            policies=policy_source,
+        )
+        envelope_source.clear()
+        policy_source.clear()
+
+        self.assertEqual(first, second)
+        self.assertEqual((make_envelope(),), tuple(original_envelopes))
+        self.assertEqual((make_policy(),), tuple(original_policies))
+
+    def test_policy_and_envelope_inputs_are_strictly_typed(self) -> None:
+        for field_name, value in (
+            ("qualification_envelopes", make_envelope()),
+            ("qualification_envelopes", "one-envelope"),
+            ("qualification_envelopes", (None,)),
+            ("qualification_envelopes", None),
+            ("policies", make_policy()),
+            ("policies", "one-policy"),
+            ("policies", (None,)),
+            ("policies", None),
+        ):
+            arguments = {
+                "qualification_envelopes": (make_envelope(),),
+                "policies": (make_policy(),),
+            }
+            arguments[field_name] = value
+            with self.subTest(field=field_name, value=value):
+                with self.assertRaises(TypeError):
+                    evaluate_cabinet(
+                        make_cabinet(),
+                        make_registry(),
+                        frozenset(),
+                        **arguments,
+                    )
+
+    def test_scope_is_rule_selection_not_full_structural_analysis(
+        self,
+    ) -> None:
+        doc = evaluate_cabinet.__doc__ or ""
+        for phrase in (
+            "rule selection",
+            "count",
+            "spacing",
+            "racking",
+            "overturning",
+            "center of gravity",
+            "structural extrapolation",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, doc.lower())
+
+
+if __name__ == "__main__":
+    unittest.main()
