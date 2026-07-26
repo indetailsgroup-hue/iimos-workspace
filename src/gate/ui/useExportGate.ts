@@ -21,17 +21,26 @@ import type { GateResult, GateFinding } from './gateTypes';
 // ============================================
 
 export interface ExportGateStatus {
-  /** Can freeze spec (DRAFT → FROZEN) - requires no blockers */
+  /** Can freeze spec (DRAFT → FROZEN) — requires a FRESH run with no blockers */
   canFreeze: boolean;
 
-  /** Can release spec (FROZEN → RELEASED) - requires no blockers */
+  /** Can release spec (FROZEN → RELEASED) — requires a FRESH run with no blockers */
   canRelease: boolean;
 
-  /** Can export DXF/CNC output - requires no blockers */
+  /** Can export DXF/CNC output — requires a FRESH run with no blockers */
   canExport: boolean;
 
   /** Has gate been run at all */
   hasRun: boolean;
+
+  /**
+   * Did the run itself come back clean, ignoring freshness?
+   *
+   * Diagnostic only — never an authority. Lets a surface tell the user WHY it
+   * is blocking: `passedWhenRun && !fresh` means "the cabinet changed, re-run
+   * the gate", which is a different message from "fix your blockers".
+   */
+  passedWhenRun: boolean;
 
   /**
    * Is the stored verdict fresh for the CURRENT drill map?
@@ -41,9 +50,10 @@ export interface ExportGateStatus {
    * useDrillMapStore. Replacing or clearing the drill map flips this to
    * false while hasRun stays true. Fail-closed: false before any run.
    *
-   * NOTE (T7): informational only for now — canFreeze/canRelease/canExport
-   * deliberately keep their existing semantics. A later task wires `fresh`
-   * into enforcement/UI.
+   * AUTHORITATIVE since T8a (owner ruling Q2 = O2+O3): canFreeze/canRelease/
+   * canExport all require it. This is also what closes the vacuous PASS — the
+   * three validators return PASS on a null drill map, but such a run records a
+   * null validatedDrillMapRef, which is never fresh.
    */
   fresh: boolean;
 
@@ -91,18 +101,23 @@ export function useExportGate(): ExportGateStatus & ExportGateActions {
     const blockers = result?.findings.blockers ?? [];
     const warnings = result?.findings.warnings ?? [];
 
-    // Core rule: No blockers = can proceed
-    const canProceed = hasRun && blockers.length === 0;
+    // The run's own verdict, ignoring freshness (diagnostic).
+    const passedWhenRun = hasRun && blockers.length === 0;
 
     // Fresh = verdict exists AND was validated against the exact object the
     // drill map store currently holds (identity, fail-closed on null).
     const fresh = hasRun && validatedRef !== null && validatedRef === currentDrillMap;
+
+    // Authority (T8a, owner ruling Q2 = O2+O3): a clean verdict only counts
+    // while it still describes the cabinet in front of the user.
+    const canProceed = passedWhenRun && fresh;
 
     return {
       canFreeze: canProceed,
       canRelease: canProceed,
       canExport: canProceed,
       hasRun,
+      passedWhenRun,
       fresh,
       isRunning,
       blockerCount: blockers.length,
@@ -133,6 +148,11 @@ export function useExportGate(): ExportGateStatus & ExportGateActions {
     if (!status.hasRun) {
       return 'Gate validation has not been run yet';
     }
+    // A clean-but-stale verdict blocks for a different reason than a dirty one,
+    // and the user needs the difference: re-run vs fix.
+    if (status.blockerCount === 0 && !status.fresh) {
+      return 'The cabinet changed since the last Safety Gate run — run the gate again';
+    }
     if (status.blockerCount === 0) {
       return ''; // No block
     }
@@ -162,14 +182,18 @@ export function getExportGateStatus(): ExportGateStatus {
   const hasRun = result !== null;
   const blockers = result?.findings.blockers ?? [];
   const warnings = result?.findings.warnings ?? [];
-  const canProceed = hasRun && blockers.length === 0;
+  const passedWhenRun = hasRun && blockers.length === 0;
+  // Same authority as the hook (T8a): clean AND fresh.
+  const fresh = isGateResultFresh();
+  const canProceed = passedWhenRun && fresh;
 
   return {
     canFreeze: canProceed,
     canRelease: canProceed,
     canExport: canProceed,
     hasRun,
-    fresh: isGateResultFresh(),
+    passedWhenRun,
+    fresh,
     isRunning: state.isRunning,
     blockerCount: blockers.length,
     warningCount: warnings.length,

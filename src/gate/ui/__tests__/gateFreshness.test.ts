@@ -120,10 +120,13 @@ describe('gate result freshness (drill-map object identity)', () => {
     expect(status.fresh).toBe(false);
     expect(status.hasRun).toBe(true);
 
-    // Existing fields keep their semantics — wiring `fresh` into enforcement
-    // is a later task; this task must not change canFreeze/canExport behavior.
-    expect(status.canFreeze).toBe(true);
-    expect(status.canExport).toBe(true);
+    // T8a (owner ruling Q2 = O2+O3) made `fresh` authoritative: a verdict that
+    // no longer describes the current cabinet authorizes nothing. The run's own
+    // clean result stays visible via passedWhenRun so a surface can say
+    // "re-run the gate" instead of "fix your blockers".
+    expect(status.canFreeze).toBe(false);
+    expect(status.canExport).toBe(false);
+    expect(status.passedWhenRun).toBe(true);
   });
 
   it('(b2) clearing the drill map invalidates freshness while hasRun stays true', () => {

@@ -6,8 +6,30 @@
  * @version 1.0.0 - Phase B1: Gate Enforcement
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// T8a: freeze/export authority now requires the verdict to be FRESH for the
+// current drill map (owner ruling Q2 = O2+O3). These tests exercise the
+// blockers dimension, so the drill map store is mocked with a stable object
+// and every run below is validated against it — the single-arg setResult
+// fallback captures exactly that object, keeping each verdict fresh. The
+// staleness dimension is covered in gateFreshness/gateEnforcement tests.
+vi.mock('../../../core/store/useDrillMapStore', () => {
+  let state: { drillMap: unknown } = { drillMap: null };
+  const useDrillMapStore = Object.assign(
+    (selector?: (s: unknown) => unknown) => (selector ? selector(state) : state),
+    {
+      getState: () => state,
+      setState: (partial: Record<string, unknown>) => {
+        state = { ...state, ...partial };
+      },
+    },
+  );
+  return { useDrillMapStore };
+});
+
 import { useGateStore } from '../gateStore';
+import { useDrillMapStore } from '../../../core/store/useDrillMapStore';
 import {
   getExportGateStatus,
   isExportAllowed,
@@ -83,6 +105,10 @@ describe('useExportGate', () => {
   beforeEach(() => {
     // Reset store before each test
     useGateStore.getState().reset();
+    // A drill map must be present for a verdict to be fresh (T8a).
+    (useDrillMapStore as unknown as { setState: (p: Record<string, unknown>) => void }).setState({
+      drillMap: { panels: [] },
+    });
   });
 
   describe('getExportGateStatus', () => {

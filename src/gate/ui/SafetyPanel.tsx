@@ -257,10 +257,17 @@ function runGateValidation(): void {
           errors: gateResult.summary.errors + g11Result.summary.blockers + connectorAudit.summary.blockers,
           warnings: gateResult.summary.warnings + g11Result.summary.warnings + connectorAudit.summary.warnings,
           connectorJointsAudited: connectorAudit.summary.jointsAudited,
+          // Coverage of this run — a verdict over zero points proves nothing.
+          pointsValidated: g11Result.summary.pointsValidated,
         },
       };
 
-      setResult(result);
+      // T8a: hand the store the EXACT map this verdict was computed from.
+      // `drillMap` was captured before this setTimeout; the store's legacy
+      // fallback would read whatever the store holds NOW, so an edit landing
+      // inside the ~50ms window would stamp a stale verdict as fresh —
+      // fail-open in the wrong direction for a safety gate.
+      setResult(result, drillMap);
       console.log('[SafetyPanel] Gate validation completed:', gateResult.status,
         '| G11:', g11Result.status, `(${g11Result.issues.length} issues)`,
         '| ConnectorOS:', connectorAudit.status, `(${connectorAudit.summary.jointsAudited} joints)`);
