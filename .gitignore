@@ -39,3 +39,10 @@ supabase/snippets/
 
 # Local isolated execution lanes
 .worktrees/
+
+# Google Drive folder-icon stubs. Drive for desktop drops a hidden+system
+# desktop.ini into every folder it syncs, which buries `git status` under
+# hundreds of untracked entries. Drive also writes them inside .git/, where
+# .gitignore has no effect and they break `git gc` — the cleanup script lives
+# in the parent repo at tools/git-drive-cleanup.ps1 and covers this repo too.
+desktop.ini
