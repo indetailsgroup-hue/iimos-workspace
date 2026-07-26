@@ -88,6 +88,25 @@ export interface ExportGateActions {
   getBlockReason: () => string;
 }
 
+/**
+ * Is there anything here for the validators to examine?
+ *
+ * NOT just "is it non-null". validateMinifixGate / validateG11FromDrillMap /
+ * runConnectorOsAudit all short-circuit to PASS on an empty map, so a map with
+ * `panels: []` produced a clean verdict that reported zero findings because it
+ * looked at nothing — and, being a real object, it matched the validated
+ * reference by identity and read as FRESH. generateMinifixDrillMap returns
+ * exactly that object for a cabinet with no panels.
+ *
+ * "Zero findings" and "nothing was examined" must never be the same answer.
+ * Cross-vendor gate, 2026-07-26.
+ */
+function isValidatableDrillMap(map: unknown): boolean {
+    if (map === null || map === undefined) return false;
+    const panels = (map as { panels?: unknown }).panels;
+    return Array.isArray(panels) && panels.length > 0;
+}
+
 // ============================================
 // WHY THE GATE IS REFUSING (single source)
 // ============================================
@@ -112,7 +131,11 @@ export function describeGateRefusal(status: ExportGateStatus): string {
     if (!status.hasDrillMap) {
         return 'there is no drill map to validate yet — generate the drill map for this cabinet first';
     }
-    if (!status.hasRun) return 'the Safety Gate has not been run yet';
+    // Imperative, not descriptive. "has not been run yet" states a fact and
+    // leaves the user to work out the move; the tenet is that every refusal
+    // carries the next action. Consolidating the two surfaces' wording lost
+    // this once already — GateToolbar.dxfExport.test.tsx pins it.
+    if (!status.hasRun) return 'run the Safety Gate first';
     if (status.blockerCount === 1) {
         return `1 Safety Gate blocker must be resolved: ${status.blockers[0]?.message ?? 'unknown issue'}`;
     }
@@ -150,7 +173,11 @@ export function useExportGate(): ExportGateStatus & ExportGateActions {
 
     // Fresh = verdict exists AND was validated against the exact object the
     // drill map store currently holds (identity, fail-closed on null).
-    const fresh = hasRun && validatedRef !== null && validatedRef === currentDrillMap;
+    const fresh =
+        hasRun &&
+        validatedRef !== null &&
+        validatedRef === currentDrillMap &&
+        isValidatableDrillMap(currentDrillMap);
 
     // Authority (T8a, owner ruling Q2 = O2+O3): a clean verdict only counts
     // while it still describes the cabinet in front of the user — and never
@@ -168,7 +195,7 @@ export function useExportGate(): ExportGateStatus & ExportGateActions {
       isRunning,
       blockerCount: blockers.length,
       warningCount: warnings.length,
-      hasDrillMap: currentDrillMap !== null && currentDrillMap !== undefined,
+      hasDrillMap: isValidatableDrillMap(currentDrillMap),
       blockers,
       result,
     };
@@ -215,7 +242,9 @@ export function getExportGateStatus(): ExportGateStatus {
   const warnings = result?.findings.warnings ?? [];
   const passedWhenRun = hasRun && blockers.length === 0;
   // Same authority as the hook (T8a + G2): clean, fresh, and not mid-run.
-  const fresh = isGateResultFresh();
+  // Freshness alone is identity-only; an empty map is identity-stable and
+  // therefore 'fresh' while covering nothing.
+  const fresh = isGateResultFresh() && isValidatableDrillMap(useDrillMapStore.getState().drillMap);
   const canProceed = passedWhenRun && fresh && !state.isRunning;
 
   return {
@@ -228,7 +257,7 @@ export function getExportGateStatus(): ExportGateStatus {
     isRunning: state.isRunning,
     blockerCount: blockers.length,
     warningCount: warnings.length,
-    hasDrillMap: useDrillMapStore.getState().drillMap != null,
+    hasDrillMap: isValidatableDrillMap(useDrillMapStore.getState().drillMap),
     blockers,
     result,
   };

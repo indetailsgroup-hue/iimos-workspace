@@ -242,6 +242,18 @@ export interface PacketGateFinding {
   message: string;
   /** Affected entity IDs */
   entityIds: string[];
+  /**
+   * Machine-readable evidence behind the finding, copied as-is from the gate.
+   * Typically `{ reason, measured, expected, waivable, ... }`.
+   *
+   * This was dropped at the packet boundary, which made `waivable: false`
+   * documentation rather than enforcement and left gate-result.json with a
+   * prose message and nothing to check it against. The packet is the archived,
+   * hashed record of WHY a job was blocked, so the measured/expected pair and
+   * the non-waivability have to travel with it. Present only when the finding
+   * carries one — nothing is invented. Cross-vendor gate, 2026-07-26.
+   */
+  context?: Record<string, unknown>;
 }
 
 /**

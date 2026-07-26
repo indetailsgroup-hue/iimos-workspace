@@ -81,6 +81,11 @@ const h = vi.hoisted(() => {
   const freshPass = {
     canFreeze: true, canRelease: true, canExport: true,
     hasRun: true, passedWhenRun: true, fresh: true,
+    // A drill map exists — otherwise describeGateRefusal correctly reports
+    // "no drill map to validate yet" for EVERY case and the more specific
+    // refusals below would never be reached (found live 2026-07-26: the app
+    // was blaming a cabinet change when nothing had ever been validated).
+    hasDrillMap: true,
     isRunning: false, blockerCount: 0, warningCount: 0, blockers: [], result: null,
   };
   return {
@@ -148,9 +153,16 @@ vi.mock('../../../factory/packet/cutListCsv', () => ({
 // ─── Safety-Gate authority (T8b) ───
 // The toolbar reads the verdict imperatively and can auto-run the gate; both
 // are mocked so a test can put the gate in any state without a drill map.
-vi.mock('../../../gate/ui/useExportGate', () => ({
-  getExportGateStatus: () => h.gateState,
-}));
+vi.mock('../../../gate/ui/useExportGate', async (importOriginal) => {
+  // describeGateRefusal is deliberately NOT stubbed: it is the single source of
+  // the refusal sentences, so importing the real one makes these tests fail when
+  // the product wording drifts — which is the whole point of asserting on it.
+  const actual = await importOriginal<typeof import('../../../gate/ui/useExportGate')>();
+  return {
+    ...actual,
+    getExportGateStatus: () => h.gateState,
+  };
+});
 vi.mock('../../../gate/ui/SafetyPanel', () => ({
   runGateValidation: vi.fn(async () => {
     h.gateRuns.count += 1;
@@ -194,7 +206,10 @@ const OK_RESULT = {
 
 async function clickDxfMenuItem() {
   fireEvent.click(screen.getByTitle('Export options'));
-  fireEvent.click(await screen.findByRole('button', { name: /DXF Files/ }));
+  // b24aaeef renamed this affordance to carry the NOT-FOR-PRODUCTION status
+  // at the click site. Matching the real label, not a loose /DXF/, so a future
+  // rename fails here instead of silently clicking the CNC item.
+  fireEvent.click(await screen.findByRole('button', { name: /DXF — Engineering Preview/ }));
 }
 
 describe('GateToolbar DXF menu item — packet path (Q1=A: quickDxf retired from user paths)', () => {
@@ -360,7 +375,7 @@ describe('GateToolbar — freeze/export require a FRESH Safety-Gate PASS (T8b)',
     render(<GateToolbar />);
     await clickDxfMenuItem();
 
-    expect(await screen.findByText(/3 Safety Gate blocker\(s\) must be resolved/i)).toBeTruthy();
+    expect(await screen.findByText(/3 Safety Gate blockers must be resolved/i)).toBeTruthy();
     expect(mockDownload).not.toHaveBeenCalled();
   });
 
@@ -375,6 +390,26 @@ describe('GateToolbar — freeze/export require a FRESH Safety-Gate PASS (T8b)',
     await clickDxfMenuItem();
 
     expect(await screen.findByText(/run the Safety Gate first/i)).toBeTruthy();
+    expect(mockDownload).not.toHaveBeenCalled();
+  });
+
+  it('REFUSES export with the RIGHT reason when no drill map exists (not "the cabinet changed")', async () => {
+    // Found by driving the running app on 2026-07-26. With no drill map, all
+    // three validators short-circuit to PASS, so the verdict is vacuously clean
+    // and can never be fresh — which used to land in the stale branch and tell
+    // the user their cabinet had changed. Re-running says the same thing
+    // forever, so the refusal was both false and a dead end.
+    h.gateState = {
+      ...h.freshPass,
+      hasDrillMap: false,
+      fresh: false, canFreeze: false, canRelease: false, canExport: false,
+    };
+
+    render(<GateToolbar />);
+    await clickDxfMenuItem();
+
+    expect(await screen.findByText(/no drill map to validate yet/i)).toBeTruthy();
+    expect(screen.queryByText(/cabinet changed/i), 'must not blame a change the user never made').toBeNull();
     expect(mockDownload).not.toHaveBeenCalled();
   });
 

@@ -237,7 +237,38 @@ export type BlindBoreRefusalReason =
    * The recipe declares no usable depth for this operation. Same fail-closed
    * treatment — a missing recipe value is never substituted.
    */
-  | 'R_RECIPE_DEPTH_UNDECLARED';
+  | 'R_RECIPE_DEPTH_UNDECLARED'
+  /**
+   * The bore would exit the panel along its OWN axis. This generalises the
+   * thickness case: a bore is limited by however far the panel extends in the
+   * direction the tool travels — the material thickness for a face bore, the
+   * in-plane span for an edge bore. Judging "is this a face bore?" first was
+   * the bug: it refused legitimate DIVIDER edge bores and waved DIVIDER face
+   * bores through, and it never noticed a 24mm BOLT_ENTRY exiting the far edge
+   * of a 24mm-clear filler top. Two-vendor gate, 2026-07-26.
+   */
+  | 'R_BORE_EXITS_PANEL'
+  /**
+   * The bore has no adjudicable direction — a zero, non-finite or diagonal
+   * normal. Face-vs-edge used to be picked by "dominant axis", and a strict
+   * tie-break silently chose X for [0,0,0] and [1,0,1], so a 17.5mm bore into
+   * a 6mm back was skipped as an edge bore. Unadjudicable data fails closed.
+   */
+  | 'R_BORE_AXIS_UNDECLARED'
+  /**
+   * The panel declares no usable extent along the bore axis (undefined or NaN
+   * dimensions). Refused rather than defaulted.
+   */
+  | 'R_PANEL_EXTENT_UNDECLARED'
+  /**
+   * A bore declared `throughHole` that runs measurably past its own panel.
+   * A through hole needs a declared overtravel; nothing in this repo declares
+   * one, and 17.5mm "through" a 6mm panel is 11.5mm of tool travel into the
+   * vacuum bed or clamp. Refused rather than approximated. NOTE: no emitter
+   * in this repo sets `throughHole`, so this closes a door with no current
+   * legitimate user — it was a pure fail-open path for external maps.
+   */
+  | 'R_THROUGH_OVERTRAVEL_UNDECLARED';
 
 /**
  * A machine-readable record of machining features the generator REFUSED to
@@ -285,7 +316,34 @@ declare module './types' {
 
 /** Stable dedupe key so one bad recipe is reported once per owner+operation. */
 function refusalKey(r: BlindBoreRefusal): string {
-  return `${r.reasonCode}|${r.joint}|${r.ownerPanelId}|${r.purpose}|${r.requiredDepthMm}`;
+  // `corner` belongs in the key: BACK_LEFT and BACK_RIGHT produce refusals that
+  // are otherwise identical tuples, so omitting it silently collapsed the two
+  // junctions into one record whose `corner` field then named only the first.
+  // The gate's blocker list lost a whole junction. Two-vendor gate, 2026-07-26.
+  return `${r.reasonCode}|${r.joint}|${r.corner ?? '-'}|${r.ownerPanelId}|${r.purpose}|${r.requiredDepthMm}`;
+}
+
+/**
+ * Suffixes that make a dowel's pairId a CHILD of a connector's pairId.
+ * See generateDrillMap emitters at :904/:929/:1241/:1289/:1589/:1616/:1853.
+ */
+const PAIR_CHILD_SUFFIXES = ['-dowel-side', '-dowel-horiz', '-dowel-shelf', '-dowel-back'] as const;
+
+/**
+ * The joint a pairId belongs to. Withdrawal has to work on this, not on the
+ * raw string: the two halves of one dowel pair carry DIFFERENT pairIds, so
+ * exact-match withdrawal removed a refused bolt and left its own dowels
+ * behind — measured on 12/15/16mm carcasses as orphan Ø8 edge bores and, worse,
+ * dowel-only corners with no cam-bolt fixing at all. Both review vendors
+ * confirmed it independently. Matching by root (never by string prefix, which
+ * would make `pair-TOP_LEFT-1` swallow `pair-TOP_LEFT-10`) keeps the
+ * documented contract true: the whole joint goes, on every panel.
+ */
+export function pairJointRoot(pairId: string): string {
+  for (const suffix of PAIR_CHILD_SUFFIXES) {
+    if (pairId.endsWith(suffix)) return pairId.slice(0, -suffix.length);
+  }
+  return pairId;
 }
 
 /**
@@ -309,8 +367,21 @@ export function evaluateBlindBoreFeasibility(args: {
   recipeSource: string;
   joint: string;
   corner?: CornerType;
+  /**
+   * Direction the tool travels, in world axes. When given, the depth is judged
+   * against the panel's extent ALONG THIS AXIS — the correct limit for both a
+   * face bore (extent = material thickness) and an edge bore (extent = in-plane
+   * span). Omit only at recipe pre-flight, before any point exists, where the
+   * recipe is known to describe a face bore into the owner panel.
+   */
+  boreAxisNormal?: readonly number[];
+  /** A bore the emitter declares as intentionally through the panel. */
+  throughHole?: boolean;
 }): BlindBoreRefusal | null {
-  const { ownerPanel, purpose, diameterMm, requiredDepthMm, recipeSource, joint, corner } = args;
+  const {
+    ownerPanel, purpose, diameterMm, requiredDepthMm, recipeSource, joint, corner,
+    boreAxisNormal, throughHole,
+  } = args;
 
   // Owner panel's OWN thickness — never a cabinet-level or config default.
   const rawThickness = ownerPanel.computed?.realThickness;
@@ -355,19 +426,72 @@ export function evaluateBlindBoreFeasibility(args: {
     };
   }
 
-  if (requiredDepthMm >= ownerThicknessMm) {
-    return {
-      ...base,
-      reasonCode: 'R_BLIND_BORE_EXCEEDS_MEMBER_THICKNESS',
-      requiredDepthMm,
-      ownerThicknessMm,
-      message:
-        `${purpose} Ø${diameterMm} needs a ${requiredDepthMm}mm blind bore but ` +
-        `${ownerPanel.role} ${ownerPanel.id} is only ${ownerThicknessMm}mm thick — ` +
-        `the bore would break through. Recipe source: ${recipeSource}. ` +
-        `Depth was NOT reduced: no compatible recipe exists for this member, so zero ` +
-        `operations are emitted for this joint.`,
-    };
+  // ── No bore axis given (recipe pre-flight): the recipe is a FACE bore into
+  //    the owner panel, so its thickness is the limit. ────────────────────────
+  if (boreAxisNormal === undefined) {
+    if (requiredDepthMm >= ownerThicknessMm) {
+      return {
+        ...base,
+        reasonCode: 'R_BLIND_BORE_EXCEEDS_MEMBER_THICKNESS',
+        requiredDepthMm,
+        ownerThicknessMm,
+        message:
+          `${purpose} Ø${diameterMm} needs a ${requiredDepthMm}mm blind bore but ` +
+          `${ownerPanel.role} ${ownerPanel.id} is only ${ownerThicknessMm}mm thick — ` +
+          `the bore would break through. Recipe source: ${recipeSource}. ` +
+          `Depth was NOT reduced: no compatible recipe exists for this member, so zero ` +
+          `operations are emitted for this joint.`,
+      };
+    }
+    return null;
+  }
+
+  // ── A bore axis IS given: judge the depth against how far the panel extends
+  //    in the direction the tool travels. One rule for face and edge bores. ───
+  const n = [
+    Math.abs(Number(boreAxisNormal[0])),
+    Math.abs(Number(boreAxisNormal[1])),
+    Math.abs(Number(boreAxisNormal[2])),
+  ];
+  const AXIS_NAMES = ['X', 'Y', 'Z'] as const;
+
+  // The axis must be unambiguous. A zero, non-finite or diagonal normal has no
+  // dominant axis; picking one by a strict tie-break is how [0,0,0] and [1,0,1]
+  // used to be waved through as "edge bores".
+  if (!n.every(Number.isFinite)) {
+    return { ...base, reasonCode: 'R_BORE_AXIS_UNDECLARED', requiredDepthMm, ownerThicknessMm,
+      message: `${purpose} Ø${diameterMm} on ${ownerPanel.role} ${ownerPanel.id}: bore normal is not finite — direction cannot be adjudicated, operation refused (fail closed).` };
+  }
+  const maxN = Math.max(n[0], n[1], n[2]);
+  const dominant = n.filter((v) => v > maxN * 0.7071).length; // 45° = ambiguous
+  if (maxN <= 0 || dominant !== 1) {
+    return { ...base, reasonCode: 'R_BORE_AXIS_UNDECLARED', requiredDepthMm, ownerThicknessMm,
+      message: `${purpose} Ø${diameterMm} on ${ownerPanel.role} ${ownerPanel.id}: bore normal [${boreAxisNormal.join(', ')}] has no single dominant axis — direction cannot be adjudicated, operation refused (fail closed).` };
+  }
+  const axis = n.indexOf(maxN);
+
+  const aabb = calculatePanelAABB(ownerPanel);
+  const extent = aabb.max[axis] - aabb.min[axis];
+  if (!Number.isFinite(extent) || extent <= 0) {
+    return { ...base, reasonCode: 'R_PANEL_EXTENT_UNDECLARED', requiredDepthMm, ownerThicknessMm,
+      message: `${purpose} Ø${diameterMm} on ${ownerPanel.role} ${ownerPanel.id}: panel declares no usable extent along ${AXIS_NAMES[axis]} (got ${extent}) — a ${requiredDepthMm}mm bore cannot be adjudicated, operation refused (fail closed).` };
+  }
+
+  if (throughHole === true) {
+    // Declared through: the tool is MEANT to exit. What is not declared anywhere
+    // in this repo is how far past the part it may travel, so a bore that runs
+    // measurably beyond the panel is refused rather than given an invented
+    // overtravel allowance.
+    if (requiredDepthMm > extent) {
+      return { ...base, reasonCode: 'R_THROUGH_OVERTRAVEL_UNDECLARED', requiredDepthMm, ownerThicknessMm,
+        message: `${purpose} Ø${diameterMm} is declared as a through hole at ${requiredDepthMm}mm, but ${ownerPanel.role} ${ownerPanel.id} is only ${extent}mm along ${AXIS_NAMES[axis]} — ${(requiredDepthMm - extent).toFixed(1)}mm of tool travel past the part, into whatever is holding it. No overtravel allowance is declared for this operation, so it is refused rather than approximated. Recipe source: ${recipeSource}.` };
+    }
+    return null;
+  }
+
+  if (requiredDepthMm >= extent) {
+    return { ...base, reasonCode: 'R_BORE_EXITS_PANEL', requiredDepthMm, ownerThicknessMm,
+      message: `${purpose} Ø${diameterMm} needs a ${requiredDepthMm}mm blind bore along ${AXIS_NAMES[axis]}, but ${ownerPanel.role} ${ownerPanel.id} only extends ${extent}mm in that direction — the bore would exit the panel. Recipe source: ${recipeSource}. Depth was NOT reduced: zero operations are emitted for this joint.` };
   }
 
   return null;
@@ -2497,31 +2621,44 @@ export function generateMinifixDrillMap(
   // half-joint is not a fixing. Nothing is clamped, relocated or relabelled.
   {
     const panelById = new Map(cabinet.panels.map((p) => [p.id, p]));
-    const doomedPairIds = new Set<string>();
+    /** Joint roots (see pairJointRoot) whose ENTIRE family must be withdrawn. */
+    const doomedJoints = new Set<string>();
     const sweepRefusals: BlindBoreRefusal[] = [];
 
     for (const [panelId, pts] of panelPointsMap) {
       const ownerPanel = panelById.get(panelId);
-      if (!ownerPanel) continue;
-
-      const aabb = calculatePanelAABB(ownerPanel);
-      const extents: [number, number, number] = [
-        aabb.max[0] - aabb.min[0],
-        aabb.max[1] - aabb.min[1],
-        aabb.max[2] - aabb.min[2],
-      ];
-      let thicknessAxis = 0;
-      if (extents[1] < extents[thicknessAxis]) thicknessAxis = 1;
-      if (extents[2] < extents[thicknessAxis]) thicknessAxis = 2;
+      if (!ownerPanel) {
+        // FAIL CLOSED. A point whose owner panel is not in cabinet.panels cannot
+        // be adjudicated at all; skipping it was a fail-OPEN hole (both review
+        // vendors flagged it). Withdraw the joint and say why.
+        for (const pt of pts) {
+          sweepRefusals.push({
+            reasonCode: 'R_MEMBER_THICKNESS_UNDECLARED',
+            joint: pt.cornerType ?? 'UNSCOPED',
+            corner: pt.cornerType,
+            ownerPanelId: panelId,
+            ownerPanelRole: 'UNKNOWN',
+            purpose: pt.purpose,
+            diameterMm: pt.diameter,
+            requiredDepthMm: pt.depth ?? null,
+            ownerThicknessMm: null,
+            recipeSource: 'emitted DrillMapPoint.depth',
+            waivable: false,
+            message:
+              `${pt.purpose} Ø${pt.diameter} is owned by panel '${panelId}', which is not in ` +
+              `cabinet.panels — the bore cannot be adjudicated against any member, so it is ` +
+              `refused (fail closed).`,
+          });
+          doomedJoints.add(pt.pairId ? pairJointRoot(pt.pairId) : `__point__:${pt.id}`);
+        }
+        continue;
+      }
 
       for (const pt of pts) {
-        if (pt.throughHole === true) continue;  // declared through = intentional
-        const n = pt.normal.map(Math.abs);
-        let drillAxis = 0;
-        if (n[1] > n[drillAxis]) drillAxis = 1;
-        if (n[2] > n[drillAxis]) drillAxis = 2;
-        if (drillAxis !== thicknessAxis) continue;  // edge bore — out of scope
-
+        // No face/edge pre-classification: the depth is judged against the
+        // panel's extent along the bore's OWN axis, which is the right limit
+        // either way. Unadjudicable normals and undeclared through-travel are
+        // refused inside evaluateBlindBoreFeasibility, not skipped here.
         const refusal = evaluateBlindBoreFeasibility({
           ownerPanel,
           purpose: pt.purpose,
@@ -2530,11 +2667,15 @@ export function generateMinifixDrillMap(
           recipeSource: 'emitted DrillMapPoint.depth',
           joint: pt.cornerType ?? 'UNSCOPED',
           corner: pt.cornerType,
+          boreAxisNormal: pt.normal,
+          throughHole: pt.throughHole,
         });
         if (refusal) {
           sweepRefusals.push(refusal);
-          if (pt.pairId) doomedPairIds.add(pt.pairId);
-          else doomedPairIds.add(`__point__:${pt.id}`);
+          // The WHOLE joint, by root — a refused bolt must take its own dowels
+          // with it. Exact-string matching left orphan Ø8 edge bores and
+          // dowel-only corners on 12/15/16mm carcasses.
+          doomedJoints.add(pt.pairId ? pairJointRoot(pt.pairId) : `__point__:${pt.id}`);
         }
       }
     }
@@ -2546,8 +2687,8 @@ export function generateMinifixDrillMap(
           panelId,
           pts.filter(
             (pt) =>
-              !(pt.pairId && doomedPairIds.has(pt.pairId)) &&
-              !doomedPairIds.has(`__point__:${pt.id}`),
+              !(pt.pairId && doomedJoints.has(pairJointRoot(pt.pairId))) &&
+              !doomedJoints.has(`__point__:${pt.id}`),
           ),
         );
       }

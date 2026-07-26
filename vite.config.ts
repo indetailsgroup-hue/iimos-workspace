@@ -29,6 +29,20 @@ export default defineConfig({
       '_daph_extract/**',
       'minifix-skill-pack/**',
       'furniture-hardware-vault/**',
+      // Git worktrees checked out INSIDE this repo are separate branches with their
+      // own node_modules. Collecting their specs here is wrong twice over:
+      //   1. Coverage lie — they re-run another branch's copy of the source, so a
+      //      pass/fail here says nothing about THIS branch.
+      //   2. Broken by construction — @vitejs/plugin-react sets
+      //      resolve.dedupe = ['react','react-dom'], which pins bare `react` to the
+      //      vite ROOT's copy, while non-deduped deps such as @testing-library/react
+      //      resolve relative to the importer and therefore load the WORKTREE copy
+      //      (which drags in the worktree's own react-dom + react). Two React
+      //      instances => react-dom primes the hook dispatcher on one of them and
+      //      the component reads useState off the other, producing
+      //      "TypeError: Cannot read properties of null (reading 'useState')".
+      // Run a worktree's tests from inside that worktree, with its own config.
+      '**/.worktrees/**',
     ],
   },
   server: {

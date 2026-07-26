@@ -430,26 +430,43 @@ describe('DXF golden — default flush INSET cabinet 600×720×560 (packet → p
  * covered by a cabinet that cannot be built.
  */
 describe('DXF golden — F-07: a 6mm overlay back refuses the joint instead of drilling through it', () => {
-  let ctx: Ctx;
   let drillMap: ReturnType<typeof generateMinifixDrillMap>;
-  beforeAll(async () => {
-    const cab = overlayBackCab();
-    drillMap = generateMinifixDrillMap(cab);
-    ctx = toCtx(await buildAndExport(cab));
+  beforeAll(() => {
+    drillMap = generateMinifixDrillMap(overlayBackCab());
   });
 
-  it('B1: exports NO back-owned face bores — the 17.5/11/12mm recipe cannot exist in 6mm', () => {
-    const back = ctx.byRole.get('BACK');
-    const faceBores = back ? back.parsed.circles.filter((c) => c.layer.startsWith('DRILL_V_')) : [];
-    expect(faceBores, 'a 6mm panel must receive no blind face bores').toEqual([]);
+  it('B1: the exporter REFUSES outright — no partial sheet set, no silent omission', async () => {
+    // Earlier this block asserted "the BACK sheet carries no bores", which
+    // accepted a subtler wrong answer: the panel simply vanished from the set
+    // while the other four sheets shipped, with nothing saying why. Both review
+    // vendors then found that exportDxfFromPacket consulted no verdict at all,
+    // so the whole set could ship off a refused drill map through any caller
+    // that was not GateToolbar. The exporter is now fail-closed, so the honest
+    // outcome is nothing at all, with the reason stated.
+    const cab = overlayBackCab();
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const dm = generateMinifixDrillMap(cab);
+      const { packet } = await buildFactoryPacket(
+        { jobId: 'job-golden-refused', projectId: 'proj-golden', toolVersion: 'golden@t3' },
+        { cabinets: [cab], drillMap: dm, gateResult: null },
+      );
+      const result = await exportDxfFromPacket(packet, {
+        machineId: 'KDT',
+        panelPlacements: cab.panels.map((p) => ({ panelId: p.id, position: p.position })),
+      });
 
-    // NOTE — open question, deliberately not asserted as correct behaviour:
-    // today the BACK sheet vanishes from the export entirely (byRole has no
-    // 'BACK') because the packet only carries panels that own operations. The
-    // panel still has to be CUT. The gate blocks export while a refusal stands,
-    // so this is not reachable through the app, but a direct caller of
-    // exportDxfFromPacket would get a set with no back panel and no explanation.
-    // Tracked as its own finding rather than frozen into a golden assertion.
+      expect(result.ok, 'a refused joint must not become a shop drawing').toBe(false);
+      if (result.ok) return;
+      const text = `${result.error} ${(result.details ?? []).join(' ')}`;
+      expect(text, 'the depth is stated as-is, never reduced').toContain('17.5');
+      expect(text, 'and the member it cannot fit in').toContain('6');
+      expect(text).toMatch(/waivable: false/);
+    } finally {
+      err.mockRestore();
+      warn.mockRestore();
+    }
   });
 
   it('B2: no bore anywhere in the map was shrunk to fit the 6mm panel', () => {

@@ -107,7 +107,9 @@ describe('useExportGate', () => {
     useGateStore.getState().reset();
     // A drill map must be present for a verdict to be fresh (T8a).
     (useDrillMapStore as unknown as { setState: (p: Record<string, unknown>) => void }).setState({
-      drillMap: { panels: [] },
+      // A map with content: an empty panels[] is nothing-to-validate and can
+      // never authorize freeze/export (cross-vendor gate, 2026-07-26).
+      drillMap: { panels: [{ panelId: 'p1', points: [] }] },
     });
   });
 

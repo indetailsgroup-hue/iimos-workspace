@@ -192,6 +192,44 @@ export async function exportDxfFromPacket(
     packet: FactoryPacket,
     options: DxfExportOptions = {}
 ): Promise<DxfExportFromPacketResult> {
+    // ─────────────────────────────────────────────────────────────────────────
+    // FAIL CLOSED ON A MANUFACTURABILITY REFUSAL (F-07 follow-up)
+    // ─────────────────────────────────────────────────────────────────────────
+    // Both review vendors found the same hole independently on 2026-07-26: the
+    // Safety Gate on GateToolbar was the ONLY thing stopping a refused joint
+    // from becoming a shop drawing, and it is one door among several —
+    // ExportPanel.handleExport (ExportPanel.tsx:837) had no gate check at all,
+    // and a direct caller has none by definition.
+    //
+    // The invariant belongs HERE, at the single point every caller passes
+    // through. Same principle as the packet carrying its own NOT_FOR_PRODUCTION
+    // notice: the artifact and the function that makes it are authoritative,
+    // not whichever screen happens to be in front of them.
+    //
+    // A refusal means the generator declined to emit machining because the
+    // fastener recipe cannot physically exist in the owning panel. Drawing the
+    // remainder would ship a part with holes for a joint that was never built.
+    // Optional-chain the packet itself: the null-packet contract is validated
+    // further down, and this guard must not pre-empt it with a TypeError.
+    const refusals = packet?.drillMap?.manufacturabilityRefusals ?? [];
+    if (refusals.length > 0) {
+        return {
+            ok: false,
+            error:
+                `DXF BLOCKED: ${refusals.length} manufacturability refusal(s) stand on this ` +
+                `drill map. The generator declined to emit machining that cannot physically ` +
+                `exist in the owning panel, so no sheets are produced. These are NOT waivable ` +
+                `— the fix is a compatible fastener recipe or a different construction, never ` +
+                `a shallower hole. No files delivered.`,
+            details: refusals.map(
+                (r) =>
+                    `[${r.reasonCode}] ${r.ownerPanelRole} ${r.ownerPanelId}: ${r.purpose} ` +
+                    `Ø${r.diameterMm} needs ${r.requiredDepthMm}mm, member is ` +
+                    `${r.ownerThicknessMm}mm (source: ${r.recipeSource}, waivable: false)`,
+            ),
+        };
+    }
+
     const {
         // T4: default must be a REAL preset. 'KDT-6000' is not in the machine
         // preset table (KDT/BIESSE/HOMAG/SCM/GENERIC), so the old default made

@@ -55,8 +55,12 @@ function makePassingResult(): GateResult {
 }
 
 function makeDrillMap(id: string): DrillMap {
-  // Minimal structural stand-in — freshness is about object identity, not shape.
-  return { cabinetId: id, panels: [] } as unknown as DrillMap;
+  // Freshness is about object identity, but the fixture still has to be a map
+  // that could be validated: an EMPTY map (panels: []) is now treated as
+  // nothing-to-validate, because all three validators short-circuit to PASS on
+  // it and it would otherwise read as a fresh clean verdict over no content
+  // (cross-vendor gate, 2026-07-26). One panel keeps identity the only variable.
+  return { cabinetId: id, panels: [{ panelId: `${id}-p`, points: [] }] } as unknown as DrillMap;
 }
 
 // ============================================

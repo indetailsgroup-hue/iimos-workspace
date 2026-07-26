@@ -120,6 +120,22 @@ vi.mock('../../../gate/ui', () => ({
   GateBlockerModal: () => null,
 }));
 
+// Safety-Gate authority on THIS surface. ExportPanel used to read the gate only
+// to render a status line and delivered regardless — the second export door the
+// gate-authority review lens found (2026-07-26). The real describeGateRefusal is
+// imported, not stubbed, so these tests fail if the refusal wording drifts.
+const gateState = vi.hoisted(() => ({
+  value: {
+    canFreeze: true, canRelease: true, canExport: true,
+    hasRun: true, passedWhenRun: true, fresh: true, hasDrillMap: true,
+    isRunning: false, blockerCount: 0, warningCount: 0, blockers: [], result: null,
+  } as Record<string, unknown>,
+}));
+vi.mock('../../../gate/ui/useExportGate', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../gate/ui/useExportGate')>();
+  return { ...actual, getExportGateStatus: () => gateState.value };
+});
+
 vi.mock('../../../factory/packet', () => ({
   useFactoryPacket: () => ({
     isGenerating: false,
@@ -185,7 +201,7 @@ describe('ExportPanel DXF export — packet path with fail-closed fallback (Q1=A
   });
 
   function clickGenerateDxf() {
-    fireEvent.click(screen.getByRole('button', { name: /Generate DXF Files/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate DXF \(Engineering Preview\)/ }));
   }
 
   it('passes panelPlacements (ALL cabinet panels, p.id + p.position) into the packet path', async () => {
@@ -231,6 +247,48 @@ describe('ExportPanel DXF export — packet path with fail-closed fallback (Q1=A
     expect(await screen.findByText(/Export failed:.*Packet has no drill map/)).toBeTruthy();
     // Q1=A: NEVER degrade to the dev-preview Cabinet-geometry sheets
     expect(mockQuick).not.toHaveBeenCalled();
+    expect(mockDownload).not.toHaveBeenCalled();
+  });
+});
+
+describe('ExportPanel honours the Safety Gate before delivering (second export door)', () => {
+  afterEach(() => {
+    cleanup();
+    gateState.value = { ...gateState.value, canExport: true, hasDrillMap: true, fresh: true, blockerCount: 0 };
+  });
+
+  it('REFUSES and delivers NOTHING when a non-waivable refusal stands', async () => {
+    // The failure mode this pins: ExportPanel rendered "Safety Gate: N blocker(s)"
+    // in its own status strip and then exported anyway, because the handler never
+    // read the verdict it was displaying.
+    gateState.value = {
+      ...gateState.value,
+      canExport: false, canFreeze: false, passedWhenRun: false, blockerCount: 2,
+      blockers: [
+        { key: 'B:1', code: 'B_G11_MANUFACTURABILITY_REFUSAL', message: 'refused', severity: 'BLOCKER', entityIds: [] },
+        { key: 'B:2', code: 'B_G11_MANUFACTURABILITY_REFUSAL', message: 'refused', severity: 'BLOCKER', entityIds: [] },
+      ],
+    };
+    mockExport.mockResolvedValue(OK_RESULT as never);
+
+    render(<ExportPanel />);
+    fireEvent.click(screen.getByRole('button', { name: /Generate DXF \(Engineering Preview\)/ }));
+
+    expect(await screen.findByText(/2 Safety Gate blockers must be resolved/i)).toBeTruthy();
+    expect(mockExport, 'the exporter must not even be reached').not.toHaveBeenCalled();
+    expect(mockDownload).not.toHaveBeenCalled();
+  });
+
+  it('names the MISSING DRILL MAP rather than blaming a change the user never made', async () => {
+    gateState.value = {
+      ...gateState.value,
+      canExport: false, hasDrillMap: false, fresh: false,
+    };
+
+    render(<ExportPanel />);
+    fireEvent.click(screen.getByRole('button', { name: /Generate DXF \(Engineering Preview\)/ }));
+
+    expect(await screen.findByText(/no drill map to validate yet/i)).toBeTruthy();
     expect(mockDownload).not.toHaveBeenCalled();
   });
 });

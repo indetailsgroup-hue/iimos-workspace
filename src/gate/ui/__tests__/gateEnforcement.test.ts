@@ -283,3 +283,62 @@ describe('describeGateRefusal — the refusal names the real cause', () => {
     expect(describeGateRefusal(getExportGateStatus())).toBe('');
   });
 });
+
+/**
+ * An EMPTY drill map is not a verdict either (cross-vendor gate, 2026-07-26).
+ *
+ * The null case was closed by freshness: a run validated against null records a
+ * null ref, which can never match. GPT-5.6 Sol found the same hole one door
+ * along — a NON-null map with `panels: []`. All three validators short-circuit
+ * to PASS on it, the ref matches by identity so it reads FRESH, blockerCount is
+ * 0, and freeze/release/export are all authorized off a verdict that examined
+ * nothing. `generateMinifixDrillMap` returns exactly this object for a cabinet
+ * with no panels.
+ *
+ * "Zero findings" and "nothing was looked at" must never be the same answer.
+ */
+describe('a drill map with no panels can never authorize anything', () => {
+  beforeEach(() => {
+    useGateStore.getState().reset();
+    setStoreMap(null);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  /** Non-null, identity-stable, and completely empty. */
+  const emptyMap = () => ({ panels: [] } as unknown as DrillMap);
+
+  it('BLOCKS freeze/release/export on an empty map validated against itself', () => {
+    const empty = emptyMap();
+    setStoreMap(empty);
+    useGateStore.getState().setResult(passingResult(), empty);
+
+    const s = getExportGateStatus();
+    expect(s.hasRun).toBe(true);
+    expect(s.blockerCount, 'the validators had nothing to complain about').toBe(0);
+    expect(s.hasDrillMap, 'an empty map is nothing to validate').toBe(false);
+    expect(s.canFreeze).toBe(false);
+    expect(s.canRelease).toBe(false);
+    expect(s.canExport).toBe(false);
+    expect(isFreezeAllowed()).toBe(false);
+    expect(isExportAllowed()).toBe(false);
+  });
+
+  it('says so honestly instead of blaming a change', () => {
+    const empty = emptyMap();
+    setStoreMap(empty);
+    useGateStore.getState().setResult(passingResult(), empty);
+
+    const reason = describeGateRefusal(getExportGateStatus());
+    expect(reason).toMatch(/drill map/i);
+    expect(reason).not.toMatch(/changed/i);
+  });
+
+  it('still authorizes a map that actually has panels (no new over-block)', () => {
+    const real = makeMap('has-panels');
+    setStoreMap(real);
+    useGateStore.getState().setResult(passingResult(), real);
+
+    expect(getExportGateStatus().hasDrillMap).toBe(true);
+    expect(getExportGateStatus().canFreeze).toBe(true);
+  });
+});

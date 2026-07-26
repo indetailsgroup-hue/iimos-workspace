@@ -28,6 +28,11 @@ function convertFinding(finding: GateFinding): PacketGateFinding {
     severity: finding.severity,
     message: finding.message,
     entityIds: [...finding.entityIds].sort(), // Sort for determinism
+    // Carry the evidence, not just the sentence: required depth, member
+    // thickness, and whether the blocker is waivable. Spread only when present
+    // so a finding without context serializes exactly as before (hashes of
+    // existing clean packets are unchanged).
+    ...(finding.context ? { context: finding.context } : {}),
   };
 }
 

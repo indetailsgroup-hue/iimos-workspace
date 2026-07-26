@@ -28,6 +28,8 @@ import {
 } from '../../core/export/dxfExportFromOperationGraph';
 import type { CabinetPanel } from '../../core/types/Cabinet';
 import { useExportGate, GateBlockerModal } from '../../gate/ui';
+// Imperative read + the single refusal-wording source, same as GateToolbar.
+import { describeGateRefusal, getExportGateStatus } from '../../gate/ui/useExportGate';
 import { useFactoryPacket, PacketPreviewModal } from '../../factory/packet';
 import { NestingPanel } from '../nesting/NestingPanel';
 import { useNestingStore } from '../../core/store/useNestingStore';
@@ -836,6 +838,27 @@ export function ExportPanel({ gateStatus: _gateStatus, onGateChange: _onGateChan
   // Real export handler (P2.2)
   const handleExport = useCallback(async (format: ExportFormat) => {
     if (!cabinet) return;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SAFETY-GATE AUTHORITY (owner ruling Q2 = O2+O3)
+    // ─────────────────────────────────────────────────────────────────────────
+    // This surface read `exportGate` only to RENDER a status line — it never
+    // consulted the verdict before delivering, so a non-waivable
+    // manufacturability refusal did not stop an export from here. The gate on
+    // GateToolbar was one door; this was the other. Found by the Claude
+    // gate-authority lens, 2026-07-26, and confirmed by reading this handler.
+    //
+    // The exporter itself is fail-closed as of the same wave, so a refusal can
+    // no longer produce sheets whatever the caller. This check exists so the
+    // user gets the REASON and the next action here, instead of a raw failure
+    // from three layers down.
+    const gate = getExportGateStatus();
+    if (!gate.canExport) {
+      setExportProgress(
+        `Cannot export ${format.toUpperCase()} — ${describeGateRefusal(gate)}.`,
+      );
+      return;
+    }
 
     setIsExporting(true);
     setExportProgress(`Generating ${format.toUpperCase()}...`);
