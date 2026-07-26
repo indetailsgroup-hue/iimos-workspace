@@ -21,6 +21,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "artifacts" / "verification" / "kitchen-kernel-bootstrap-summary.json"
 PACKAGE_SOURCE = ROOT / "packages" / "component-master" / "src"
+GOVERNED_CORE_TEST_FLOOR = 27
+# 1.1.0 adds governed sub-suite evidence and replaces bootstrap Git evidence.
+OUTPUT_SCHEMA_VERSION = "1.1.0"
 
 EXPECTED_CONTEXTS = {
     "identity-tenancy",
@@ -91,6 +94,40 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
         return [json.loads(line) for line in source if line.strip()]
 
 
+def evaluate_unittest_result(
+    result: dict[str, Any],
+    *,
+    exact_count: int | None = None,
+    minimum_count: int | None = None,
+) -> tuple[bool, dict[str, Any]]:
+    matches = re.findall(r"Ran (\d+) tests?", result["output"])
+    test_count = int(matches[-1]) if matches else None
+    has_ok_summary = bool(
+        re.search(
+            r"(?m)^OK(?: \([^\r\n]+\))?\r?$",
+            result["output"],
+        )
+    )
+    count_passed = test_count is not None
+    if exact_count is not None:
+        count_passed = count_passed and test_count == exact_count
+    if minimum_count is not None:
+        count_passed = count_passed and test_count >= minimum_count
+    details = {
+        **result,
+        "test_count": test_count,
+        "has_unittest_ok_summary": has_ok_summary,
+    }
+    if exact_count is not None:
+        details["expected_test_count"] = exact_count
+    if minimum_count is not None:
+        details["minimum_test_count"] = minimum_count
+    return (
+        result["exit_code"] == 0 and count_passed and has_ok_summary,
+        details,
+    )
+
+
 def check_commands(evidence: Evidence) -> None:
     tests = run(
         [
@@ -103,12 +140,43 @@ def check_commands(evidence: Evidence) -> None:
             "-v",
         ]
     )
-    test_match = re.search(r"Ran (\d+) tests?", tests["output"])
-    test_count = int(test_match.group(1)) if test_match else None
+    full_suite_passed, full_suite_details = evaluate_unittest_result(
+        tests,
+        minimum_count=GOVERNED_CORE_TEST_FLOOR,
+    )
     evidence.add(
         "unittest_full_suite",
-        tests["exit_code"] == 0 and test_count == 27 and "OK" in tests["output"],
-        {**tests, "test_count": test_count},
+        full_suite_passed,
+        full_suite_details,
+    )
+
+    governed_suites: dict[str, dict[str, Any]] = {}
+    for name, start_directory, expected_count in (
+        ("component_master", "tests/component_master", 20),
+        ("identity_tenancy", "tests/identity_tenancy", 7),
+    ):
+        result = run(
+            [
+                sys.executable,
+                "-m",
+                "unittest",
+                "discover",
+                "-s",
+                start_directory,
+                "-t",
+                ".",
+                "-v",
+            ]
+        )
+        passed, details = evaluate_unittest_result(
+            result,
+            exact_count=expected_count,
+        )
+        governed_suites[name] = {**details, "passed": passed}
+    evidence.add(
+        "governed_kernel_unittest_suites",
+        all(suite["passed"] for suite in governed_suites.values()),
+        {"suites": governed_suites},
     )
 
     compile_result = run(
@@ -499,30 +567,70 @@ def check_secrets(evidence: Evidence) -> None:
 
 
 def check_git(evidence: Evidence) -> None:
-    status = run(["git", "status", "--short", "--branch"])
+    status = run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=all"]
+    )
     head = run(["git", "rev-parse", "--verify", "HEAD"])
-    staged = run(["git", "ls-files", "--stage"])
+    staged = run(["git", "diff", "--cached", "--quiet", "--exit-code"])
+    unstaged = run(["git", "diff", "--quiet", "--exit-code"])
+    unmerged = run(["git", "ls-files", "--unmerged"])
     remotes = run(["git", "remote"])
-    lines = [line for line in status["output"].splitlines() if line.strip()]
+    branch = run(["git", "symbolic-ref", "--quiet", "--short", "HEAD"])
+    status_lines = [
+        line for line in status["output"].splitlines() if line.strip()
+    ]
+    unmerged_lines = [
+        line for line in unmerged["output"].splitlines() if line.strip()
+    ]
+    remote_names = [
+        line for line in remotes["output"].splitlines() if line.strip()
+    ]
+    head_exists = head["exit_code"] == 0
+    branch_query_valid = branch["exit_code"] in (0, 1)
+    branch_name = (
+        branch["output"].strip() if branch["exit_code"] == 0 else None
+    )
+    detached_head = head_exists and branch["exit_code"] == 1
     evidence.add(
-        "git_bootstrap_state",
+        "git_established_repository_state",
         status["exit_code"] == 0
-        and head["exit_code"] != 0
-        and not staged["output"].strip()
-        and not remotes["output"].strip(),
+        and not status_lines
+        and head_exists
+        and staged["exit_code"] == 0
+        and unstaged["exit_code"] == 0
+        and unmerged["exit_code"] == 0
+        and not unmerged_lines
+        and branch_query_valid,
         {
             "status_command": status["command"],
             "status_exit_code": status["exit_code"],
-            "branch_line": lines[0] if lines else None,
-            "status_line_count": len(lines),
-            "head_exists": head["exit_code"] == 0,
-            "staged_path_count": len(
-                [line for line in staged["output"].splitlines() if line.strip()]
+            "porcelain_status": status_lines,
+            "status_line_count": len(status_lines),
+            "head_command": head["command"],
+            "head_exit_code": head["exit_code"],
+            "head_exists": head_exists,
+            "head": head["output"].strip() if head_exists else None,
+            "staged_diff_command": staged["command"],
+            "staged_diff_exit_code": staged["exit_code"],
+            "staged_diff_empty": staged["exit_code"] == 0,
+            "unstaged_diff_command": unstaged["command"],
+            "unstaged_diff_exit_code": unstaged["exit_code"],
+            "unstaged_diff_empty": unstaged["exit_code"] == 0,
+            "unmerged_command": unmerged["command"],
+            "unmerged_exit_code": unmerged["exit_code"],
+            "unmerged_entry_count": len(unmerged_lines),
+            "remote_command": remotes["command"],
+            "remote_exit_code": remotes["exit_code"],
+            "remote_names": remote_names,
+            "remote_count": len(remote_names),
+            "branch_command": branch["command"],
+            "branch_exit_code": branch["exit_code"],
+            "branch_name": branch_name,
+            "detached_head": detached_head,
+            "note": (
+                "Established repository state is verified locally; remote "
+                "presence is informational, and no push is claimed."
             ),
-            "remote_count": len(
-                [line for line in remotes["output"].splitlines() if line.strip()]
-            ),
-            "note": "Repository initialized in place; no commit, staging, remote, or push is claimed.",
         },
     )
 
@@ -538,7 +646,7 @@ def main() -> int:
     check_git(evidence)
 
     payload = {
-        "schema_version": "1.0.0",
+        "schema_version": OUTPUT_SCHEMA_VERSION,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "scope": "Governed reference-kernel bootstrap; no production or ratification claim",
         "repository_root": str(ROOT),
