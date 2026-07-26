@@ -192,6 +192,8 @@ class MaterialConstraint:
             )
         if self.moisture_min_pct < 0:
             raise ValueError("moisture_min_pct must be nonnegative")
+        if self.moisture_max_pct > 100:
+            raise ValueError("moisture_max_pct must not exceed 100")
         if self.facing_thickness_min_mm < 0:
             raise ValueError(
                 "facing_thickness_min_mm must be nonnegative"
@@ -350,10 +352,28 @@ class QualificationResult:
                 "envelope_id",
                 "envelope:",
             )
+        reason_codes = _copy_reason_codes(self.reason_codes)
+        if self.verdict is Verdict.QUALIFIED:
+            if self.envelope_id is None or reason_codes:
+                raise ValueError(
+                    "QUALIFIED requires an envelope_id "
+                    "and no reason_codes"
+                )
+        elif self.verdict is Verdict.CONDITIONALLY_QUALIFIED:
+            if self.envelope_id is None or not reason_codes:
+                raise ValueError(
+                    "CONDITIONALLY_QUALIFIED requires an envelope_id "
+                    "and at least one reason_code"
+                )
+        elif self.envelope_id is not None or not reason_codes:
+            raise ValueError(
+                "refusal verdicts require no envelope_id "
+                "and at least one reason_code"
+            )
         object.__setattr__(
             self,
             "reason_codes",
-            _copy_reason_codes(self.reason_codes),
+            reason_codes,
         )
 
 

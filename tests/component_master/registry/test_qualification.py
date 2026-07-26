@@ -398,6 +398,31 @@ class MaterialConstraintValidationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     make_constraint(**{field_name: -0.01})
 
+    def test_moisture_bounds_cannot_exceed_one_hundred_percent(
+        self,
+    ) -> None:
+        boundary = make_constraint(
+            moisture_min_pct=0,
+            moisture_max_pct=100,
+        )
+        self.assertEqual(
+            (0, 100),
+            (
+                boundary.moisture_min_pct,
+                boundary.moisture_max_pct,
+            ),
+        )
+
+        for moisture_max_pct in (100.01, 101):
+            with self.subTest(
+                moisture_max_pct=moisture_max_pct,
+            ):
+                with self.assertRaises(ValueError):
+                    make_constraint(
+                        moisture_min_pct=0,
+                        moisture_max_pct=moisture_max_pct,
+                    )
+
     def test_every_bound_pair_is_ordered_and_inclusive(self) -> None:
         reversed_pairs = (
             ("density_min_kg_m3", 761.0, "density_max_kg_m3", 760.0),
@@ -1110,6 +1135,90 @@ class QualificationResultValidationTests(unittest.TestCase):
             reason_codes=("NO_EXACT_CONFIGURATION_EVIDENCE",),
         )
         self.assertIsNone(result.envelope_id)
+
+    def test_qualified_and_conditional_results_authorize_exact_shapes(
+        self,
+    ) -> None:
+        qualified = QualificationResult(
+            verdict=Verdict.QUALIFIED,
+            envelope_id=ENVELOPE_ID,
+            reason_codes=(),
+        )
+        conditional = QualificationResult(
+            verdict=Verdict.CONDITIONALLY_QUALIFIED,
+            envelope_id=ENVELOPE_ID,
+            reason_codes=("INSTALLATION_CONDITION_REQUIRED",),
+        )
+        self.assertEqual((), qualified.reason_codes)
+        self.assertEqual(
+            ("INSTALLATION_CONDITION_REQUIRED",),
+            conditional.reason_codes,
+        )
+
+        invalid_cases = (
+            (Verdict.QUALIFIED, None, ()),
+            (
+                Verdict.QUALIFIED,
+                ENVELOPE_ID,
+                ("UNEXPECTED_QUALIFICATION_REASON",),
+            ),
+            (
+                Verdict.CONDITIONALLY_QUALIFIED,
+                None,
+                ("INSTALLATION_CONDITION_REQUIRED",),
+            ),
+            (
+                Verdict.CONDITIONALLY_QUALIFIED,
+                ENVELOPE_ID,
+                (),
+            ),
+        )
+        for verdict, envelope_id, reason_codes in invalid_cases:
+            with self.subTest(
+                verdict=verdict,
+                envelope_id=envelope_id,
+                reason_codes=reason_codes,
+            ):
+                with self.assertRaises(ValueError):
+                    QualificationResult(
+                        verdict=verdict,
+                        envelope_id=envelope_id,
+                        reason_codes=reason_codes,
+                    )
+
+    def test_refusal_results_forbid_envelopes_and_require_reasons(
+        self,
+    ) -> None:
+        refusal_verdicts = (
+            Verdict.UNQUALIFIED,
+            Verdict.INSUFFICIENT_EVIDENCE,
+            Verdict.DISCONTINUED_OR_UNORDERABLE,
+        )
+        for verdict in refusal_verdicts:
+            with self.subTest(verdict=verdict, valid=True):
+                result = QualificationResult(
+                    verdict=verdict,
+                    envelope_id=None,
+                    reason_codes=("FAIL_CLOSED_REASON",),
+                )
+                self.assertEqual(
+                    ("FAIL_CLOSED_REASON",),
+                    result.reason_codes,
+                )
+            with self.subTest(verdict=verdict, envelope=True):
+                with self.assertRaises(ValueError):
+                    QualificationResult(
+                        verdict=verdict,
+                        envelope_id=ENVELOPE_ID,
+                        reason_codes=("FAIL_CLOSED_REASON",),
+                    )
+            with self.subTest(verdict=verdict, empty_reasons=True):
+                with self.assertRaises(ValueError):
+                    QualificationResult(
+                        verdict=verdict,
+                        envelope_id=None,
+                        reason_codes=(),
+                    )
 
     def test_reason_codes_are_typed_nonblank_immutable_tuples(self) -> None:
         reason_codes = ["NO_EXACT_CONFIGURATION_EVIDENCE"]
