@@ -67,7 +67,7 @@ _REGISTERED_EXTRA_NAMESPACES = frozenset(
     {"tool", "machine", "material", "qualification"}
 )
 _CANONICAL_IDENTIFIER = re.compile(
-    r"^[a-z][a-z0-9_-]*:[^\s]+$"
+    r"^[a-z][a-z0-9_-]*(?::[A-Za-z0-9][A-Za-z0-9._-]*)+$"
 )
 
 
@@ -407,6 +407,7 @@ class CompatibilityGraph:
             for edge in self.bom_edges
             if edge.assembly_sku_id == assembly_sku_id
             and edge.region == region
+            and edge.edge_type is not EdgeType.OPTIONAL
         )
         if not release_edges:
             issues.add(
@@ -420,12 +421,6 @@ class CompatibilityGraph:
                 )
             )
 
-        incompatible_pairs = {
-            (edge.source_id, edge.target_id)
-            for edge in self.compatibility_edges
-            if edge.region == region
-            and edge.edge_type is EdgeType.INCOMPATIBLE
-        }
         relevant_entity_ids = {assembly_sku_id}
 
         for edge in release_edges:
@@ -478,23 +473,38 @@ class CompatibilityGraph:
                         )
                     )
 
+        for edge in self.compatibility_edges:
             if (
-                (assembly_sku_id, target_id)
-                in incompatible_pairs
-                or (target_id, assembly_sku_id)
-                in incompatible_pairs
+                edge.region != region
+                or edge.edge_type is not EdgeType.INCOMPATIBLE
+                or edge.source_id not in relevant_entity_ids
+                or edge.target_id not in relevant_entity_ids
             ):
-                issues.add(
-                    GraphIssue(
-                        code="INCOMPATIBLE_BOM_TARGET",
-                        entity_id=assembly_sku_id,
-                        related_id=target_id,
-                        message=(
-                            "BOM target is explicitly incompatible "
-                            "with the assembly"
-                        ),
-                    )
+                continue
+            if assembly_sku_id in {
+                edge.source_id,
+                edge.target_id,
+            }:
+                entity_id = assembly_sku_id
+                related_id = (
+                    edge.target_id
+                    if edge.source_id == assembly_sku_id
+                    else edge.source_id
                 )
+            else:
+                entity_id, related_id = sorted(
+                    (edge.source_id, edge.target_id)
+                )
+            issues.add(
+                GraphIssue(
+                    code="INCOMPATIBLE_BOM_TARGET",
+                    entity_id=entity_id,
+                    related_id=related_id,
+                    message=(
+                        "BOM entities are explicitly incompatible"
+                    ),
+                )
+            )
 
         relationship_types: dict[
             tuple[str, str], set[EdgeType]

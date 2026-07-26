@@ -248,6 +248,89 @@ class EdgeContractTests(unittest.TestCase):
                 with self.assertRaises(error_type):
                     make_compatibility_edge(**{field_name: value})
 
+    def test_bom_ids_reject_malformed_ascii_namespaced_segments(
+        self,
+    ) -> None:
+        malformed_ids = (
+            "sku::",
+            "sku:!",
+            "sku:demo::EU",
+            "sku:demo:_part:EU",
+            "sku:demo:.part:EU",
+            "sku:demo:-part:EU",
+            "sku:demo/part:EU",
+            "sku:demo:part?:EU",
+            "sku:demo:part:ÉU",
+        )
+
+        accepted = []
+        for field_name in ("assembly_sku_id", "component_id"):
+            for value in malformed_ids:
+                try:
+                    make_bom_edge(**{field_name: value})
+                except ValueError:
+                    continue
+                accepted.append((field_name, value))
+
+        self.assertEqual([], accepted)
+
+    def test_compatibility_ids_reject_malformed_namespaced_segments(
+        self,
+    ) -> None:
+        malformed_ids = (
+            "sku::",
+            "sku:!",
+            "sku:demo::EU",
+            "sku:demo:_part:EU",
+            "sku:demo:.part:EU",
+            "sku:demo:-part:EU",
+            "sku:demo/part:EU",
+            "sku:demo:part?:EU",
+            "sku:demo:part:ÉU",
+        )
+
+        accepted = []
+        for field_name in ("source_id", "target_id"):
+            for value in malformed_ids:
+                try:
+                    make_compatibility_edge(**{field_name: value})
+                except ValueError:
+                    continue
+                accepted.append((field_name, value))
+
+        self.assertEqual([], accepted)
+
+    def test_ascii_namespaced_ids_preserve_approved_characters(
+        self,
+    ) -> None:
+        bom_edge = make_bom_edge(
+            assembly_sku_id="sku:Demo_1:part-2.5:EU",
+            component_id="tool:Demo_1:bit-2.5",
+            evidence_assertion_ids=(
+                "assertion:SKU_1:field.path",
+            ),
+        )
+        compatibility_edge = make_compatibility_edge(
+            source_id="sku:Demo_1:part-2.5:EU",
+            target_id="sku:Demo_1:cap_2.5:EU",
+            evidence_assertion_ids=(
+                "assertion:SKU_1:compatibility.field",
+            ),
+        )
+
+        self.assertEqual(
+            "sku:Demo_1:part-2.5:EU",
+            bom_edge.assembly_sku_id,
+        )
+        self.assertEqual(
+            "tool:Demo_1:bit-2.5",
+            bom_edge.component_id,
+        )
+        self.assertEqual(
+            "sku:Demo_1:cap_2.5:EU",
+            compatibility_edge.target_id,
+        )
+
     def test_quantity_requires_a_positive_finite_non_boolean_real(
         self,
     ) -> None:
@@ -369,6 +452,38 @@ class EdgeContractTests(unittest.TestCase):
             compatibility_edge.evidence_assertion_ids,
         )
 
+    def test_assertion_ids_reject_malformed_namespaced_segments(
+        self,
+    ) -> None:
+        malformed_ids = (
+            "assertion::",
+            "assertion:!",
+            "assertion:demo::field",
+            "assertion:demo:_field",
+            "assertion:demo/field",
+            "assertion:demo:field?",
+            "assertion:demo:ฟิลด์",
+        )
+
+        accepted = []
+        for value in malformed_ids:
+            try:
+                make_bom_edge(evidence_assertion_ids=(value,))
+            except ValueError:
+                pass
+            else:
+                accepted.append(("bom", value))
+            try:
+                make_compatibility_edge(
+                    evidence_assertion_ids=(value,)
+                )
+            except ValueError:
+                pass
+            else:
+                accepted.append(("compatibility", value))
+
+        self.assertEqual([], accepted)
+
 
 class CompatibilityGraphConstructionTests(unittest.TestCase):
     def test_constructor_requires_canonical_registry_and_typed_edges(
@@ -463,6 +578,34 @@ class CompatibilityGraphConstructionTests(unittest.TestCase):
                         [invalid],
                     )
 
+    def test_registered_extras_reject_malformed_namespaced_segments(
+        self,
+    ) -> None:
+        malformed_ids = (
+            "tool::",
+            "tool:!",
+            "tool:demo::bit",
+            "tool:demo:_bit",
+            "tool:demo/bit",
+            "tool:demo:bit?",
+            "tool:demo:บิต",
+        )
+
+        accepted = []
+        for value in malformed_ids:
+            try:
+                CompatibilityGraph(
+                    make_registry(),
+                    [],
+                    [],
+                    [value],
+                )
+            except ValueError:
+                continue
+            accepted.append(value)
+
+        self.assertEqual([], accepted)
+
 
 class ReleaseBomValidationTests(unittest.TestCase):
     def test_unknown_assembly_returns_one_structured_issue(self) -> None:
@@ -550,6 +693,7 @@ class ReleaseBomValidationTests(unittest.TestCase):
         graph = CompatibilityGraph(
             make_registry(),
             [
+                make_bom_edge(),
                 make_bom_edge(
                     component_id="sku:demo:optional-trim:EU",
                     edge_type=EdgeType.OPTIONAL,
@@ -559,6 +703,94 @@ class ReleaseBomValidationTests(unittest.TestCase):
                 )
             ],
             [],
+        )
+
+        self.assertEqual(
+            (),
+            graph.validate_release_bom(CAM_SKU_ID, "EU"),
+        )
+
+    def test_optional_only_graph_is_an_empty_release_bom(self) -> None:
+        graph = CompatibilityGraph(
+            make_registry(),
+            [
+                make_bom_edge(
+                    component_id=CAP_SKU_ID,
+                    edge_type=EdgeType.OPTIONAL,
+                    evidence_assertion_ids=(
+                        "assertion:demo:optional-cap",
+                    ),
+                )
+            ],
+            [],
+        )
+
+        issues = graph.validate_release_bom(CAM_SKU_ID, "EU")
+
+        self.assertEqual(
+            ["EMPTY_RELEASE_BOM"],
+            [issue.code for issue in issues],
+        )
+
+    def test_registered_optional_wrong_region_and_lifecycle_do_not_block(
+        self,
+    ) -> None:
+        graph = CompatibilityGraph(
+            make_registry(
+                cap_region="TH",
+                cap_lifecycle=LifecycleState.PENDING,
+            ),
+            [
+                make_bom_edge(),
+                make_bom_edge(
+                    component_id=CAP_SKU_ID,
+                    edge_type=EdgeType.OPTIONAL,
+                    evidence_assertion_ids=(
+                        "assertion:demo:optional-cap-th",
+                    ),
+                ),
+            ],
+            [],
+        )
+
+        self.assertEqual(
+            (),
+            graph.validate_release_bom(CAM_SKU_ID, "EU"),
+        )
+
+    def test_optional_compatibility_contradiction_does_not_block(
+        self,
+    ) -> None:
+        graph = CompatibilityGraph(
+            make_registry(),
+            [
+                make_bom_edge(),
+                make_bom_edge(
+                    component_id=CAP_SKU_ID,
+                    edge_type=EdgeType.OPTIONAL,
+                    evidence_assertion_ids=(
+                        "assertion:demo:optional-cap",
+                    ),
+                ),
+            ],
+            [
+                make_compatibility_edge(
+                    source_id=BOLT_SKU_ID,
+                    target_id=CAP_SKU_ID,
+                    edge_type=EdgeType.COMPATIBLE,
+                    evidence_assertion_ids=(
+                        "assertion:demo:optional-compatible",
+                    ),
+                ),
+                make_compatibility_edge(
+                    source_id=BOLT_SKU_ID,
+                    target_id=CAP_SKU_ID,
+                    edge_type=EdgeType.INCOMPATIBLE,
+                    evidence_assertion_ids=(
+                        "assertion:demo:optional-incompatible",
+                    ),
+                ),
+            ],
         )
 
         self.assertEqual(
@@ -851,6 +1083,97 @@ class ReleaseBomValidationTests(unittest.TestCase):
         self.assertIn(
             ("INCOMPATIBLE_BOM_TARGET", BOLT_SKU_ID),
             [(issue.code, issue.related_id) for issue in issues],
+        )
+
+    def test_required_component_pair_incompatibility_blocks_both_directions(
+        self,
+    ) -> None:
+        for source_id, target_id in (
+            (BOLT_SKU_ID, CAP_SKU_ID),
+            (CAP_SKU_ID, BOLT_SKU_ID),
+        ):
+            with self.subTest(source=source_id, target=target_id):
+                graph = CompatibilityGraph(
+                    make_registry(),
+                    complete_fixture_edges(),
+                    [
+                        make_compatibility_edge(
+                            source_id=source_id,
+                            target_id=target_id,
+                            edge_type=EdgeType.INCOMPATIBLE,
+                            evidence_assertion_ids=(
+                                "assertion:demo:fixture-incompatible",
+                            ),
+                        )
+                    ],
+                )
+
+                issues = graph.validate_release_bom(
+                    CAM_SKU_ID,
+                    "EU",
+                )
+
+                self.assertIn(
+                    (
+                        "INCOMPATIBLE_BOM_TARGET",
+                        BOLT_SKU_ID,
+                        CAP_SKU_ID,
+                    ),
+                    [
+                        (
+                            issue.code,
+                            issue.entity_id,
+                            issue.related_id,
+                        )
+                        for issue in issues
+                    ],
+                )
+
+    def test_symmetric_incompatibility_emits_one_pair_issue(self) -> None:
+        graph = CompatibilityGraph(
+            make_registry(),
+            complete_fixture_edges(),
+            [
+                make_compatibility_edge(
+                    source_id=BOLT_SKU_ID,
+                    target_id=CAP_SKU_ID,
+                    edge_type=EdgeType.INCOMPATIBLE,
+                    evidence_assertion_ids=(
+                        "assertion:demo:bolt-cap-incompatible",
+                    ),
+                ),
+                make_compatibility_edge(
+                    source_id=CAP_SKU_ID,
+                    target_id=BOLT_SKU_ID,
+                    edge_type=EdgeType.INCOMPATIBLE,
+                    evidence_assertion_ids=(
+                        "assertion:demo:cap-bolt-incompatible",
+                    ),
+                ),
+            ],
+        )
+
+        pair_issues = [
+            issue
+            for issue in graph.validate_release_bom(
+                CAM_SKU_ID,
+                "EU",
+            )
+            if issue.code == "INCOMPATIBLE_BOM_TARGET"
+        ]
+
+        self.assertEqual(
+            [
+                GraphIssue(
+                    code="INCOMPATIBLE_BOM_TARGET",
+                    entity_id=BOLT_SKU_ID,
+                    related_id=CAP_SKU_ID,
+                    message=(
+                        "BOM entities are explicitly incompatible"
+                    ),
+                )
+            ],
+            pair_issues,
         )
 
     def test_directed_compatible_and_incompatible_pair_is_a_contradiction(
