@@ -1162,7 +1162,6 @@ def evaluate_cabinet(
     placements: list[ConnectorPlacement] = []
     reinforcement_requirements: list[str] = []
     anchor_requirements: list[str] = []
-    conditional_reasons: list[str] = []
     for joint_index, (joint, policy) in enumerate(
         zip(cabinet.joints, selected_policies, strict=True)
     ):
@@ -1217,12 +1216,8 @@ def evaluate_cabinet(
             reinforcement_requirements.append(
                 policy.reinforcement_requirement
             )
-            conditional_reasons.append(
-                "REINFORCEMENT_REQUIRED"
-            )
         if policy.anchor_requirement is not None:
             anchor_requirements.append(policy.anchor_requirement)
-            conditional_reasons.append("ANCHOR_REQUIRED")
 
     policy_evidence_ids = tuple(
         evidence_id
@@ -1235,18 +1230,34 @@ def evaluate_cabinet(
     policy_ids = tuple(
         policy.policy_id for policy in selected_policies
     )
+    reinforcement_requirements_tuple = _unique_in_order(
+        reinforcement_requirements
+    )
+    anchor_requirements_tuple = _unique_in_order(
+        anchor_requirements
+    )
+    conditional_reasons = (
+        (
+            ("REINFORCEMENT_REQUIRED",)
+            if reinforcement_requirements_tuple
+            else ()
+        )
+        + (
+            ("ANCHOR_REQUIRED",)
+            if anchor_requirements_tuple
+            else ()
+        )
+    )
     if conditional_reasons:
         return CabinetEvaluation(
             verdict=Verdict.CONDITIONALLY_QUALIFIED,
             policy_ids=policy_ids,
             placements=tuple(placements),
-            reinforcement_requirements=_unique_in_order(
-                reinforcement_requirements
+            reinforcement_requirements=(
+                reinforcement_requirements_tuple
             ),
-            anchor_requirements=_unique_in_order(
-                anchor_requirements
-            ),
-            reason_codes=_unique_in_order(conditional_reasons),
+            anchor_requirements=anchor_requirements_tuple,
+            reason_codes=conditional_reasons,
             evidence_assertion_ids=evidence_ids,
         )
     return CabinetEvaluation(

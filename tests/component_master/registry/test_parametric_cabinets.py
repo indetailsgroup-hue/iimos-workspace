@@ -165,6 +165,32 @@ def make_registry(
     return Registry(models=(model,), skus=(sku,))
 
 
+def make_two_connector_registry() -> Registry:
+    first = make_registry()
+    second_model = ProductModel(
+        model_id="model:demo:connector-2",
+        brand_id="brand:demo",
+        name="Second demo connector",
+        lifecycle=LifecycleState.ACTIVE,
+    )
+    second_sku = CommercialSku(
+        global_id=OTHER_CONNECTOR_SKU_ID,
+        brand_id="brand:demo",
+        model_id=second_model.model_id,
+        oem_order_code="DEMO-2",
+        region="EU",
+        pack_qty=1,
+        verification={
+            dimension: VerificationState.VERIFIED
+            for dimension in VerificationDimension
+        },
+    )
+    return Registry(
+        models=tuple(first.models.values()) + (second_model,),
+        skus=tuple(first.skus.values()) + (second_sku,),
+    )
+
+
 def make_policy(**overrides: object) -> CabinetPolicy:
     arguments: dict[str, object] = {
         "policy_id": POLICY_ID,
@@ -838,6 +864,140 @@ class PlacementAndEvaluationValidationTests(unittest.TestCase):
 
 
 class CabinetEvaluationBehaviorTests(unittest.TestCase):
+    def _evaluate_anchor_then_reinforcement(
+        self,
+        *,
+        anchor_count_exceeds: bool,
+    ) -> CabinetEvaluation:
+        cabinet = make_cabinet(
+            joints=(
+                make_joint(),
+                make_joint(
+                    connector_sku_id=OTHER_CONNECTOR_SKU_ID
+                ),
+            ),
+        )
+        second_qualification_evidence = (
+            "assertion:demo:qualification:connector-2"
+        )
+        envelopes = (
+            make_envelope(),
+            make_envelope(
+                envelope_id="envelope:demo:connector-2:mdf-plywood",
+                connector_sku_id=OTHER_CONNECTOR_SKU_ID,
+                evidence_assertion_ids=(
+                    second_qualification_evidence,
+                ),
+            ),
+        )
+        anchor_policy_arguments: dict[str, object] = {}
+        if anchor_count_exceeds:
+            anchor_policy_arguments.update(
+                max_spacing_mm=200.0,
+                max_connector_count=3,
+            )
+        anchor_policy = make_policy(
+            policy_id="policy:demo:anchor-first",
+            anchor_requirement="Use evidenced concrete anchor",
+            evidence_assertion_ids=(
+                "assertion:demo:policy:anchor-first",
+            ),
+            **anchor_policy_arguments,
+        )
+        reinforcement_policy = make_policy(
+            policy_id="policy:demo:reinforcement-second",
+            connector_sku_id=OTHER_CONNECTOR_SKU_ID,
+            reinforcement_requirement="Add evidenced steel rail",
+            evidence_assertion_ids=(
+                "assertion:demo:policy:reinforcement-second",
+            ),
+        )
+        return evaluate_cabinet(
+            cabinet,
+            make_two_connector_registry(),
+            frozenset(),
+            qualification_envelopes=envelopes,
+            policies=(anchor_policy, reinforcement_policy),
+        )
+
+    def test_anchor_first_multi_joint_conditions_use_canonical_reasons(
+        self,
+    ) -> None:
+        try:
+            result = self._evaluate_anchor_then_reinforcement(
+                anchor_count_exceeds=False,
+            )
+        except ValueError as error:
+            self.fail(
+                "valid anchor-first concrete placements raised "
+                f"ValueError: {error}"
+            )
+
+        self.assertEqual(
+            Verdict.CONDITIONALLY_QUALIFIED,
+            result.verdict,
+        )
+        self.assertEqual(
+            (
+                "REINFORCEMENT_REQUIRED",
+                "ANCHOR_REQUIRED",
+            ),
+            result.reason_codes,
+        )
+        self.assertEqual(
+            ("Add evidenced steel rail",),
+            result.reinforcement_requirements,
+        )
+        self.assertEqual(
+            ("Use evidenced concrete anchor",),
+            result.anchor_requirements,
+        )
+        self.assertEqual(2, len(result.placements))
+        self.assertTrue(
+            all(
+                placement.connector_count is not None
+                and placement.spacing_mm is not None
+                for placement in result.placements
+            )
+        )
+        self.assertEqual(
+            len(result.evidence_assertion_ids),
+            len(set(result.evidence_assertion_ids)),
+        )
+
+    def test_anchor_first_unresolved_joint_uses_canonical_reasons(
+        self,
+    ) -> None:
+        try:
+            result = self._evaluate_anchor_then_reinforcement(
+                anchor_count_exceeds=True,
+            )
+        except ValueError as error:
+            self.fail(
+                "valid anchor-first unresolved placement raised "
+                f"ValueError: {error}"
+            )
+
+        self.assertEqual(
+            Verdict.CONDITIONALLY_QUALIFIED,
+            result.verdict,
+        )
+        self.assertEqual(
+            (
+                "REINFORCEMENT_REQUIRED",
+                "ANCHOR_REQUIRED",
+            ),
+            result.reason_codes,
+        )
+        self.assertIsNone(result.placements[0].connector_count)
+        self.assertIsNone(result.placements[0].spacing_mm)
+        self.assertIsNotNone(result.placements[1].connector_count)
+        self.assertIsNotNone(result.placements[1].spacing_mm)
+        self.assertEqual(
+            len(result.evidence_assertion_ids),
+            len(set(result.evidence_assertion_ids)),
+        )
+
     def test_three_positional_arguments_remain_valid_and_fail_closed(
         self,
     ) -> None:
