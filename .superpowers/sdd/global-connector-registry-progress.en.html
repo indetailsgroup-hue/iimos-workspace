@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Global Connector Registry — SDD Progress Ledger</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai","Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-text-size-adjust:100%}
+main{max-width:82ch;margin:0 auto}
+h1,h2,h3{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}
+p,ul{margin:0 0 1.05em}
+ul{padding-left:1.5em}li{margin:.3em 0}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+.status{padding:.9em 1.1em;background:var(--warn-bg);border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+@media print{body{padding:0;font-size:11pt;background:#fff;color:#000}main{max-width:none}pre,.status{break-inside:avoid}h1,h2,h3{break-after:avoid}}
+</style>
+</head>
+<body><main>
+<h1>Global Connector Registry — SDD Progress Ledger</h1>
+<h2>Task 1: Paired worktrees and baseline gates</h2>
+<div class="status">
+<p><strong>Recorded:</strong> 26 July 2026<br>
+<strong>Status:</strong> BLOCKED<br>
+<strong>Edition:</strong> English (canonical unsuffixed Markdown)<br>
+<strong>Companions:</strong> <code>global-connector-registry-progress.en.html</code>, <code>global-connector-registry-progress.th.md</code>, <code>global-connector-registry-progress.th.html</code><br>
+<strong>Stop condition:</strong> The first required parent baseline exited nonzero because its tracked test input is absent from the isolated baseline. Per the implementation plan, no later baseline command was run.</p>
+</div>
+
+<h2>Paired isolated worktrees</h2>
+<h3>Parent governance/bootstrap worktree</h3>
+<ul>
+<li>Absolute path: <code>C:\tmp\monolith-global-connector-registry-parent</code></li>
+<li>Branch: <code>codex/global-connector-registry</code></li>
+<li><code>git rev-parse HEAD</code>: <code>9597ce6924b14ec71fe311160a7dfe927f449b13</code></li>
+<li>Approved-design ancestor: <code>92d67571</code></li>
+<li><code>git status --short</code> before baseline: empty</li>
+<li>Git directory: <code>C:/Users/thai3/determined-williams (2)/.git/worktrees/monolith-global-connector-registry-parent</code></li>
+<li>Common Git directory: <code>C:/Users/thai3/determined-williams (2)/.git</code></li>
+<li>Superproject working tree: empty (not a submodule)</li>
+<li>Isolation result: linked worktree verified</li>
+</ul>
+
+<h3>Nested MONOLITH runtime worktree</h3>
+<ul>
+<li>Absolute path: <code>C:\tmp\monolith-global-connector-registry-runtime</code></li>
+<li>Branch: <code>codex/global-connector-runtime</code></li>
+<li><code>git rev-parse HEAD</code>: <code>ed036a2ceebc8c3c9fa71edd3fc85ff67ca53b97</code></li>
+<li>Minifix provenance baseline: <code>ed036a2c</code> retained unchanged</li>
+<li><code>git status --short</code> before baseline: empty</li>
+<li>Git directory: <code>C:/Users/thai3/determined-williams (2)/determined-williams/.git/worktrees/monolith-global-connector-registry-runtime</code></li>
+<li>Common Git directory: <code>C:/Users/thai3/determined-williams (2)/determined-williams/.git</code></li>
+<li>Superproject working tree: empty (not a submodule)</li>
+<li>Isolation result: linked worktree verified</li>
+</ul>
+
+<h2>Toolchain</h2>
+<ul>
+<li>Python: <code>Python 3.14.2</code></li>
+<li>Node.js: <code>v22.21.1</code></li>
+<li>npm: <code>11.6.2</code></li>
+</ul>
+
+<h2>Tracked-baseline availability</h2>
+<ul>
+<li>At parent baseline <code>9597ce6924b14ec71fe311160a7dfe927f449b13</code>, <code>git ls-tree</code> reports zero tracked entries under:
+  <ul>
+  <li><code>tests/component_master/</code></li>
+  <li><code>packages/component-master/</code></li>
+  <li><code>data/component-master/</code></li>
+  </ul>
+</li>
+<li>None of those three paths exists in the isolated parent worktree.</li>
+<li>The same paths exist only as untracked (<code>??</code>) content in the original governance checkout.</li>
+<li>The untracked original-checkout content was not copied, staged, or modified. Integrating it into the isolated baseline requires separate authorization and is outside Task 1.</li>
+</ul>
+
+<h2>NOT-FOR-PRODUCTION state</h2>
+<ul>
+<li>State: active</li>
+<li>Source evidence: <code>src/core/config/shadowMode.ts:16</code> in the runtime worktree declares <code>SHADOW_MODE_NOT_FOR_PRODUCTION = true</code>.</li>
+<li>Packet evidence paths: <code>src/factory/packet/buildFactoryPacket.ts</code> adds <code>NOT_FOR_PRODUCTION.txt</code>; <code>src/factory/packet/zipBundle.ts</code> applies the <code>NFP-</code> prefix while shadow mode is active.</li>
+<li>Verification note: the source state was inspected, but the runtime targeted baseline was not run because the plan required stopping at the first failed parent baseline.</li>
+</ul>
+
+<h2>Required baseline commands</h2>
+<h3>1. Parent component-master unit tests — FAIL</h3>
+<p>Command:</p>
+<pre><code>python -m unittest discover -s tests/component_master -v</code></pre>
+<p>Exit status: <code>1</code></p>
+<p>Complete captured output:</p>
+<pre><code>Traceback (most recent call last):
+  File "&lt;frozen runpy&gt;", line 198, in _run_module_as_main
+  File "&lt;frozen runpy&gt;", line 88, in _run_code
+  File "C:\Users\thai3\AppData\Local\Programs\Python\Python314\Lib\unittest\__main__.py", line 18, in &lt;module&gt;
+    main(module=None)
+    ~~~~^^^^^^^^^^^^^
+  File "C:\Users\thai3\AppData\Local\Programs\Python\Python314\Lib\unittest\main.py", line 103, in __init__
+    self.parseArgs(argv)
+    ~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\thai3\AppData\Local\Programs\Python\Python314\Lib\unittest\main.py", line 119, in parseArgs
+    self._do_discovery(argv[2:])
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\thai3\AppData\Local\Programs\Python\Python314\Lib\unittest\main.py", line 242, in _do_discovery
+    self.createTests(from_discovery=True, Loader=Loader)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\thai3\AppData\Local\Programs\Python\Python314\Lib\unittest\main.py", line 149, in createTests
+    self.test = loader.discover(self.start, self.pattern, self.top)
+                ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\thai3\AppData\Local\Programs\Python\Python314\Lib\unittest\loader.py", line 334, in discover
+    raise ImportError('Start directory is not importable: %r' % start_dir)
+ImportError: Start directory is not importable: 'tests/component_master'</code></pre>
+<p>Observed summary: unittest discovery did not start because <code>tests/component_master/</code> does not exist in the tracked isolated baseline. Python therefore reported the requested start directory as not importable. No test count or passing summary was produced.</p>
+<p><strong>Blocker:</strong> the required tests, implementation package, and seed data are absent from the tracked isolated baseline and exist only as untracked original-checkout content. A separately authorized baseline-integration change is required before this command can exercise the intended component-master baseline.</p>
+
+<h3>2. Parent kitchen-kernel verifier — NOT RUN</h3>
+<p>Command:</p>
+<pre><code>python tools/verify_kitchen_kernel.py</code></pre>
+<p>Exit status: not run after required stop condition.</p>
+
+<h3>3. Runtime targeted tests — NOT RUN</h3>
+<p>Command:</p>
+<pre><code>npm.cmd run test:run -- src/core/connector src/core/hardware/catalog src/factory/packet</code></pre>
+<p>Exit status: not run after required stop condition.</p>
+<p>Minifix targeted-test requirement: <strong>NOT SATISFIED — not run / cannot verify.</strong></p>
+<p>The Minifix live-recipe provenance state was not re-evaluated by this task. Runtime commit <code>ed036a2c</code> was retained unchanged, but immutability does not satisfy the targeted-test requirement.</p>
+
+<h3>4. Runtime typecheck — NOT RUN</h3>
+<p>Command:</p>
+<pre><code>npm.cmd run typecheck:all</code></pre>
+<p>Exit status: not run after required stop condition.</p>
+
+<h2>Residual concerns</h2>
+<ul>
+<li><code>tests/component_master/</code>, <code>packages/component-master/</code>, and <code>data/component-master/</code> are absent from the tracked isolated baseline. The only observed copies are untracked original-checkout content; integrating them requires separate authorization.</li>
+<li><code>CONTEXT.md</code> and the 21 July repository-scope correction are absent from parent commit <code>9597ce69</code>; they were read from the original governance checkout as mandatory routing context. No file from that checkout was modified.</li>
+<li>Runtime dependencies were installed by the controller before this task. No npm installation or audit output was produced or observed during this execution, so this ledger makes no npm-audit claim.</li>
+<li>The Minifix targeted tests and runtime typecheck were not run, so their requirements remain unsatisfied and cannot be verified from Task 1.</li>
+<li>No production source was changed. The runtime worktree remains read/test-only and unchanged.</li>
+</ul>
+</main></body>
+</html>

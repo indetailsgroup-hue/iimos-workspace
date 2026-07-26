@@ -4,7 +4,9 @@
 
 **Recorded:** 26 July 2026
 **Status:** BLOCKED
-**Stop condition:** The first required parent baseline exited nonzero. Per the implementation plan, no later baseline command was run.
+**Edition:** English (canonical unsuffixed Markdown)
+**Companions:** `global-connector-registry-progress.en.html`, `global-connector-registry-progress.th.md`, `global-connector-registry-progress.th.html`
+**Stop condition:** The first required parent baseline exited nonzero because its tracked test input is absent from the isolated baseline. Per the implementation plan, no later baseline command was run.
 
 ## Paired isolated worktrees
 
@@ -37,6 +39,16 @@
 - Python: `Python 3.14.2`
 - Node.js: `v22.21.1`
 - npm: `11.6.2`
+
+## Tracked-baseline availability
+
+- At parent baseline `9597ce6924b14ec71fe311160a7dfe927f449b13`, `git ls-tree` reports zero tracked entries under:
+  - `tests/component_master/`
+  - `packages/component-master/`
+  - `data/component-master/`
+- None of those three paths exists in the isolated parent worktree.
+- The same paths exist only as untracked (`??`) content in the original governance checkout.
+- The untracked original-checkout content was not copied, staged, or modified. Integrating it into the isolated baseline requires separate authorization and is outside Task 1.
 
 ## NOT-FOR-PRODUCTION state
 
@@ -83,7 +95,9 @@ Traceback (most recent call last):
 ImportError: Start directory is not importable: 'tests/component_master'
 ```
 
-Observed summary: unittest discovery did not start; Python reported that `tests/component_master` is not importable. No test count or passing summary was produced.
+Observed summary: unittest discovery did not start because `tests/component_master/` does not exist in the tracked isolated baseline. Python therefore reported the requested start directory as not importable. No test count or passing summary was produced.
+
+Blocker: the required tests, implementation package, and seed data are absent from the tracked isolated baseline and exist only as untracked original-checkout content. A separately authorized baseline-integration change is required before this command can exercise the intended component-master baseline.
 
 ### 2. Parent kitchen-kernel verifier — NOT RUN
 
@@ -105,7 +119,9 @@ npm.cmd run test:run -- src/core/connector src/core/hardware/catalog src/factory
 
 Exit status: not run after required stop condition.
 
-The Minifix live-recipe provenance state was not re-evaluated by this task. No claim is made beyond retaining runtime commit `ed036a2c` unchanged.
+Minifix targeted-test requirement: **NOT SATISFIED — not run / cannot verify.**
+
+The Minifix live-recipe provenance state was not re-evaluated by this task. Runtime commit `ed036a2c` was retained unchanged, but immutability does not satisfy the targeted-test requirement.
 
 ### 4. Runtime typecheck — NOT RUN
 
@@ -119,7 +135,8 @@ Exit status: not run after required stop condition.
 
 ## Residual concerns
 
-- The plan-required parent unittest discovery command is incompatible with the checked-out parent baseline under Python 3.14.2 because the specified start directory is not importable.
+- `tests/component_master/`, `packages/component-master/`, and `data/component-master/` are absent from the tracked isolated baseline. The only observed copies are untracked original-checkout content; integrating them requires separate authorization.
 - `CONTEXT.md` and the 21 July repository-scope correction are absent from parent commit `9597ce69`; they were read from the original governance checkout as mandatory routing context. No file from that checkout was modified.
 - Runtime dependencies were installed by the controller before this task. No npm installation or audit output was produced or observed during this execution, so this ledger makes no npm-audit claim.
+- The Minifix targeted tests and runtime typecheck were not run, so their requirements remain unsatisfied and cannot be verified from Task 1.
 - No production source was changed. The runtime worktree remains read/test-only and unchanged.
