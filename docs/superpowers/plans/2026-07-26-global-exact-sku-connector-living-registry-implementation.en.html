@@ -135,7 +135,7 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 </ul>
 <p>The committed nested JSON file is a materialized, hash-pinned release produced by the parent. It is not an independent authority.</p>
 <h2>Execution order</h2>
-<p>Tasks 1–8 establish the canonical engine. Tasks 9–12 populate the first cohort in four evidence-review waves. Task 13 proves tenant separation. Tasks 14–16 integrate and verify the nested runtime. Do not begin nested cutover before Task 8 produces a deterministic release.</p>
+<p>Tasks 1–8 establish the canonical engine. Tasks 9–12 populate the first cohort in four evidence-review waves. Task 13 proves tenant separation. Tasks 14–16 integrate and verify the nested runtime. Do not begin nested cutover before Task 8 produces a deterministic release. Before Task 14, pass the runtime synchronization gate below so the connector work lands on the stable DXF-truth-chain state and does not overwrite concurrent runtime work.</p>
 <h3>Task 1: Establish paired worktrees and baseline gates</h3>
 <p><strong>Files:</strong></p>
 <ul>
@@ -876,6 +876,16 @@ def apply_tenant_overlay(
 </ul>
 <pre><code class="language-powershell">git add packages/component-master/src/monolith_component_master/tenant_overlays.py tests/component_master/registry/test_tenant_overlays.py
 git commit -m "feat(registry): isolate tenant commercial overlays"</code></pre>
+<h3>Mandatory runtime synchronization gate before Task 14</h3>
+<p>This gate is a prerequisite, not a selector implementation task.</p>
+<ul>
+<li>[ ] Record the current commit and status of both the owner's runtime tree (<code>fix/dxf-truth-chain</code>) and the isolated runtime branch.</li>
+<li>[ ] Confirm <code>src/core/connector/worldSynthesis.ts</code> contains the T1b <code>opts.connectorCount</code> and <code>opts.excludeCorners</code> contract. Do not edit or replace that file merely to change connector selection.</li>
+<li>[ ] Wait for a stable-tree point before integrating a newer owner commit. If the owner tree has advanced beyond the isolated runtime base, obtain approval for the exact integration operation and record the before/after commits.</li>
+<li>[ ] Inspect overlap in <code>catalog.ts</code>, <code>types.ts</code>, <code>worldSynthesis.ts</code>, G11, gate stores and freeze/export surfaces before changing runtime code. Preserve concurrent DXF-truth-chain behavior.</li>
+<li>[ ] Run the full nested gate only while the tree is stable. Before attributing a failure to this work, classify it by changed file/owner lane and reproduce it with the exact commit recorded.</li>
+</ul>
+<p>Current observation on 2026-07-26: the owner tree and isolated runtime worktree both point at <code>ed036a2c</code>; their <code>worldSynthesis.ts</code> files are byte-identical and already contain the T1b options above. Recheck this observation immediately before Task 14 because it is not a permanent assumption.</p>
 <h3>Task 14: Build the nested hash-pinned release consumer</h3>
 <p><strong>Files:</strong></p>
 <ul>
@@ -938,14 +948,16 @@ git commit -m "feat(hardware): consume pinned connector registry release"</code>
 <p><strong>Files:</strong></p>
 <ul>
 <li>Create: <code>src/core/hardware/registry/selectRegistryConnector.ts</code></li>
+<li>Create: <code>src/core/hardware/registry/connectorRecovery.ts</code></li>
 <li>Create: <code>src/core/hardware/registry/__tests__/selectRegistryConnector.test.ts</code></li>
+<li>Create: <code>src/core/hardware/registry/__tests__/connectorRecovery.test.ts</code></li>
 <li>Modify: <code>src/core/connector/types.ts</code></li>
 <li>Modify: <code>src/core/connector/catalog.ts:247-253</code></li>
 </ul>
 <p><strong>Interfaces:</strong></p>
 <ul>
-<li>Produces: <code>ConnectorResolution</code>, <code>selectRegistryConnector(input, release)</code>.</li>
-<li>Consumed by: factory packet task.</li>
+<li>Produces: <code>ConnectorResolution</code>, <code>ConnectorRecoveryAction</code>, <code>selectRegistryConnector(input, release)</code>.</li>
+<li>Consumed by: factory packet and G11/user-recovery task.</li>
 </ul>
 <ul>
 <li>[ ] <strong>Step 1: Write failing resolution tests</strong></li>
@@ -953,10 +965,13 @@ git commit -m "feat(hardware): consume pinned connector registry release"</code>
 <p>Cover:</p>
 <ul>
 <li>exact Minifix SKU + compatible housing/BOM;</li>
-<li><code>RASTEX</code> intent returns <code>INSUFFICIENT_EVIDENCE</code> rather than Minifix;</li>
+<li><code>RASTEX</code> intent returns <code>STRUCTURAL_EVIDENCE_INSUFFICIENT</code> rather than Minifix;</li>
 <li>material/thickness outside envelope refuses;</li>
 <li>discontinued/region-only SKU refuses for the wrong region;</li>
 <li>unqualified live Minifix Ø10/17.5 recipe remains shadow-only because the current provenance audit records contradicted/unsourced values.</li>
+<li>every refusal intended for a user-facing gate has recovery actions and exactly one primary action;</li>
+<li>12/15/16 mm core cases select an exact qualified thickness-specific housing or an explicit compatible-construction action; none becomes a message-only dead end;</li>
+<li>a recovery action never selects <code>SHADOW_ONLY</code>, region-blocked, discontinued or tenant-forbidden data as production-qualified.</li>
 </ul>
 <ul>
 <li>[ ] <strong>Step 2: Verify RED</strong></li>
@@ -984,11 +999,34 @@ git commit -m "feat(hardware): consume pinned connector registry release"</code>
         | 'STRUCTURAL_EVIDENCE_INSUFFICIENT'
         | 'LIFECYCLE_OR_REGION_BLOCKED';
       message: string;
+      primaryRecoveryAction: ConnectorRecoveryAction;
+      recoveryActions: ConnectorRecoveryAction[];
+    };
+
+export type ConnectorRecoveryAction =
+  | {
+      kind: 'APPLY_QUALIFIED_EXACT_SKU';
+      label: string;
+      skuId: string;
+      expectedRegistryPin: RegistryPin;
+    }
+  | {
+      kind: 'APPLY_QUALIFIED_CONFIGURATION';
+      label: string;
+      configurationPatch: QualifiedConfigurationPatch;
+      expectedRegistryPin: RegistryPin;
+    }
+  | {
+      kind: 'OPEN_FILTERED_RESOLUTION';
+      label: string;
+      compatibleSkuIds: string[];
+      requiredEvidence: string[];
     };</code></pre>
 <p>Extend <code>ConnectorFamily</code> without another closed four-value list:</p>
 <pre><code class="language-typescript">export type LegacyConnectorFamily = 'MINIFIX' | 'TARGET_J' | 'RASTEX' | 'DOWEL';
 export type ConnectorFamily = LegacyConnectorFamily | `OEM:${string}`;</code></pre>
 <p>Delete the behavior in <code>selectConnector()</code> that returns Minifix for every family except Target J and dowel. Keep a deprecated wrapper only if every caller passes an exact SKU and handles refusal.</p>
+<p>Recovery is not a disguised fallback. The UI must show the OEM, family, exact order code, material/thickness envelope and resulting construction change before applying it. A one-click apply is allowed only when the action is deterministic, registry-pinned, production-qualified and auditable. Where materially different safe choices remain, the primary click opens a pre-filtered resolution surface; it must never silently choose Minifix or waive G11.</p>
 <ul>
 <li>[ ] <strong>Step 4: Verify GREEN and existing Connector OS tests</strong></li>
 </ul>
@@ -998,21 +1036,28 @@ npm.cmd run typecheck:all</code></pre>
 <ul>
 <li>[ ] <strong>Step 5: Commit</strong></li>
 </ul>
-<pre><code class="language-powershell">git add src/core/hardware/registry/selectRegistryConnector.ts src/core/hardware/registry/__tests__/selectRegistryConnector.test.ts src/core/connector/types.ts src/core/connector/catalog.ts
+<pre><code class="language-powershell">git add src/core/hardware/registry/selectRegistryConnector.ts src/core/hardware/registry/connectorRecovery.ts src/core/hardware/registry/__tests__/selectRegistryConnector.test.ts src/core/hardware/registry/__tests__/connectorRecovery.test.ts src/core/connector/types.ts src/core/connector/catalog.ts
 git commit -m "fix(connectors): resolve exact SKU without family fallback"</code></pre>
-<h3>Task 16: Wire registry truth into shadow factory packets</h3>
+<h3>Task 16: Wire registry truth and recovery through G11, freeze/export and shadow factory packets</h3>
 <p><strong>Files:</strong></p>
 <ul>
 <li>Modify: <code>src/factory/packet/builders/buildConnectorOps.ts</code></li>
 <li>Modify: <code>src/factory/packet/types.ts</code></li>
 <li>Modify: <code>src/factory/packet/verifyPacket.ts</code></li>
 <li>Create: <code>src/factory/packet/__tests__/connectorRegistryPin.test.ts</code></li>
+<li>Modify: <code>src/gate/rules/gateG11_minifixSystem32.ts</code></li>
+<li>Modify: <code>src/gate/ui/gateTypes.ts</code></li>
+<li>Modify: <code>src/gate/ui/useExportGate.ts</code></li>
+<li>Modify: <code>src/gate/ui/GateBlockerModal.tsx</code></li>
+<li>Modify: <code>src/components/ui/GateToolbar.tsx</code></li>
+<li>Modify: <code>src/components/ui/ExportPanel.tsx</code></li>
+<li>Create: <code>src/gate/ui/__tests__/connectorRecoveryGate.test.tsx</code></li>
 <li>Modify: applicable factory-packet call sites to pass explicit selection context.</li>
 </ul>
 <p><strong>Interfaces:</strong></p>
 <ul>
 <li>Consumes: <code>ConnectorResolution</code>.</li>
-<li>Produces: packet registry pin, exact SKU/BOM, qualification verdict, evidence IDs and refusal records.</li>
+<li>Produces: packet registry pin, exact SKU/BOM, qualification verdict, evidence IDs, refusal records and an auditable recovery path from G11 blocker to a fresh verdict.</li>
 </ul>
 <ul>
 <li>[ ] <strong>Step 1: Write failing packet tests</strong></li>
@@ -1025,6 +1070,12 @@ git commit -m "fix(connectors): resolve exact SKU without family fallback"</code
 <li><code>SHADOW_ONLY</code> emits NOT-FOR-PRODUCTION and a reason-coded refusal;</li>
 <li>missing explicit connector intent cannot fall back to Minifix;</li>
 <li>current drill-map/connector-ops parity tests remain intact.</li>
+<li><code>refusalsToG11Issues()</code> preserves the resolution reference and recovery actions when it creates the non-waivable G11 blocker;</li>
+<li>the blocker reaches <code>useExportGate</code>, GateToolbar and ExportPanel without losing its primary recovery action;</li>
+<li>an unsupported Rastex selection can never freeze/export, but the same refusal offers a qualified exact-SKU/configuration recovery instead of a disabled dead end;</li>
+<li>clicking a qualified deterministic recovery creates an audit event/design revision, regenerates the drill map, invalidates the old verdict, reruns G11 and freezes only after the new verdict is a fresh PASS;</li>
+<li>12/15/16 mm core refusals expose thickness-specific compatible housing/construction recovery where the pinned release proves it;</li>
+<li>rejected, stale, shadow-only or tampered recovery actions cannot mutate the design or authorize freeze/export.</li>
 </ul>
 <ul>
 <li>[ ] <strong>Step 2: Verify RED</strong></li>
@@ -1048,10 +1099,20 @@ export function buildConnectorOpsData(
   context: ConnectorSelectionContext,
 ): PacketConnectorOps</code></pre>
 <p>When <code>resolution.ok</code> is false, emit a refusal artifact and zero manufacturing operations. <code>SHADOW_ONLY</code> may emit comparison operations but must retain the NFP gate.</p>
+<p>The refusal path is explicitly end-to-end:</p>
+<pre><code class="language-text">registry resolution refusal
+  -&gt; DrillMap.manufacturabilityRefusals
+  -&gt; refusalsToG11Issues
+  -&gt; G11 FAIL / gate verdict
+  -&gt; useExportGate freeze-release-export authority
+  -&gt; recovery action
+  -&gt; design revision + drill-map regeneration + fresh gate run</code></pre>
+<p>Fail-closed remains mandatory; dead-end refusal is not acceptable. <code>View Issues</code> alone does not satisfy this task. Gate surfaces must expose the primary recovery action in the same refusal context. Applying an action must be idempotent, registry-pin checked and separately auditable from the subsequent freeze.</p>
 <ul>
 <li>[ ] <strong>Step 4: Run scoped and full nested gates</strong></li>
 </ul>
 <pre><code class="language-powershell">npm.cmd run test:run -- src/core/hardware/registry src/core/connector src/factory/packet
+npm.cmd run test:run -- src/gate src/components/ui/__tests__/GateToolbar.dxfExport.test.tsx src/components/ui/__tests__/ExportPanel.dxfExport.test.tsx
 npm.cmd run typecheck:all
 npm.cmd run build</code></pre>
 <p>Expected: exit 0; factory packets remain explicitly NOT-FOR-PRODUCTION.</p>
@@ -1069,6 +1130,8 @@ git commit -m "feat(factory): pin exact connector registry evidence"</code></pre
 <li>[ ] Prove all 12 cohort brands have a denominator and every discovered row has a classification.</li>
 <li>[ ] Prove each <code>VERIFIED</code> field has primary-source evidence and rights state.</li>
 <li>[ ] Prove all incomplete BOMs, unsupported thicknesses, Rastex fallback attempts and tampered hashes fail closed.</li>
+<li>[ ] Prove every user-facing connector refusal carries a recovery path; qualified one-click actions revise and revalidate before freeze, while unsafe actions remain blocked.</li>
+<li>[ ] Prove 12/15/16 mm core and unsupported-family scenarios do not become message-only dead ends.</li>
 <li>[ ] Record the current Minifix contradicted/unsourced geometry as an explicit blocker; do not relabel it qualified.</li>
 <li>[ ] Render a bilingual implementation report and coverage report to standalone HTML.</li>
 <li>[ ] Keep parent and nested commits separate; do not push until the owner reviews both histories and evidence.</li>
@@ -1077,7 +1140,8 @@ git commit -m "feat(factory): pin exact connector registry evidence"</code></pre
 <ol>
 <li><strong>Foundation checkpoint:</strong> after Task 8, review schema, graph, qualification and deterministic release before vendor data expansion.</li>
 <li><strong>Cohort checkpoint:</strong> after Task 12, review source denominators, rights and classifications before runtime import.</li>
-<li><strong>Runtime checkpoint:</strong> after Task 16, run independent spec-conformance and code-quality review plus full gates.</li>
+<li><strong>Runtime synchronization checkpoint:</strong> immediately before Task 14, re-record both runtime commits, confirm T1b preservation, inspect overlap and proceed only from a stable tree.</li>
+<li><strong>Runtime checkpoint:</strong> after Task 16, run independent spec-conformance and code-quality review plus full gates, including refusal-to-recovery-to-fresh-verdict scenarios.</li>
 <li><strong>Production decision:</strong> outside this plan. Requires physical configuration qualification, machine/coupon/first-article evidence, security and owner ratification; software completion alone cannot remove NOT-FOR-PRODUCTION.</li>
 </ol>
 <h2>Spec-coverage self-review</h2>
@@ -1092,6 +1156,8 @@ git commit -m "feat(factory): pin exact connector registry evidence"</code></pre
 <tr><td>Tenant-local Daph/commercial overlays</td><td>Task 13</td></tr>
 <tr><td>Parent canonical authority and nested pinned consumer</td><td>Tasks 1, 8, 14</td></tr>
 <tr><td>No Rastex/unknown-family fallback</td><td>Task 15</td></tr>
+<tr><td>Fail-closed without user dead ends; one-click qualified recovery and fresh revalidation</td><td>Tasks 15–16</td></tr>
+<tr><td>Stable-tree runtime synchronization and concurrent T1b preservation</td><td>Pre-Task-14 gate</td></tr>
 <tr><td>Factory-packet provenance and NFP enforcement</td><td>Task 16</td></tr>
 <tr><td>Physical qualification remains separate from software proof</td><td>Final gate and production checkpoint</td></tr>
 </tbody></table></div>

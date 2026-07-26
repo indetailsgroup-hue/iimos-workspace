@@ -76,7 +76,7 @@ Nested JSON เป็น materialized, hash-pinned release ที่ parent ผ�
 
 ## ลำดับดำเนินงาน
 
-Tasks 1–8 สร้าง canonical engine; Tasks 9–12 นำเข้า first cohort สี่ waves; Task 13 พิสูจน์ tenant separation; Tasks 14–16 เชื่อม nested runtime ห้ามเริ่ม nested cutover ก่อน Task 8 สร้าง deterministic release
+Tasks 1–8 สร้าง canonical engine; Tasks 9–12 นำเข้า first cohort สี่ waves; Task 13 พิสูจน์ tenant separation; Tasks 14–16 เชื่อม nested runtime ห้ามเริ่ม nested cutover ก่อน Task 8 สร้าง deterministic release และก่อน Task 14 ต้องผ่าน runtime synchronization gate ด้านล่าง เพื่อไม่ให้ connector work ทับงาน DXF truth chain ที่กำลังเดินขนาน
 
 ### Task 1: สร้าง paired worktrees และ baseline gates
 
@@ -454,6 +454,18 @@ class TenantCommercialOverlay:
 - [ ] **Step 4:** รัน test ให้ cross-tenant denial ผ่าน
 - [ ] **Step 5:** commit `feat(registry): isolate tenant commercial overlays`
 
+### Runtime synchronization gate ที่ต้องผ่านก่อน Task 14
+
+gate นี้เป็น prerequisite ไม่ใช่งานแก้ selector
+
+- [ ] บันทึก commit และ status ปัจจุบันของทั้ง owner runtime tree (`fix/dxf-truth-chain`) และ isolated runtime branch
+- [ ] ยืนยันว่า `src/core/connector/worldSynthesis.ts` มีสัญญา T1b `opts.connectorCount` และ `opts.excludeCorners`; ห้ามแก้หรือแทนไฟล์นี้เพียงเพื่อเปลี่ยน connector selection
+- [ ] รอจุดที่ tree นิ่งก่อนนำ owner commit ใหม่เข้ามา หาก owner tree เดินหน้าเกิน isolated base ต้องขออนุมัติวิธี integration ที่ระบุ commit ชัดเจนและบันทึก before/after
+- [ ] ตรวจ overlap ใน `catalog.ts`, `types.ts`, `worldSynthesis.ts`, G11, gate stores และ freeze/export surfaces ก่อนแก้ runtime พร้อมรักษาพฤติกรรม DXF truth chain
+- [ ] รัน full nested gate เฉพาะตอน tree นิ่ง ก่อนสรุปว่า failure มาจากงานนี้ต้องจำแนกตามไฟล์/owner lane และ reproduce ที่ exact commit
+
+ข้อสังเกต ณ 2026-07-26: owner tree และ isolated runtime worktree อยู่ที่ `ed036a2c` เหมือนกัน; `worldSynthesis.ts` ตรงกันทุกไบต์และมี T1b options แล้ว ต้องตรวจใหม่ทันทีก่อน Task 14 เพราะข้อมูลนี้ไม่ใช่สมมติฐานถาวร
+
 ### Task 14: สร้าง nested hash-pinned release consumer
 
 **ไฟล์:** สร้าง registry types/schema/loader/JSON/test ใต้ `src/core/hardware/registry/`
@@ -492,11 +504,11 @@ export async function loadRegistryRelease(
 
 ### Task 15: แทน connector fallback ด้วย explicit registry resolution
 
-**ไฟล์:** สร้าง `selectRegistryConnector.ts`/test; แก้ `connector/types.ts`, `connector/catalog.ts:247-253`
+**ไฟล์:** สร้าง `selectRegistryConnector.ts`, `connectorRecovery.ts` และ tests; แก้ `connector/types.ts`, `connector/catalog.ts:247-253`
 
-**Interfaces:** ส่งออก `ConnectorResolution`, `selectRegistryConnector(input, release)`
+**Interfaces:** ส่งออก `ConnectorResolution`, `ConnectorRecoveryAction`, `selectRegistryConnector(input, release)`
 
-- [ ] **Step 1:** tests ครอบคลุม exact Minifix BOM, Rastex refusal, material/thickness out-of-envelope, region/lifecycle block และ live Minifix Ø10/17.5 เป็น shadow-only
+- [ ] **Step 1:** tests ครอบคลุม exact Minifix BOM, Rastex refusal, material/thickness out-of-envelope, region/lifecycle block, live Minifix Ø10/17.5 เป็น shadow-only, ทุก user-facing refusal มี recovery actions และ primary action หนึ่งรายการ, core 12/15/16mm มี exact thickness-specific housing/compatible construction path และ action ที่ shadow-only/region-blocked/discontinued/ผิด tenant ห้ามใช้ authorize production
 - [ ] **Step 2:** รัน test และเห็น RED
 - [ ] **Step 3:** implement discriminated result:
 
@@ -520,6 +532,28 @@ export type ConnectorResolution =
         | 'STRUCTURAL_EVIDENCE_INSUFFICIENT'
         | 'LIFECYCLE_OR_REGION_BLOCKED';
       message: string;
+      primaryRecoveryAction: ConnectorRecoveryAction;
+      recoveryActions: ConnectorRecoveryAction[];
+    };
+
+export type ConnectorRecoveryAction =
+  | {
+      kind: 'APPLY_QUALIFIED_EXACT_SKU';
+      label: string;
+      skuId: string;
+      expectedRegistryPin: RegistryPin;
+    }
+  | {
+      kind: 'APPLY_QUALIFIED_CONFIGURATION';
+      label: string;
+      configurationPatch: QualifiedConfigurationPatch;
+      expectedRegistryPin: RegistryPin;
+    }
+  | {
+      kind: 'OPEN_FILTERED_RESOLUTION';
+      label: string;
+      compatibleSkuIds: string[];
+      requiredEvidence: string[];
     };
 ```
 
@@ -532,16 +566,18 @@ export type ConnectorFamily = LegacyConnectorFamily | `OEM:${string}`;
 
 ลบพฤติกรรมที่ family อื่นตกเป็น Minifix; deprecated wrapper ต้องรับ exact SKU และจัดการ refusal
 
+recovery ต้องไม่เป็น fallback ที่เปลี่ยนชื่อ UI ต้องแสดง OEM, family, exact order code, material/thickness envelope และ construction change ก่อนใช้ one-click apply ทำได้เฉพาะ action ที่ deterministic, registry-pinned, production-qualified และ audit ได้ ถ้ามี safe choices ที่ต่างกันอย่างมีนัยสำคัญ primary click ต้องเปิดหน้าตัดสินใจที่กรองมาแล้ว ห้ามเลือก Minifix เงียบ ๆ หรือ waive G11
+
 - [ ] **Step 4:** รัน registry/connector tests และ typecheck ให้ exit 0
 - [ ] **Step 5:** commit `fix(connectors): resolve exact SKU without family fallback`
 
-### Task 16: ต่อ registry truth เข้า shadow factory packets
+### Task 16: ต่อ registry truth และ recovery ผ่าน G11, freeze/export และ shadow factory packets
 
-**ไฟล์:** แก้ `buildConnectorOps.ts`, packet types/verifier/callers; สร้าง `connectorRegistryPin.test.ts`
+**ไฟล์:** แก้ `buildConnectorOps.ts`, packet types/verifier/callers, `gateG11_minifixSystem32.ts`, gate types/`useExportGate.ts`, `GateBlockerModal.tsx`, `GateToolbar.tsx`, `ExportPanel.tsx`; สร้าง packet และ connector-recovery gate tests
 
-**Interfaces:** รับ `ConnectorResolution`; ส่งออก registry pin, exact SKU/BOM, verdict, evidence IDs และ refusals
+**Interfaces:** รับ `ConnectorResolution`; ส่งออก registry pin, exact SKU/BOM, verdict, evidence IDs, refusals และเส้นทาง recovery ที่ audit ได้จาก G11 blocker ไปถึง fresh verdict
 
-- [ ] **Step 1:** tests ต้องตรวจ pin/hash/SKU/BOM, determinism, tamper block, SHADOW_ONLY/NFP, no default Minifix และ parity เดิม
+- [ ] **Step 1:** tests ต้องตรวจ pin/hash/SKU/BOM, determinism, tamper block, SHADOW_ONLY/NFP, no default Minifix, parity เดิม และพิสูจน์ว่า `refusalsToG11Issues()` รักษา resolution/recovery จนถึง GateToolbar/ExportPanel; Rastex ที่ไม่รองรับถูก block แต่มี exact qualified recovery; คลิก action แล้วสร้าง design revision/audit, regenerate drill map, invalidate verdict เก่า, rerun G11 และ freeze ได้เฉพาะ fresh PASS; core 12/15/16mm ไม่เป็นทางตัน; action ที่ stale/shadow/tampered ห้ามแก้ design หรือ authorize
 - [ ] **Step 2:** รัน test และเห็น RED
 - [ ] **Step 3:** เปลี่ยน signature:
 
@@ -563,10 +599,25 @@ export function buildConnectorOpsData(
 
 `resolution.ok=false` ต้อง emit refusal/zero manufacturing ops; `SHADOW_ONLY` ใช้ comparison ops ได้แต่ต้องคง NFP
 
+เส้นทาง refusal ที่ต้องพิสูจน์ครบ:
+
+```text
+registry resolution refusal
+  -> DrillMap.manufacturabilityRefusals
+  -> refusalsToG11Issues
+  -> G11 FAIL / gate verdict
+  -> useExportGate freeze-release-export authority
+  -> recovery action
+  -> design revision + drill-map regeneration + fresh gate run
+```
+
+ต้อง fail-closed แต่ห้ามเป็น dead-end; แค่ปุ่ม `View Issues` ยังไม่ผ่าน requirement นี้ gate surface ต้องแสดง primary recovery action ในบริบทเดียวกับ refusal การ apply ต้อง idempotent, ตรวจ registry pin และมี audit แยกจาก freeze ที่ตามมา
+
 - [ ] **Step 4:** รัน:
 
 ```powershell
 npm.cmd run test:run -- src/core/hardware/registry src/core/connector src/factory/packet
+npm.cmd run test:run -- src/gate src/components/ui/__tests__/GateToolbar.dxfExport.test.tsx src/components/ui/__tests__/ExportPanel.dxfExport.test.tsx
 npm.cmd run typecheck:all
 npm.cmd run build
 ```
@@ -584,6 +635,8 @@ Expected: exit 0 และ packets ยัง NOT-FOR-PRODUCTION
 - [ ] พิสูจน์ denominator ของ 12 แบรนด์และ classification ของทุกรายการที่ค้นพบ
 - [ ] พิสูจน์ verified fields มี primary evidence/rights
 - [ ] พิสูจน์ incomplete BOM, unsupported thickness, Rastex fallback และ tampered hash fail closed
+- [ ] พิสูจน์ทุก user-facing connector refusal มี recovery path; qualified one-click action ต้อง revise และ revalidate ก่อน freeze ส่วน action ไม่ปลอดภัยยังถูก block
+- [ ] พิสูจน์ core 12/15/16mm และ unsupported-family ไม่กลายเป็น message-only dead end
 - [ ] บันทึก Minifix geometry ที่ contradicted/unsourced เป็น blocker ห้ามเรียก qualified
 - [ ] render implementation/coverage reports สองภาษาเป็น standalone HTML
 - [ ] แยก parent/nested commits และห้าม push จน owner review histories/evidence
@@ -592,8 +645,9 @@ Expected: exit 0 และ packets ยัง NOT-FOR-PRODUCTION
 
 1. **Foundation:** หลัง Task 8 review schema, graph, qualification และ deterministic release
 2. **Cohort:** หลัง Task 12 review source denominator, rights และ classifications
-3. **Runtime:** หลัง Task 16 ทำ independent spec-conformance/code-quality review และ full gates
-4. **Production decision:** อยู่นอกแผนนี้ ต้องมี physical qualification, machine/coupon/first-article evidence, security และ owner ratification; software completion ไม่ปลด NOT-FOR-PRODUCTION
+3. **Runtime synchronization:** ก่อน Task 14 ให้บันทึก runtime commits ทั้งสองใหม่ ยืนยัน T1b ตรวจ overlap และเดินต่อเฉพาะตอน tree นิ่ง
+4. **Runtime:** หลัง Task 16 ทำ independent spec-conformance/code-quality review และ full gates รวม refusal→recovery→fresh verdict
+5. **Production decision:** อยู่นอกแผนนี้ ต้องมี physical qualification, machine/coupon/first-article evidence, security และ owner ratification; software completion ไม่ปลด NOT-FOR-PRODUCTION
 
 ## Spec-coverage self-review
 
@@ -609,5 +663,7 @@ Expected: exit 0 และ packets ยัง NOT-FOR-PRODUCTION
 | Daph/tenant commercial overlay | 13 |
 | Parent authority/nested pinned consumer | 1, 8, 14 |
 | ไม่มี Rastex/unknown-family fallback | 15 |
+| Fail-closed โดยไม่สร้างทางตัน; qualified one-click recovery และ fresh revalidation | 15–16 |
+| Stable-tree runtime synchronization และรักษา T1b ที่เดินขนาน | gate ก่อน Task 14 |
 | Factory-packet provenance/NFP | 16 |
 | Physical qualification แยกจาก software proof | Final gate/production checkpoint |
