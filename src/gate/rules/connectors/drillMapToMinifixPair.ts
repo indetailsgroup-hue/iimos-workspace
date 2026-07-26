@@ -8,6 +8,7 @@
  */
 
 import type { DrillMapPoint, Vec3Tuple } from '../../../core/manufacturing/drillMap/types';
+import { resolveCamDimA } from '../gateG11_types';
 import type {
   MinifixConnectorPair,
   MinifixCamEntity,
@@ -25,28 +26,95 @@ function tupleToVec3(t: Vec3Tuple): Vec3 {
 }
 
 // ============================================
+// CAM POCKET CENTRE — SINGLE RESOLUTION POINT
+// ============================================
+
+/**
+ * Resolve the cam pocket (bolt channel) centre in world coordinates.
+ *
+ * ## Why this is not `camDepth / 2`
+ *
+ * The Ø15 Minifix housing is asymmetric: it is drilled `camDepth` deep but the
+ * bolt channel axis sits at Häfele "dim A" from the insertion face
+ * (`minifixDefaults.ts:55` — `camHeight: 9 // 9mm - dimA`, for 18mm wood
+ * drilled 13.5mm). `camDepth / 2` = 6.75mm was a constant 2.25mm short.
+ *
+ * ## Precedence (mirrors ruleG11_BoltCamAlignment, gateG11_minifixSystem32.ts:726-731)
+ *
+ * 1. **`boltPoint.targetPocketCenter`** — the generator's own declared value,
+ *    emitted verbatim by every corner-joint path:
+ *    OVERLAY `generateDrillMap.ts:988-996`, INSET `:1286-1297`,
+ *    SHELF `:1670-1680`, BACK PANEL `:1933-1943`. It is the single authority;
+ *    nothing downstream may recompute over it.
+ * 2. **`camPanelThickness / 2`** — the generator's own formula, reproduced.
+ *    Each of those four sites offsets the cam surface point along the cam
+ *    normal by half the thickness of the panel the CAM is drilled into. This is
+ *    the same source `genPocketCenter` uses in the sibling cross-checks
+ *    (`validateMinifixConnector.ts:1001-1005`, commit 075ceacf).
+ * 3. **`resolveCamDimA(camDepth)`** — the Häfele spec table
+ *    (`CAM_DRILLING_SPECS`, `hardware/minifixDefaults.ts:42-53`) keyed by
+ *    drilling depth, used when no owning-panel thickness is reachable.
+ *
+ * Tiers 2 and 3 agree wherever `camDepth` is the spec drilling depth for
+ * `camPanelThickness` — every row of `CAM_DRILLING_SPECS` has
+ * `dimA === woodThickness / 2` (12→6, 16→8, 18→9, 22→11, 29→14.5). They
+ * diverge only when the two inputs disagree, and tier 2 wins because it is
+ * what the generator actually did.
+ */
+export function resolveCamPocketCenter(args: {
+  camPoint: DrillMapPoint;
+  /** The paired BOLT point, when known — carries the generator's declared centre. */
+  boltPoint?: DrillMapPoint;
+  /** Thickness of the panel the CAM is drilled into, when known. */
+  camPanelThickness?: number;
+  /** CAM housing drilling depth (13.5mm for 18mm wood per Häfele FF 3.10). */
+  camDepth: number;
+}): Vec3 {
+  const declared = args.boltPoint?.targetPocketCenter;
+  if (declared) {
+    // Tier 1: the generator said so. Do not recompute.
+    return tupleToVec3(declared as Vec3Tuple);
+  }
+
+  const offset =
+    args.camPanelThickness !== undefined && Number.isFinite(args.camPanelThickness)
+      ? args.camPanelThickness / 2 // Tier 2
+      : resolveCamDimA(args.camDepth); // Tier 3
+
+  const position = tupleToVec3(args.camPoint.position);
+  const normal = tupleToVec3(args.camPoint.normal);
+  return {
+    x: position.x + normal.x * offset,
+    y: position.y + normal.y * offset,
+    z: position.z + normal.z * offset,
+  };
+}
+
+// ============================================
 // CAM ENTITY BUILDER
 // ============================================
 
 /**
  * Build a MinifixCamEntity from a DrillMapPoint representing a CAM_LOCK/MINIFIX housing.
+ *
+ * @param pocketCenter - Pre-resolved pocket centre (see `resolveCamPocketCenter`).
+ *   When omitted, the dim A fallback is resolved from `camDepth` alone — never
+ *   `camDepth / 2`, which is not a convention anything in this repo emits.
  */
 export function buildCamEntityFromDrillPoint(
   point: DrillMapPoint,
   camDepth: number = 13.5,  // 13.5mm for 18mm wood per Häfele FF 3.10
-  arrowDirection?: Vec3Tuple
+  arrowDirection?: Vec3Tuple,
+  pocketCenter?: Vec3
 ): MinifixCamEntity {
   const position = tupleToVec3(point.position);
   const normal = tupleToVec3(point.normal);
 
-  // Calculate pocket center (camDepth/2 into the panel from drill surface)
-  // Drill position is at panel surface, pocket center is inside
-  const pocketCenterOffset = camDepth / 2;
-  const pocketCenter: Vec3 = {
-    x: position.x + normal.x * pocketCenterOffset,
-    y: position.y + normal.y * pocketCenterOffset,
-    z: position.z + normal.z * pocketCenterOffset,
-  };
+  // Pocket centre = the generator's declared value where available, else dim A
+  // into the panel from the drill surface. NOT camDepth/2 (see
+  // resolveCamPocketCenter for the full precedence and its citations).
+  const resolvedPocketCenter: Vec3 =
+    pocketCenter ?? resolveCamPocketCenter({ camPoint: point, camDepth });
 
   // Default arrow direction (perpendicular to normal, in XZ plane)
   const defaultArrow: Vec3 = arrowDirection
@@ -68,7 +136,7 @@ export function buildCamEntityFromDrillPoint(
     geometry: {
       housingDiameter: point.diameter,
       housingDepth: camDepth,
-      pocketCenter,
+      pocketCenter: resolvedPocketCenter,
     },
     params: {
       depth: camDepth,
@@ -232,17 +300,20 @@ export interface DrillPointPair {
 export function buildConnectorPairFromDrillPoints(
   pair: DrillPointPair
 ): MinifixConnectorPair {
-  // First, compute cam pocket center (same formula as buildCamEntityFromDrillPoint)
-  // This is needed to compute arrow direction BEFORE building the cam entity
-  const camPos = tupleToVec3(pair.camPoint.position);
-  const camNormal = tupleToVec3(pair.camPoint.normal);
+  // Resolve the cam pocket centre ONCE, from the generator's declared value
+  // where it exists. Everything downstream — arrow direction, bolt axis, ball
+  // centre, and every rule that reads cam.geometry.pocketCenter — hangs off
+  // this single value. `panelHThickness` is the CAM's owning panel thickness:
+  // the gate resolves it per-panel via getPanelThicknessForPoint(ctx, cam, …)
+  // (validateMinifixConnector.ts:970, 979), which is the same panel the
+  // generator halves.
   const boltPos = tupleToVec3(pair.boltPoint.position);
-  const pocketCenterOffset = pair.camDepth / 2;
-  const camPocketCenter: Vec3 = {
-    x: camPos.x + camNormal.x * pocketCenterOffset,
-    y: camPos.y + camNormal.y * pocketCenterOffset,
-    z: camPos.z + camNormal.z * pocketCenterOffset,
-  };
+  const camPocketCenter: Vec3 = resolveCamPocketCenter({
+    camPoint: pair.camPoint,
+    boltPoint: pair.boltPoint,
+    camPanelThickness: pair.panelHThickness,
+    camDepth: pair.camDepth,
+  });
 
   // Compute arrow direction: from cam pocket center to bolt position
   // This MUST match what the validator expects: direction from C (pocketCenter) to A (bolt origin)
@@ -253,8 +324,13 @@ export function buildConnectorPairFromDrillPoints(
     ? [arrowVec.x / arrowLen, arrowVec.y / arrowLen, arrowVec.z / arrowLen]
     : [1, 0, 0]; // Fallback if zero (shouldn't happen in practice)
 
-  // Build cam entity with computed arrow direction
-  const cam = buildCamEntityFromDrillPoint(pair.camPoint, pair.camDepth, arrowDirection);
+  // Build cam entity with computed arrow direction and the resolved pocket centre
+  const cam = buildCamEntityFromDrillPoint(
+    pair.camPoint,
+    pair.camDepth,
+    arrowDirection,
+    camPocketCenter
+  );
 
   // Build bolt entity (ball should align with cam pocket center)
   const bolt = buildBoltEntityFromDrillPoint(

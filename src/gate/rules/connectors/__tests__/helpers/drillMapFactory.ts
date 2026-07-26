@@ -95,7 +95,12 @@ export function makePoint(overrides: PartialPoint & { id: string }): DrillMapPoi
  * Geometry defaults (Y-up):
  * - Position: [0, y, 0]
  * - Normal: [0, -1, 0] (drills down into horizontal panel)
- * - camDepth: 13.5mm → pocket center Y = y - 6.75 (18mm wood default)
+ * - Pocket centre Y = y − dim A = y − 9 for the 18mm panel these factories
+ *   declare (`makeDrillMap` → `dimensions.thickness: 18`, below). Dim A is
+ *   half the OWNING panel thickness — the generator's own convention
+ *   (generateDrillMap.ts:988, 1286, 1670, 1933) and Häfele's
+ *   (`minifixDefaults.ts:55` — `camHeight: 9 // 9mm - dimA`).
+ *   NOT camDepth/2 = 6.75.
  */
 export function makeCam(opts: {
   id?: string;
@@ -240,17 +245,34 @@ export function pairCamToBolt(
 }
 
 /**
+ * Dim A for the 18mm panel these factories declare
+ * (`makeDrillMap` sets `dimensions.thickness: 18` on every panel).
+ *
+ * The generator places the cam pocket centre at half the OWNING panel's
+ * thickness from the drill surface — generateDrillMap.ts:988 (OVERLAY), :1286
+ * (INSET), :1670 (shelf), :1933 (back panel) — which for 18mm stock is the 9mm
+ * Häfele calls dim A (`minifixDefaults.ts:55` — `camHeight: 9 // 9mm - dimA`;
+ * `CAM_DRILLING_SPECS[18].dimA = 9`, hardware/minifixDefaults.ts:47).
+ *
+ * These fixtures previously used camDepth/2 = 6.75, a convention nothing in
+ * this repo emits; it made "valid" pairs sit 2.25mm off the real pocket centre
+ * and silently inflated every makeYMismatchPair offset by the same 2.25mm.
+ */
+export const FIXTURE_PANEL_THICKNESS = 18;
+export const FIXTURE_CAM_DIM_A = FIXTURE_PANEL_THICKNESS / 2; // 9
+
+/**
  * Create a valid cam-bolt pair that should pass validation.
  *
  * Geometry (Y-up):
  * - Cam at [0, 100, 0] with normal [0, -1, 0]
- * - Cam pocket center Y = 100 - 6.75 = 93.25 (camDepth=13.5 for 18mm wood)
- * - Bolt at [10, 93.25, 0] so ball center Y matches cam pocket center
+ * - Cam pocket center Y = 100 - 9 = 91 (dim A for the 18mm panel)
+ * - Bolt at [10, 91, 0] so ball center Y matches cam pocket center
  * - Bolt normal [-1, 0, 0] points toward cam
  */
 export function makeValidPair(suffix = '1'): { cam: DrillMapPoint; bolt: DrillMapPoint } {
   const camY = 100;
-  const camPocketCenterY = camY - 13.5 / 2; // 93.25 (camDepth=13.5 for 18mm wood)
+  const camPocketCenterY = camY - FIXTURE_CAM_DIM_A; // 91
 
   const cam = makeCam({
     id: `cam-${suffix}`,
@@ -275,7 +297,7 @@ export function makeYMismatchPair(
   suffix = '1'
 ): { cam: DrillMapPoint; bolt: DrillMapPoint } {
   const camY = 100;
-  const camPocketCenterY = camY - 13.5 / 2; // 93.25 (camDepth=13.5 for 18mm wood)
+  const camPocketCenterY = camY - FIXTURE_CAM_DIM_A; // 91 (dim A for the 18mm panel)
 
   const cam = makeCam({
     id: `cam-${suffix}`,
@@ -376,7 +398,7 @@ export function makeValidPairWithFields(suffix = '1'): { cam: DrillMapPoint; bol
   bolt.depth = 12; // Realistic bolt depth for 18mm panel (leaves 6mm > 2mm min)
   // S16: declared fields ใช้ convention เดียวกับ generator จริง —
   // pocket center ที่ Dim A = ครึ่งความหนาแผ่น (18/2) ไม่ใช่ camDepth/2
-  const dimA = 18 / 2;
+  const dimA = FIXTURE_CAM_DIM_A;
   bolt.targetPocketCenter = [
     cam.position[0] + cam.normal[0] * dimA,
     cam.position[1] + cam.normal[1] * dimA,

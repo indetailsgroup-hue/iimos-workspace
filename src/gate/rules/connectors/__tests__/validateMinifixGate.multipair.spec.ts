@@ -25,6 +25,7 @@ import {
   v,
   AXIS,
   resetUidSequence,
+  FIXTURE_CAM_DIM_A,
 } from './helpers/drillMapFactory';
 import type { DrillMapPoint, DrillMap, Vec3Tuple } from '../../../../core/manufacturing/drillMap/types';
 
@@ -88,8 +89,12 @@ function buildScenarioDrillMap(scenarios: ScenarioKind[]): ScenarioResult {
 
     // Base Y position for cam (used to calculate pocket center)
     const baseY = 100;
-    // Cam pocket center Y = baseY - camDepth/2 = 100 - 6.75 = 93.25 (18mm wood)
-    const camPocketCenterY = baseY - 13.5 / 2;
+    // Cam pocket centre Y = baseY − dim A = 100 − 9 = 91.
+    // Dim A is half the OWNING panel thickness (18mm here — makeDrillMap
+    // declares `dimensions.thickness: 18`), which is what the generator emits
+    // (generateDrillMap.ts:988, 1286, 1670, 1933) and what Häfele specifies
+    // (minifixDefaults.ts:55 `camHeight: 9 // 9mm - dimA`). NOT camDepth/2.
+    const camPocketCenterY = baseY - FIXTURE_CAM_DIM_A;
 
     // Create cam with spread in Z for uniqueness
     const cam = makeCam({
