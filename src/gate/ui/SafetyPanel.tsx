@@ -15,6 +15,9 @@ import type { GateFinding, GateResult, Severity } from './gateTypes';
 import type { MinifixGateFinding } from '../rules/connectors/minifixConstraintTypes';
 import { SEVERITY_COLORS, SEVERITY_BG, countBySeverity } from './gateTypes';
 import { useDrillMapStore } from '../../core/store/useDrillMapStore';
+import type { DrillMap } from '../../core/manufacturing/drillMap/types';
+import type { ConnectorDensity } from '../../core/manufacturing/drillMap/generateDrillMap';
+import type { Cabinet } from '../../core/types/Cabinet';
 import { validateMinifixGate } from '../rules/connectors/validateMinifixConnector';
 import { validateG11FromDrillMap } from '../rules/gateG11_minifixSystem32';
 import { runConnectorOsAudit, type ConnectorAuditIssue } from '../rules/gateG11_connectorAudit';
@@ -154,17 +157,167 @@ function FindingCard({ finding, isSelected, onFocus, onApplyFix, onCopy }: Findi
  * success. `toGatePatches` passes the path through and refuses anything that
  * is not already correctly rooted.
  */
-export function minifixFindingToBlockerFinding(f: MinifixGateFinding): GateFinding {
+export function minifixFindingToGateFinding(f: MinifixGateFinding, severity: Severity): GateFinding {
   return {
     key: `${f.code}:${f.entityIds.join(',')}`,
     code: f.code,
     message: f.message,
-    severity: 'BLOCKER' as Severity,
+    severity,
     entityIds: f.entityIds,
     patch: toGatePatches(f.suggestedFix?.patch),
     context: {
       ...(f.measured || {}),
       ...(f.tolerance || {}),
+    },
+  };
+}
+
+/** ERROR → BLOCKER. Thin wrapper kept for the existing call sites and tests. */
+export function minifixFindingToBlockerFinding(f: MinifixGateFinding): GateFinding {
+  return minifixFindingToGateFinding(f, 'BLOCKER');
+}
+
+/**
+ * INFO → INFO, through the SAME mapper the blocker path uses.
+ *
+ * Before this existed, every INFO finding `validateMinifixGate` produced was
+ * dropped before display: `findings.info` was assembled from shadowInfo + G11 +
+ * the connector audit only. That silently swallowed
+ * `MONO_MINIFIX_BALL_AUTOCORRECTED_TO_POCKET` — the ONLY bolt/cam alignment
+ * report a production user can see, because BALL_TO_POCKET pins the ball centre
+ * onto the pocket centre so MONO_MINIFIX_Y_MISMATCH / MONO_MINIFIX_NOT_COAXIAL
+ * both measure exactly zero and can never fire — and
+ * `MONO_MINIFIX_POINT_STATUS_PROPAGATED`.
+ *
+ * The whole worth of that diagnostic is its `measured` payload
+ * (y_deviation_mm / radial_deviation_mm / axial_deviation_mm /
+ * auto_correction_distance_mm) and the `tolerance` it is judged against, so it
+ * goes through `minifixFindingToGateFinding`, which folds both into `context`
+ * exactly as the blocker path does. A finding that reaches the UI without its
+ * numbers is noise, not a surfaced finding.
+ *
+ * NOT de-duplicated: an OVERLAY cabinet emits one instance per cam/bolt pair
+ * (12 on the 4-corner + back fixture). The messages are byte-identical but the
+ * `entityIds` are not — each names a different pair and is what Focus acts on,
+ * and each carries that pair's own measured numbers. Collapsing them would have
+ * to pick ONE pair's measurements to display and discard eleven others, i.e.
+ * report numbers that are not the ones for the row shown. The `key` already
+ * embeds the entityIds, so the 12 rows have 12 distinct keys and React's list
+ * renders all of them; nothing is hidden by the renderer.
+ */
+export function minifixFindingToInfoFinding(f: MinifixGateFinding): GateFinding {
+  return minifixFindingToGateFinding(f, 'INFO');
+}
+
+/**
+ * Build the UI GateResult for a drill map.
+ *
+ * Extracted from `runGateValidation` for the same reason d38dbde2 extracted
+ * `minifixFindingToBlockerFinding`: this IS the conversion the panel performs,
+ * and it must be testable without rendering React (component tests in this
+ * repo have a known-flaky environment). `runGateValidation` now does nothing
+ * but read the two stores, call this, and store the verdict.
+ *
+ * Pure: no store reads, no clock beyond `runAt`.
+ */
+export function buildGateResult(
+  drillMap: DrillMap | null,
+  ctx: { cabinet: Cabinet | null; connectorDensity: ConnectorDensity },
+): GateResult {
+  const gateResult = validateMinifixGate(drillMap);
+  // Connector OS เป็นผู้ตรวจชั้นที่สอง (G11 rules + catalog/placer/compiler audit)
+  const g11Result = validateG11FromDrillMap(drillMap);
+  // ADR-061: severity ของ spacing ตาม density profile ที่ผู้ใช้เลือก
+  const connectorAudit = runConnectorOsAudit(drillMap, 'STANDARD', ctx.connectorDensity);
+  // ADR-061 ขั้น shadow: compiler สังเคราะห์คู่ขนาน เทียบ parity (ยังไม่สลับตัวสร้าง)
+  const shadow = runShadowCompare(drillMap);
+  // ADR-061(c): world-coordinate parity — synthesis จาก cabinet geometry ล้วน เทียบ drill map จริง
+  const world = ctx.cabinet
+    ? compareWorldParity(ctx.cabinet, drillMap, { density: ctx.connectorDensity })
+    : null;
+
+  const g11ToFinding = (i: (typeof g11Result.issues)[number]): GateFinding => ({
+    key: `${i.code}:${(i.drillPointIds ?? i.panelIds ?? []).join(',')}`,
+    code: i.code,
+    message: i.message,
+    severity: (i.severity === 'BLOCKER' ? 'BLOCKER' : i.severity === 'WARNING' ? 'WARNING' : 'INFO') as Severity,
+    entityIds: i.drillPointIds ?? i.panelIds ?? [],
+    context: i.context as Record<string, unknown> | undefined,
+  });
+  const auditToFinding = (i: ConnectorAuditIssue): GateFinding => ({
+    key: `${i.code}:${i.entityIds.slice(0, 4).join(',')}`,
+    code: i.code,
+    message: i.message,
+    severity: i.severity as Severity,
+    entityIds: i.entityIds,
+    context: i.measured,
+  });
+
+  const extraBlockers = [
+    ...g11Result.issues.filter(i => i.severity === 'BLOCKER').map(g11ToFinding),
+    ...connectorAudit.issues.filter(i => i.severity === 'BLOCKER').map(auditToFinding),
+  ];
+  const extraWarnings = [
+    ...g11Result.issues.filter(i => i.severity === 'WARNING').map(g11ToFinding),
+    ...connectorAudit.issues.filter(i => i.severity === 'WARNING').map(auditToFinding),
+  ];
+  const shadowInfo: GateFinding[] = shadow.jointsCompared > 0 ? [{
+    key: 'CONNECTOR_OS_SHADOW',
+    code: 'CONNECTOR_OS_SHADOW',
+    message: `Shadow compiler parity: ${shadow.jointsMatched}/${shadow.jointsCompared} joints ตรง` +
+      (world ? ` · world-coord: ${world.matched}/${world.compared} bores (Δmax ${world.maxDeltaMm.toFixed(2)}mm${world.skippedCorners.length > 0 ? `, skip ${world.skippedCorners.length} corner` : ''})` : '') +
+      ' — สลับตัวสร้างได้เมื่อเต็มทุกตู้',
+    severity: 'INFO' as Severity,
+    entityIds: [],
+    context: { jointsMatched: shadow.jointsMatched, jointsCompared: shadow.jointsCompared },
+  }] : [];
+
+  const extraInfo = [
+    ...shadowInfo,
+    ...g11Result.issues.filter(i => i.severity !== 'BLOCKER' && i.severity !== 'WARNING').map(g11ToFinding),
+    ...connectorAudit.issues.filter(i => i.severity === 'INFO').map(auditToFinding),
+  ];
+
+  // Convert MinifixGateResult to GateResult format
+  return {
+    passed: gateResult.status === 'PASS' && g11Result.status === 'PASS' && connectorAudit.status === 'PASS',
+    runAt: new Date().toISOString(),
+    policyVersion: 'minifix-v1.0+g11-connector-os-v1.1',
+    findings: {
+      blockers: [
+        ...gateResult.findings
+          .filter(f => f.severity === 'ERROR')
+          .map(minifixFindingToBlockerFinding),
+        ...extraBlockers,
+      ],
+      warnings: [
+        ...gateResult.findings
+          .filter(f => f.severity === 'WARNING')
+          .map(f => ({
+            key: `${f.code}:${f.entityIds.join(',')}`,
+            code: f.code,
+            message: f.message,
+            severity: 'WARNING' as Severity,
+            entityIds: f.entityIds,
+            context: f.measured,
+          })),
+        ...extraWarnings,
+      ],
+      // Minifix INFO first, mirroring the blockers/warnings buckets above
+      // (producer findings, then the second-layer extras).
+      info: [
+        ...gateResult.findings
+          .filter(f => f.severity === 'INFO')
+          .map(minifixFindingToInfoFinding),
+        ...extraInfo,
+      ],
+    },
+    metrics: {
+      errors: gateResult.summary.errors + g11Result.summary.blockers + connectorAudit.summary.blockers,
+      warnings: gateResult.summary.warnings + g11Result.summary.warnings + connectorAudit.summary.warnings,
+      connectorJointsAudited: connectorAudit.summary.jointsAudited,
+      // Coverage of this run — a verdict over zero points proves nothing.
+      pointsValidated: g11Result.summary.pointsValidated,
     },
   };
 }
@@ -198,95 +351,10 @@ export function runGateValidation(): Promise<void> {
   // Run validation (synchronous, but we use setTimeout to allow UI to update)
   setTimeout(() => {
     try {
-      const gateResult = validateMinifixGate(drillMap);
-      // Connector OS เป็นผู้ตรวจชั้นที่สอง (G11 rules + catalog/placer/compiler audit)
-      const g11Result = validateG11FromDrillMap(drillMap);
-      // ADR-061: severity ของ spacing ตาม density profile ที่ผู้ใช้เลือก
-      const connectorDensity = useDrillMapStore.getState().connectorDensity;
-      const connectorAudit = runConnectorOsAudit(drillMap, 'STANDARD', connectorDensity);
-      // ADR-061 ขั้น shadow: compiler สังเคราะห์คู่ขนาน เทียบ parity (ยังไม่สลับตัวสร้าง)
-      const shadow = runShadowCompare(drillMap);
-      // ADR-061(c): world-coordinate parity — synthesis จาก cabinet geometry ล้วน เทียบ drill map จริง
-      const activeCab = useCabinetStore.getState().cabinet;
-      const world = activeCab ? compareWorldParity(activeCab, drillMap, { density: connectorDensity }) : null;
-
-      const g11ToFinding = (i: (typeof g11Result.issues)[number]): GateFinding => ({
-        key: `${i.code}:${(i.drillPointIds ?? i.panelIds ?? []).join(',')}`,
-        code: i.code,
-        message: i.message,
-        severity: (i.severity === 'BLOCKER' ? 'BLOCKER' : i.severity === 'WARNING' ? 'WARNING' : 'INFO') as Severity,
-        entityIds: i.drillPointIds ?? i.panelIds ?? [],
-        context: i.context as Record<string, unknown> | undefined,
+      const result = buildGateResult(drillMap, {
+        cabinet: useCabinetStore.getState().cabinet,
+        connectorDensity: useDrillMapStore.getState().connectorDensity,
       });
-      const auditToFinding = (i: ConnectorAuditIssue): GateFinding => ({
-        key: `${i.code}:${i.entityIds.slice(0, 4).join(',')}`,
-        code: i.code,
-        message: i.message,
-        severity: i.severity as Severity,
-        entityIds: i.entityIds,
-        context: i.measured,
-      });
-
-      const extraBlockers = [
-        ...g11Result.issues.filter(i => i.severity === 'BLOCKER').map(g11ToFinding),
-        ...connectorAudit.issues.filter(i => i.severity === 'BLOCKER').map(auditToFinding),
-      ];
-      const extraWarnings = [
-        ...g11Result.issues.filter(i => i.severity === 'WARNING').map(g11ToFinding),
-        ...connectorAudit.issues.filter(i => i.severity === 'WARNING').map(auditToFinding),
-      ];
-      const shadowInfo: GateFinding[] = shadow.jointsCompared > 0 ? [{
-        key: 'CONNECTOR_OS_SHADOW',
-        code: 'CONNECTOR_OS_SHADOW',
-        message: `Shadow compiler parity: ${shadow.jointsMatched}/${shadow.jointsCompared} joints ตรง` +
-          (world ? ` · world-coord: ${world.matched}/${world.compared} bores (Δmax ${world.maxDeltaMm.toFixed(2)}mm${world.skippedCorners.length > 0 ? `, skip ${world.skippedCorners.length} corner` : ''})` : '') +
-          ' — สลับตัวสร้างได้เมื่อเต็มทุกตู้',
-        severity: 'INFO' as Severity,
-        entityIds: [],
-        context: { jointsMatched: shadow.jointsMatched, jointsCompared: shadow.jointsCompared },
-      }] : [];
-
-      const extraInfo = [
-        ...shadowInfo,
-        ...g11Result.issues.filter(i => i.severity !== 'BLOCKER' && i.severity !== 'WARNING').map(g11ToFinding),
-        ...connectorAudit.issues.filter(i => i.severity === 'INFO').map(auditToFinding),
-      ];
-
-      // Convert MinifixGateResult to GateResult format
-      const result: GateResult = {
-        passed: gateResult.status === 'PASS' && g11Result.status === 'PASS' && connectorAudit.status === 'PASS',
-        runAt: new Date().toISOString(),
-        policyVersion: 'minifix-v1.0+g11-connector-os-v1.1',
-        findings: {
-          blockers: [
-            ...gateResult.findings
-              .filter(f => f.severity === 'ERROR')
-              .map(minifixFindingToBlockerFinding),
-            ...extraBlockers,
-          ],
-          warnings: [
-            ...gateResult.findings
-              .filter(f => f.severity === 'WARNING')
-              .map(f => ({
-                key: `${f.code}:${f.entityIds.join(',')}`,
-                code: f.code,
-                message: f.message,
-                severity: 'WARNING' as Severity,
-                entityIds: f.entityIds,
-                context: f.measured,
-              })),
-            ...extraWarnings,
-          ],
-          info: extraInfo,
-        },
-        metrics: {
-          errors: gateResult.summary.errors + g11Result.summary.blockers + connectorAudit.summary.blockers,
-          warnings: gateResult.summary.warnings + g11Result.summary.warnings + connectorAudit.summary.warnings,
-          connectorJointsAudited: connectorAudit.summary.jointsAudited,
-          // Coverage of this run — a verdict over zero points proves nothing.
-          pointsValidated: g11Result.summary.pointsValidated,
-        },
-      };
 
       // T8a: hand the store the EXACT map this verdict was computed from.
       // `drillMap` was captured before this setTimeout; the store's legacy
@@ -294,9 +362,11 @@ export function runGateValidation(): Promise<void> {
       // inside the ~50ms window would stamp a stale verdict as fresh —
       // fail-open in the wrong direction for a safety gate.
       setResult(result, drillMap);
-      console.log('[SafetyPanel] Gate validation completed:', gateResult.status,
-        '| G11:', g11Result.status, `(${g11Result.issues.length} issues)`,
-        '| ConnectorOS:', connectorAudit.status, `(${connectorAudit.summary.jointsAudited} joints)`);
+      console.log('[SafetyPanel] Gate validation completed:', result.passed ? 'PASS' : 'FAIL',
+        `| blockers: ${result.findings.blockers.length}`,
+        `| warnings: ${result.findings.warnings.length}`,
+        `| info: ${result.findings.info.length}`,
+        `| joints audited: ${result.metrics?.connectorJointsAudited ?? 0}`);
     } catch (error) {
       console.error('[SafetyPanel] Gate validation error:', error);
       // Fail closed (G2): a crashed run must NOT leave the previous verdict
