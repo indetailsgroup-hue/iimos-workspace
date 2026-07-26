@@ -4,12 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from enum import Enum
+from fractions import Fraction
 import math
 from numbers import Real
 import re
 
-from .registry_models import LifecycleState, Registry
+from .registry_models import (
+    LifecycleState,
+    Registry,
+    VerificationDimension,
+    VerificationState,
+)
 
 
 class Verdict(str, Enum):
@@ -784,17 +791,26 @@ class CabinetEvaluation:
                     "or reasons"
                 )
         elif self.verdict is Verdict.CONDITIONALLY_QUALIFIED:
+            expected_reason_codes = (
+                (
+                    ("REINFORCEMENT_REQUIRED",)
+                    if reinforcements
+                    else ()
+                )
+                + (("ANCHOR_REQUIRED",) if anchors else ())
+            )
             if (
                 not policy_ids
                 or not placements
                 or not evidence_ids
                 or not (reinforcements or anchors)
-                or not reason_codes
+                or reason_codes != expected_reason_codes
                 or selected_policy_ids != policy_ids
             ):
                 raise ValueError(
                     "CONDITIONALLY_QUALIFIED requires matching policies, "
-                    "placements, evidence, requirements and reasons"
+                    "placements, evidence, and exact requirement-category "
+                    "reasons"
                 )
         elif (
             policy_ids
@@ -917,6 +933,70 @@ def _cabinet_refusal(
     )
 
 
+def _checked_connector_layout(
+    axis_length: Real,
+    max_spacing_mm: Real,
+    min_connector_count: int,
+    max_connector_count: int,
+) -> tuple[int, float | None, str | None]:
+    """Return count and safely representable spacing without float division.
+
+    Accepted floats use their canonical shortest decimal spelling as the
+    governed boundary. Exact decimal 0.918 / 0.102 is therefore nine, while
+    the next float above 0.918 remains above nine. Integer-ratio arithmetic
+    keeps the ceiling total when the finite quotient exceeds float range.
+    """
+
+    def canonical_ratio(value: Real) -> tuple[int, int]:
+        try:
+            decimal_value = Decimal(str(value))
+            return decimal_value.as_integer_ratio()
+        except (InvalidOperation, ValueError):
+            ratio_method = getattr(value, "as_integer_ratio", None)
+            if ratio_method is not None:
+                numerator, denominator = ratio_method()
+                return int(numerator), int(denominator)
+            fraction = Fraction(value)
+            return fraction.numerator, fraction.denominator
+
+    axis_numerator, axis_denominator = canonical_ratio(axis_length)
+    spacing_numerator, spacing_denominator = canonical_ratio(
+        max_spacing_mm
+    )
+    quotient_numerator = axis_numerator * spacing_denominator
+    quotient_denominator = axis_denominator * spacing_numerator
+    quotient_ceiling = (
+        quotient_numerator + quotient_denominator - 1
+    ) // quotient_denominator
+    connector_count = max(
+        min_connector_count,
+        quotient_ceiling + 1,
+    )
+
+    if connector_count > max_connector_count:
+        return connector_count, None, None
+
+    exact_spacing = Fraction(
+        axis_numerator,
+        axis_denominator * (connector_count - 1),
+    )
+    try:
+        spacing_mm = float(exact_spacing)
+    except (OverflowError, ValueError):
+        return (
+            connector_count,
+            None,
+            "PARAMETRIC_ARITHMETIC_UNREPRESENTABLE",
+        )
+    if not math.isfinite(spacing_mm) or spacing_mm <= 0:
+        return (
+            connector_count,
+            None,
+            "PARAMETRIC_ARITHMETIC_UNREPRESENTABLE",
+        )
+    return connector_count, spacing_mm, None
+
+
 def evaluate_cabinet(
     cabinet: CabinetConfiguration,
     registry: Registry,
@@ -947,12 +1027,26 @@ def evaluate_cabinet(
     policy_snapshot = _copy_policies(policies)
 
     missing_skus: list[str] = []
-    unavailable_skus: list[str] = []
+    pending_sku_lifecycles: list[str] = []
+    unavailable_sku_lifecycles: list[str] = []
+    unavailable_models: list[str] = []
     for joint in cabinet.joints:
         sku = registry.get_sku(joint.connector_sku_id)
         if sku is None:
             missing_skus.append(joint.connector_sku_id)
             continue
+        sku_lifecycle = sku.verification[
+            VerificationDimension.LIFECYCLE
+        ]
+        if sku_lifecycle is VerificationState.PENDING:
+            pending_sku_lifecycles.append(joint.connector_sku_id)
+        elif sku_lifecycle in (
+            VerificationState.DISCONTINUED,
+            VerificationState.BLOCKED,
+        ):
+            unavailable_sku_lifecycles.append(
+                joint.connector_sku_id
+            )
         model = registry.get_model(sku.model_id)
         if model is None:
             missing_skus.append(joint.connector_sku_id)
@@ -961,13 +1055,26 @@ def evaluate_cabinet(
             LifecycleState.ACTIVE,
             LifecycleState.REGION_ONLY,
         ):
-            unavailable_skus.append(joint.connector_sku_id)
+            unavailable_models.append(joint.connector_sku_id)
     if missing_skus:
         return _cabinet_refusal(
             Verdict.INSUFFICIENT_EVIDENCE,
             ("EXACT_CONNECTOR_SKU_NOT_FOUND",),
         )
-    if unavailable_skus:
+    if pending_sku_lifecycles:
+        return _cabinet_refusal(
+            Verdict.INSUFFICIENT_EVIDENCE,
+            ("EXACT_CONNECTOR_SKU_LIFECYCLE_PENDING",),
+        )
+    if unavailable_sku_lifecycles:
+        return _cabinet_refusal(
+            Verdict.DISCONTINUED_OR_UNORDERABLE,
+            (
+                "EXACT_CONNECTOR_SKU_"
+                "DISCONTINUED_OR_UNORDERABLE",
+            ),
+        )
+    if unavailable_models:
         return _cabinet_refusal(
             Verdict.DISCONTINUED_OR_UNORDERABLE,
             ("EXACT_CONNECTOR_DISCONTINUED_OR_UNORDERABLE",),
@@ -1064,10 +1171,21 @@ def evaluate_cabinet(
             SpacingAxis.DEPTH: cabinet.depth_mm,
             SpacingAxis.HEIGHT: cabinet.height_mm,
         }[policy.spacing_axis]
-        connector_count = max(
+        (
+            connector_count,
+            spacing_mm,
+            arithmetic_reason,
+        ) = _checked_connector_layout(
+            axis_length,
+            policy.max_spacing_mm,
             policy.min_connector_count,
-            math.ceil(axis_length / policy.max_spacing_mm) + 1,
+            policy.max_connector_count,
         )
+        if arithmetic_reason is not None:
+            return _cabinet_refusal(
+                Verdict.UNQUALIFIED,
+                (arithmetic_reason,),
+            )
         has_condition = (
             policy.reinforcement_requirement is not None
             or policy.anchor_requirement is not None
@@ -1091,7 +1209,7 @@ def evaluate_cabinet(
                 connector_sku_id=joint.connector_sku_id,
                 policy_id=policy.policy_id,
                 connector_count=connector_count,
-                spacing_mm=axis_length / (connector_count - 1),
+                spacing_mm=spacing_mm,
             )
         placements.append(placement)
 

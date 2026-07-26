@@ -138,6 +138,7 @@ def make_registry(
     *,
     lifecycle: LifecycleState = LifecycleState.ACTIVE,
     connector_sku_id: str = CONNECTOR_SKU_ID,
+    sku_lifecycle: VerificationState = VerificationState.VERIFIED,
 ) -> Registry:
     model = ProductModel(
         model_id=MODEL_ID,
@@ -153,7 +154,11 @@ def make_registry(
         region="EU",
         pack_qty=1,
         verification={
-            dimension: VerificationState.VERIFIED
+            dimension: (
+                sku_lifecycle
+                if dimension is VerificationDimension.LIFECYCLE
+                else VerificationState.VERIFIED
+            )
             for dimension in VerificationDimension
         },
     )
@@ -685,6 +690,100 @@ class PlacementAndEvaluationValidationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     CabinetEvaluation(**arguments)
 
+    def test_conditional_reasons_exactly_match_requirement_categories(
+        self,
+    ) -> None:
+        placement = ConnectorPlacement(
+            joint_index=0,
+            connector_sku_id=CONNECTOR_SKU_ID,
+            policy_id=POLICY_ID,
+            connector_count=3,
+            spacing_mm=300.0,
+        )
+        common = {
+            "verdict": Verdict.CONDITIONALLY_QUALIFIED,
+            "policy_ids": (POLICY_ID,),
+            "placements": (placement,),
+            "evidence_assertion_ids": (POLICY_EVIDENCE_ID,),
+        }
+        valid_cases = (
+            (
+                ("Add evidenced rail",),
+                (),
+                ("REINFORCEMENT_REQUIRED",),
+            ),
+            (
+                (),
+                ("Use evidenced anchor",),
+                ("ANCHOR_REQUIRED",),
+            ),
+            (
+                ("Add evidenced rail",),
+                ("Use evidenced anchor",),
+                (
+                    "REINFORCEMENT_REQUIRED",
+                    "ANCHOR_REQUIRED",
+                ),
+            ),
+        )
+        for reinforcements, anchors, reasons in valid_cases:
+            with self.subTest(valid=(reinforcements, anchors, reasons)):
+                result = CabinetEvaluation(
+                    reinforcement_requirements=reinforcements,
+                    anchor_requirements=anchors,
+                    reason_codes=reasons,
+                    **common,
+                )
+                self.assertEqual(reasons, result.reason_codes)
+
+        invalid_cases = (
+            (
+                ("Add evidenced rail",),
+                (),
+                ("ANCHOR_REQUIRED",),
+            ),
+            (
+                (),
+                ("Use evidenced anchor",),
+                ("REINFORCEMENT_REQUIRED",),
+            ),
+            (
+                ("Add evidenced rail",),
+                ("Use evidenced anchor",),
+                ("REINFORCEMENT_REQUIRED",),
+            ),
+            (
+                ("Add evidenced rail",),
+                (),
+                (
+                    "REINFORCEMENT_REQUIRED",
+                    "ANCHOR_REQUIRED",
+                ),
+            ),
+            (
+                ("Add evidenced rail",),
+                (),
+                ("UNKNOWN_CONDITION",),
+            ),
+            (
+                ("Add evidenced rail",),
+                ("Use evidenced anchor",),
+                (
+                    "ANCHOR_REQUIRED",
+                    "REINFORCEMENT_REQUIRED",
+                ),
+            ),
+        )
+        for reinforcements, anchors, reasons in invalid_cases:
+            with self.subTest(invalid=(reinforcements, anchors, reasons)):
+                with self.assertRaises(ValueError):
+                    CabinetEvaluation(
+                        reinforcement_requirements=reinforcements,
+                        anchor_requirements=anchors,
+                        reason_codes=reasons,
+                        **common,
+                    )
+
     def test_refusals_require_reasons_and_forbid_manufacturing_authority(
         self,
     ) -> None:
@@ -807,6 +906,70 @@ class CabinetEvaluationBehaviorTests(unittest.TestCase):
                     result.reason_codes,
                 )
                 self.assertEqual((), result.placements)
+
+    def test_sku_lifecycle_evidence_is_gated_independently_from_model(
+        self,
+    ) -> None:
+        for state in (
+            VerificationState.VERIFIED,
+            VerificationState.REGION_ONLY,
+        ):
+            with self.subTest(state=state):
+                result = evaluate(
+                    registry=make_registry(
+                        lifecycle=LifecycleState.ACTIVE,
+                        sku_lifecycle=state,
+                    )
+                )
+                self.assertEqual(Verdict.QUALIFIED, result.verdict)
+
+        pending = evaluate(
+            registry=make_registry(
+                lifecycle=LifecycleState.ACTIVE,
+                sku_lifecycle=VerificationState.PENDING,
+            )
+        )
+        self.assertEqual(
+            Verdict.INSUFFICIENT_EVIDENCE,
+            pending.verdict,
+        )
+        self.assertEqual(
+            ("EXACT_CONNECTOR_SKU_LIFECYCLE_PENDING",),
+            pending.reason_codes,
+        )
+        self.assertEqual((), pending.policy_ids)
+        self.assertEqual((), pending.placements)
+        self.assertEqual((), pending.reinforcement_requirements)
+        self.assertEqual((), pending.anchor_requirements)
+        self.assertEqual((), pending.evidence_assertion_ids)
+
+        for state in (
+            VerificationState.DISCONTINUED,
+            VerificationState.BLOCKED,
+        ):
+            with self.subTest(state=state):
+                result = evaluate(
+                    registry=make_registry(
+                        lifecycle=LifecycleState.ACTIVE,
+                        sku_lifecycle=state,
+                    )
+                )
+                self.assertEqual(
+                    Verdict.DISCONTINUED_OR_UNORDERABLE,
+                    result.verdict,
+                )
+                self.assertEqual(
+                    (
+                        "EXACT_CONNECTOR_SKU_"
+                        "DISCONTINUED_OR_UNORDERABLE",
+                    ),
+                    result.reason_codes,
+                )
+                self.assertEqual((), result.policy_ids)
+                self.assertEqual((), result.placements)
+                self.assertEqual((), result.reinforcement_requirements)
+                self.assertEqual((), result.anchor_requirements)
+                self.assertEqual((), result.evidence_assertion_ids)
 
     def test_machine_capabilities_are_exact_canonical_frozenset(
         self,
@@ -1072,6 +1235,125 @@ class CabinetEvaluationBehaviorTests(unittest.TestCase):
         )
         self.assertEqual(5, minimum.placements[0].connector_count)
         self.assertEqual(150.0, minimum.placements[0].spacing_mm)
+
+    def test_decimal_boundary_and_immediate_ulp_above_are_distinct(
+        self,
+    ) -> None:
+        policy = make_policy(
+            width_min_mm=0.1,
+            width_max_mm=1.0,
+            max_spacing_mm=0.102,
+            max_connector_count=20,
+        )
+        boundary = evaluate(
+            make_cabinet(width_mm=0.918),
+            policies=(policy,),
+        )
+        self.assertEqual(10, boundary.placements[0].connector_count)
+        self.assertEqual(0.102, boundary.placements[0].spacing_mm)
+
+        immediately_above = math.nextafter(0.918, math.inf)
+        above = evaluate(
+            make_cabinet(width_mm=immediately_above),
+            policies=(policy,),
+        )
+        self.assertEqual(11, above.placements[0].connector_count)
+        self.assertGreater(above.placements[0].spacing_mm, 0.0)
+        self.assertLessEqual(
+            above.placements[0].spacing_mm,
+            policy.max_spacing_mm,
+        )
+
+    def test_extreme_finite_ratio_refuses_or_conditions_without_error(
+        self,
+    ) -> None:
+        cabinet = make_cabinet(width_mm=1e308)
+        policy_arguments = {
+            "width_min_mm": 1e308,
+            "width_max_mm": 1e308,
+            "max_spacing_mm": 1e-308,
+            "max_connector_count": 8,
+        }
+
+        refusal = evaluate(
+            cabinet,
+            policies=(make_policy(**policy_arguments),),
+        )
+        self.assertEqual(Verdict.UNQUALIFIED, refusal.verdict)
+        self.assertEqual(
+            ("CONNECTOR_COUNT_EXCEEDS_POLICY",),
+            refusal.reason_codes,
+        )
+        self.assertEqual((), refusal.placements)
+
+        conditional = evaluate(
+            cabinet,
+            policies=(
+                make_policy(
+                    reinforcement_requirement=(
+                        "Add evidenced extreme-span reinforcement"
+                    ),
+                    **policy_arguments,
+                ),
+            ),
+        )
+        self.assertEqual(
+            Verdict.CONDITIONALLY_QUALIFIED,
+            conditional.verdict,
+        )
+        self.assertIsNone(conditional.placements[0].connector_count)
+        self.assertIsNone(conditional.placements[0].spacing_mm)
+
+    def test_extreme_finite_ratio_can_emit_representable_spacing(
+        self,
+    ) -> None:
+        expected_count = 10**616 + 1
+        result = evaluate(
+            make_cabinet(width_mm=1e308),
+            policies=(
+                make_policy(
+                    width_min_mm=1e308,
+                    width_max_mm=1e308,
+                    max_spacing_mm=1e-308,
+                    max_connector_count=expected_count,
+                ),
+            ),
+        )
+
+        self.assertEqual(Verdict.QUALIFIED, result.verdict)
+        self.assertEqual(
+            expected_count,
+            result.placements[0].connector_count,
+        )
+        self.assertEqual(1e-308, result.placements[0].spacing_mm)
+
+    def test_unrepresentable_derived_spacing_refuses_without_authority(
+        self,
+    ) -> None:
+        smallest_positive = math.nextafter(0.0, math.inf)
+        result = evaluate(
+            make_cabinet(width_mm=smallest_positive),
+            policies=(
+                make_policy(
+                    width_min_mm=smallest_positive,
+                    width_max_mm=smallest_positive,
+                    max_spacing_mm=1.0,
+                    min_connector_count=4,
+                    max_connector_count=4,
+                ),
+            ),
+        )
+
+        self.assertEqual(Verdict.UNQUALIFIED, result.verdict)
+        self.assertEqual(
+            ("PARAMETRIC_ARITHMETIC_UNREPRESENTABLE",),
+            result.reason_codes,
+        )
+        self.assertEqual((), result.policy_ids)
+        self.assertEqual((), result.placements)
+        self.assertEqual((), result.reinforcement_requirements)
+        self.assertEqual((), result.anchor_requirements)
+        self.assertEqual((), result.evidence_assertion_ids)
 
     def test_excess_count_without_evidenced_condition_refuses(self) -> None:
         result = evaluate(
