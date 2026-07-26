@@ -11,7 +11,8 @@
  */
 
 import { useCallback, useMemo } from 'react';
-import { useGateStore, selectHasBlockers } from './gateStore';
+import { useGateStore, selectHasBlockers, isGateResultFresh } from './gateStore';
+import { useDrillMapStore } from '../../core/store/useDrillMapStore';
 import { openSafetyTab } from '../../designer/state/useIntentPanelStore';
 import type { GateResult, GateFinding } from './gateTypes';
 
@@ -31,6 +32,20 @@ export interface ExportGateStatus {
 
   /** Has gate been run at all */
   hasRun: boolean;
+
+  /**
+   * Is the stored verdict fresh for the CURRENT drill map?
+   *
+   * Freshness key = drill-map OBJECT IDENTITY: true only while the drillMap
+   * object the verdict was validated against is still (===) the one held by
+   * useDrillMapStore. Replacing or clearing the drill map flips this to
+   * false while hasRun stays true. Fail-closed: false before any run.
+   *
+   * NOTE (T7): informational only for now — canFreeze/canRelease/canExport
+   * deliberately keep their existing semantics. A later task wires `fresh`
+   * into enforcement/UI.
+   */
+  fresh: boolean;
 
   /** Is validation currently running */
   isRunning: boolean;
@@ -65,6 +80,10 @@ export function useExportGate(): ExportGateStatus & ExportGateActions {
   const isRunning = useGateStore((s) => s.isRunning);
   const hasBlockers = useGateStore(selectHasBlockers);
   const selectFinding = useGateStore((s) => s.selectFinding);
+  // Freshness inputs — subscribe to BOTH stores so consumers re-render the
+  // moment the drill map object is replaced (setDrillMap always replaces).
+  const validatedRef = useGateStore((s) => s.validatedDrillMapRef);
+  const currentDrillMap = useDrillMapStore((s) => s.drillMap);
 
   // Derived values
   const status = useMemo<ExportGateStatus>(() => {
@@ -75,18 +94,23 @@ export function useExportGate(): ExportGateStatus & ExportGateActions {
     // Core rule: No blockers = can proceed
     const canProceed = hasRun && blockers.length === 0;
 
+    // Fresh = verdict exists AND was validated against the exact object the
+    // drill map store currently holds (identity, fail-closed on null).
+    const fresh = hasRun && validatedRef !== null && validatedRef === currentDrillMap;
+
     return {
       canFreeze: canProceed,
       canRelease: canProceed,
       canExport: canProceed,
       hasRun,
+      fresh,
       isRunning,
       blockerCount: blockers.length,
       warningCount: warnings.length,
       blockers,
       result,
     };
-  }, [result, isRunning]);
+  }, [result, isRunning, validatedRef, currentDrillMap]);
 
   // Actions
   const openFirstBlocker = useCallback(() => {
@@ -145,6 +169,7 @@ export function getExportGateStatus(): ExportGateStatus {
     canRelease: canProceed,
     canExport: canProceed,
     hasRun,
+    fresh: isGateResultFresh(),
     isRunning: state.isRunning,
     blockerCount: blockers.length,
     warningCount: warnings.length,

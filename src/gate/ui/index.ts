@@ -10,7 +10,13 @@
 export * from './gateTypes';
 
 // Store
-export { useGateStore, useGatePassed, useSelectedFinding } from './gateStore';
+export {
+  useGateStore,
+  useGatePassed,
+  useSelectedFinding,
+  isGateResultFresh,
+  useGateFreshness,
+} from './gateStore';
 export type { GateUIState, GateUIActions } from './gateTypes';
 
 // GateProvider Context (Phase 4)

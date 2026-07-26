@@ -8,6 +8,8 @@
  */
 
 import { create } from 'zustand';
+import type { DrillMap } from '../../core/manufacturing/drillMap/types';
+import { useDrillMapStore } from '../../core/store/useDrillMapStore';
 import type { GateResult, GateUIState, GateUIActions } from './gateTypes';
 
 // ============================================
@@ -19,6 +21,7 @@ const initialState: GateUIState = {
   isRunning: false,
   selectedFindingKey: null,
   selectedEntityIds: [],
+  validatedDrillMapRef: null,
 };
 
 // ============================================
@@ -33,8 +36,16 @@ export const useGateStore = create<GateUIState & GateUIActions>((set, get) => ({
   // Actions
   // ────────────────────────────────────────────────────────────────────────
 
-  setResult: (result: GateResult) => {
-    set({ lastResult: result, isRunning: false });
+  setResult: (result: GateResult, validatedDrillMap?: DrillMap | null) => {
+    // Capture the drillMap the verdict was computed from. Explicit param wins
+    // (including explicit null = "validated against no drill map"); legacy
+    // single-arg callers (SafetyPanel) fall back to the current store object.
+    const validatedDrillMapRef =
+      validatedDrillMap !== undefined
+        ? validatedDrillMap
+        : useDrillMapStore.getState().drillMap;
+
+    set({ lastResult: result, isRunning: false, validatedDrillMapRef });
     console.log(
       `[GateStore] Result: ${result.passed ? 'PASSED' : 'FAILED'} ` +
       `(${result.findings.blockers.length} blockers, ` +
@@ -96,8 +107,43 @@ export const selectTotalFindingCount = (s: GateUIState): number => {
 };
 
 // ============================================
+// FRESHNESS (drill-map object identity)
+// ============================================
+
+/**
+ * Is the stored verdict fresh for the CURRENT drill map?
+ *
+ * Fresh = a result exists AND the drillMap object it was validated against
+ * is still, by identity (===), the object held by useDrillMapStore.
+ *
+ * Fail-closed: no result, no captured ref (null), or a replaced/cleared
+ * drill map all report stale. Non-hook — safe for imperative code.
+ */
+export function isGateResultFresh(): boolean {
+  const s = useGateStore.getState();
+  return (
+    s.lastResult !== null &&
+    s.validatedDrillMapRef !== null &&
+    s.validatedDrillMapRef === useDrillMapStore.getState().drillMap
+  );
+}
+
+// ============================================
 // HOOKS
 // ============================================
+
+/**
+ * Hook: Reactive version of isGateResultFresh().
+ *
+ * Subscribes to BOTH stores (gate ref + current drillMap) so consumers
+ * re-render the moment the drill map object is replaced or cleared.
+ */
+export function useGateFreshness(): boolean {
+  const hasResult = useGateStore(s => s.lastResult !== null);
+  const validatedRef = useGateStore(s => s.validatedDrillMapRef);
+  const currentDrillMap = useDrillMapStore(s => s.drillMap);
+  return hasResult && validatedRef !== null && validatedRef === currentDrillMap;
+}
 
 /**
  * Hook: Get pass/fail status

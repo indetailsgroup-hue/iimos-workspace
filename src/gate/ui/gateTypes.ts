@@ -9,6 +9,7 @@
 
 import type { GateIssue } from '../../spec/types';
 import type { Severity } from '../../spec/types';
+import type { DrillMap } from '../../core/manufacturing/drillMap/types';
 
 // Re-export Severity for consumers
 export type { Severity } from '../../spec/types';
@@ -92,14 +93,36 @@ export interface GateUIState {
   selectedFindingKey: string | null;
   /** Entity IDs from selected finding (for highlights) */
   selectedEntityIds: string[];
+  /**
+   * The exact drillMap object that lastResult was validated against.
+   *
+   * Freshness key = OBJECT IDENTITY: the verdict is fresh only while
+   * useDrillMapStore.getState().drillMap === validatedDrillMapRef.
+   * Deliberately NOT drillMapVersion — setDrillMap replaces the object
+   * without bumping the version, and unrelated resets DO bump it.
+   *
+   * Never persist this field: an object reference cannot survive
+   * serialization, so a rehydrated verdict must always report stale.
+   */
+  validatedDrillMapRef: DrillMap | null;
 }
 
 /**
  * Gate UI store actions.
  */
 export interface GateUIActions {
-  /** Update the last validation result */
-  setResult: (result: GateResult) => void;
+  /**
+   * Update the last validation result.
+   *
+   * @param result - The gate verdict to store.
+   * @param validatedDrillMap - The drillMap object the verdict was computed
+   *   from. Pass it explicitly when available (preferred). When omitted
+   *   (legacy single-arg callers, e.g. SafetyPanel), the store falls back to
+   *   capturing useDrillMapStore.getState().drillMap at set time. Passing an
+   *   explicit null records a run against "no drill map", which never counts
+   *   as fresh (fail-closed).
+   */
+  setResult: (result: GateResult, validatedDrillMap?: DrillMap | null) => void;
   /** Set running state */
   setRunning: (running: boolean) => void;
   /** Select a finding and its entities */
