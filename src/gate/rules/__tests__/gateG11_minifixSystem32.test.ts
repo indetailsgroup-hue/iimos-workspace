@@ -481,13 +481,14 @@ describe('G11.4 Mating Alignment', () => {
 
 describe('G11.5 Bolt-CAM Alignment', () => {
   it('should PASS when bolt tip aligns with CAM pocket center', () => {
-    // For LEFT_SIDE corner:
+    // For LEFT_SIDE corner (T10c hardware truth — createCamPoint drills a
+    // 12.5mm housing = 16mm wood → dimA 8, NOT camDepth/2 = 6.25):
     // - BOLT entry: [18, 700, 37] on SIDE inner face
     // - BOLT normal: [-1, 0, 0] → tip extends to [42, 700, 37]
-    // - CAM at [42, 706.25, 37] with normal [0, -1, 0]
-    // - CAM pocket center at [42, 700, 37] (6.25mm into panel)
+    // - CAM at [42, 708, 37] with normal [0, -1, 0]
+    // - CAM bolt channel at [42, 700, 37] (dimA = 8mm into panel)
     const points: G11DrillPoint[] = [
-      createCamPoint('cam-1', 24, 'TOP_LEFT', [42, 706.25, 37]),
+      createCamPoint('cam-1', 24, 'TOP_LEFT', [42, 708, 37]),
       createBoltPoint('bolt-1', 'TOP_LEFT', [18, 700, 37], 'cam-1'),
     ];
 
@@ -496,12 +497,13 @@ describe('G11.5 Bolt-CAM Alignment', () => {
     expect(issues.length).toBe(0);
   });
 
-  it('should BLOCK when bolt tip does not reach CAM center (X-axis misalignment)', () => {
-    // BOLT at wrong X position - tip won't reach CAM
-    // Entry at X=10 instead of X=18 → tip at X=34 instead of X=42
+  it('should BLOCK when bolt axis misses CAM channel (perpendicular misalignment)', () => {
+    // T10c: the measure is the residual PERPENDICULAR to the bolt axis (X
+    // here) — a bolt bored 8mm too high passes beside the cam channel.
+    // Entry at Y=708 instead of Y=700 → tip [42, 708, 37] vs channel [42, 700, 37]
     const points: G11DrillPoint[] = [
-      createCamPoint('cam-1', 24, 'TOP_LEFT', [42, 706.25, 37]),
-      createBoltPoint('bolt-1', 'TOP_LEFT', [10, 700, 37], 'cam-1'), // 8mm off
+      createCamPoint('cam-1', 24, 'TOP_LEFT', [42, 708, 37]),
+      createBoltPoint('bolt-1', 'TOP_LEFT', [18, 708, 37], 'cam-1'), // 8mm off in Y
     ];
 
     const issues = ruleG11_BoltCamAlignment(points);
@@ -509,16 +511,17 @@ describe('G11.5 Bolt-CAM Alignment', () => {
     expect(issues.length).toBe(1);
     expect(issues[0].severity).toBe('BLOCKER');
     expect(issues[0].code).toBe('B_G11_BOLT_CAM_MISALIGNMENT');
-    // X-axis gap should be 8mm (34mm tip vs 42mm cam center)
-    expect(issues[0].context?.deltaX).toBeCloseTo(8, 0);
+    // Perpendicular gap should be 8mm (tip Y=708 vs channel Y=700)
+    expect(issues[0].context?.measured).toBeCloseTo(8, 0);
+    expect(issues[0].context?.boltAxis).toBe('X');
   });
 
   it('should WARN when bolt tip is near tolerance limit', () => {
-    // BOLT slightly off - tip X = 42.09 (within tolerance but near limit)
-    // Entry at X=18.09 → tip at X=42.09
+    // BOLT slightly off perpendicular to its axis — tip [42, 700.09, 37]
+    // vs channel [42, 700, 37] (within 0.1mm tolerance but > 0.08 warning band)
     const points: G11DrillPoint[] = [
-      createCamPoint('cam-1', 24, 'TOP_LEFT', [42, 706.25, 37]),
-      createBoltPoint('bolt-1', 'TOP_LEFT', [18.09, 700, 37], 'cam-1'),
+      createCamPoint('cam-1', 24, 'TOP_LEFT', [42, 708, 37]),
+      createBoltPoint('bolt-1', 'TOP_LEFT', [18, 700.09, 37], 'cam-1'),
     ];
 
     const issues = ruleG11_BoltCamAlignment(points);
@@ -552,16 +555,17 @@ describe('runG11Rules (Integrated)', () => {
     // - BOLT normal: [-1, 0, 0] (drilling left into panel)
     // - BOLT tip = entry + 24mm × [+1, 0, 0] = [42, 700, 37]
     //
-    // - CAM entry: [42, 706.25, 37] on TOP panel face
+    // - CAM entry: [42, 708, 37] on TOP panel face
     // - CAM normal: [0, -1, 0] (drilling down into panel)
-    // - CAM pocket center = entry + 6.25mm × [0, -1, 0] = [42, 700, 37]
+    // - CAM channel center = entry + dimA(12.5→8) × [0, -1, 0] = [42, 700, 37]
+    //   (T10c hardware truth: dimA from spec table, NOT camDepth/2 = 6.25)
     //
     // Both align at [42, 700, 37] ✓
 
     const points: G11DrillPoint[] = [
       // CAM at correct Distance B with aligned position
-      // Y = 700 + 6.25 = 706.25 so pocket center Y = 700
-      createCamPoint('cam-1', 24, 'TOP_LEFT', [42, 706.25, 37]),
+      // Y = 700 + 8 = 708 so channel center Y = 700
+      createCamPoint('cam-1', 24, 'TOP_LEFT', [42, 708, 37]),
       // BOLT on side panel (v4.0 face drilling) with aligned position
       createBoltPoint('bolt-1', 'TOP_LEFT', [18, 700, 37], 'cam-1'),
       // Dowels with v4.0 correct depths: SIDE=12mm, HORIZ=18mm

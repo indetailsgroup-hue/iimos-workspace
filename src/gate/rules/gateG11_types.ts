@@ -20,6 +20,8 @@
  */
 
 import type { Severity } from '../../spec';
+import { CAM_DRILLING_SPECS } from '../../core/manufacturing/hardware/minifixDefaults';
+import { DEFAULT_MINIFIX_S200_CONFIG } from '../../core/manufacturing/drillMap/minifixDefaults';
 
 // ============================================
 // CONSTANTS (Häfele Engineering Standards)
@@ -208,6 +210,13 @@ export interface G11DrillPoint {
   face?: string;
   /** Panel role (LEFT_SIDE, RIGHT_SIDE, TOP, BOTTOM) */
   connectedPanelRole?: string;
+  /**
+   * Cam pocket center in world coords, emitted by the generator on BOLT
+   * points (B=C truth chain, generateDrillMap.ts:663/:964/:1347/:1610).
+   * When present it is the single authority for G11.5 — the gate must not
+   * recompute what the generator already declared.
+   */
+  targetPocketCenter?: [number, number, number];
 }
 
 /**
@@ -382,21 +391,58 @@ export function calculateBoltTipPosition(
 }
 
 /**
- * Calculate CAM pocket center from drill entry point.
+ * Resolve dimA (distance from the cam insertion face to the bolt-channel
+ * center axis) from the cam DRILLING depth, using the same Häfele config
+ * family the generator uses.
  *
- * CAM pocket center is at camDepth/2 INTO the material from drill surface.
+ * Hardware truth (T10c): the Ø15 Minifix housing is asymmetric by design —
+ * the bolt channel is NOT at half the drilling depth. For 18mm wood the
+ * housing is drilled 13.5mm deep but the channel sits at dimA = 9mm from
+ * the insertion face (minifixDefaults.ts 'camHeight: 9 — dimA'). The old
+ * camDepth/2 model (6.75mm) was 2.25mm off along the cam normal and
+ * false-blocked every OVERLAY and BACK cabinet.
  *
- * @param camSurfacePosition - CAM drill entry point on TOP/BOTTOM face
+ * Lookup: CAM_DRILLING_SPECS (hardware/minifixDefaults.ts) keyed by wood
+ * thickness maps drillingDepth → dimA (13.5 → 9, 12.5 → 8, ...). Unknown
+ * depths fall back to the S200 default config's camHeight — the same value
+ * the generator's default config carries (generateDrillMap.ts camHeight: 9).
+ *
+ * @param camDrillDepth - CAM housing drilling depth (e.g. 13.5 for 18mm wood)
+ * @returns dimA in mm
+ */
+export function resolveCamDimA(camDrillDepth?: number): number {
+  if (camDrillDepth !== undefined) {
+    for (const spec of Object.values(CAM_DRILLING_SPECS)) {
+      if (Math.abs(spec.drillingDepth - camDrillDepth) < 0.01) {
+        return spec.dimA;
+      }
+    }
+  }
+  return DEFAULT_MINIFIX_S200_CONFIG.camHeight;
+}
+
+/**
+ * Calculate CAM pocket (bolt channel) center from the drill entry point.
+ *
+ * FALLBACK path only: when the generator emitted targetPocketCenter on the
+ * BOLT point, that value is the single authority and this function must not
+ * be consulted (see ruleG11_BoltCamAlignment).
+ *
+ * The channel center is at dimA INTO the material from the drill surface —
+ * NOT at camDepth/2 (the housing is asymmetric; see resolveCamDimA).
+ *
+ * @param camSurfacePosition - CAM drill entry point on the host panel face
  * @param camNormal - Drill direction (into material)
- * @param camDepth - CAM housing depth (typically 12.5mm for 16mm wood)
- * @returns CAM pocket center position in world coordinates
+ * @param camDrillDepth - CAM housing drilling depth (13.5mm for 18mm wood),
+ *   used to resolve dimA from the Häfele spec table
+ * @returns CAM bolt-channel center position in world coordinates
  */
 export function calculateCamPocketCenter(
   camSurfacePosition: [number, number, number],
   camNormal: [number, number, number],
-  camDepth: number
+  camDrillDepth: number
 ): [number, number, number] {
-  const pocketOffset = camDepth / 2;
+  const pocketOffset = resolveCamDimA(camDrillDepth);
   return [
     camSurfacePosition[0] + camNormal[0] * pocketOffset,
     camSurfacePosition[1] + camNormal[1] * pocketOffset,

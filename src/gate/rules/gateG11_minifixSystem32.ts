@@ -14,7 +14,8 @@
  * - G11.3: Drill Type - purpose invariant (T10b): BOLT/CAM/MINIFIX=FACE bore
  *   into host panel, BOLT_ENTRY=EDGE bore, DOWEL pairs=EDGE+FACE
  * - G11.4: Mating Alignment - world-space dowel alignment ≤0.1mm
- * - G11.5: Bolt Tip ↔ CAM Center Alignment
+ * - G11.5: Bolt Tip ↔ CAM Center Alignment (T10c): pocket = emitted
+ *   targetPocketCenter (else dimA fallback), perpendicular residual ≤0.1mm
  * - G11.6: N-Center Policy & Mode Consistency (v1.1)
  * - G11.7: Double PVC Compensation Prevention (v1.1)
  * - G11.8: Edge Banding on Join Edge Forbidden (v1.1)
@@ -619,12 +620,22 @@ function findMatingPairs(drillPoints: G11DrillPoint[]): G11MatingPair[] {
  * G11.5: Validate Bolt Tip aligns with CAM Pocket Center.
  *
  * CRITICAL FOR PHYSICAL ASSEMBLY:
- * The bolt's ball head must reach the CAM pocket center for proper engagement.
+ * The bolt's ball head must enter the CAM's bolt channel for engagement.
  *
- * Calculation:
+ * Calculation (T10c — hardware truth):
  * - Bolt Tip = Entry Position + Protrusion × (-Normal)
- * - CAM Pocket = Surface Position + (camDepth/2) × Normal
- * - X-axis alignment: |BoltTip.X - CamCenter.X| ≤ 0.1mm
+ * - CAM Pocket = bolt.targetPocketCenter when the generator emitted it
+ *   (single authority, B=C truth chain); FALLBACK = cam surface + dimA ×
+ *   camNormal — dimA resolved from the Häfele spec table, NOT camDepth/2
+ *   (the Ø15×13.5 housing is asymmetric: channel at 9mm for 18mm wood).
+ * - Misalignment = full perpendicular residual w.r.t. the bolt drilling
+ *   axis (dominant axis of bolt.normal) ≤ 0.1mm. The old deltaX-only check
+ *   validated ONLY X: it false-blocked every OVERLAY/BACK cabinet (cam
+ *   normal ±X carried the 2.25mm model error) while a genuinely misaligned
+ *   INSET pair (cam normal ±Y — error hides in Y/Z) passed silently.
+ *   The along-axis component is panel-construction geometry (entry face vs
+ *   mate edge, dado offsets) and is owned by the generator's linkage chain
+ *   (validateBoltPocketLinkage + golden drift tests), not by this rule.
  *
  * @param drillPoints - All drill points (BOLT and CAM pairs)
  * @param policy - Validation policy
@@ -696,53 +707,59 @@ export function ruleG11_BoltCamAlignment(
       G11_CONSTANTS.BOLT_PROTRUSION_TOTAL // 24mm
     );
 
-    // Calculate CAM pocket center
+    // CAM pocket (bolt channel) center — generator's emitted value is the
+    // single authority; dimA-based fallback otherwise (T10c).
     // Default camDepth from Häfele spec for 18mm wood: 13.5mm (FF 3.10)
     const camDepth = cam.depth || 13.5;
-    const camPocketCenter = calculateCamPocketCenter(
+    const pocketSource = bolt.targetPocketCenter ? 'targetPocketCenter' : 'dimA-fallback';
+    const camPocketCenter = bolt.targetPocketCenter ?? calculateCamPocketCenter(
       cam.position,
       cam.normal,
       camDepth
     );
 
-    // Check X-axis alignment (most critical for Side-covers-Top construction)
-    const deltaX = Math.abs(boltTip[0] - camPocketCenter[0]);
+    // Perpendicular residual w.r.t. the bolt drilling axis — validates BOTH
+    // cam orientations (±X OVERLAY/BACK and ±Y INSET). The along-axis
+    // component is construction geometry, not a channel miss (see rule doc).
+    const boltAxis = dominantAxis(bolt.normal);
+    const perpendicularGap = perpendicularDistance(boltTip, camPocketCenter, boltAxis);
+    const boltAxisName = (['X', 'Y', 'Z'] as const)[boltAxis];
 
-    // Full 3D distance check
+    // Full 3D distance (informational)
     const distance3D = calculateDistance(boltTip, camPocketCenter);
 
-    if (deltaX > matingTolerance) {
-      // BLOCKER: Bolt head won't reach CAM
+    if (perpendicularGap > matingTolerance) {
+      // BLOCKER: Bolt ball head misses the CAM bolt channel
       issues.push({
         id: issueId('B_G11_BOLT_CAM_MISALIGNMENT', bolt.id, cam.id),
         severity: 'BLOCKER',
         code: 'B_G11_BOLT_CAM_MISALIGNMENT',
-        message: `Bolt tip at ${bolt.id} does not reach CAM center at ${cam.id}. X-axis gap: ${deltaX.toFixed(2)}mm (max: ${matingTolerance}mm). Bolt protrusion may be too short.`,
+        message: `Bolt tip at ${bolt.id} does not reach CAM center at ${cam.id}. Perpendicular gap: ${perpendicularGap.toFixed(2)}mm (max: ${matingTolerance}mm). Bolt axis misses the cam bolt channel.`,
         drillPointIds: [bolt.id, cam.id],
         corner: bolt.cornerType,
         context: {
-          boltTipX: boltTip[0],
-          camCenterX: camPocketCenter[0],
-          deltaX,
+          measured: perpendicularGap,
+          boltAxis: boltAxisName,
+          pocketSource,
           distance3D,
           tolerance: matingTolerance,
           boltProtrusion: G11_CONSTANTS.BOLT_PROTRUSION_TOTAL,
           camDepth,
         },
       });
-    } else if (deltaX > matingTolerance * 0.8) {
+    } else if (perpendicularGap > matingTolerance * 0.8) {
       // Warning: Near tolerance
       issues.push({
         id: issueId('W_G11_BOLT_CAM_NEAR_TOLERANCE', bolt.id, cam.id),
         severity: 'WARNING',
         code: 'W_G11_BOLT_CAM_NEAR_TOLERANCE',
-        message: `Bolt-CAM alignment near tolerance: X-axis gap ${deltaX.toFixed(2)}mm (limit: ${matingTolerance}mm).`,
+        message: `Bolt-CAM alignment near tolerance: perpendicular gap ${perpendicularGap.toFixed(2)}mm (limit: ${matingTolerance}mm).`,
         drillPointIds: [bolt.id, cam.id],
         corner: bolt.cornerType,
         context: {
-          boltTipX: boltTip[0],
-          camCenterX: camPocketCenter[0],
-          deltaX,
+          measured: perpendicularGap,
+          boltAxis: boltAxisName,
+          pocketSource,
           tolerance: matingTolerance,
         },
       });
@@ -1097,6 +1114,8 @@ export function validateG11FromDrillMap(
         cornerType: point.cornerType,
         face: point.face,
         connectedPanelRole: point.connectedPanelRole,
+        // G11.5 single authority: the generator's emitted cam pocket center
+        targetPocketCenter: point.targetPocketCenter,
       });
     }
   }
