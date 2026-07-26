@@ -522,17 +522,28 @@ export async function downloadDxfZipFromPacket(
      * guarantee lived entirely in the two UI callers — a third caller would
      * have shipped bore-less DXF silently. The guarantee now lives here.
      *
-     * `preValidatedResult` also lets a caller that already inspected the
-     * export hand the result back instead of paying for a second identical
-     * run (the wrapper used to recompute it internally).
+     * `preValidated` lets a caller that already inspected the export hand the
+     * result back instead of paying for a second identical run — but it must
+     * hand back the PACKET it validated too. Accepting a bare result would let
+     * packet B be zipped from result A (or from a fabricated one), which is a
+     * substitution hole in exactly the guarantee this function exists to keep
+     * (G2 finding). Identity is the binding: same object, same export.
      */
     guards: {
         failOnSkipped?: boolean;
-        preValidatedResult?: DxfExportResult;
+        preValidated?: { packet: FactoryPacket; result: DxfExportResult };
     } = {}
 ): Promise<void> {
-    const { failOnSkipped = true, preValidatedResult } = guards;
-    const result = preValidatedResult ?? (await exportDxfFromPacket(packet, options));
+    const { failOnSkipped = true, preValidated } = guards;
+
+    if (preValidated && preValidated.packet !== packet) {
+        throw new Error(
+            'DXF BLOCKED: preValidated result does not belong to the packet being exported ' +
+            '(result/packet substitution). No files delivered.'
+        );
+    }
+
+    const result = preValidated?.result ?? (await exportDxfFromPacket(packet, options));
 
     if (!result.ok) {
         throw new Error(result.error);

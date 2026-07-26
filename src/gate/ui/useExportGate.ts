@@ -109,8 +109,10 @@ export function useExportGate(): ExportGateStatus & ExportGateActions {
     const fresh = hasRun && validatedRef !== null && validatedRef === currentDrillMap;
 
     // Authority (T8a, owner ruling Q2 = O2+O3): a clean verdict only counts
-    // while it still describes the cabinet in front of the user.
-    const canProceed = passedWhenRun && fresh;
+    // while it still describes the cabinet in front of the user — and never
+    // while a re-validation is in flight, because the verdict on record is the
+    // PREVIOUS one and the run underway may be about to contradict it (G2).
+    const canProceed = passedWhenRun && fresh && !isRunning;
 
     return {
       canFreeze: canProceed,
@@ -183,9 +185,9 @@ export function getExportGateStatus(): ExportGateStatus {
   const blockers = result?.findings.blockers ?? [];
   const warnings = result?.findings.warnings ?? [];
   const passedWhenRun = hasRun && blockers.length === 0;
-  // Same authority as the hook (T8a): clean AND fresh.
+  // Same authority as the hook (T8a + G2): clean, fresh, and not mid-run.
   const fresh = isGateResultFresh();
-  const canProceed = passedWhenRun && fresh;
+  const canProceed = passedWhenRun && fresh && !state.isRunning;
 
   return {
     canFreeze: canProceed,

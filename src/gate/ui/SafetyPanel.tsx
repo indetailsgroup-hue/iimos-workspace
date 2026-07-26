@@ -281,6 +281,30 @@ export function runGateValidation(): Promise<void> {
         '| ConnectorOS:', connectorAudit.status, `(${connectorAudit.summary.jointsAudited} joints)`);
     } catch (error) {
       console.error('[SafetyPanel] Gate validation error:', error);
+      // Fail closed (G2): a crashed run must NOT leave the previous verdict
+      // standing as authority — that verdict would still read clean+fresh and
+      // would authorize freeze/export off a validation that never completed.
+      // Record the crash AS the verdict, validated against this map.
+      setResult(
+        {
+          passed: false,
+          runAt: new Date().toISOString(),
+          policyVersion: 'error',
+          findings: {
+            blockers: [{
+              key: 'GATE_RUN_FAILED',
+              code: 'B_GATE_RUN_FAILED',
+              message: `Safety Gate did not complete: ${error instanceof Error ? error.message : String(error)}`,
+              severity: 'BLOCKER' as Severity,
+              entityIds: [],
+            }],
+            warnings: [],
+            info: [],
+          },
+          metrics: { errors: 1, warnings: 0, pointsValidated: 0 },
+        },
+        drillMap,
+      );
       setRunning(false);
     } finally {
       settle();

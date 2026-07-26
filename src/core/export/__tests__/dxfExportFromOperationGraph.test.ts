@@ -12,6 +12,7 @@ import {
     exportDxfFromPacket,
     canExportDxfFromOperationGraph,
     type DxfExportOptions,
+  downloadDxfZipFromPacket,
 } from '../dxfExportFromOperationGraph';
 import type {
     FactoryPacket,
@@ -524,4 +525,42 @@ describe('exportDxfFromPacket', () => {
             }
         });
     });
+});
+
+// ============================================================================
+// G2 — fail-closed guards on the download wrapper
+// ============================================================================
+describe('downloadDxfZipFromPacket — fail-closed guards (T8b/G2)', () => {
+  const packetA = { manifest: { jobId: 'A' } } as never;
+  const packetB = { manifest: { jobId: 'B' } } as never;
+
+  it('REJECTS a preValidated result that belongs to a different packet (substitution)', async () => {
+    // The wrapper used to accept a bare result and zip it verbatim, so packet B
+    // could be delivered from result A — a hole in the very guarantee this
+    // function exists to keep. Identity binding closes it.
+    const resultForA = {
+      ok: true as const,
+      panels: [{ panelId: 'p1', panelName: 'LEFT', filename: 'LEFT.dxf', content: '0\nEOF\n' }],
+      totalOperations: 1, machineId: 'GENERIC', warnings: [], skipped: [],
+    } as never;
+
+    await expect(
+      downloadDxfZipFromPacket(packetB, {}, { preValidated: { packet: packetA, result: resultForA } }),
+    ).rejects.toThrow(/substitution/i);
+  });
+
+  it('accepts a result bound to the SAME packet, then applies the skipped guard to it', async () => {
+    // Proves the binding check passed (no substitution error) and control
+    // reached the next fail-closed guard, which refuses undrawn points.
+    const withSkips = {
+      ok: true as const,
+      panels: [{ panelId: 'p1', panelName: 'LEFT', filename: 'LEFT.dxf', content: 'X' }],
+      totalOperations: 1, machineId: 'GENERIC', warnings: [],
+      skipped: [{ panelId: 'p1', reason: 'EDGE_ENTRY_OFF_PANEL', detail: 'x' }],
+    } as never;
+
+    await expect(
+      downloadDxfZipFromPacket(packetA, {}, { preValidated: { packet: packetA, result: withSkips } }),
+    ).rejects.toThrow(/DXF BLOCKED: 1 drill point/);
+  });
 });

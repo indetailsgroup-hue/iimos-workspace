@@ -63,6 +63,7 @@ export function GateToolbar() {
   const [showValidation, setShowValidation] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const stateActionBusy = React.useRef(false);
 
   // Get cabinets for export
   const cabinets = useCabinetStore((s) => s.cabinets);
@@ -82,6 +83,19 @@ export function GateToolbar() {
   };
 
   const handleStateAction = async () => {
+    // Re-entry guard (G2): the freeze path awaits a gate run, so a second
+    // click during that window would schedule a second validation and a second
+    // state transition off the same verdict.
+    if (stateActionBusy.current) return;
+    stateActionBusy.current = true;
+    try {
+      await runStateAction();
+    } finally {
+      stateActionBusy.current = false;
+    }
+  };
+
+  const runStateAction = async () => {
     if (specState === 'DRAFT') {
       // Owner ruling Q2 (O2+O3): freeze requires a FRESH Safety-Gate PASS.
       // Auto-run when stale so the user is not sent hunting for the Safety tab

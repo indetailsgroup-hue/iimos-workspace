@@ -168,6 +168,24 @@ describe('T8a — a fresh Safety-Gate PASS is the authority for freeze and expor
     expect(s.canExport).toBe(false);
   });
 
+  it('BLOCKS while a re-validation is in flight (the verdict on record is the previous one)', () => {
+    // G2 finding: canProceed ignored isRunning, so a user could export off the
+    // OLD verdict during the very run that might contradict it.
+    const map = makeMap('current');
+    setStoreMap(map);
+    useGateStore.getState().setResult(passingResult(), map);
+    expect(getExportGateStatus().canExport).toBe(true);
+
+    useGateStore.getState().setRunning(true);
+
+    const s = getExportGateStatus();
+    expect(s.isRunning).toBe(true);
+    expect(s.passedWhenRun, 'the previous verdict is still clean').toBe(true);
+    expect(s.canFreeze).toBe(false);
+    expect(s.canRelease).toBe(false);
+    expect(s.canExport).toBe(false);
+  });
+
   it('BLOCKS before any run (fail-closed default)', () => {
     setStoreMap(makeMap('current'));
 
