@@ -1,0 +1,449 @@
+"""Contracts for immutable OEM evidence and field-level assertions."""
+
+from __future__ import annotations
+
+from dataclasses import FrozenInstanceError, fields
+import hashlib
+import json
+from pathlib import Path
+import subprocess
+import sys
+import unittest
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+PACKAGE_SOURCE = REPOSITORY_ROOT / "packages" / "component-master" / "src"
+sys.path.insert(0, str(PACKAGE_SOURCE))
+
+from monolith_component_master.evidence import (  # noqa: E402
+    EvidenceVault,
+    FieldAssertion,
+    SourceSnapshot,
+    verify_source_hash,
+)
+
+
+SOURCE_BYTES = b"OEM connector catalogue, exact 2026 edition"
+
+
+def make_source(**overrides: object) -> SourceSnapshot:
+    arguments: dict[str, object] = {
+        "source_id": "source:hafele:connector-catalogue:2026:EU",
+        "publisher": "Hafele",
+        "url": "https://example.invalid/oem/connector-catalogue.pdf",
+        "edition": "2026",
+        "region": "EU",
+        "accessed_at": "2026-07-27T09:30:00+07:00",
+        "sha256": hashlib.sha256(SOURCE_BYTES).hexdigest(),
+        "rights_state": "INTERNAL_REVIEW_ONLY",
+    }
+    arguments.update(overrides)
+    return SourceSnapshot(**arguments)
+
+
+def make_assertion(**overrides: object) -> FieldAssertion:
+    arguments: dict[str, object] = {
+        "assertion_id": "assertion:sku-262.26.033:drill-depth",
+        "entity_id": "sku:hafele:262.26.033:EU",
+        "field_path": "geometry.drill_depth_mm",
+        "value": 12.5,
+        "source_id": "source:hafele:connector-catalogue:2026:EU",
+        "locator": "page 42, table 7, row 262.26.033",
+        "reviewer": "reviewer:component-master",
+        "review_state": "VERIFIED",
+    }
+    arguments.update(overrides)
+    return FieldAssertion(**arguments)
+
+
+class EvidenceRecordContractTests(unittest.TestCase):
+    def test_source_snapshot_has_exact_frozen_field_shape(self) -> None:
+        source = make_source()
+
+        self.assertEqual(
+            [
+                "source_id",
+                "publisher",
+                "url",
+                "edition",
+                "region",
+                "accessed_at",
+                "sha256",
+                "rights_state",
+            ],
+            [field.name for field in fields(SourceSnapshot)],
+        )
+        with self.assertRaises(FrozenInstanceError):
+            source.publisher = "Changed"
+
+    def test_field_assertion_has_exact_frozen_field_shape(self) -> None:
+        assertion = make_assertion()
+
+        self.assertEqual(
+            [
+                "assertion_id",
+                "entity_id",
+                "field_path",
+                "value",
+                "source_id",
+                "locator",
+                "reviewer",
+                "review_state",
+            ],
+            [field.name for field in fields(FieldAssertion)],
+        )
+        with self.assertRaises(FrozenInstanceError):
+            assertion.review_state = "PENDING"
+
+
+class SourceSnapshotValidationTests(unittest.TestCase):
+    def test_source_id_requires_prefix_type_and_nonblank_suffix(self) -> None:
+        invalid_values = (
+            ("oem:catalogue", ValueError),
+            ("source:   ", ValueError),
+            (None, TypeError),
+        )
+
+        for value, error_type in invalid_values:
+            with self.subTest(value=value):
+                with self.assertRaises(error_type):
+                    make_source(source_id=value)
+
+    def test_required_source_metadata_rejects_blank_strings(self) -> None:
+        for field_name in (
+            "publisher",
+            "url",
+            "edition",
+            "region",
+            "accessed_at",
+            "rights_state",
+        ):
+            with self.subTest(field=field_name):
+                with self.assertRaises(ValueError):
+                    make_source(**{field_name: "   "})
+
+    def test_required_source_metadata_rejects_non_strings(self) -> None:
+        for field_name in (
+            "publisher",
+            "url",
+            "edition",
+            "region",
+            "accessed_at",
+            "rights_state",
+        ):
+            with self.subTest(field=field_name):
+                with self.assertRaises(TypeError):
+                    make_source(**{field_name: None})
+
+    def test_sha256_requires_exact_lowercase_hex_digest(self) -> None:
+        invalid_values = (
+            ("0" * 63, ValueError),
+            ("0" * 65, ValueError),
+            ("A" * 64, ValueError),
+            ("g" * 64, ValueError),
+            (None, TypeError),
+        )
+
+        for value, error_type in invalid_values:
+            with self.subTest(value=value):
+                with self.assertRaises(error_type):
+                    make_source(sha256=value)
+
+
+class SourceHashTests(unittest.TestCase):
+    def test_exact_bytes_match_and_tampered_bytes_do_not(self) -> None:
+        source = make_source()
+
+        self.assertTrue(verify_source_hash(source, SOURCE_BYTES))
+        self.assertFalse(
+            verify_source_hash(source, SOURCE_BYTES + b" tampered")
+        )
+
+    def test_bytes_like_inputs_are_not_mutated(self) -> None:
+        source = make_source()
+        mutable_content = bytearray(SOURCE_BYTES)
+        original_content = mutable_content[:]
+
+        self.assertTrue(verify_source_hash(source, mutable_content))
+        self.assertTrue(verify_source_hash(source, memoryview(mutable_content)))
+        self.assertEqual(original_content, mutable_content)
+
+    def test_non_bytes_like_inputs_are_rejected(self) -> None:
+        source = make_source()
+
+        for value in (None, "text", [1, 2], 7):
+            with self.subTest(value=value):
+                with self.assertRaises(TypeError):
+                    verify_source_hash(source, value)
+
+
+class FieldAssertionValidationTests(unittest.TestCase):
+    def test_assertion_and_source_ids_require_typed_prefixed_values(
+        self,
+    ) -> None:
+        invalid_values = {
+            "assertion_id": (
+                ("field:drill-depth", ValueError),
+                ("assertion:   ", ValueError),
+                (None, TypeError),
+            ),
+            "source_id": (
+                ("oem:catalogue", ValueError),
+                ("source:   ", ValueError),
+                (None, TypeError),
+            ),
+        }
+
+        for field_name, cases in invalid_values.items():
+            for value, error_type in cases:
+                with self.subTest(field=field_name, value=value):
+                    with self.assertRaises(error_type):
+                        make_assertion(**{field_name: value})
+
+    def test_entity_id_and_field_path_require_typed_nonblank_values(
+        self,
+    ) -> None:
+        for field_name in ("entity_id", "field_path"):
+            for value, error_type in (
+                ("   ", ValueError),
+                (None, TypeError),
+            ):
+                with self.subTest(field=field_name, value=value):
+                    with self.assertRaises(error_type):
+                        make_assertion(**{field_name: value})
+
+    def test_review_state_is_strictly_pending_or_verified(self) -> None:
+        self.assertEqual("PENDING", make_assertion(
+            review_state="PENDING",
+            locator="",
+            reviewer="",
+        ).review_state)
+        self.assertEqual("VERIFIED", make_assertion().review_state)
+
+        for value, error_type in (
+            ("verified", ValueError),
+            ("BLOCKED", ValueError),
+            ("", ValueError),
+            (None, TypeError),
+        ):
+            with self.subTest(value=value):
+                with self.assertRaises(error_type):
+                    make_assertion(review_state=value)
+
+    def test_verified_assertions_require_locator_and_reviewer(self) -> None:
+        for field_name in ("locator", "reviewer"):
+            for value, error_type in (
+                ("", ValueError),
+                ("   ", ValueError),
+                (None, TypeError),
+            ):
+                with self.subTest(field=field_name, value=value):
+                    with self.assertRaises(error_type):
+                        make_assertion(**{field_name: value})
+
+    def test_pending_assertions_allow_blank_locator_and_reviewer_only_as_strings(
+        self,
+    ) -> None:
+        pending = make_assertion(
+            review_state="PENDING",
+            locator="",
+            reviewer="   ",
+        )
+
+        self.assertEqual("", pending.locator)
+        self.assertEqual("   ", pending.reviewer)
+        for field_name in ("locator", "reviewer"):
+            with self.subTest(field=field_name):
+                with self.assertRaises(TypeError):
+                    make_assertion(
+                        review_state="PENDING",
+                        **{field_name: None},
+                    )
+
+
+class EvidenceVaultTests(unittest.TestCase):
+    def test_registered_source_has_deterministic_read_only_lookup(self) -> None:
+        source = make_source()
+        vault = EvidenceVault()
+
+        vault.register(source, SOURCE_BYTES)
+
+        self.assertIs(source, vault.get_source(source.source_id))
+        self.assertIsNone(vault.get_source("source:unknown"))
+
+    def test_source_registration_rejects_missing_or_tampered_bytes(
+        self,
+    ) -> None:
+        source = make_source()
+        vault = EvidenceVault()
+
+        with self.assertRaises(TypeError):
+            vault.register(source)
+        with self.assertRaises(ValueError):
+            vault.register(source, SOURCE_BYTES + b" tampered")
+
+        self.assertIsNone(vault.get_source(source.source_id))
+
+    def test_source_bytes_are_defensively_copied_for_verified_assertions(
+        self,
+    ) -> None:
+        source = make_source()
+        assertion = make_assertion()
+        caller_bytes = bytearray(SOURCE_BYTES)
+        vault = EvidenceVault()
+        vault.register(source, caller_bytes)
+
+        caller_bytes[0] ^= 0xFF
+        vault.register(assertion)
+
+        self.assertIs(assertion, vault.get_assertion(assertion.assertion_id))
+
+    def test_duplicate_source_ids_are_rejected_before_mapping_collapse(
+        self,
+    ) -> None:
+        first = make_source()
+        second = make_source(publisher="Different publisher")
+        vault = EvidenceVault()
+        vault.register(first, SOURCE_BYTES)
+
+        with self.assertRaises(ValueError):
+            vault.register(second, SOURCE_BYTES)
+
+        self.assertIs(first, vault.get_source(first.source_id))
+
+    def test_verified_assertion_requires_registered_source(self) -> None:
+        assertion = make_assertion()
+        vault = EvidenceVault()
+
+        with self.assertRaises(ValueError):
+            vault.register(assertion)
+
+        self.assertIsNone(vault.get_assertion(assertion.assertion_id))
+
+    def test_verified_assertion_rechecks_registered_source_bytes(self) -> None:
+        source = make_source()
+        assertion = make_assertion()
+        vault = EvidenceVault()
+        vault.register(source, SOURCE_BYTES)
+        vault._stored_source_bytes[source.source_id] = b"tampered"
+
+        with self.assertRaises(ValueError):
+            vault.register(assertion)
+
+        self.assertIsNone(vault.get_assertion(assertion.assertion_id))
+
+    def test_pending_remote_assertion_stays_pending_without_promotion_api(
+        self,
+    ) -> None:
+        assertion = make_assertion(
+            source_id="source:remote:candidate",
+            locator="",
+            reviewer="",
+            review_state="PENDING",
+        )
+        vault = EvidenceVault()
+
+        vault.register(assertion)
+
+        self.assertIs(assertion, vault.get_assertion(assertion.assertion_id))
+        self.assertEqual("PENDING", assertion.review_state)
+        self.assertIsNone(vault.get_source(assertion.source_id))
+        self.assertFalse(hasattr(vault, "promote"))
+        self.assertFalse(hasattr(vault, "delete"))
+
+    def test_duplicate_assertion_ids_are_rejected_before_mapping_collapse(
+        self,
+    ) -> None:
+        first = make_assertion(
+            locator="",
+            reviewer="",
+            review_state="PENDING",
+        )
+        second = make_assertion(
+            entity_id="sku:hafele:different:EU",
+            locator="",
+            reviewer="",
+            review_state="PENDING",
+        )
+        vault = EvidenceVault()
+        vault.register(first)
+
+        with self.assertRaises(ValueError):
+            vault.register(second)
+
+        self.assertIs(first, vault.get_assertion(first.assertion_id))
+
+    def test_registration_rejects_illegal_bytes_and_item_types(self) -> None:
+        vault = EvidenceVault()
+        pending = make_assertion(
+            locator="",
+            reviewer="",
+            review_state="PENDING",
+        )
+
+        with self.assertRaises(TypeError):
+            vault.register(pending, b"unexpected")
+        with self.assertRaises(TypeError):
+            vault.register(object())
+
+
+class EvidenceDataSeedTests(unittest.TestCase):
+    def test_only_source_cache_is_ignored_and_manifest_is_empty_jsonl(
+        self,
+    ) -> None:
+        registry_dir = (
+            REPOSITORY_ROOT
+            / "data"
+            / "component-master"
+            / "registry"
+            / "v1"
+        )
+        ignore_file = registry_dir / ".gitignore"
+        manifest = registry_dir / "evidence-manifest.jsonl"
+
+        self.assertEqual(["/_source-cache/"], ignore_file.read_text(
+            encoding="utf-8"
+        ).splitlines())
+        cache_check = subprocess.run(
+            [
+                "git",
+                "-c",
+                f"safe.directory={REPOSITORY_ROOT}",
+                "check-ignore",
+                "--no-index",
+                "--quiet",
+                "--",
+                "data/component-master/registry/v1/"
+                "_source-cache/source.pdf",
+            ],
+            cwd=REPOSITORY_ROOT,
+            check=False,
+        )
+        manifest_check = subprocess.run(
+            [
+                "git",
+                "-c",
+                f"safe.directory={REPOSITORY_ROOT}",
+                "check-ignore",
+                "--no-index",
+                "--quiet",
+                "--",
+                "data/component-master/registry/v1/"
+                "evidence-manifest.jsonl",
+            ],
+            cwd=REPOSITORY_ROOT,
+            check=False,
+        )
+        self.assertEqual(0, cache_check.returncode)
+        self.assertEqual(1, manifest_check.returncode)
+
+        records = [
+            json.loads(line)
+            for line in manifest.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        self.assertEqual([], records)
+
+
+if __name__ == "__main__":
+    unittest.main()
