@@ -30,6 +30,14 @@ import type { DrillMapPoint, DrillMap } from '../../core/manufacturing/drillMap/
 // Importing it also brings the `DrillMap.manufacturabilityRefusals` module
 // augmentation declared in generateDrillMap.ts into scope. F-07.
 import type { BlindBoreRefusal } from '../../core/manufacturing/drillMap/generateDrillMap';
+// G11.9 EDGE half: the owner panel's in-plane span is read from the SAME AABB
+// helper the generator adjudicates with (evaluateBlindBoreFeasibility →
+// calculatePanelAABB), so the gate cannot drift from the generator's geometry.
+// panelBasis.ts has NO runtime imports of its own (both of its imports are
+// `import type`), so this pulls no generator or store code into the gate and
+// creates no cycle.
+import { calculatePanelAABB } from '../../core/manufacturing/drillMap/panelBasis';
+import type { CabinetPanel } from '../../core/types/Cabinet';
 import type { NCenterPolicy, ManufacturingMode, EdgeBandMap } from '../../core/connector/types';
 import {
   G11_CONSTANTS,
@@ -1001,26 +1009,56 @@ export function ruleG11_EdgeBandJoinForbidden(
  *    DrillMapPanel.dimensions.thickness, which the generator fills from that
  *    panel's own `computed.realThickness`.
  *
- * ## Scope: FACE bores only
- * Only bores driven along the owner panel's THICKNESS axis are adjudicated.
- * For an EDGE bore (BOLT_ENTRY Ø7.5 D24 into a side panel's back edge, the
- * D19 dowel edge bore, ...) the limiting dimension is the panel's in-plane
- * span, not its thickness — the G11 input carries no panel-local basis, so
- * that half of the breakthrough test is deliberately left unimplemented
- * rather than guessed at.
+ * ## Scope: FACE and EDGE bores (edge half closed)
+ * The limiting dimension is never "thickness" as such — it is how far the
+ * owner panel extends ALONG THE BORE'S OWN AXIS:
+ *   - FACE bore (driven along the panel's thickness axis): that extent IS the
+ *     thickness, and this half is adjudicated exactly as before.
+ *   - EDGE bore (BOLT_ENTRY Ø7.5 D24 into a side panel's back edge, the Ø8
+ *     edge dowel, ...): the extent is the panel's in-plane span along that
+ *     axis, taken from `calculatePanelAABB` — the SAME helper the generator
+ *     adjudicates with in `evaluateBlindBoreFeasibility`
+ *     (generateDrillMap.ts ~:484-530). No new number is introduced: the
+ *     `depth >= extent` comparison and the geometry helper are the generator's,
+ *     and the geometry is the panel's own. The axis/ambiguity handling is NOT
+ *     identical to the generator's — see `resolveBoreAxis` below.
+ *
+ * ## What this half does and does NOT protect (measured, not assumed)
+ * Previously it was a bare `continue`: EVERY edge bore passed, 24mm and 2400mm
+ * alike. What it guards is drill maps that did NOT come from
+ * `generateMinifixDrillMap`, whose own universal sweep already adjudicates both
+ * halves at source (generateDrillMap.ts ~:2657-2712). Concretely:
+ * `src/gate/ui/applyGatePatch.ts` rewrites the drill map by JSON path with no
+ * geometric re-adjudication and leaves G11 as the only remaining check.
+ *
+ * It is NOT reachable from an "Apply fix" button today, and this comment
+ * previously claimed otherwise. Two independent reasons, both verified by
+ * running them: (1) G11 issues are mapped to findings by `g11ToFinding`
+ * (SafetyPanel.tsx ~:180), which sets no `patch` field at all, so a G11 blocker
+ * can never carry a fix button; (2) every patch the UI can produce is a silent
+ * no-op — `patchPathForPoint` (connectors/drillMapIndex.ts:151-161) already
+ * returns a fully-prefixed `/useDrillMapStore/drillMap/...` path and
+ * SafetyPanel.tsx ~:237 prefixes it a second time, so path navigation fails and
+ * `applyGatePatches` still returns true. That double-prefix bug is real and
+ * pre-existing; it is tracked separately and is NOT fixed here.
  *
  * ## UNKNOWN / fail-visible, never silently passed
- * When the owner's role or thickness cannot be resolved the rule cannot
- * adjudicate. It emits `I_G11_BREAKTHROUGH_NOT_EVALUATED` (INFO) rather than
- * returning a clean pass. It is INFO and not a BLOCKER because the fail-CLOSED
- * duty sits one layer up: the generator refuses to emit the operation at all
- * (generateDrillMap.ts `evaluateBlindBoreFeasibility`), and every drill map
- * that reaches this gate through validateG11FromDrillMap does carry per-panel
- * thickness. Blocking here on absent metadata would only over-block
+ * When the owner's role, thickness, bore axis or in-plane span cannot be
+ * resolved the rule cannot adjudicate. It emits
+ * `I_G11_BREAKTHROUGH_NOT_EVALUATED` (INFO) with a `context.reason` naming
+ * which input was missing, rather than returning a clean pass. It is INFO and
+ * not a BLOCKER because the fail-CLOSED duty sits one layer up: the generator
+ * refuses to emit the operation at all (generateDrillMap.ts
+ * `evaluateBlindBoreFeasibility`), and every drill map that reaches this gate
+ * through validateG11FromDrillMap now carries per-panel thickness AND per-panel
+ * in-plane dimensions. Blocking here on absent metadata would only over-block
  * hand-assembled point arrays, not protect any real panel.
  *
+ * Reasons emitted: `OWNER_ROLE_UNKNOWN`, `OWNER_THICKNESS_UNDECLARED`
+ * (face half), `BORE_AXIS_AMBIGUOUS`, `OWNER_SPAN_UNRESOLVED` (edge half).
+ *
  * @param drillPoints - All drill points
- * @param panels - Panel information (owner thickness authority)
+ * @param panels - Panel geometry (owner thickness + in-plane span authority)
  * @returns Array of validation issues
  */
 export function ruleG11_PanelBreakthrough(
@@ -1055,43 +1093,113 @@ export function ruleG11_PanelBreakthrough(
       continue;
     }
 
-    // Thickness is only the limiting dimension for bores along the thickness axis.
-    if (inferBoreTypeFromNormal(point.normal, panelRole) !== 'FACE_BORE') continue;
-
     const declaredThickness = ownerPanel?.computed?.realThickness ?? point.panelThickness;
-    if (declaredThickness === undefined ||
-        !Number.isFinite(declaredThickness) ||
-        declaredThickness <= 0) {
+
+    // ── FACE half (unchanged): along the thickness axis the limiting extent
+    //    IS the declared thickness, so no panel geometry is needed. ─────────
+    if (inferBoreTypeFromNormal(point.normal, panelRole) === 'FACE_BORE') {
+      if (declaredThickness === undefined ||
+          !Number.isFinite(declaredThickness) ||
+          declaredThickness <= 0) {
+        issues.push({
+          id: issueId('I_G11_BREAKTHROUGH_NOT_EVALUATED', point.id),
+          severity: 'INFO',
+          code: 'I_G11_BREAKTHROUGH_NOT_EVALUATED',
+          message: `Breakthrough not evaluated for ${point.id}: owner panel ${point.panelId} declares no usable thickness.`,
+          drillPointIds: [point.id],
+          panelIds: [point.panelId],
+          context: { reason: 'OWNER_THICKNESS_UNDECLARED', measured: point.depth, panelRole },
+        });
+        continue;
+      }
+
+      if (point.depth >= declaredThickness) {
+        issues.push({
+          id: issueId('B_G11_PANEL_BREAKTHROUGH', point.id),
+          severity: 'BLOCKER',
+          code: 'B_G11_PANEL_BREAKTHROUGH',
+          message:
+            `Blind bore ${point.id} (${point.purpose} Ø${point.diameter}) needs ${point.depth}mm ` +
+            `but its owner panel ${point.panelId} (${panelRole}) is only ${declaredThickness}mm thick — ` +
+            `the bore breaks through the far face. Reducing the depth would invent a nonfunctional ` +
+            `fixing: resolve the fastener recipe instead.`,
+          drillPointIds: [point.id],
+          panelIds: [point.panelId],
+          corner: point.cornerType,
+          context: {
+            measured: point.depth,
+            expected: declaredThickness,
+            panelRole,
+            boreType: 'FACE_BORE',
+            purpose: point.purpose,
+            waivable: false,
+          },
+        });
+      }
+      continue;
+    }
+
+    // ── EDGE half: the tool travels across the panel's in-plane span, not
+    //    through its thickness. Same rule, different extent. ───────────────
+    const axis = resolveBoreAxis(point.normal);
+    if (axis < 0) {
       issues.push({
         id: issueId('I_G11_BREAKTHROUGH_NOT_EVALUATED', point.id),
         severity: 'INFO',
         code: 'I_G11_BREAKTHROUGH_NOT_EVALUATED',
-        message: `Breakthrough not evaluated for ${point.id}: owner panel ${point.panelId} declares no usable thickness.`,
+        message:
+          `Breakthrough not evaluated for ${point.id}: bore normal [${point.normal?.join(', ')}] ` +
+          `has no single dominant axis, so the travel direction cannot be classified.`,
         drillPointIds: [point.id],
         panelIds: [point.panelId],
-        context: { reason: 'OWNER_THICKNESS_UNDECLARED', measured: point.depth, panelRole },
+        context: { reason: 'BORE_AXIS_AMBIGUOUS', measured: point.depth, panelRole },
       });
       continue;
     }
 
-    if (point.depth >= declaredThickness) {
+    const extent = resolvePanelExtentAlongAxis(ownerPanel, axis, declaredThickness);
+    if (extent === undefined) {
+      issues.push({
+        id: issueId('I_G11_BREAKTHROUGH_NOT_EVALUATED', point.id),
+        severity: 'INFO',
+        code: 'I_G11_BREAKTHROUGH_NOT_EVALUATED',
+        message:
+          `Breakthrough not evaluated for ${point.id}: owner panel ${point.panelId} (${panelRole}) ` +
+          `declares no usable span along ${AXIS_NAMES[axis]}, so this edge bore cannot be measured ` +
+          `against anything.`,
+        drillPointIds: [point.id],
+        panelIds: [point.panelId],
+        context: {
+          reason: 'OWNER_SPAN_UNRESOLVED',
+          measured: point.depth,
+          panelRole,
+          boreType: 'EDGE_BORE',
+          axis: AXIS_NAMES[axis],
+        },
+      });
+      continue;
+    }
+
+    if (point.depth >= extent) {
       issues.push({
         id: issueId('B_G11_PANEL_BREAKTHROUGH', point.id),
         severity: 'BLOCKER',
         code: 'B_G11_PANEL_BREAKTHROUGH',
         message:
-          `Blind bore ${point.id} (${point.purpose} Ø${point.diameter}) needs ${point.depth}mm ` +
-          `but its owner panel ${point.panelId} (${panelRole}) is only ${declaredThickness}mm thick — ` +
-          `the bore breaks through the far face. Reducing the depth would invent a nonfunctional ` +
-          `fixing: resolve the fastener recipe instead.`,
+          `Blind edge bore ${point.id} (${point.purpose} Ø${point.diameter}) needs ${point.depth}mm ` +
+          `along ${AXIS_NAMES[axis]}, but its owner panel ${point.panelId} (${panelRole}) only ` +
+          `extends ${extent}mm in that direction — the bore exits the panel. Depth was NOT reduced: ` +
+          `clamping it would invent a nonfunctional fixing. Resolve the fastener recipe or the ` +
+          `panel size instead.`,
         drillPointIds: [point.id],
         panelIds: [point.panelId],
         corner: point.cornerType,
         context: {
           measured: point.depth,
-          expected: declaredThickness,
+          expected: extent,
           panelRole,
-          boreType: 'FACE_BORE',
+          boreType: 'EDGE_BORE',
+          axis: AXIS_NAMES[axis],
           purpose: point.purpose,
           waivable: false,
         },
@@ -1100,6 +1208,107 @@ export function ruleG11_PanelBreakthrough(
   }
 
   return issues;
+}
+
+/** World axis names, index-aligned with the AABB tuples. */
+const AXIS_NAMES = ['X', 'Y', 'Z'] as const;
+
+/**
+ * Dominant bore axis (0=X, 1=Y, 2=Z), or -1 when it cannot be resolved.
+ *
+ * Applies the generator's ambiguity test (generateDrillMap.ts ~:496-506): a
+ * zero, non-finite or 45°-diagonal normal has no single dominant axis and is
+ * not assigned one by a tie-break.
+ *
+ * ## This is NOT parity with the generator, and the difference is measurable
+ * This helper only ever sees bores that `inferBoreTypeFromNormal` (~:521) has
+ * ALREADY classified as EDGE — and that classifier uses `dominantAxis()`, which
+ * DOES tie-break. So an unadjudicable normal is first routed by a tie-break and
+ * only then reaches this test. Measured consequence: normal `[1,1,0]` or
+ * `[NaN,0,0]` on a LEFT_SIDE panel is classified FACE_BORE and measured against
+ * thickness, where the generator refuses it outright with
+ * `R_BORE_AXIS_UNDECLARED`. At depth 24 the gate happens to block anyway; at
+ * depth 17.5 it would pass where the generator refuses.
+ *
+ * Closing that gap means resolving the axis BEFORE the face/edge split —
+ * i.e. dropping the role-based pre-classification the generator already
+ * abandoned for the same reason (generateDrillMap.ts ~:246-252, "judging 'is
+ * this a face bore?' first was the bug"). That is a change to the FACE half's
+ * behaviour, so it is deliberately NOT bundled into this edge-half task.
+ *
+ * NOTE the `!Array.isArray(normal)` guard below is currently unreachable: a
+ * point with no `normal` throws earlier inside `inferBoreTypeFromNormal`
+ * (pre-existing at HEAD). It is kept as a cheap invariant, not as coverage —
+ * `BORE_AXIS_AMBIGUOUS` does not catch a missing normal.
+ */
+function resolveBoreAxis(normal: [number, number, number] | undefined): number {
+  if (!Array.isArray(normal) || normal.length !== 3) return -1;
+  const n = [Math.abs(Number(normal[0])), Math.abs(Number(normal[1])), Math.abs(Number(normal[2]))];
+  if (!n.every(Number.isFinite)) return -1;
+  const maxN = Math.max(n[0], n[1], n[2]);
+  if (!(maxN > 0)) return -1;
+  // 0.7071 = cos 45°: more than one component above it means a diagonal normal.
+  if (n.filter((v) => v > maxN * 0.7071).length !== 1) return -1;
+  return n.indexOf(maxN);
+}
+
+/**
+ * How far the owner panel extends along a world axis, in mm.
+ *
+ * Delegates to `calculatePanelAABB` (panelBasis.ts:122-165) — the single
+ * source the generator already uses — rather than re-deriving the box layout
+ * here. Returns undefined (never a guessed number) when the panel does not
+ * declare position, in-plane dimensions or thickness.
+ *
+ * ## ⚠️ LATENT TRAP for whoever adds the next emitter — measured, not theorised
+ * Two role tables disagree, and this rule sits across both:
+ *   - `inferBoreTypeFromNormal` (~:521): SIDE→X, BACK→Z, EVERYTHING ELSE→Y
+ *   - `calculatePanelAABB` (panelBasis.ts:130-150): TOP/BOTTOM/SHELF→Y,
+ *     LEFT_SIDE/RIGHT_SIDE→X, DEFAULT (everything else)→Z
+ * They agree only on {LEFT_SIDE, RIGHT_SIDE, TOP, BOTTOM, SHELF, BACK}. For
+ * `DIVIDER`, `DRAWER_SIDE`, `DRAWER_BACK`, `DOOR*`, `FRONT` — and the bare
+ * `'SIDE'` that `isSidePanel()` accepts but `calculatePanelAABB` does not —
+ * they disagree, and the review measured BOTH failure directions on a
+ * store-shaped DIVIDER (useCabinetStore.ts ~:1984): a legal 24mm BOLT_ENTRY
+ * into the 540mm front edge FALSE-BLOCKS (expected: 18), while a genuinely
+ * fatal 24mm bore through the 18mm thickness FALSE-PASSES.
+ *
+ * Harmless TODAY only because generateDrillMap.ts has no DIVIDER/DRAWER
+ * emitter, so no such panel ever carries points or reaches `drillMap.panels`
+ * (verified: a 2-divider cabinet yields 0 blockers because the dividers emit
+ * nothing). The moment such an emitter is added, reconcile the two tables
+ * FIRST — do not tune this rule around the symptom.
+ *
+ * `panel.rotation` is ignored (calculatePanelAABB never reads it), so a rotated
+ * panel's world-axis extent would be wrong. The generator ignores it
+ * identically, so gate and generator do not disagree; today only
+ * generateDrawerPanels.ts sets a non-zero rotation, and drawers emit no bores.
+ */
+function resolvePanelExtentAlongAxis(
+  panel: G11Panel | undefined,
+  axis: number,
+  thickness: number | undefined,
+): number | undefined {
+  if (!panel) return undefined;
+  if (thickness === undefined || !Number.isFinite(thickness) || thickness <= 0) return undefined;
+  if (!Array.isArray(panel.position) || panel.position.length !== 3) return undefined;
+  if (!panel.position.every((v) => Number.isFinite(v))) return undefined;
+  if (!Number.isFinite(panel.finishWidth) || panel.finishWidth <= 0) return undefined;
+  if (!Number.isFinite(panel.finishHeight) || panel.finishHeight <= 0) return undefined;
+
+  // calculatePanelAABB reads exactly these five fields; the cast supplies the
+  // CabinetPanel nominal type without fabricating any of the fields it ignores.
+  const aabb = calculatePanelAABB({
+    position: panel.position,
+    rotation: panel.rotation,
+    role: panel.role,
+    finishWidth: panel.finishWidth,
+    finishHeight: panel.finishHeight,
+    computed: { realThickness: thickness },
+  } as unknown as CabinetPanel);
+
+  const extent = aabb.max[axis] - aabb.min[axis];
+  return Number.isFinite(extent) && extent > 0 ? extent : undefined;
 }
 
 // ============================================
@@ -1268,7 +1477,37 @@ export function validateG11FromDrillMap(
     }
   }
 
-  const result = runG11Rules(allPoints, panels, policy);
+  // ── G11.9 EDGE half: the in-plane span has to REACH the rules ──────────
+  // DrillMapPanel already carries everything calculatePanelAABB needs — role,
+  // worldPosition (= CabinetPanel.position), dimensions.width (= finishWidth),
+  // dimensions.height (= finishHeight), dimensions.thickness
+  // (= computed.realThickness); see the DrillMapPanel assembly in
+  // generateDrillMap.ts (~:2756-2767). The flattener used to copy the thickness
+  // onto each point and DISCARD width/height, so the edge half had no span to
+  // measure against even once it existed.
+  //
+  // Synthesising here rather than at the call sites is deliberate: production
+  // calls this with no panels argument at all (SafetyPanel.tsx:170,
+  // RightInspectorSafetySection). Fixing one button leaves the next caller
+  // fail-open — same reasoning that put the export guard in the exporter.
+  // A caller-supplied G11Panel still wins: it may carry richer Cabinet data.
+  const panelById = new Map<string, G11Panel>();
+  for (const panel of drillMap.panels || []) {
+    if (!panel?.panelId || !panel.dimensions) continue;
+    panelById.set(panel.panelId, {
+      id: panel.panelId,
+      role: panel.role,
+      position: panel.worldPosition,
+      rotation: panel.worldRotation,
+      finishWidth: panel.dimensions.width,
+      finishHeight: panel.dimensions.height,
+      computed: { realThickness: panel.dimensions.thickness },
+    });
+  }
+  for (const panel of panels) panelById.set(panel.id, panel);
+  const effectivePanels = [...panelById.values()];
+
+  const result = runG11Rules(allPoints, effectivePanels, policy);
 
   // G11.9b (F-07): a refused joint leaves NO drill points behind, so the
   // point-level rules above can never see it. Without this, "the generator

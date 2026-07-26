@@ -2644,13 +2644,16 @@ export function generateMinifixDrillMap(
   // The back-overlay family is refused at source above. This sweep is the
   // backstop for EVERY other emitter (overlay corners, inset corners, shelf
   // junctions, Connector OS synthesis, future paths): no drill map may leave
-  // this function containing a blind FACE bore that is as deep as, or deeper
-  // than, the panel it is drilled into.
+  // this function containing a blind bore that is as deep as, or deeper than,
+  // the panel it is drilled into, measured along the bore's own axis.
   //
-  // Face vs edge is decided from the panel's OWN geometry — the thinnest AABB
-  // extent is the thickness axis — not from a role assumption. Edge bores are
-  // limited by the panel's in-plane span, not its thickness, and are left
-  // alone (see the scope note on the back-overlay pre-flight).
+  // There is NO face/edge pre-classification here, and no role assumption. The
+  // bore's dominant axis is taken from its own normal and the depth is judged
+  // against the owner panel's AABB extent along THAT axis
+  // (evaluateBlindBoreFeasibility, ~:484-530) — which is the thickness for a
+  // face bore and the in-plane span for an edge bore. One rule, both cases.
+  // Ambiguous normals and undeclared through-travel are refused there, not
+  // skipped.
   //
   // On a violation the whole pairId group is withdrawn, on every panel: a
   // half-joint is not a fixing. Nothing is clamped, relocated or relabelled.
