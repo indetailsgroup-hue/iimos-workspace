@@ -210,6 +210,41 @@ class GitEvidenceContractTests(unittest.TestCase):
                         check["details"]["remote_count"],
                     )
 
+    def test_remote_query_failure_fails_without_parsing_stderr_as_names(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+            self.init_repository(repository)
+            actual_run = verifier.run
+
+            def fail_only_remote(command: list[str]) -> dict[str, object]:
+                if command == ["git", "remote"]:
+                    return command_result(
+                        command,
+                        exit_code=2,
+                        output="fatal: injected remote query failure\n",
+                    )
+                return actual_run(command)
+
+            evidence = verifier.Evidence()
+            with (
+                mock.patch.object(verifier, "ROOT", repository),
+                mock.patch.object(
+                    verifier,
+                    "run",
+                    side_effect=fail_only_remote,
+                ),
+            ):
+                verifier.check_git(evidence)
+            check = check_by_name(
+                evidence,
+                "git_established_repository_state",
+            )
+
+            self.assertFalse(check["passed"], check)
+            self.assertEqual(2, check["details"]["remote_exit_code"])
+            self.assertEqual([], check["details"]["remote_names"])
+            self.assertEqual(0, check["details"]["remote_count"])
+
     def test_clean_detached_head_is_recorded_accurately(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repository = Path(temporary)

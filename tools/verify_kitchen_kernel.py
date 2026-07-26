@@ -582,9 +582,13 @@ def check_git(evidence: Evidence) -> None:
     unmerged_lines = [
         line for line in unmerged["output"].splitlines() if line.strip()
     ]
-    remote_names = [
-        line for line in remotes["output"].splitlines() if line.strip()
-    ]
+    remote_names = (
+        [
+            line for line in remotes["output"].splitlines() if line.strip()
+        ]
+        if remotes["exit_code"] == 0
+        else []
+    )
     head_exists = head["exit_code"] == 0
     branch_query_valid = branch["exit_code"] in (0, 1)
     branch_name = (
@@ -600,6 +604,7 @@ def check_git(evidence: Evidence) -> None:
         and unstaged["exit_code"] == 0
         and unmerged["exit_code"] == 0
         and not unmerged_lines
+        and remotes["exit_code"] == 0
         and branch_query_valid,
         {
             "status_command": status["command"],
