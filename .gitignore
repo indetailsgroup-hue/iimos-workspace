@@ -36,3 +36,6 @@ daph-second-brain/**/*.zip
 
 # Supabase Studio scratch queries ("Untitled query NNN.sql")
 supabase/snippets/
+
+# Local isolated execution lanes
+.worktrees/
