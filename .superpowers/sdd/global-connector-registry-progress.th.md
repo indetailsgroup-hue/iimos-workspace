@@ -2,11 +2,12 @@
 
 ## งานที่ 1: Worktree แบบคู่และ baseline gate
 
-**บันทึกเมื่อ:** 26 กรกฎาคม 2026
-**สถานะ:** BLOCKED
+**บันทึกเมื่อ:** 26–27 กรกฎาคม 2026
+**สถานะ:** COMPLETE
 **ฉบับ:** ภาษาไทย
 **ไฟล์คู่กัน:** `global-connector-registry-progress.md` (Markdown ภาษาอังกฤษ), `global-connector-registry-progress.en.html`, `global-connector-registry-progress.th.html`
-**เงื่อนไขที่ทำให้หยุด:** baseline แรกของ parent ที่แผนกำหนดจบด้วยสถานะไม่เป็นศูนย์ เพราะไม่มี test input ที่ tracked อยู่ใน isolated baseline ตามแผน implementation จึงไม่ได้รันคำสั่ง baseline หลังจากนั้น
+**เงื่อนไขที่ทำให้หยุดในอดีต (ถูกแทนที่แล้ว):** baseline แรกของ parent ที่แผนกำหนดจบด้วยสถานะไม่เป็นศูนย์ เพราะไม่มี test input ที่ tracked อยู่ใน isolated baseline ตามแผน implementation จึงไม่ได้รันคำสั่ง baseline หลังจากนั้นในการทำงานรอบแรก
+**การปิดงาน:** การ adopt baseline และ migrate verifier ที่เจ้าของอนุมัติได้แก้ช่องว่าง baseline สองรายการแล้ว Gate ของ parent และ isolated runtime สำหรับงานที่ 1 ผ่านใหม่เมื่อ 27 กรกฎาคม 2026 และยังไม่ได้เริ่มงานที่ 2
 
 ## Isolated worktree แบบคู่
 
@@ -133,10 +134,101 @@ npm.cmd run typecheck:all
 
 Exit status: ไม่ได้รันหลังถึงเงื่อนไขที่กำหนดให้หยุด
 
-## ประเด็นที่ยังคงเหลือ
+## ประเด็นคงเหลือในอดีต ณ จุดหยุดครั้งแรก
 
 - `tests/component_master/`, `packages/component-master/` และ `data/component-master/` ไม่มีอยู่ใน tracked isolated baseline สำเนาที่พบมีเฉพาะเนื้อหา untracked ใน checkout เดิม การนำมารวมต้องได้รับอนุญาตแยกต่างหาก
 - `CONTEXT.md` และเอกสารแก้ไขขอบเขต repository วันที่ 21 กรกฎาคมไม่มีอยู่ใน parent commit `9597ce69` จึงอ่านจาก governance checkout เดิมเพื่อปฏิบัติตามข้อกำหนดการกำหนดเส้นทาง repository เท่านั้น และไม่ได้แก้ไขไฟล์ใดใน checkout นั้น
 - Controller ติดตั้ง runtime dependencies ก่อนเริ่มงานนี้ งานนี้ไม่ได้สร้างหรือพบ npm installation/audit output จึงไม่มีการกล่าวอ้างเกี่ยวกับ npm audit
 - ไม่ได้รัน Minifix targeted tests และ runtime typecheck ดังนั้นข้อกำหนดเหล่านี้ยังไม่สำเร็จและไม่สามารถยืนยันได้จากงานที่ 1
 - ไม่มีการเปลี่ยน production source ส่วน runtime worktree ยังคงเป็น read/test-only และไม่เปลี่ยนแปลง
+
+## การแก้ไขที่ได้รับอนุมัติและสถานะปัจจุบันของงานที่ 1
+
+การอนุมัติของเจ้าของคือ `อนุมัติ baseline adoption + verifier migration` หลักฐานสถานะ BLOCKED ด้านบนยังคงอยู่เป็นประวัติของการทำงานรอบแรก และถูกแทนที่เฉพาะสำหรับสถานะปัจจุบันของงานที่ 1 ด้วยการแก้ไขที่ผ่าน review และ gate ปิดงานใหม่ด้านล่าง
+
+สถานะปัจจุบันของงานที่ 1 คือ **COMPLETE** หมายถึง baseline แบบคู่และ verifier gate ถูกจัดตั้งสำหรับ cohort ที่มี governance ใน parent และ baseline runtime แบบ isolated ที่ pin ไว้ ไม่ได้หมายถึงเริ่มงานที่ 2, รวม runtime branch, ยืนยัน production/manufacturing readiness หรือยกเลิก NOT-FOR-PRODUCTION
+
+## ลำดับการแก้ไขที่ยอมรับแล้ว
+
+| ขั้น | Commit | ผลที่บันทึก |
+| --- | --- | --- |
+| Adoption manifest | `a3f6216977c2f6e595c11654a13f7be441bb8dd7` | สร้าง manifest ที่ tracked จำนวนห้า artifact/edition สำหรับ allowlist แบบ exact จำนวน 77 ไฟล์ รวม 712,400 ไบต์ |
+| การแก้ manifest | `a6a8d8bd18a871784e806cf54c3a2d6836a540fa` | จัดแนวฉบับ EN/TH, purpose group, migration ที่ยังไม่จบ และ execution contract แบบ ADD-only ค่า SHA-256 สุดท้ายของ manifest JSON คือ `7987272b4b9828574d5244e5a99ef31f423b5546425a643358d2f30ebcc846ee` และ SHA-256 ของ compact inventory คือ `1d25a3fdc6bb008d227fcfc80e865dd244396f8842778135e5afa833bbabb2db` |
+| Guardrail ของ excluded root | `929bb9413ee1f49a7f057dbf4b6911195423cca2` | ทำให้ claim linter ทั้งสองปฏิเสธ excluded path ก่อนตรวจการมีอยู่ของ path |
+| Adopt governed cohort | `6dd9937295ba3838bfa57d2610dfb5d0cf316e9d` | เพิ่มพาธตาม manifest ครบ 77 พาธ โดยไม่พบบันทึก manifest collision, พาธขาด หรือพาธเกิน |
+| Migrate verifier สำหรับ established state | `11f42a052b48479ba20cda54dd9e85da6f5af7a7` | เพิ่มหลักฐาน governed suite แบบ exact, ยอมรับ Git repository ที่จัดตั้งแล้วและสะอาด และย้าย schema ของ summary เป็น `1.1.0` |
+| แก้ remote query ให้ fail closed | `01bf7b51051a520d77b0e9b510d89a0e611ad295` | กำหนดให้ query `git remote` ต้องสำเร็จ และป้องกันไม่ให้ตีความ stderr เป็นชื่อ remote |
+
+ไบต์ source ที่ adopt แล้วยังมีคำเตือน advisory ที่รับต่อมา: `git diff --cached --check` รายงาน 21 ไฟล์ที่ยอมรับแล้วว่ามี `new blank line at EOF` เนื่องจาก manifest pin ไบต์เหล่านั้น การ adopt จึงไม่เขียนทับใหม่
+
+## ลำดับคำตัดสินของ reviewer
+
+| Review | คำตัดสิน | การจัดการ |
+| --- | --- | --- |
+| Review แรกของ adoption manifest | `NEEDS_FIXES` | แก้ด้วย `a6a8d8bd` และไม่ได้อ้างว่าได้รับการยอมรับตั้งแต่รอบแรก |
+| Rereview manifest ที่แก้แล้ว | `ACCEPTED` | ยอมรับหลังแก้ความสอดคล้องของ edition และ execution contract |
+| Review excluded-root guardrail | `ACCEPTED` | ยอมรับที่ `929bb941` |
+| Review baseline adoption | `ACCEPTED` | ยอมรับที่ `6dd99372` |
+| Review แรกของ verifier migration | `NEEDS_FIXES` | พบ defect ที่ remote query เปิดให้ผ่านเมื่อผิดพลาด และไม่ได้อ้างว่าได้รับการยอมรับตั้งแต่รอบแรก |
+| Rereview verifier ที่แก้แล้ว | `ACCEPTED` | ยอมรับหลังแก้ให้ fail closed ที่ `01bf7b51` |
+
+## หลักฐาน verifier migration
+
+**PRE-MIGRATION:** การรันบน commit ที่ adopt แล้ว `6dd99372` ในสภาพสะอาดจบด้วย exit `1`, schema `1.0.0`, 12 checks, ผ่าน 10 และล้มเหลวตรงสองรายการ:
+
+1. `unittest_full_suite` ปฏิเสธ ambient run ที่สำเร็จ 258 tests เพราะ verifier เก่า encode เงื่อนไข `test_count == 27`
+2. `git_bootstrap_state` ปฏิเสธ linked worktree ที่จัดตั้งแล้วและสะอาด เพราะ verifier เก่ากำหนดให้เป็น repository ที่ยังไม่มี HEAD, index และ remote
+
+สองรายการนี้คือ failure ที่อนุมัติให้ migrate ส่วนอีก 10 checks ผ่าน
+
+**POST-MIGRATION:** verifier ที่แก้แล้วที่ `01bf7b51` ใช้ schema `1.1.0`, กำหนด ambient suite ที่สำเร็จและมากกว่าค่าขั้นต่ำโดยไม่ encode จำนวนรวมทั้งหมด, กำหนด governed suite แบบ exact 20 tests สำหรับ Component Master บวก 7 tests สำหรับ identity-tenancy และตรวจ Git state ที่จัดตั้งแล้วและสะอาด Regression ของ remote query ล้มเหลวแบบ fail closed ส่วน closeout run ใหม่ด้านล่างให้ผลผ่าน 13/13 checks
+
+## Gate สุดท้ายที่รันใหม่ — 27 กรกฎาคม 2026
+
+### Isolated worktree ของ parent governance/bootstrap
+
+| Gate | Exit | หลักฐานใหม่ |
+| --- | ---: | --- |
+| `python -B -m unittest discover -s tests/component_master -v` | `0` | รัน 20 tests แบบ exact และจบด้วย `OK` |
+| `python -B tools/verify_kitchen_kernel.py` | `0` | Schema `1.1.0`; 13 checks, ผ่าน 13, ล้มเหลว 0 Ambient discovery รัน 269 tests พร้อม `OK` จริง จำนวนรวมนี้เป็น observation ไม่ใช่ requirement ถาวร Governed suites เท่ากับ 20 + 7 แบบ exact |
+| หลักฐาน Git ของ verifier | `0` | `HEAD` `01bf7b51051a520d77b0e9b510d89a0e611ad295`, branch `codex/global-connector-registry`, สถานะ porcelain/cached/unstaged/unmerged ว่าง, remote query exit `0`, มี remote เชิงข้อมูลหนึ่งรายการ (`origin`) และไม่มีการอ้างว่า push |
+
+Summary ที่สร้างใหม่ก่อน cleanup ตามที่อนุมัติ: 57,552 ไบต์; SHA-256 `1edaba16a0aab0ff6dca8521cebdba11d473ef7c92154a3cd527bdc5853e5877` จากนั้นลบ summary ที่ ignored แบบ exact และไดเรกทอรี `__pycache__` ที่สร้างขึ้นแปดรายการ และไม่เหลือไดเรกทอรี cache
+
+### Isolated worktree ของ nested MONOLITH runtime
+
+| Gate | Exit | หลักฐานใหม่ |
+| --- | ---: | --- |
+| การรักษา T1b | `0` | `src/core/connector/worldSynthesis.ts` มีทั้ง `opts.connectorCount` และ `opts.excludeCorners` ไฟล์มีขนาด 15,694 ไบต์ และ SHA-256 `99ee18918f60ea815cf2c718513ef90d025ad862cde88562df1efa447f4e56c8` ตรงกันระดับไบต์กับสำเนาของ owner แบบ read-only ทั้งตอนสังเกต gate ที่ `b361fb5e` และตอนสังเกตสุดท้ายที่ `a1e9006a` |
+| `npm.cmd run test:run -- src/core/connector src/core/hardware/catalog src/factory/packet` | `0` | ผ่าน 19 test files และผ่าน 207 tests |
+| `npm.cmd run typecheck:all` | `0` | `tsc -b tsconfig.build.json` จบสำเร็จ |
+
+Toolchain ที่บันทึกสำหรับ closeout นี้: Git `2.52.0.windows.1`, Python `3.14.2`, Node.js `v22.21.1`, npm `11.6.2`, TypeScript `5.9.3`, Vitest `3.0.0` และ runtime package `monolith-workspace@2.1.0`
+
+## NOT-FOR-PRODUCTION และขีดจำกัดของหลักฐาน
+
+- NOT-FOR-PRODUCTION ยังทำงานอยู่: `SHADOW_MODE_NOT_FOR_PRODUCTION = true`; targeted run ผ่าน NFP tests ทั้งสี่ที่ครอบคลุม notice file, การรวมใน manifest/hash และคำนำหน้า ZIP `NFP-`
+- Live Minifix recipe ยังคงไม่ได้มี source ครบโดยเจตนา: provenance tests ที่ผ่านบันทึกค่าหนึ่งรายการเป็น `CONTRADICTED` (เส้นผ่านศูนย์กลาง sleeve Ø10) และสองรายการเป็น `UNSOURCED` (ความลึก bolt-bore 17.5 มม. และการใช้ทางเข้า Ø7.5)
+- Software gate ไม่ได้ยืนยัน production, manufacturing, machine/coupon/first-article, security, field หรือ operational readiness
+- Daph ยังคงเป็นหนึ่ง tenant/pilot ไม่ใช่ขอบเขตของระบบและไม่ได้เป็นเจ้าของข้อมูล canonical ที่ใช้ร่วมกัน
+
+## Snapshot การกำหนดเส้นทางสี่ root
+
+| Root และขอบเขตคำกล่าวอ้าง | HEAD / branch | สถานะที่สังเกต |
+| --- | --- | --- |
+| Original parent governance/bootstrap root — ใช้รองรับคำกล่าวอ้างของ parent เท่านั้น: `C:\Users\thai3\determined-williams (2)` | `8b65a1e974c5a34ee5abc12edab87d1ec54d69a4` / `guardrails/claim-linters` | Checkout ภายนอกไม่สะอาด: 8,342 entries (tracked change 1, untracked 8,341) เมื่อสังเกตตอน closeout; งานนี้ไม่เคยแก้ไข |
+| Original nested product runtime — ใช้รองรับคำกล่าวอ้างของ runtime เท่านั้น: `C:\Users\thai3\determined-williams (2)\determined-williams` | `a1e9006add32fe3ce5346eb6ca94e8bdce1d13ab` / `fix/dxf-truth-chain` | Lane ภายนอกไม่สะอาด: 67 entries (tracked changes 18, untracked 49) เมื่อสังเกตสุดท้ายตอน closeout; งานนี้ไม่เคยแก้ไข และ lane เดินหน้าพร้อมกันจากจุดสังเกต gate `b361fb5e` |
+| Isolated parent closeout lane: `C:\tmp\monolith-global-connector-registry-parent` | Evidence base `01bf7b51051a520d77b0e9b510d89a0e611ad295` / `codex/global-connector-registry` | สะอาดก่อนแก้ ledger และหลัง cleanup artifact ที่สร้าง |
+| Isolated runtime baseline lane: `C:\tmp\monolith-global-connector-registry-runtime` | `ed036a2ceebc8c3c9fa71edd3fc85ff67ca53b97` / `codex/global-connector-runtime` | สะอาด; read/test-only; ไม่มีการเปลี่ยน runtime source |
+
+Owner runtime แตกต่างจาก isolated baseline เนื่องจาก lane ภายนอกที่ทำงานพร้อมกัน งานนี้ไม่ได้ sync หรือ integrate operation การตรวจ overlap และ stable-tree gate ใหม่แบบ exact ยังเป็นข้อบังคับทันทีก่อนงานที่ 14
+
+## ขอบเขตงานและประเด็นคงเหลือ
+
+- ปิดงานที่ 1 เฉพาะการจัดตั้ง paired baseline และการแก้ไขที่ยอมรับแล้ว
+- ยังไม่ได้เริ่มงานที่ 2
+- ไม่ได้เปลี่ยน runtime/source product code และไม่ได้รวม runtime branch
+- ไม่ได้ push หรือ merge
+- รายงาน manifest คงสถานะ `DONE_WITH_CONCERNS` เพราะ migration สองรายการยังไม่จบ ณ เวลานั้น Closeout นี้รักษาประวัติดังกล่าวและบันทึกการแก้ไขที่ยอมรับในภายหลัง
+- คำเตือน EOF ที่รับต่อมา 21 รายการยังเป็น advisory debt ในไบต์ source ที่ยอมรับแล้ว
+- Production readiness อยู่นอกขอบเขตงานนี้ และต้องมี physical qualification พร้อม owner ratification

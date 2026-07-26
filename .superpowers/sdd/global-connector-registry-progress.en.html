@@ -3,37 +3,59 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
 <title>Global Connector Registry — SDD Progress Ledger</title>
 <style>
-:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
-@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
 *{box-sizing:border-box}
-body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai","Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-text-size-adjust:100%}
-main{max-width:82ch;margin:0 auto}
-h1,h2,h3{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
 h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
 h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
-h3{font-size:1.16rem}
-p,ul{margin:0 0 1.05em}
-ul{padding-left:1.5em}li{margin:.3em 0}
-code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.12em .38em;color:var(--code);word-break:break-word}
-pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
 pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
-.status{padding:.9em 1.1em;background:var(--warn-bg);border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
-@media print{body{padding:0;font-size:11pt;background:#fff;color:#000}main{max-width:none}pre,.status{break-inside:avoid}h1,h2,h3{break-after:avoid}}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
 </style>
 </head>
 <body><main>
 <h1>Global Connector Registry — SDD Progress Ledger</h1>
 <h2>Task 1: Paired worktrees and baseline gates</h2>
-<div class="status">
-<p><strong>Recorded:</strong> 26 July 2026<br>
-<strong>Status:</strong> BLOCKED<br>
-<strong>Edition:</strong> English (canonical unsuffixed Markdown)<br>
-<strong>Companions:</strong> <code>global-connector-registry-progress.en.html</code>, <code>global-connector-registry-progress.th.md</code>, <code>global-connector-registry-progress.th.html</code><br>
-<strong>Stop condition:</strong> The first required parent baseline exited nonzero because its tracked test input is absent from the isolated baseline. Per the implementation plan, no later baseline command was run.</p>
-</div>
-
+<p><strong>Recorded:</strong> 26–27 July 2026 <strong>Status:</strong> COMPLETE <strong>Edition:</strong> English (canonical unsuffixed Markdown) <strong>Companions:</strong> <code>global-connector-registry-progress.en.html</code>, <code>global-connector-registry-progress.th.md</code>, <code>global-connector-registry-progress.th.html</code> <strong>Historical stop condition (superseded):</strong> The first required parent baseline exited nonzero because its tracked test input was absent from the isolated baseline. Per the implementation plan, no later baseline command was run in that initial execution. <strong>Closeout:</strong> Owner-authorized baseline adoption and verifier migration resolved the two recorded baseline gaps. Fresh parent and isolated-runtime Task 1 gates passed on 27 July 2026. Task 2 has not started.</p>
 <h2>Paired isolated worktrees</h2>
 <h3>Parent governance/bootstrap worktree</h3>
 <ul>
@@ -47,7 +69,6 @@ pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
 <li>Superproject working tree: empty (not a submodule)</li>
 <li>Isolation result: linked worktree verified</li>
 </ul>
-
 <h3>Nested MONOLITH runtime worktree</h3>
 <ul>
 <li>Absolute path: <code>C:\tmp\monolith-global-connector-registry-runtime</code></li>
@@ -60,28 +81,22 @@ pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
 <li>Superproject working tree: empty (not a submodule)</li>
 <li>Isolation result: linked worktree verified</li>
 </ul>
-
 <h2>Toolchain</h2>
 <ul>
 <li>Python: <code>Python 3.14.2</code></li>
 <li>Node.js: <code>v22.21.1</code></li>
 <li>npm: <code>11.6.2</code></li>
 </ul>
-
 <h2>Tracked-baseline availability</h2>
 <ul>
-<li>At parent baseline <code>9597ce6924b14ec71fe311160a7dfe927f449b13</code>, <code>git ls-tree</code> reports zero tracked entries under:
-  <ul>
-  <li><code>tests/component_master/</code></li>
-  <li><code>packages/component-master/</code></li>
-  <li><code>data/component-master/</code></li>
-  </ul>
-</li>
+<li>At parent baseline <code>9597ce6924b14ec71fe311160a7dfe927f449b13</code>, <code>git ls-tree</code> reports zero tracked entries under:</li>
+<li><code>tests/component_master/</code></li>
+<li><code>packages/component-master/</code></li>
+<li><code>data/component-master/</code></li>
 <li>None of those three paths exists in the isolated parent worktree.</li>
 <li>The same paths exist only as untracked (<code>??</code>) content in the original governance checkout.</li>
 <li>The untracked original-checkout content was not copied, staged, or modified. Integrating it into the isolated baseline requires separate authorization and is outside Task 1.</li>
 </ul>
-
 <h2>NOT-FOR-PRODUCTION state</h2>
 <ul>
 <li>State: active</li>
@@ -89,14 +104,13 @@ pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
 <li>Packet evidence paths: <code>src/factory/packet/buildFactoryPacket.ts</code> adds <code>NOT_FOR_PRODUCTION.txt</code>; <code>src/factory/packet/zipBundle.ts</code> applies the <code>NFP-</code> prefix while shadow mode is active.</li>
 <li>Verification note: the source state was inspected, but the runtime targeted baseline was not run because the plan required stopping at the first failed parent baseline.</li>
 </ul>
-
 <h2>Required baseline commands</h2>
 <h3>1. Parent component-master unit tests — FAIL</h3>
 <p>Command:</p>
-<pre><code>python -m unittest discover -s tests/component_master -v</code></pre>
+<pre><code class="language-powershell">python -m unittest discover -s tests/component_master -v</code></pre>
 <p>Exit status: <code>1</code></p>
 <p>Complete captured output:</p>
-<pre><code>Traceback (most recent call last):
+<pre><code class="language-text">Traceback (most recent call last):
   File "&lt;frozen runpy&gt;", line 198, in _run_module_as_main
   File "&lt;frozen runpy&gt;", line 88, in _run_code
   File "C:\Users\thai3\AppData\Local\Programs\Python\Python314\Lib\unittest\__main__.py", line 18, in &lt;module&gt;
@@ -118,32 +132,98 @@ pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
     raise ImportError('Start directory is not importable: %r' % start_dir)
 ImportError: Start directory is not importable: 'tests/component_master'</code></pre>
 <p>Observed summary: unittest discovery did not start because <code>tests/component_master/</code> does not exist in the tracked isolated baseline. Python therefore reported the requested start directory as not importable. No test count or passing summary was produced.</p>
-<p><strong>Blocker:</strong> the required tests, implementation package, and seed data are absent from the tracked isolated baseline and exist only as untracked original-checkout content. A separately authorized baseline-integration change is required before this command can exercise the intended component-master baseline.</p>
-
+<p>Blocker: the required tests, implementation package, and seed data are absent from the tracked isolated baseline and exist only as untracked original-checkout content. A separately authorized baseline-integration change is required before this command can exercise the intended component-master baseline.</p>
 <h3>2. Parent kitchen-kernel verifier — NOT RUN</h3>
 <p>Command:</p>
-<pre><code>python tools/verify_kitchen_kernel.py</code></pre>
+<pre><code class="language-powershell">python tools/verify_kitchen_kernel.py</code></pre>
 <p>Exit status: not run after required stop condition.</p>
-
 <h3>3. Runtime targeted tests — NOT RUN</h3>
 <p>Command:</p>
-<pre><code>npm.cmd run test:run -- src/core/connector src/core/hardware/catalog src/factory/packet</code></pre>
+<pre><code class="language-powershell">npm.cmd run test:run -- src/core/connector src/core/hardware/catalog src/factory/packet</code></pre>
 <p>Exit status: not run after required stop condition.</p>
 <p>Minifix targeted-test requirement: <strong>NOT SATISFIED — not run / cannot verify.</strong></p>
 <p>The Minifix live-recipe provenance state was not re-evaluated by this task. Runtime commit <code>ed036a2c</code> was retained unchanged, but immutability does not satisfy the targeted-test requirement.</p>
-
 <h3>4. Runtime typecheck — NOT RUN</h3>
 <p>Command:</p>
-<pre><code>npm.cmd run typecheck:all</code></pre>
+<pre><code class="language-powershell">npm.cmd run typecheck:all</code></pre>
 <p>Exit status: not run after required stop condition.</p>
-
-<h2>Residual concerns</h2>
+<h2>Historical residual concerns at the initial stop</h2>
 <ul>
 <li><code>tests/component_master/</code>, <code>packages/component-master/</code>, and <code>data/component-master/</code> are absent from the tracked isolated baseline. The only observed copies are untracked original-checkout content; integrating them requires separate authorization.</li>
 <li><code>CONTEXT.md</code> and the 21 July repository-scope correction are absent from parent commit <code>9597ce69</code>; they were read from the original governance checkout as mandatory routing context. No file from that checkout was modified.</li>
 <li>Runtime dependencies were installed by the controller before this task. No npm installation or audit output was produced or observed during this execution, so this ledger makes no npm-audit claim.</li>
 <li>The Minifix targeted tests and runtime typecheck were not run, so their requirements remain unsatisfied and cannot be verified from Task 1.</li>
 <li>No production source was changed. The runtime worktree remains read/test-only and unchanged.</li>
+</ul>
+<h2>Authorized remediation and current Task 1 status</h2>
+<p>Owner authorization was <code>อนุมัติ baseline adoption + verifier migration</code> (approve baseline adoption and verifier migration). The initial BLOCKED evidence above remains the historical record of the first execution; it is superseded only for the current Task 1 status by the reviewed remediation and the fresh closeout gates below.</p>
+<p>Current Task 1 status is <strong>COMPLETE</strong>. This means the paired baseline and verifier gates are established for the governed parent cohort and the pinned isolated runtime baseline. It does not start Task 2, integrate a runtime branch, establish production/manufacturing readiness, or lift NOT-FOR-PRODUCTION.</p>
+<h2>Accepted remediation chain</h2>
+<div class="tablewrap"><table><thead><tr><th>Stage</th><th>Commit</th><th>Recorded result</th></tr></thead><tbody>
+<tr><td>Adoption manifest</td><td><code>a3f6216977c2f6e595c11654a13f7be441bb8dd7</code></td><td>Created the five tracked manifest editions/artifacts for a 77-file, 712,400-byte exact allowlist.</td></tr>
+<tr><td>Manifest correction</td><td><code>a6a8d8bd18a871784e806cf54c3a2d6836a540fa</code></td><td>Aligned EN/TH editions, purpose groups, unresolved migrations, and the ADD-only execution contract. Final manifest JSON SHA-256: <code>7987272b4b9828574d5244e5a99ef31f423b5546425a643358d2f30ebcc846ee</code>; compact inventory SHA-256: <code>1d25a3fdc6bb008d227fcfc80e865dd244396f8842778135e5afa833bbabb2db</code>.</td></tr>
+<tr><td>Excluded-root guardrail</td><td><code>929bb9413ee1f49a7f057dbf4b6911195423cca2</code></td><td>Made both claim linters refuse excluded paths before testing path existence.</td></tr>
+<tr><td>Governed cohort adoption</td><td><code>6dd9937295ba3838bfa57d2610dfb5d0cf316e9d</code></td><td>Added exactly the 77 manifest paths; no manifest collision, missing path, or extra path was recorded.</td></tr>
+<tr><td>Established-state verifier migration</td><td><code>11f42a052b48479ba20cda54dd9e85da6f5af7a7</code></td><td>Added exact governed-suite evidence, accepted a clean established Git repository, and moved the summary schema to <code>1.1.0</code>.</td></tr>
+<tr><td>Remote-query fail-closed correction</td><td><code>01bf7b51051a520d77b0e9b510d89a0e611ad295</code></td><td>Required a successful <code>git remote</code> query and prevented stderr from being interpreted as remote names.</td></tr>
+</tbody></table></div>
+<p>The adopted source bytes retain an inherited advisory: <code>git diff --cached --check</code> reported 21 accepted files with <code>new blank line at EOF</code>. The manifest pinned those bytes, so adoption did not rewrite them.</p>
+<h2>Reviewer verdict chronology</h2>
+<div class="tablewrap"><table><thead><tr><th>Review</th><th>Verdict</th><th>Disposition</th></tr></thead><tbody>
+<tr><td>Adoption manifest first review</td><td><code>NEEDS_FIXES</code></td><td>Addressed by <code>a6a8d8bd</code>; first-pass acceptance is not claimed.</td></tr>
+<tr><td>Corrected manifest rereview</td><td><code>ACCEPTED</code></td><td>Accepted after the edition and execution-contract corrections.</td></tr>
+<tr><td>Excluded-root guardrail review</td><td><code>ACCEPTED</code></td><td>Accepted at <code>929bb941</code>.</td></tr>
+<tr><td>Baseline adoption review</td><td><code>ACCEPTED</code></td><td>Accepted at <code>6dd99372</code>.</td></tr>
+<tr><td>Verifier migration first review</td><td><code>NEEDS_FIXES</code></td><td>Found the remote-query fail-open defect; first-pass acceptance is not claimed.</td></tr>
+<tr><td>Corrected verifier rereview</td><td><code>ACCEPTED</code></td><td>Accepted after the fail-closed correction at <code>01bf7b51</code>.</td></tr>
+</tbody></table></div>
+<h2>Verifier migration evidence</h2>
+<p><strong>PRE-MIGRATION:</strong> a clean run at adopted commit <code>6dd99372</code> exited <code>1</code> with schema <code>1.0.0</code>, 12 checks, 10 passes, and exactly two failures:</p>
+<ol>
+<li><code>unittest_full_suite</code> rejected a successful ambient run of 258 tests because the old verifier encoded <code>test_count == 27</code>.</li>
+<li><code>git_bootstrap_state</code> rejected the clean established linked worktree because the old verifier required an unborn repository with no HEAD, index, or remote.</li>
+</ol>
+<p>These were the two authorized migration failures; the other 10 checks passed.</p>
+<p><strong>POST-MIGRATION:</strong> the corrected verifier at <code>01bf7b51</code> uses schema <code>1.1.0</code>, requires a successful ambient suite above a floor without encoding its full count, requires exact governed suites of 20 Component Master plus 7 identity-tenancy tests, and checks a clean established Git state. The remote-query regression fails closed. The fresh closeout run below produced 13/13 passing checks.</p>
+<h2>Fresh final gates — 27 July 2026</h2>
+<h3>Parent governance/bootstrap isolated worktree</h3>
+<div class="tablewrap"><table><thead><tr><th>Gate</th><th align="right">Exit</th><th>Fresh evidence</th></tr></thead><tbody>
+<tr><td><code>python -B -m unittest discover -s tests/component_master -v</code></td><td align="right"><code>0</code></td><td>Exactly 20 tests ran; <code>OK</code>.</td></tr>
+<tr><td><code>python -B tools/verify_kitchen_kernel.py</code></td><td align="right"><code>0</code></td><td>Schema <code>1.1.0</code>; 13 checks, 13 passed, 0 failed. Ambient discovery ran 269 tests with a real <code>OK</code>; this full count is observational, not a permanent requirement. Governed suites were exactly 20 + 7.</td></tr>
+<tr><td>Verifier Git evidence</td><td align="right"><code>0</code></td><td><code>HEAD</code> <code>01bf7b51051a520d77b0e9b510d89a0e611ad295</code>, branch <code>codex/global-connector-registry</code>, empty porcelain/cached/unstaged/unmerged state, remote query exit <code>0</code>, one informational remote (<code>origin</code>), and no push claim.</td></tr>
+</tbody></table></div>
+<p>Fresh generated summary before authorized cleanup: 57,552 bytes; SHA-256 <code>1edaba16a0aab0ff6dca8521cebdba11d473ef7c92154a3cd527bdc5853e5877</code>. The exact ignored summary and eight generated <code>__pycache__</code> directories were then removed; no cache directory remains.</p>
+<h3>Nested MONOLITH isolated runtime worktree</h3>
+<div class="tablewrap"><table><thead><tr><th>Gate</th><th align="right">Exit</th><th>Fresh evidence</th></tr></thead><tbody>
+<tr><td>T1b preservation</td><td align="right"><code>0</code></td><td><code>src/core/connector/worldSynthesis.ts</code> contains both <code>opts.connectorCount</code> and <code>opts.excludeCorners</code>. It is 15,694 bytes with SHA-256 <code>99ee18918f60ea815cf2c718513ef90d025ad862cde88562df1efa447f4e56c8</code>, byte-identical to the read-only owner copy both at the gate observation <code>b361fb5e</code> and final observation <code>a1e9006a</code>.</td></tr>
+<tr><td><code>npm.cmd run test:run -- src/core/connector src/core/hardware/catalog src/factory/packet</code></td><td align="right"><code>0</code></td><td>19 test files passed; 207 tests passed.</td></tr>
+<tr><td><code>npm.cmd run typecheck:all</code></td><td align="right"><code>0</code></td><td><code>tsc -b tsconfig.build.json</code> completed successfully.</td></tr>
+</tbody></table></div>
+<p>Toolchain recorded for this closeout: Git <code>2.52.0.windows.1</code>, Python <code>3.14.2</code>, Node.js <code>v22.21.1</code>, npm <code>11.6.2</code>, TypeScript <code>5.9.3</code>, Vitest <code>3.0.0</code>, and runtime package <code>monolith-workspace@2.1.0</code>.</p>
+<h2>NOT-FOR-PRODUCTION and evidence limits</h2>
+<ul>
+<li>NOT-FOR-PRODUCTION remains active: <code>SHADOW_MODE_NOT_FOR_PRODUCTION = true</code>; the targeted run passed all four NFP tests covering the notice file, manifest/hash participation, and <code>NFP-</code> ZIP prefix.</li>
+<li>The live Minifix recipe remains intentionally not fully sourced: the passing provenance tests record one <code>CONTRADICTED</code> value (Ø10 sleeve diameter) and two <code>UNSOURCED</code> values (17.5 mm bolt-bore depth and the Ø7.5 entry application).</li>
+<li>Software gates do not establish production, manufacturing, machine/coupon/first-article, security, field, or operational readiness.</li>
+<li>Daph remains one tenant/pilot. It does not define the system boundary or own shared canonical data.</li>
+</ul>
+<h2>Four-root routing snapshot</h2>
+<div class="tablewrap"><table><thead><tr><th>Root and claim boundary</th><th>HEAD / branch</th><th>Status observation</th></tr></thead><tbody>
+<tr><td>Original parent governance/bootstrap root — parent claims only: <code>C:\Users\thai3\determined-williams (2)</code></td><td><code>8b65a1e974c5a34ee5abc12edab87d1ec54d69a4</code> / <code>guardrails/claim-linters</code></td><td>Dirty external checkout: 8,342 entries (1 tracked change, 8,341 untracked) at closeout observation; never modified by this task.</td></tr>
+<tr><td>Original nested product runtime — runtime claims only: <code>C:\Users\thai3\determined-williams (2)\determined-williams</code></td><td><code>a1e9006add32fe3ce5346eb6ca94e8bdce1d13ab</code> / <code>fix/dxf-truth-chain</code></td><td>Dirty external lane: 67 entries (18 tracked changes, 49 untracked) at final closeout observation; never modified by this task. It advanced concurrently from the gate observation <code>b361fb5e</code>.</td></tr>
+<tr><td>Isolated parent closeout lane: <code>C:\tmp\monolith-global-connector-registry-parent</code></td><td>Evidence base <code>01bf7b51051a520d77b0e9b510d89a0e611ad295</code> / <code>codex/global-connector-registry</code></td><td>Clean before ledger editing and after generated-artifact cleanup.</td></tr>
+<tr><td>Isolated runtime baseline lane: <code>C:\tmp\monolith-global-connector-registry-runtime</code></td><td><code>ed036a2ceebc8c3c9fa71edd3fc85ff67ca53b97</code> / <code>codex/global-connector-runtime</code></td><td>Clean; read/test-only; no runtime source change.</td></tr>
+</tbody></table></div>
+<p>The owner runtime has diverged from the isolated baseline because of an external concurrent lane. No sync or integration was performed. The exact integration operation, overlap review, and fresh stable-tree gates remain mandatory immediately before Task 14.</p>
+<h2>Task boundary and residual concerns</h2>
+<ul>
+<li>Task 1 is closed only for paired baseline establishment and its accepted remediation.</li>
+<li>Task 2 has not started.</li>
+<li>No runtime/source product code was changed, and no runtime branch was integrated.</li>
+<li>No push or merge was performed.</li>
+<li>The manifest report retained <code>DONE_WITH_CONCERNS</code> because the two migrations were unresolved at that point; this closeout preserves that history and records their later accepted resolution.</li>
+<li>The 21 inherited EOF warnings remain advisory debt in accepted source bytes.</li>
+<li>Production readiness remains outside this task and requires physical qualification plus owner ratification.</li>
 </ul>
 </main></body>
 </html>

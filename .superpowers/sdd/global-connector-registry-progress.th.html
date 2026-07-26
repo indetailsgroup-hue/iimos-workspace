@@ -55,7 +55,7 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <body><main>
 <h1>Global Connector Registry — บัญชีความคืบหน้า SDD</h1>
 <h2>งานที่ 1: Worktree แบบคู่และ baseline gate</h2>
-<p><strong>บันทึกเมื่อ:</strong> 26 กรกฎาคม 2026 <strong>สถานะ:</strong> BLOCKED <strong>ฉบับ:</strong> ภาษาไทย <strong>ไฟล์คู่กัน:</strong> <code>global-connector-registry-progress.md</code> (Markdown ภาษาอังกฤษ), <code>global-connector-registry-progress.en.html</code>, <code>global-connector-registry-progress.th.html</code> <strong>เงื่อนไขที่ทำให้หยุด:</strong> baseline แรกของ parent ที่แผนกำหนดจบด้วยสถานะไม่เป็นศูนย์ เพราะไม่มี test input ที่ tracked อยู่ใน isolated baseline ตามแผน implementation จึงไม่ได้รันคำสั่ง baseline หลังจากนั้น</p>
+<p><strong>บันทึกเมื่อ:</strong> 26–27 กรกฎาคม 2026 <strong>สถานะ:</strong> COMPLETE <strong>ฉบับ:</strong> ภาษาไทย <strong>ไฟล์คู่กัน:</strong> <code>global-connector-registry-progress.md</code> (Markdown ภาษาอังกฤษ), <code>global-connector-registry-progress.en.html</code>, <code>global-connector-registry-progress.th.html</code> <strong>เงื่อนไขที่ทำให้หยุดในอดีต (ถูกแทนที่แล้ว):</strong> baseline แรกของ parent ที่แผนกำหนดจบด้วยสถานะไม่เป็นศูนย์ เพราะไม่มี test input ที่ tracked อยู่ใน isolated baseline ตามแผน implementation จึงไม่ได้รันคำสั่ง baseline หลังจากนั้นในการทำงานรอบแรก <strong>การปิดงาน:</strong> การ adopt baseline และ migrate verifier ที่เจ้าของอนุมัติได้แก้ช่องว่าง baseline สองรายการแล้ว Gate ของ parent และ isolated runtime สำหรับงานที่ 1 ผ่านใหม่เมื่อ 27 กรกฎาคม 2026 และยังไม่ได้เริ่มงานที่ 2</p>
 <h2>Isolated worktree แบบคู่</h2>
 <h3>Worktree ของ parent governance/bootstrap</h3>
 <ul>
@@ -147,13 +147,83 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
 <p>คำสั่ง:</p>
 <pre><code class="language-powershell">npm.cmd run typecheck:all</code></pre>
 <p>Exit status: ไม่ได้รันหลังถึงเงื่อนไขที่กำหนดให้หยุด</p>
-<h2>ประเด็นที่ยังคงเหลือ</h2>
+<h2>ประเด็นคงเหลือในอดีต ณ จุดหยุดครั้งแรก</h2>
 <ul>
 <li><code>tests/component_master/</code>, <code>packages/component-master/</code> และ <code>data/component-master/</code> ไม่มีอยู่ใน tracked isolated baseline สำเนาที่พบมีเฉพาะเนื้อหา untracked ใน checkout เดิม การนำมารวมต้องได้รับอนุญาตแยกต่างหาก</li>
 <li><code>CONTEXT.md</code> และเอกสารแก้ไขขอบเขต repository วันที่ 21 กรกฎาคมไม่มีอยู่ใน parent commit <code>9597ce69</code> จึงอ่านจาก governance checkout เดิมเพื่อปฏิบัติตามข้อกำหนดการกำหนดเส้นทาง repository เท่านั้น และไม่ได้แก้ไขไฟล์ใดใน checkout นั้น</li>
 <li>Controller ติดตั้ง runtime dependencies ก่อนเริ่มงานนี้ งานนี้ไม่ได้สร้างหรือพบ npm installation/audit output จึงไม่มีการกล่าวอ้างเกี่ยวกับ npm audit</li>
 <li>ไม่ได้รัน Minifix targeted tests และ runtime typecheck ดังนั้นข้อกำหนดเหล่านี้ยังไม่สำเร็จและไม่สามารถยืนยันได้จากงานที่ 1</li>
 <li>ไม่มีการเปลี่ยน production source ส่วน runtime worktree ยังคงเป็น read/test-only และไม่เปลี่ยนแปลง</li>
+</ul>
+<h2>การแก้ไขที่ได้รับอนุมัติและสถานะปัจจุบันของงานที่ 1</h2>
+<p>การอนุมัติของเจ้าของคือ <code>อนุมัติ baseline adoption + verifier migration</code> หลักฐานสถานะ BLOCKED ด้านบนยังคงอยู่เป็นประวัติของการทำงานรอบแรก และถูกแทนที่เฉพาะสำหรับสถานะปัจจุบันของงานที่ 1 ด้วยการแก้ไขที่ผ่าน review และ gate ปิดงานใหม่ด้านล่าง</p>
+<p>สถานะปัจจุบันของงานที่ 1 คือ <strong>COMPLETE</strong> หมายถึง baseline แบบคู่และ verifier gate ถูกจัดตั้งสำหรับ cohort ที่มี governance ใน parent และ baseline runtime แบบ isolated ที่ pin ไว้ ไม่ได้หมายถึงเริ่มงานที่ 2, รวม runtime branch, ยืนยัน production/manufacturing readiness หรือยกเลิก NOT-FOR-PRODUCTION</p>
+<h2>ลำดับการแก้ไขที่ยอมรับแล้ว</h2>
+<div class="tablewrap"><table><thead><tr><th>ขั้น</th><th>Commit</th><th>ผลที่บันทึก</th></tr></thead><tbody>
+<tr><td>Adoption manifest</td><td><code>a3f6216977c2f6e595c11654a13f7be441bb8dd7</code></td><td>สร้าง manifest ที่ tracked จำนวนห้า artifact/edition สำหรับ allowlist แบบ exact จำนวน 77 ไฟล์ รวม 712,400 ไบต์</td></tr>
+<tr><td>การแก้ manifest</td><td><code>a6a8d8bd18a871784e806cf54c3a2d6836a540fa</code></td><td>จัดแนวฉบับ EN/TH, purpose group, migration ที่ยังไม่จบ และ execution contract แบบ ADD-only ค่า SHA-256 สุดท้ายของ manifest JSON คือ <code>7987272b4b9828574d5244e5a99ef31f423b5546425a643358d2f30ebcc846ee</code> และ SHA-256 ของ compact inventory คือ <code>1d25a3fdc6bb008d227fcfc80e865dd244396f8842778135e5afa833bbabb2db</code></td></tr>
+<tr><td>Guardrail ของ excluded root</td><td><code>929bb9413ee1f49a7f057dbf4b6911195423cca2</code></td><td>ทำให้ claim linter ทั้งสองปฏิเสธ excluded path ก่อนตรวจการมีอยู่ของ path</td></tr>
+<tr><td>Adopt governed cohort</td><td><code>6dd9937295ba3838bfa57d2610dfb5d0cf316e9d</code></td><td>เพิ่มพาธตาม manifest ครบ 77 พาธ โดยไม่พบบันทึก manifest collision, พาธขาด หรือพาธเกิน</td></tr>
+<tr><td>Migrate verifier สำหรับ established state</td><td><code>11f42a052b48479ba20cda54dd9e85da6f5af7a7</code></td><td>เพิ่มหลักฐาน governed suite แบบ exact, ยอมรับ Git repository ที่จัดตั้งแล้วและสะอาด และย้าย schema ของ summary เป็น <code>1.1.0</code></td></tr>
+<tr><td>แก้ remote query ให้ fail closed</td><td><code>01bf7b51051a520d77b0e9b510d89a0e611ad295</code></td><td>กำหนดให้ query <code>git remote</code> ต้องสำเร็จ และป้องกันไม่ให้ตีความ stderr เป็นชื่อ remote</td></tr>
+</tbody></table></div>
+<p>ไบต์ source ที่ adopt แล้วยังมีคำเตือน advisory ที่รับต่อมา: <code>git diff --cached --check</code> รายงาน 21 ไฟล์ที่ยอมรับแล้วว่ามี <code>new blank line at EOF</code> เนื่องจาก manifest pin ไบต์เหล่านั้น การ adopt จึงไม่เขียนทับใหม่</p>
+<h2>ลำดับคำตัดสินของ reviewer</h2>
+<div class="tablewrap"><table><thead><tr><th>Review</th><th>คำตัดสิน</th><th>การจัดการ</th></tr></thead><tbody>
+<tr><td>Review แรกของ adoption manifest</td><td><code>NEEDS_FIXES</code></td><td>แก้ด้วย <code>a6a8d8bd</code> และไม่ได้อ้างว่าได้รับการยอมรับตั้งแต่รอบแรก</td></tr>
+<tr><td>Rereview manifest ที่แก้แล้ว</td><td><code>ACCEPTED</code></td><td>ยอมรับหลังแก้ความสอดคล้องของ edition และ execution contract</td></tr>
+<tr><td>Review excluded-root guardrail</td><td><code>ACCEPTED</code></td><td>ยอมรับที่ <code>929bb941</code></td></tr>
+<tr><td>Review baseline adoption</td><td><code>ACCEPTED</code></td><td>ยอมรับที่ <code>6dd99372</code></td></tr>
+<tr><td>Review แรกของ verifier migration</td><td><code>NEEDS_FIXES</code></td><td>พบ defect ที่ remote query เปิดให้ผ่านเมื่อผิดพลาด และไม่ได้อ้างว่าได้รับการยอมรับตั้งแต่รอบแรก</td></tr>
+<tr><td>Rereview verifier ที่แก้แล้ว</td><td><code>ACCEPTED</code></td><td>ยอมรับหลังแก้ให้ fail closed ที่ <code>01bf7b51</code></td></tr>
+</tbody></table></div>
+<h2>หลักฐาน verifier migration</h2>
+<p><strong>PRE-MIGRATION:</strong> การรันบน commit ที่ adopt แล้ว <code>6dd99372</code> ในสภาพสะอาดจบด้วย exit <code>1</code>, schema <code>1.0.0</code>, 12 checks, ผ่าน 10 และล้มเหลวตรงสองรายการ:</p>
+<ol>
+<li><code>unittest_full_suite</code> ปฏิเสธ ambient run ที่สำเร็จ 258 tests เพราะ verifier เก่า encode เงื่อนไข <code>test_count == 27</code></li>
+<li><code>git_bootstrap_state</code> ปฏิเสธ linked worktree ที่จัดตั้งแล้วและสะอาด เพราะ verifier เก่ากำหนดให้เป็น repository ที่ยังไม่มี HEAD, index และ remote</li>
+</ol>
+<p>สองรายการนี้คือ failure ที่อนุมัติให้ migrate ส่วนอีก 10 checks ผ่าน</p>
+<p><strong>POST-MIGRATION:</strong> verifier ที่แก้แล้วที่ <code>01bf7b51</code> ใช้ schema <code>1.1.0</code>, กำหนด ambient suite ที่สำเร็จและมากกว่าค่าขั้นต่ำโดยไม่ encode จำนวนรวมทั้งหมด, กำหนด governed suite แบบ exact 20 tests สำหรับ Component Master บวก 7 tests สำหรับ identity-tenancy และตรวจ Git state ที่จัดตั้งแล้วและสะอาด Regression ของ remote query ล้มเหลวแบบ fail closed ส่วน closeout run ใหม่ด้านล่างให้ผลผ่าน 13/13 checks</p>
+<h2>Gate สุดท้ายที่รันใหม่ — 27 กรกฎาคม 2026</h2>
+<h3>Isolated worktree ของ parent governance/bootstrap</h3>
+<div class="tablewrap"><table><thead><tr><th>Gate</th><th align="right">Exit</th><th>หลักฐานใหม่</th></tr></thead><tbody>
+<tr><td><code>python -B -m unittest discover -s tests/component_master -v</code></td><td align="right"><code>0</code></td><td>รัน 20 tests แบบ exact และจบด้วย <code>OK</code></td></tr>
+<tr><td><code>python -B tools/verify_kitchen_kernel.py</code></td><td align="right"><code>0</code></td><td>Schema <code>1.1.0</code>; 13 checks, ผ่าน 13, ล้มเหลว 0 Ambient discovery รัน 269 tests พร้อม <code>OK</code> จริง จำนวนรวมนี้เป็น observation ไม่ใช่ requirement ถาวร Governed suites เท่ากับ 20 + 7 แบบ exact</td></tr>
+<tr><td>หลักฐาน Git ของ verifier</td><td align="right"><code>0</code></td><td><code>HEAD</code> <code>01bf7b51051a520d77b0e9b510d89a0e611ad295</code>, branch <code>codex/global-connector-registry</code>, สถานะ porcelain/cached/unstaged/unmerged ว่าง, remote query exit <code>0</code>, มี remote เชิงข้อมูลหนึ่งรายการ (<code>origin</code>) และไม่มีการอ้างว่า push</td></tr>
+</tbody></table></div>
+<p>Summary ที่สร้างใหม่ก่อน cleanup ตามที่อนุมัติ: 57,552 ไบต์; SHA-256 <code>1edaba16a0aab0ff6dca8521cebdba11d473ef7c92154a3cd527bdc5853e5877</code> จากนั้นลบ summary ที่ ignored แบบ exact และไดเรกทอรี <code>__pycache__</code> ที่สร้างขึ้นแปดรายการ และไม่เหลือไดเรกทอรี cache</p>
+<h3>Isolated worktree ของ nested MONOLITH runtime</h3>
+<div class="tablewrap"><table><thead><tr><th>Gate</th><th align="right">Exit</th><th>หลักฐานใหม่</th></tr></thead><tbody>
+<tr><td>การรักษา T1b</td><td align="right"><code>0</code></td><td><code>src/core/connector/worldSynthesis.ts</code> มีทั้ง <code>opts.connectorCount</code> และ <code>opts.excludeCorners</code> ไฟล์มีขนาด 15,694 ไบต์ และ SHA-256 <code>99ee18918f60ea815cf2c718513ef90d025ad862cde88562df1efa447f4e56c8</code> ตรงกันระดับไบต์กับสำเนาของ owner แบบ read-only ทั้งตอนสังเกต gate ที่ <code>b361fb5e</code> และตอนสังเกตสุดท้ายที่ <code>a1e9006a</code></td></tr>
+<tr><td><code>npm.cmd run test:run -- src/core/connector src/core/hardware/catalog src/factory/packet</code></td><td align="right"><code>0</code></td><td>ผ่าน 19 test files และผ่าน 207 tests</td></tr>
+<tr><td><code>npm.cmd run typecheck:all</code></td><td align="right"><code>0</code></td><td><code>tsc -b tsconfig.build.json</code> จบสำเร็จ</td></tr>
+</tbody></table></div>
+<p>Toolchain ที่บันทึกสำหรับ closeout นี้: Git <code>2.52.0.windows.1</code>, Python <code>3.14.2</code>, Node.js <code>v22.21.1</code>, npm <code>11.6.2</code>, TypeScript <code>5.9.3</code>, Vitest <code>3.0.0</code> และ runtime package <code>monolith-workspace@2.1.0</code></p>
+<h2>NOT-FOR-PRODUCTION และขีดจำกัดของหลักฐาน</h2>
+<ul>
+<li>NOT-FOR-PRODUCTION ยังทำงานอยู่: <code>SHADOW_MODE_NOT_FOR_PRODUCTION = true</code>; targeted run ผ่าน NFP tests ทั้งสี่ที่ครอบคลุม notice file, การรวมใน manifest/hash และคำนำหน้า ZIP <code>NFP-</code></li>
+<li>Live Minifix recipe ยังคงไม่ได้มี source ครบโดยเจตนา: provenance tests ที่ผ่านบันทึกค่าหนึ่งรายการเป็น <code>CONTRADICTED</code> (เส้นผ่านศูนย์กลาง sleeve Ø10) และสองรายการเป็น <code>UNSOURCED</code> (ความลึก bolt-bore 17.5 มม. และการใช้ทางเข้า Ø7.5)</li>
+<li>Software gate ไม่ได้ยืนยัน production, manufacturing, machine/coupon/first-article, security, field หรือ operational readiness</li>
+<li>Daph ยังคงเป็นหนึ่ง tenant/pilot ไม่ใช่ขอบเขตของระบบและไม่ได้เป็นเจ้าของข้อมูล canonical ที่ใช้ร่วมกัน</li>
+</ul>
+<h2>Snapshot การกำหนดเส้นทางสี่ root</h2>
+<div class="tablewrap"><table><thead><tr><th>Root และขอบเขตคำกล่าวอ้าง</th><th>HEAD / branch</th><th>สถานะที่สังเกต</th></tr></thead><tbody>
+<tr><td>Original parent governance/bootstrap root — ใช้รองรับคำกล่าวอ้างของ parent เท่านั้น: <code>C:\Users\thai3\determined-williams (2)</code></td><td><code>8b65a1e974c5a34ee5abc12edab87d1ec54d69a4</code> / <code>guardrails/claim-linters</code></td><td>Checkout ภายนอกไม่สะอาด: 8,342 entries (tracked change 1, untracked 8,341) เมื่อสังเกตตอน closeout; งานนี้ไม่เคยแก้ไข</td></tr>
+<tr><td>Original nested product runtime — ใช้รองรับคำกล่าวอ้างของ runtime เท่านั้น: <code>C:\Users\thai3\determined-williams (2)\determined-williams</code></td><td><code>a1e9006add32fe3ce5346eb6ca94e8bdce1d13ab</code> / <code>fix/dxf-truth-chain</code></td><td>Lane ภายนอกไม่สะอาด: 67 entries (tracked changes 18, untracked 49) เมื่อสังเกตสุดท้ายตอน closeout; งานนี้ไม่เคยแก้ไข และ lane เดินหน้าพร้อมกันจากจุดสังเกต gate <code>b361fb5e</code></td></tr>
+<tr><td>Isolated parent closeout lane: <code>C:\tmp\monolith-global-connector-registry-parent</code></td><td>Evidence base <code>01bf7b51051a520d77b0e9b510d89a0e611ad295</code> / <code>codex/global-connector-registry</code></td><td>สะอาดก่อนแก้ ledger และหลัง cleanup artifact ที่สร้าง</td></tr>
+<tr><td>Isolated runtime baseline lane: <code>C:\tmp\monolith-global-connector-registry-runtime</code></td><td><code>ed036a2ceebc8c3c9fa71edd3fc85ff67ca53b97</code> / <code>codex/global-connector-runtime</code></td><td>สะอาด; read/test-only; ไม่มีการเปลี่ยน runtime source</td></tr>
+</tbody></table></div>
+<p>Owner runtime แตกต่างจาก isolated baseline เนื่องจาก lane ภายนอกที่ทำงานพร้อมกัน งานนี้ไม่ได้ sync หรือ integrate operation การตรวจ overlap และ stable-tree gate ใหม่แบบ exact ยังเป็นข้อบังคับทันทีก่อนงานที่ 14</p>
+<h2>ขอบเขตงานและประเด็นคงเหลือ</h2>
+<ul>
+<li>ปิดงานที่ 1 เฉพาะการจัดตั้ง paired baseline และการแก้ไขที่ยอมรับแล้ว</li>
+<li>ยังไม่ได้เริ่มงานที่ 2</li>
+<li>ไม่ได้เปลี่ยน runtime/source product code และไม่ได้รวม runtime branch</li>
+<li>ไม่ได้ push หรือ merge</li>
+<li>รายงาน manifest คงสถานะ <code>DONE_WITH_CONCERNS</code> เพราะ migration สองรายการยังไม่จบ ณ เวลานั้น Closeout นี้รักษาประวัติดังกล่าวและบันทึกการแก้ไขที่ยอมรับในภายหลัง</li>
+<li>คำเตือน EOF ที่รับต่อมา 21 รายการยังเป็น advisory debt ในไบต์ source ที่ยอมรับแล้ว</li>
+<li>Production readiness อยู่นอกขอบเขตงานนี้ และต้องมี physical qualification พร้อม owner ratification</li>
 </ul>
 </main></body>
 </html>
