@@ -38,11 +38,12 @@ export {
 } from './gateG11_minifixSystem32';
 
 // G11 Types (re-export for convenience)
-// getExpectedDowelDepth deliberately NOT re-exported (T10): deprecated
-// bore-type-keyed remnant — dowel depth follows bore orientation, not panel
-// role. Use ruleG11_DowelDepth / G11_CONSTANTS instead.
+// getExpectedDowelDepth (T10) and getExpectedBoreType (T10b) were DELETED:
+// both keyed manufacturing truth off panel role alone, which cannot answer
+// either question — depth follows the actual bore orientation, and drill-type
+// expectations are purpose invariants (BOLT/CAM=FACE, BOLT_ENTRY=EDGE).
+// Use ruleG11_DowelDepth / ruleG11_DrillType / G11_CONSTANTS instead.
 export {
-  getExpectedBoreType,
   isSidePanel,
   isHorizontalPanel,
   calculateExpectedConnectorCount,

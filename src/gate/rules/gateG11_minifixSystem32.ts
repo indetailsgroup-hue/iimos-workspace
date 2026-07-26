@@ -10,8 +10,9 @@
  *
  * ## Rule Set
  * - G11.1: Distance B - measured from mate edge (LEFT/RIGHT), not FRONT
- * - G11.2: Dowel Depth - SIDE=18mm (EDGE_BORE), TOP/BOTTOM=12mm (FACE_BORE)
- * - G11.3: Drill Type - enforcement based on panel role
+ * - G11.2: Dowel Depth - follows actual bore orientation: EDGE_BORE=18mm, FACE_BORE=12mm
+ * - G11.3: Drill Type - purpose invariant (T10b): BOLT/CAM/MINIFIX=FACE bore
+ *   into host panel, BOLT_ENTRY=EDGE bore, DOWEL pairs=EDGE+FACE
  * - G11.4: Mating Alignment - world-space dowel alignment ≤0.1mm
  * - G11.5: Bolt Tip ↔ CAM Center Alignment
  * - G11.6: N-Center Policy & Mode Consistency (v1.1)
@@ -35,8 +36,7 @@ import {
   type G11Panel,
   type G11Cabinet,
   type G11MatingPair,
-  getExpectedBoreType,
-  getExpectedDowelDepth,
+  type DrillBoreType,
   isSidePanel,
   isHorizontalPanel,
   calculateDistance,
@@ -241,16 +241,30 @@ export function ruleG11_DowelDepth(
 // ============================================
 
 /**
- * G11.3: Validate drill type matches panel role.
+ * G11.3: Validate drill orientation matches the purpose invariant.
  *
- * Enforcement rules:
- * - SIDE panel: BOLT=EDGE_BORE, DOWEL=EDGE_BORE
- * - TOP/BOTTOM panel: CAM=FACE_BORE, DOWEL=FACE_BORE
+ * Orientation-aware (T10b): the expectation is keyed on PURPOSE, not panel
+ * role — the old role-based mapping (getExpectedBoreType, now deleted) was
+ * INSET-v4-only and false-blocked the entire BACK-panel overlay joint family.
+ *
+ * Invariant derived from all four emitter families in generateDrillMap.ts
+ * (OVERLAY corner :572/:610/:631 · INSET corner :815/:855/:919 · shelf
+ * junction :1222/:1270/:1310 · back overlay :1517/:1555/:1575):
+ * - BOLT / CAM_LOCK / MINIFIX: always a FACE bore into the host panel
+ *   (drilled along the host panel's thickness axis)
+ * - BOLT_ENTRY: always an EDGE bore (bolt passage through the mating panel)
+ * - DOWEL: one EDGE + one FACE pairwise (checked below, per-point skipped)
  *
  * @param drillPoints - All drill points
  * @param panels - Panel information for role lookup
  * @returns Array of validation issues
  */
+
+/** Purposes that must be FACE bores (housing/sleeve into the host panel face) */
+const G11_FACE_BORE_PURPOSES = ['BOLT', 'CAM_LOCK', 'MINIFIX'];
+/** Purposes that must be EDGE bores (passage through the mating panel edge) */
+const G11_EDGE_BORE_PURPOSES = ['BOLT_ENTRY'];
+
 export function ruleG11_DrillType(
   drillPoints: G11DrillPoint[],
   panels: G11Panel[] = []
@@ -260,8 +274,8 @@ export function ruleG11_DrillType(
   // Build panel role lookup
   const panelRoleMap = new Map(panels.map(p => [p.id, p.role]));
 
-  // Filter relevant drill points (BOLT, CAM, DOWEL)
-  const relevantPurposes = ['BOLT', 'CAM_LOCK', 'MINIFIX', 'DOWEL'];
+  // Filter relevant drill points (BOLT, CAM, BOLT_ENTRY, DOWEL)
+  const relevantPurposes = [...G11_FACE_BORE_PURPOSES, ...G11_EDGE_BORE_PURPOSES, 'DOWEL'];
   const relevantPoints = drillPoints.filter(p => relevantPurposes.includes(p.purpose));
 
   for (const point of relevantPoints) {
@@ -276,9 +290,11 @@ export function ruleG11_DrillType(
     // → ตรวจแบบคู่ (ต้องเป็น EDGE+FACE ผสมกัน) ด้านล่างแทน ไม่ตรวจ per-role
     if (point.purpose === 'DOWEL') continue;
 
-    // Infer actual bore type from drill normal and panel role (v4.0 context-aware)
+    // Actual bore type from drill normal vs host panel thickness axis;
+    // expected bore type from the purpose invariant (see doc above)
     const actualBoreType = inferBoreTypeFromNormal(point.normal, panelRole);
-    const expectedBoreType = getExpectedBoreType(panelRole, point.purpose);
+    const expectedBoreType: DrillBoreType =
+      G11_FACE_BORE_PURPOSES.includes(point.purpose) ? 'FACE_BORE' : 'EDGE_BORE';
 
     if (actualBoreType !== expectedBoreType) {
       const isSide = isSidePanel(panelRole);
@@ -467,32 +483,37 @@ function perpendicularDistance(
 }
 
 /**
- * Infer bore type from drill normal vector and panel role.
+ * Infer bore type from drill normal vector and host panel role.
  *
- * Construction-aware (S16):
- * - SIDE panels: horizontal normal [±X] = FACE_BORE (into inner face — INSET v4.0)
- * - SIDE panels: vertical normal [±Y] = EDGE_BORE (into top/bottom edge — OVERLAY)
- * - HORIZ panels: vertical normal [±Y] = FACE_BORE (into face — CAM / OVERLAY dowel)
- * - HORIZ panels: horizontal normal [±X] = EDGE_BORE (into left/right edge — INSET dowel)
+ * A FACE bore drills along the host panel's THICKNESS axis; any other
+ * dominant axis enters through an edge. Thickness axis per role (T10b —
+ * derived from panelBasis.ts:122-165 AABB layout, exercised by all four
+ * emitter families; pinned in gateG11_drillType_orientation.test.ts):
+ * - SIDE panels (LEFT_SIDE/RIGHT_SIDE/SIDE): X
+ * - HORIZ panels (TOP/BOTTOM/SHELF) and unknown roles: Y
+ * - BACK panels: Z
+ *
+ * Verdicts per family:
+ * - SIDE  ±X = FACE (INSET bolt / OVERLAY cam) · ±Y = EDGE (OVERLAY entry)
+ *         · ±Z = EDGE (back-joint entry/dowel into the side back edge —
+ *           the pre-T10b code called this FACE, so a bolt mistakenly bored
+ *           into the side back edge passed the gate silently)
+ * - HORIZ ±Y = FACE (cam / OVERLAY bolt) · ±X/±Z = EDGE (INSET dowel/entry)
+ * - BACK  ±Z = FACE (back-overlay bolt/dowel — pre-T10b this fell into the
+ *           HORIZ branch as EDGE, false-blocking every overlay-back cabinet)
  *
  * @param normal - Drill normal vector
- * @param panelRole - Optional panel role for context-aware inference
+ * @param panelRole - Optional host panel role for context-aware inference
  */
 function inferBoreTypeFromNormal(
   normal: [number, number, number],
   panelRole?: string
 ): 'EDGE_BORE' | 'FACE_BORE' {
-  const [nx, ny, nz] = normal.map(Math.abs);
-  const isHorizontalNormal = (nx > ny) || (nz > ny);
-
-  // v4.0 context-aware inference
-  if (panelRole && isSidePanel(panelRole)) {
-    // SIDE panels: horizontal = FACE_BORE (v4.0), vertical = EDGE_BORE (wrong)
-    return isHorizontalNormal ? 'FACE_BORE' : 'EDGE_BORE';
-  }
-
-  // HORIZ panels: horizontal = EDGE_BORE (for dowels), vertical = FACE_BORE (for CAM)
-  return isHorizontalNormal ? 'EDGE_BORE' : 'FACE_BORE';
+  const thicknessAxis =
+    panelRole && isSidePanel(panelRole) ? 0 :
+    panelRole === 'BACK' ? 2 :
+    1;
+  return dominantAxis(normal) === thicknessAxis ? 'FACE_BORE' : 'EDGE_BORE';
 }
 
 /**

@@ -28,8 +28,6 @@ import {
 } from '../gateG11_minifixSystem32';
 import {
   calculateExpectedConnectorCount,
-  getExpectedDowelDepth,
-  getExpectedBoreType,
   isSidePanel,
   isHorizontalPanel,
 } from '../gateG11_types';
@@ -165,35 +163,12 @@ function createDowelPoint(
 // ============================================
 
 describe('G11 Helper Functions', () => {
-  describe('getExpectedDowelDepth (deprecated, bore-type-keyed)', () => {
-    // T10: the old (panelRole) => depth signature was deleted — panel role
-    // alone CANNOT determine dowel depth. The 18/12 split follows the actual
-    // bore orientation, which flips between constructions:
-    //   OVERLAY:    side = EDGE_BORE 18mm · horiz = FACE_BORE 12mm
-    //   INSET v4.0: side = FACE_BORE 12mm · horiz = EDGE_BORE 18mm
-    // The live rule (ruleG11_DowelDepth) derives bore type from the drill
-    // normal — see the S16 OVERLAY + G11.2 INSET suites in this file.
-    it('maps EDGE_BORE → 18mm (end grain)', () => {
-      expect(getExpectedDowelDepth('EDGE_BORE')).toBe(18);
-    });
-
-    it('maps FACE_BORE → 12mm', () => {
-      expect(getExpectedDowelDepth('FACE_BORE')).toBe(12);
-    });
-  });
-
-  describe('getExpectedBoreType', () => {
-    // v4.0 Side-covers-Top: SIDE=FACE_BORE, HORIZ=FACE_BORE for CAM, EDGE_BORE for DOWEL
-    it('should return FACE_BORE for SIDE panels (v4.0 face drilling)', () => {
-      expect(getExpectedBoreType('LEFT_SIDE')).toBe('FACE_BORE');
-      expect(getExpectedBoreType('RIGHT_SIDE')).toBe('FACE_BORE');
-    });
-
-    it('should return FACE_BORE for horizontal panels', () => {
-      expect(getExpectedBoreType('TOP')).toBe('FACE_BORE');
-      expect(getExpectedBoreType('BOTTOM')).toBe('FACE_BORE');
-    });
-  });
+  // T10: getExpectedDowelDepth deleted — depth follows the actual bore
+  // orientation (see S16 OVERLAY + G11.2 suites in this file).
+  // T10b: getExpectedBoreType deleted — the role-based expectation was
+  // INSET-v4-only and false-blocked the BACK-panel overlay joint family.
+  // Drill-type expectations are now purpose invariants validated by
+  // ruleG11_DrillType (see gateG11_drillType_orientation.test.ts).
 
   describe('isSidePanel / isHorizontalPanel', () => {
     it('should correctly identify side panels', () => {
