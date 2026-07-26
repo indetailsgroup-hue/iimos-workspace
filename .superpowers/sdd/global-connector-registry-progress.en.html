@@ -55,7 +55,7 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <body><main>
 <h1>Global Connector Registry — SDD Progress Ledger</h1>
 <h2>Task 1: Paired worktrees and baseline gates</h2>
-<p><strong>Recorded:</strong> 26–27 July 2026 <strong>Status:</strong> COMPLETE <strong>Edition:</strong> English (canonical unsuffixed Markdown) <strong>Companions:</strong> <code>global-connector-registry-progress.en.html</code>, <code>global-connector-registry-progress.th.md</code>, <code>global-connector-registry-progress.th.html</code> <strong>Historical stop condition (superseded):</strong> The first required parent baseline exited nonzero because its tracked test input was absent from the isolated baseline. Per the implementation plan, no later baseline command was run in that initial execution. <strong>Closeout:</strong> Owner-authorized baseline adoption and verifier migration resolved the two recorded baseline gaps. Fresh parent and isolated-runtime Task 1 gates passed on 27 July 2026. Task 2 has not started.</p>
+<p><strong>Recorded:</strong> 26–27 July 2026 <strong>Status:</strong> COMPLETE <strong>Edition:</strong> English (canonical unsuffixed Markdown) <strong>Companions:</strong> <code>global-connector-registry-progress.en.html</code>, <code>global-connector-registry-progress.th.md</code>, <code>global-connector-registry-progress.th.html</code> <strong>Historical stop condition (superseded):</strong> The first required parent baseline exited nonzero because its tracked test input was absent from the isolated baseline. Per the implementation plan, no later baseline command was run in that initial execution. <strong>Closeout:</strong> Owner-authorized baseline adoption and verifier migration resolved the two recorded baseline gaps. Fresh parent and isolated-runtime Task 1 gates passed on 27 July 2026. Task 2 is COMPLETE; Task 3 has not started.</p>
 <h2>Paired isolated worktrees</h2>
 <h3>Parent governance/bootstrap worktree</h3>
 <ul>
@@ -218,12 +218,65 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
 <h2>Task boundary and residual concerns</h2>
 <ul>
 <li>Task 1 is closed only for paired baseline establishment and its accepted remediation.</li>
-<li>Task 2 has not started.</li>
+<li>Task 2 is COMPLETE; Task 3 has not started.</li>
 <li>No runtime/source product code was changed, and no runtime branch was integrated.</li>
 <li>No push or merge was performed.</li>
 <li>The manifest report retained <code>DONE_WITH_CONCERNS</code> because the two migrations were unresolved at that point; this closeout preserves that history and records their later accepted resolution.</li>
 <li>The 21 inherited EOF warnings remain advisory debt in accepted source bytes.</li>
 <li>Production readiness remains outside this task and requires physical qualification plus owner ratification.</li>
+</ul>
+<h2>Task 2 closeout — 27 July 2026</h2>
+<p><strong>Status:</strong> COMPLETE <strong>Task 2 base:</strong> <code>e048ec3fb765ab53ae0f3778dfbe3a3483129711</code> <strong>Implementation commit:</strong> <code>84e9b16141fad33be2921cbfcd4796120ac7260b</code> <strong>Next boundary:</strong> Task 3 has not started.</p>
+<h3>Accepted verifier compatibility correction</h3>
+<p>Before Task 2, accepted commit <code>e048ec3fb765ab53ae0f3778dfbe3a3483129711</code> corrected the verifier so the frozen legacy governed cohort is selected by explicit module names:</p>
+<ul>
+<li>Component Master: <code>tests.component_master.test_boring_standard</code>, <code>tests.component_master.test_catalog_baseline</code>, <code>tests.component_master.test_finish_taxonomy</code>, and <code>tests.component_master.test_seed_integrity</code></li>
+<li>Identity-tenancy: <code>tests.identity_tenancy.test_contracts</code></li>
+</ul>
+<p>The governed counts remain exact at 20 + 7, while the full repository suite remains dynamic. Fresh accepted evidence at that correction was 12 focused verifier-contract tests, 270 dynamic full-suite tests, and a clean-HEAD schema <code>1.1.0</code> verifier result of 13/13 checks with the governed suites still exact at 20 + 7. The fresh reviewer verdict was <code>ACCEPTED</code>. This correction was necessary so new registry tests would remain visible to full discovery without mutating the frozen legacy governed count.</p>
+<h3>Authorized Task 2 paths</h3>
+<p>Implementation commit <code>84e9b16141fad33be2921cbfcd4796120ac7260b</code> changed exactly these four authorized paths:</p>
+<ol>
+<li><code>packages/component-master/src/monolith_component_master/registry_models.py</code></li>
+<li><code>packages/component-master/src/monolith_component_master/__init__.py</code></li>
+<li><code>tests/component_master/registry/test_registry_models.py</code></li>
+<li><code>tests/component_master/registry/__init__.py</code> — the discovery package marker authorized solely so standard <code>unittest discover</code> descends into the registry tests</li>
+</ol>
+<p>No owner-root or runtime file was changed. <code>catalog.py</code> and the legacy <code>SupplierSKU</code> interface remain unchanged.</p>
+<h3>Exact public identity-model contract</h3>
+<p>The package publicly exports exactly the six new interfaces <code>VerificationDimension</code>, <code>VerificationState</code>, <code>LifecycleState</code>, <code>CommercialSku</code>, <code>ProductModel</code>, and <code>Registry</code>.</p>
+<ul>
+<li><code>VerificationDimension</code> has exactly <code>IDENTITY=identity</code>, <code>GEOMETRY=geometry</code>, <code>BOM=bom</code>, <code>TOOLING=tooling</code>, <code>MATERIAL_THICKNESS=material_thickness</code>, <code>STRUCTURAL=structural</code>, <code>COMMERCIAL=commercial</code>, <code>FIELD=field</code>, <code>LIFECYCLE=lifecycle</code>, and <code>RIGHTS=rights</code>.</li>
+<li><code>VerificationState</code> has exactly <code>VERIFIED</code>, <code>PENDING</code>, <code>REGION_ONLY</code>, <code>DISCONTINUED</code>, and <code>BLOCKED</code>, with identical uppercase values.</li>
+<li><code>LifecycleState</code> has exactly <code>PENDING</code>, <code>ACTIVE</code>, <code>REGION_ONLY</code>, <code>SUPERSEDED</code>, <code>DISCONTINUED</code>, and <code>SOURCE_BLOCKED</code>, with identical uppercase values.</li>
+<li>Immutable <code>CommercialSku</code> has exactly <code>global_id</code>, <code>brand_id</code>, <code>model_id</code>, <code>oem_order_code</code>, <code>region</code>, <code>pack_qty</code>, and <code>verification</code>. IDs require nonblank <code>sku:</code>, <code>brand:</code>, and <code>model:</code> prefixes; order code and region must be nonblank; pack quantity must be a positive non-boolean integer; and the map must contain every typed verification dimension exactly once with typed states. The map is defensively copied, read-only, and queried dimension-by-dimension through <code>is_verified</code>.</li>
+<li>Immutable <code>ProductModel</code> has exactly <code>model_id</code>, <code>brand_id</code>, <code>name</code>, and <code>lifecycle</code>. IDs require nonblank <code>model:</code> and <code>brand:</code> prefixes, name must be nonblank, and lifecycle must be a typed <code>LifecycleState</code>.</li>
+<li>Immutable <code>Registry</code> defensively copies models and SKUs into read-only exact-ID maps. It rejects non-model/non-SKU entries, duplicate <code>model_id</code> values, duplicate SKU <code>global_id</code> values before a mapping could collapse distinct records, and SKU references to unknown models. <code>get_model(model_id)</code> and <code>get_sku(global_id)</code> are deterministic exact lookups and return <code>None</code> when absent.</li>
+</ul>
+<h3>TDD and verification evidence</h3>
+<div class="tablewrap"><table><thead><tr><th>Gate</th><th>Accepted result</th></tr></thead><tbody>
+<tr><td>RED before production edits</td><td><code>python -m unittest tests.component_master.registry.test_registry_models -v</code> exited <code>1</code> because <code>monolith_component_master.registry_models</code> did not exist.</td></tr>
+<tr><td>Targeted + legacy GREEN</td><td>34/34 tests passed: 24 new registry contracts + 10 legacy seed-integrity contracts; <code>OK</code>.</td></tr>
+<tr><td>Dynamic full discovery</td><td>294/294 tests passed: the prior dynamic 270 + exactly 24 Task 2 tests; <code>OK</code>.</td></tr>
+<tr><td>Focused verifier contracts</td><td>12/12 tests passed; <code>OK</code>.</td></tr>
+<tr><td>Single clean-HEAD verifier</td><td>Schema <code>1.1.0</code>; 13/13 checks passed; exact governed suites 20 + 7; dynamic suite 294; Python compile and Git evidence passed.</td></tr>
+<tr><td>Review</td><td>Fresh reviewer verdict <code>ACCEPTED</code>.</td></tr>
+</tbody></table></div>
+<h3>Evidence integrity and cleanup</h3>
+<ul>
+<li>Accepted Task 2 report: <code>.superpowers/sdd/task-2-identity-models-report.md</code>; 5,907 bytes; SHA-256 <code>a6075621f56218d3ad42fbba6934c736694fc2e68f4f7cb64e3fb70092fd7599</code>.</li>
+<li>Accepted native full-index binary review package: <code>.superpowers/sdd/task-2-identity-models-review-package.diff</code>; 22,760 bytes; SHA-256 <code>5e1c9bd0c49a34dccf3a84308dad7f2ebe15d00e776e7bd167e2b611bf731fea</code>.</li>
+<li>Generated clean-HEAD verifier summary before cleanup: 61,845 bytes; SHA-256 <code>6ab7d67b41e8540fd74cc6b7fc0d0d8bf8101183aaaeeec8139d21269d5a9e7f</code>.</li>
+<li>The ignored verifier summary and generated caches were removed after capture.</li>
+</ul>
+<h3>Task 2 authority boundary</h3>
+<ul>
+<li>Task 2 establishes the domain identity foundation only; it is not a populated living registry.</li>
+<li>It does not create an evidence vault, ingestion pipeline, BOM resolution, qualification workflow, release authority, or runtime integration.</li>
+<li>It establishes no production or manufacturing authority. NOT-FOR-PRODUCTION remains unchanged.</li>
+<li>Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.</li>
+<li>No push or merge was performed.</li>
+<li>Task 3 is next and has not started.</li>
 </ul>
 </main></body>
 </html>

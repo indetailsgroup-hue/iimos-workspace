@@ -7,7 +7,7 @@
 **ฉบับ:** ภาษาไทย
 **ไฟล์คู่กัน:** `global-connector-registry-progress.md` (Markdown ภาษาอังกฤษ), `global-connector-registry-progress.en.html`, `global-connector-registry-progress.th.html`
 **เงื่อนไขที่ทำให้หยุดในอดีต (ถูกแทนที่แล้ว):** baseline แรกของ parent ที่แผนกำหนดจบด้วยสถานะไม่เป็นศูนย์ เพราะไม่มี test input ที่ tracked อยู่ใน isolated baseline ตามแผน implementation จึงไม่ได้รันคำสั่ง baseline หลังจากนั้นในการทำงานรอบแรก
-**การปิดงาน:** การ adopt baseline และ migrate verifier ที่เจ้าของอนุมัติได้แก้ช่องว่าง baseline สองรายการแล้ว Gate ของ parent และ isolated runtime สำหรับงานที่ 1 ผ่านใหม่เมื่อ 27 กรกฎาคม 2026 และยังไม่ได้เริ่มงานที่ 2
+**การปิดงาน:** การ adopt baseline และ migrate verifier ที่เจ้าของอนุมัติได้แก้ช่องว่าง baseline สองรายการแล้ว Gate ของ parent และ isolated runtime สำหรับงานที่ 1 ผ่านใหม่เมื่อ 27 กรกฎาคม 2026 งานที่ 2 COMPLETE แล้ว และยังไม่ได้เริ่มงานที่ 3
 
 ## Isolated worktree แบบคู่
 
@@ -226,9 +226,74 @@ Owner runtime แตกต่างจาก isolated baseline เนื่อ�
 ## ขอบเขตงานและประเด็นคงเหลือ
 
 - ปิดงานที่ 1 เฉพาะการจัดตั้ง paired baseline และการแก้ไขที่ยอมรับแล้ว
-- ยังไม่ได้เริ่มงานที่ 2
+- งานที่ 2 COMPLETE แล้ว และยังไม่ได้เริ่มงานที่ 3
 - ไม่ได้เปลี่ยน runtime/source product code และไม่ได้รวม runtime branch
 - ไม่ได้ push หรือ merge
 - รายงาน manifest คงสถานะ `DONE_WITH_CONCERNS` เพราะ migration สองรายการยังไม่จบ ณ เวลานั้น Closeout นี้รักษาประวัติดังกล่าวและบันทึกการแก้ไขที่ยอมรับในภายหลัง
 - คำเตือน EOF ที่รับต่อมา 21 รายการยังเป็น advisory debt ในไบต์ source ที่ยอมรับแล้ว
 - Production readiness อยู่นอกขอบเขตงานนี้ และต้องมี physical qualification พร้อม owner ratification
+
+## การปิดงานที่ 2 — 27 กรกฎาคม 2026
+
+**สถานะ:** COMPLETE
+**Base ของงานที่ 2:** `e048ec3fb765ab53ae0f3778dfbe3a3483129711`
+**Implementation commit:** `84e9b16141fad33be2921cbfcd4796120ac7260b`
+**ขอบเขตถัดไป:** ยังไม่ได้เริ่มงานที่ 3
+
+### การแก้ compatibility ของ verifier ที่ยอมรับแล้ว
+
+ก่อนงานที่ 2 commit `e048ec3fb765ab53ae0f3778dfbe3a3483129711` ที่ยอมรับแล้วได้แก้ verifier ให้เลือก cohort เดิมที่มี governance และถูก freeze ไว้ด้วยชื่อ module แบบ explicit:
+
+- Component Master: `tests.component_master.test_boring_standard`, `tests.component_master.test_catalog_baseline`, `tests.component_master.test_finish_taxonomy` และ `tests.component_master.test_seed_integrity`
+- Identity-tenancy: `tests.identity_tenancy.test_contracts`
+
+จำนวน governed ยังคง exact ที่ 20 + 7 ขณะที่ full repository suite ยังคงเป็นแบบ dynamic หลักฐานใหม่ที่ยอมรับ ณ การแก้นี้คือ focused verifier-contract tests 12 รายการ, dynamic full-suite tests 270 รายการ และผล verifier จาก clean HEAD ด้วย schema `1.1.0` ผ่าน 13/13 checks โดย governed suites ยังคง exact ที่ 20 + 7 คำตัดสินใหม่ของ reviewer คือ `ACCEPTED` การแก้นี้จำเป็นเพื่อให้ registry tests ใหม่ยังถูกพบใน full discovery โดยไม่เปลี่ยนจำนวน legacy governed ที่ freeze ไว้
+
+### พาธที่อนุญาตสำหรับงานที่ 2
+
+Implementation commit `84e9b16141fad33be2921cbfcd4796120ac7260b` เปลี่ยนพาธที่อนุญาต exactly สี่รายการต่อไปนี้:
+
+1. `packages/component-master/src/monolith_component_master/registry_models.py`
+2. `packages/component-master/src/monolith_component_master/__init__.py`
+3. `tests/component_master/registry/test_registry_models.py`
+4. `tests/component_master/registry/__init__.py` — package marker สำหรับ discovery ที่อนุญาตเฉพาะเพื่อให้ `unittest discover` มาตรฐานลงไปพบ registry tests
+
+ไม่มีการเปลี่ยนไฟล์ใน owner root หรือ runtime ส่วน `catalog.py` และ interface เดิม `SupplierSKU` ยังคงไม่เปลี่ยนแปลง
+
+### Contract ของ public identity model แบบ exact
+
+Package export interface ใหม่ exactly หกรายการ ได้แก่ `VerificationDimension`, `VerificationState`, `LifecycleState`, `CommercialSku`, `ProductModel` และ `Registry`
+
+- `VerificationDimension` มี exactly `IDENTITY=identity`, `GEOMETRY=geometry`, `BOM=bom`, `TOOLING=tooling`, `MATERIAL_THICKNESS=material_thickness`, `STRUCTURAL=structural`, `COMMERCIAL=commercial`, `FIELD=field`, `LIFECYCLE=lifecycle` และ `RIGHTS=rights`
+- `VerificationState` มี exactly `VERIFIED`, `PENDING`, `REGION_ONLY`, `DISCONTINUED` และ `BLOCKED` โดย value เป็นตัวพิมพ์ใหญ่ตรงกับชื่อ
+- `LifecycleState` มี exactly `PENDING`, `ACTIVE`, `REGION_ONLY`, `SUPERSEDED`, `DISCONTINUED` และ `SOURCE_BLOCKED` โดย value เป็นตัวพิมพ์ใหญ่ตรงกับชื่อ
+- `CommercialSku` แบบ immutable มี field exactly `global_id`, `brand_id`, `model_id`, `oem_order_code`, `region`, `pack_qty` และ `verification` ID ต้องมี prefix `sku:`, `brand:` และ `model:` พร้อมเนื้อหาที่ไม่ว่าง order code และ region ต้องไม่ว่าง pack quantity ต้องเป็น integer บวกที่ไม่ใช่ boolean และ map ต้องมี typed verification dimension ทุกมิติ exactly หนึ่งครั้งพร้อม typed state ระบบทำ defensive copy ให้ map เป็น read-only และตรวจแยกตามมิติด้วย `is_verified`
+- `ProductModel` แบบ immutable มี field exactly `model_id`, `brand_id`, `name` และ `lifecycle` ID ต้องมี prefix `model:` และ `brand:` พร้อมเนื้อหาที่ไม่ว่าง name ต้องไม่ว่าง และ lifecycle ต้องเป็น `LifecycleState` ที่มี type ถูกต้อง
+- `Registry` แบบ immutable ทำ defensive copy ของ model และ SKU ลงใน read-only exact-ID map ปฏิเสธ entry ที่ไม่ใช่ model/SKU, ค่า `model_id` ซ้ำ, ค่า `global_id` ของ SKU ซ้ำก่อนที่ mapping จะยุบ record ที่ต่างกัน และ SKU ที่อ้างถึง model ที่ไม่รู้จัก `get_model(model_id)` และ `get_sku(global_id)` เป็น exact lookup ที่กำหนดผลได้แน่นอน และคืน `None` เมื่อไม่พบ
+
+### หลักฐาน TDD และการตรวจสอบ
+
+| Gate | ผลที่ยอมรับแล้ว |
+| --- | --- |
+| RED ก่อนแก้ production | `python -m unittest tests.component_master.registry.test_registry_models -v` จบด้วย exit `1` เพราะยังไม่มี `monolith_component_master.registry_models` |
+| Targeted + legacy GREEN | ผ่าน 34/34 tests: registry contracts ใหม่ 24 + seed-integrity contracts เดิม 10; `OK` |
+| Dynamic full discovery | ผ่าน 294/294 tests: dynamic เดิม 270 + Task 2 tests exactly 24; `OK` |
+| Focused verifier contracts | ผ่าน 12/12 tests; `OK` |
+| Verifier ครั้งเดียวจาก clean HEAD | Schema `1.1.0`; ผ่าน 13/13 checks; governed suites exact 20 + 7; dynamic suite 294; Python compile และหลักฐาน Git ผ่าน |
+| Review | คำตัดสินใหม่ของ reviewer คือ `ACCEPTED` |
+
+### ความสมบูรณ์ของหลักฐานและ cleanup
+
+- รายงานงานที่ 2 ที่ยอมรับแล้ว: `.superpowers/sdd/task-2-identity-models-report.md`; 5,907 ไบต์; SHA-256 `a6075621f56218d3ad42fbba6934c736694fc2e68f4f7cb64e3fb70092fd7599`
+- Native full-index binary review package ที่ยอมรับแล้ว: `.superpowers/sdd/task-2-identity-models-review-package.diff`; 22,760 ไบต์; SHA-256 `5e1c9bd0c49a34dccf3a84308dad7f2ebe15d00e776e7bd167e2b611bf731fea`
+- Verifier summary ที่สร้างจาก clean HEAD ก่อน cleanup: 61,845 ไบต์; SHA-256 `6ab7d67b41e8540fd74cc6b7fc0d0d8bf8101183aaaeeec8139d21269d5a9e7f`
+- ลบ verifier summary ที่ ignored และ cache ที่สร้างแล้วหลังบันทึกหลักฐาน
+
+### ขอบเขตอำนาจของงานที่ 2
+
+- งานที่ 2 สร้างเฉพาะรากฐาน identity ของ domain ไม่ใช่ living registry ที่มีข้อมูลแล้ว
+- งานนี้ไม่ได้สร้าง evidence vault, ingestion pipeline, การ resolve BOM, qualification workflow, release authority หรือ runtime integration
+- งานนี้ไม่ได้สร้าง production หรือ manufacturing authority และ NOT-FOR-PRODUCTION ยังคงไม่เปลี่ยนแปลง
+- Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data
+- ไม่ได้ push หรือ merge
+- งานที่ 3 เป็นงานถัดไปและยังไม่ได้เริ่ม
