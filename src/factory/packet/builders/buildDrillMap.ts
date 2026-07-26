@@ -13,7 +13,14 @@
  */
 
 import type { DrillMap, DrillMapPanel, DrillMapPoint } from '../../../core/manufacturing/drillMap/types';
-import type { PacketDrillMap, PacketDrillPanel, PacketDrillPoint } from '../types';
+import type {
+  PacketDrillMap,
+  PacketDrillPanel,
+  PacketDrillPoint,
+  PacketManufacturabilityRefusal,
+} from '../types';
+// F-07: the refusal shape the generator writes onto the DrillMap.
+import type { BlindBoreRefusal } from '../../../core/manufacturing/drillMap/generateDrillMap';
 import { roundToPrecision, serializeDeterministicPretty } from '../manifestHash';
 
 // ============================================
@@ -234,11 +241,37 @@ export function buildDrillMapData(drillMap: DrillMap | null): PacketDrillMap {
   // Extract tools
   const tools = extractTools(drillMap, panels);
 
+  // F-07: carry the generator's refusals into the shop-facing artifact.
+  // Omitted entirely when nothing was refused, so a clean cabinet's
+  // drillmap.json is unchanged byte-for-byte and existing hashes still match.
+  const refusals = drillMap.manufacturabilityRefusals;
+
   return {
     version: 'drillmap.v1',
     panels,
     summary,
     tools,
+    ...(refusals && refusals.length > 0
+      ? { manufacturabilityRefusals: refusals.map(toPacketRefusal) }
+      : {}),
+  };
+}
+
+/** Copy a refusal as plain, deterministic packet data. Depth is never altered. */
+function toPacketRefusal(r: BlindBoreRefusal): PacketManufacturabilityRefusal {
+  return {
+    reasonCode: r.reasonCode,
+    joint: r.joint,
+    ...(r.corner ? { corner: String(r.corner) } : {}),
+    ownerPanelId: r.ownerPanelId,
+    ownerPanelRole: String(r.ownerPanelRole),
+    purpose: String(r.purpose),
+    diameterMm: r.diameterMm,
+    requiredDepthMm: r.requiredDepthMm,
+    ownerThicknessMm: r.ownerThicknessMm,
+    recipeSource: r.recipeSource,
+    waivable: false,
+    message: r.message,
   };
 }
 

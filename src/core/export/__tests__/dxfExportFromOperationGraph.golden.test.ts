@@ -87,7 +87,12 @@ function defaultCab(): Cabinet {
   } as unknown as Cabinet;
 }
 
-/** Overlay-back variant: BACK gets REAL connector points (6mm panel) — pins per-panel thickness ≠ 18. */
+/**
+ * Overlay-back variant with a 6mm back — the F-07 case. The 17.5/11/12mm
+ * back-owned recipe cannot exist in 6mm, so this cabinet must emit ZERO
+ * operations for the back joint and record a refusal. Kept as a fixture
+ * precisely because it is the shape that used to drill straight through.
+ */
 function overlayBackCab(): Cabinet {
   const hw = W - 2 * T, sx = W / 2 - T / 2;
   const sideW = D - 6;             // store: D − backDepthReduction(6mm overlay back)
@@ -107,6 +112,40 @@ function overlayBackCab(): Cabinet {
       panel({ id: 'r', role: 'RIGHT_SIDE', w: sideW, h: H, position: [sx, H / 2, carcassZ] }),
       // Overlay back: full W×H, back face at z=0 → center z = backTotalT/2 = 3
       panel({ id: 'back', role: 'BACK', w: W, h: H, position: [0, H / 2, 3], thickness: 6 }),
+    ],
+  } as unknown as Cabinet;
+}
+
+/**
+ * Same overlay construction, but with a back panel thick enough to accept the
+ * fastener recipe (19mm > the 17.5mm BOLT bore, 1.5mm of wall left). This is
+ * the fixture that still exercises per-panel REAL thickness reaching the DXF
+ * annotation, now that the 6mm variant correctly emits nothing.
+ *
+ * 19mm is unusual for a back panel and is chosen for exactly that reason: it
+ * is not the 18mm cabinet default, so a sheet that reads T=18mm proves the
+ * exporter fell back to the default instead of reading the panel.
+ */
+function thickOverlayBackCab(): Cabinet {
+  const BACK_T = 19;
+  const hw = W - 2 * T, sx = W / 2 - T / 2;
+  const sideW = D - BACK_T;          // store: D − backDepthReduction(overlay back)
+  const carcassZ = D / 2 + BACK_T / 2;
+  return {
+    id: 'cab-golden-ovl-thick', name: 'cab-golden-ovl-thick', type: 'BASE',
+    dimensions: { width: W, height: H, depth: D, toeKickHeight: 100 },
+    structure: {
+      topJoint: 'INSET', bottomJoint: 'INSET', hasBackPanel: true,
+      backPanelConstruction: 'overlay', backPanelInset: BACK_T, shelfCount: 0, dividerCount: 0,
+    },
+    materials: { defaultCore: 'c', defaultSurface: 's', defaultEdge: 'e' },
+    panels: [
+      panel({ id: 't', role: 'TOP', w: hw, h: sideW, position: [0, H - T / 2, carcassZ] }),
+      panel({ id: 'b', role: 'BOTTOM', w: hw, h: sideW, position: [0, T / 2, carcassZ] }),
+      panel({ id: 'l', role: 'LEFT_SIDE', w: sideW, h: H, position: [-sx, H / 2, carcassZ] }),
+      panel({ id: 'r', role: 'RIGHT_SIDE', w: sideW, h: H, position: [sx, H / 2, carcassZ] }),
+      // Overlay back: full W×H, back face at z=0 → center z = BACK_T/2
+      panel({ id: 'back', role: 'BACK', w: W, h: H, position: [0, H / 2, BACK_T / 2], thickness: BACK_T }),
     ],
   } as unknown as Cabinet;
 }
@@ -369,22 +408,105 @@ describe('DXF golden — default flush INSET cabinet 600×720×560 (packet → p
   });
 });
 
-describe('DXF golden — overlay-back variant pins per-panel REAL thickness (6mm back, NOT the 18mm cabinet default)', () => {
+/**
+ * F-07 [P0]. This block used to read:
+ *
+ *   "overlay-back variant pins per-panel REAL thickness (6mm back)"
+ *   B1: BACK sheet exists ... "overlay construction emits real back connector points"
+ *   B2: BACK face bores land inside the BACK outline
+ *
+ * Those two assertions PINNED THE DEFECT. The bores they demanded were
+ * back-owned blind bores of 17.5mm (BOLT), 11mm (BOLT_THREAD) and 12mm (DOWEL)
+ * driven into a 6mm panel — every one of them straight through and out the
+ * other side. The fixture comment even said the quiet part out loud.
+ *
+ * The scrutinize review's ruling is that the correct outcome is zero
+ * operations plus a blocker, never a shallower hole:
+ *   "Reducing the depth would invent a nonfunctional fixing."
+ *
+ * So the 6mm case is now a refusal test, and the per-panel-thickness
+ * propagation it was ALSO covering moved to a back panel that can physically
+ * accept the recipe (below). Both properties stay covered; neither one is
+ * covered by a cabinet that cannot be built.
+ */
+describe('DXF golden — F-07: a 6mm overlay back refuses the joint instead of drilling through it', () => {
   let ctx: Ctx;
+  let drillMap: ReturnType<typeof generateMinifixDrillMap>;
   beforeAll(async () => {
-    ctx = toCtx(await buildAndExport(overlayBackCab()));
+    const cab = overlayBackCab();
+    drillMap = generateMinifixDrillMap(cab);
+    ctx = toCtx(await buildAndExport(cab));
   });
 
-  it('B1: BACK sheet exists and its annotation carries the panel\'s own 6mm thickness', () => {
+  it('B1: exports NO back-owned face bores — the 17.5/11/12mm recipe cannot exist in 6mm', () => {
     const back = ctx.byRole.get('BACK');
-    expect(back, 'BACK sheet (overlay construction emits real back connector points)').toBeDefined();
-    expect(back!.content).toContain('T=6mm');
+    const faceBores = back ? back.parsed.circles.filter((c) => c.layer.startsWith('DRILL_V_')) : [];
+    expect(faceBores, 'a 6mm panel must receive no blind face bores').toEqual([]);
+
+    // NOTE — open question, deliberately not asserted as correct behaviour:
+    // today the BACK sheet vanishes from the export entirely (byRole has no
+    // 'BACK') because the packet only carries panels that own operations. The
+    // panel still has to be CUT. The gate blocks export while a refusal stands,
+    // so this is not reachable through the app, but a direct caller of
+    // exportDxfFromPacket would get a set with no back panel and no explanation.
+    // Tracked as its own finding rather than frozen into a golden assertion.
+  });
+
+  it('B2: no bore anywhere in the map was shrunk to fit the 6mm panel', () => {
+    // The forbidden "fix" is a depth reduction. If one had happened, a bore of
+    // 0 < depth <= 6 would exist on the back panel.
+    const backPoints = (drillMap.panels ?? [])
+      .filter((p) => p.panelId === 'back' || p.role === 'BACK')
+      .flatMap((p) => p.points ?? []);
+    expect(backPoints.map((pt) => `${pt.purpose} D${pt.depth}`), 'zero operations, not shallow ones')
+      .toEqual([]);
+  });
+
+  it('B3: records a STRUCTURED, non-waivable refusal naming the depth and the member', () => {
+    const refusals = drillMap.manufacturabilityRefusals ?? [];
+    expect(refusals.length, 'an empty panel must never read as "nothing needed"').toBeGreaterThan(0);
+
+    const bolt = refusals.find((r) => r.purpose === 'BOLT');
+    expect(bolt, 'the 17.5mm bolt bore must be named').toBeDefined();
+    expect(bolt!.reasonCode).toBe('R_BLIND_BORE_EXCEEDS_MEMBER_THICKNESS');
+    expect(bolt!.requiredDepthMm, 'the required depth is recorded AS-IS, not reduced').toBe(17.5);
+    expect(bolt!.ownerThicknessMm).toBe(6);
+    expect(bolt!.waivable).toBe(false);
+  });
+
+  it('B4: the side of the joint is withdrawn too — a cam with no bolt is not a fixing', () => {
+    const sideBackJointBores = (drillMap.panels ?? [])
+      .filter((p) => p.role === 'LEFT_SIDE' || p.role === 'RIGHT_SIDE')
+      .flatMap((p) => p.points ?? [])
+      .filter((pt) => typeof pt.cornerType === 'string' && pt.cornerType.startsWith('BACK_'));
+    expect(sideBackJointBores.map((pt) => `${pt.purpose}@${pt.cornerType}`),
+      'half a joint is worse than none: it looks assembled and holds nothing').toEqual([]);
+  });
+});
+
+/**
+ * The per-panel-thickness propagation B1/B2 were really testing, on a back
+ * panel that can actually take the recipe. 19mm clears the deepest back-owned
+ * blind bore (17.5mm BOLT) with 1.5mm of wall left, and is not the 18mm
+ * cabinet default — so a sheet reading T=18mm here still proves the exporter
+ * fell back to the cabinet default instead of reading the panel.
+ */
+describe('DXF golden — overlay-back variant pins per-panel REAL thickness (19mm back, NOT the 18mm cabinet default)', () => {
+  let ctx: Ctx;
+  beforeAll(async () => {
+    ctx = toCtx(await buildAndExport(thickOverlayBackCab()));
+  });
+
+  it('B5: BACK sheet exists and its annotation carries the panel\'s own 19mm thickness', () => {
+    const back = ctx.byRole.get('BACK');
+    expect(back, 'a 19mm overlay back accepts the recipe, so it owns real operations').toBeDefined();
+    expect(back!.content).toContain('T=19mm');
     expect(back!.content).not.toContain('T=18mm');
     // Carcass sheets still carry their own 18mm
     expect(ctx.byRole.get('LEFT_SIDE')!.content).toContain('T=18mm');
   });
 
-  it('B2: BACK face bores land inside the BACK outline (600×720) — projected, not world coordinates', () => {
+  it('B6: BACK face bores land inside the BACK outline (600×720) — projected, not world coordinates', () => {
     const back = ctx.byRole.get('BACK')!;
     const faceBores = back.parsed.circles.filter((c) => c.layer.startsWith('DRILL_V_'));
     expect(faceBores.length).toBeGreaterThan(0);

@@ -199,6 +199,180 @@ function buildCadConnectorRunPositions(
   );
 }
 
+// ============================================================================
+// F-07 [P0] — BLIND BORE FEASIBILITY (fail-closed, no depth reduction)
+// ============================================================================
+/**
+ * Review finding F-07 (`docs/research/2026-07-20-monolith-kitchen-cabinet-full-
+ * scrutinize-review.en.md`): overlay-back connector generation auto-enabled and
+ * placed back-owned 17.5mm and 11mm blind bores into a 6mm back panel.
+ *
+ *   "Reducing the depth would invent a nonfunctional fixing. The correct
+ *    outcome is zero operations plus a blocker unless an exact compatible
+ *    recipe exists."
+ *
+ * Owner engineering rules this implements:
+ * - แผงหลัง 6 mm ห้ามรับ blind bore ลึก 17.5 mm หรือ 11 mm
+ * - ถ้าตัวยึดใช้กับแผง 6 mm ไม่ได้ ต้อง BLOCK พร้อมเหตุผล ห้ามลดความลึกให้ดูเหมือนผ่าน
+ * - ห้าม clamp, relabel, relocate หรือสร้างพิกัดสมมติเพื่อทำให้ผ่าน gate
+ * - ข้อมูลขาด/ไม่เข้ากัน ต้อง FAIL CLOSED เสมอ
+ */
+
+/** Machine-readable reason a joint's operations were refused. */
+export type BlindBoreRefusalReason =
+  /**
+   * The only geometric fact used without a cited source: a blind bore whose
+   * depth is >= the owner panel's own thickness cannot exist in that panel.
+   * `depth === thickness` is included — the bore reaches the far face, so it
+   * is a through hole that was never declared as one.
+   */
+  | 'R_BLIND_BORE_EXCEEDS_MEMBER_THICKNESS'
+  /**
+   * The owner panel declares no usable `computed.realThickness`. The bore is
+   * NOT adjudicable, so it is refused (fail closed) rather than defaulted into
+   * something that passes.
+   */
+  | 'R_MEMBER_THICKNESS_UNDECLARED'
+  /**
+   * The recipe declares no usable depth for this operation. Same fail-closed
+   * treatment — a missing recipe value is never substituted.
+   */
+  | 'R_RECIPE_DEPTH_UNDECLARED';
+
+/**
+ * A machine-readable record of machining features the generator REFUSED to
+ * emit. Never a console.warn: it rides on the DrillMap so downstream gates,
+ * the Safety Panel and the factory packet can all see the refusal.
+ */
+export interface BlindBoreRefusal {
+  reasonCode: BlindBoreRefusalReason;
+  /** Joint family whose operations were suppressed, e.g. 'BACK_OVERLAY'. */
+  joint: string;
+  /** Corner/junction identifier when the refusal is junction-scoped. */
+  corner?: CornerType;
+  /** Panel that would have OWNED (been drilled by) the refused bore. */
+  ownerPanelId: string;
+  ownerPanelRole: PanelRole | string;
+  purpose: DrillPurpose;
+  diameterMm: number;
+  /** Depth the fastener recipe requires — recorded as-is, never reduced. */
+  requiredDepthMm: number | null;
+  /** Owner panel's OWN thickness (`computed.realThickness`), never a default. */
+  ownerThicknessMm: number | null;
+  /** Where the required depth came from, e.g. 'MinifixConfig.boltBoreDepth'. */
+  recipeSource: string;
+  /** F-07: the blocker is non-waivable. */
+  waivable: false;
+  message: string;
+}
+
+/**
+ * Attach refusals to the DrillMap without editing types.ts (out of scope for
+ * this fix). Declaration merging keeps the field fully typed for every
+ * consumer of `DrillMap`.
+ */
+declare module './types' {
+  interface DrillMap {
+    /**
+     * F-07: machining features the generator refused to emit because the
+     * fastener recipe cannot physically exist in the owning panel. Non-empty
+     * means operations were withheld ON PURPOSE — never treat an empty panel
+     * as "nothing needed" without checking here.
+     */
+    manufacturabilityRefusals?: BlindBoreRefusal[];
+  }
+}
+
+/** Stable dedupe key so one bad recipe is reported once per owner+operation. */
+function refusalKey(r: BlindBoreRefusal): string {
+  return `${r.reasonCode}|${r.joint}|${r.ownerPanelId}|${r.purpose}|${r.requiredDepthMm}`;
+}
+
+/**
+ * Decide whether ONE blind bore can physically exist in the panel that owns it.
+ *
+ * Returns `null` when the bore is feasible, or a structured refusal otherwise.
+ *
+ * ## What this does NOT do (deliberate UNKNOWN — do not "fix" by guessing)
+ * It does not judge whether the RESIDUAL WALL left behind is structurally
+ * adequate. 17.5mm in an 18mm panel leaves 0.5mm and is the normal Häfele S200
+ * case, so it passes. A residual-wall/ligament rule needs a qualified
+ * member-thickness range from the fastener vendor; `MinifixConfig` declares no
+ * such range, so no margin number is invented here. Adding one without a cited
+ * Häfele source would be exactly the kind of made-up tolerance F-07 warns about.
+ */
+export function evaluateBlindBoreFeasibility(args: {
+  ownerPanel: CabinetPanel;
+  purpose: DrillPurpose;
+  diameterMm: number;
+  requiredDepthMm: number | undefined;
+  recipeSource: string;
+  joint: string;
+  corner?: CornerType;
+}): BlindBoreRefusal | null {
+  const { ownerPanel, purpose, diameterMm, requiredDepthMm, recipeSource, joint, corner } = args;
+
+  // Owner panel's OWN thickness — never a cabinet-level or config default.
+  const rawThickness = ownerPanel.computed?.realThickness;
+  const ownerThicknessMm =
+    typeof rawThickness === 'number' && Number.isFinite(rawThickness) && rawThickness > 0
+      ? rawThickness
+      : null;
+
+  const base = {
+    joint,
+    corner,
+    ownerPanelId: ownerPanel.id,
+    ownerPanelRole: ownerPanel.role,
+    purpose,
+    diameterMm,
+    recipeSource,
+    waivable: false as const,
+  };
+
+  if (requiredDepthMm === undefined || !Number.isFinite(requiredDepthMm) || requiredDepthMm <= 0) {
+    return {
+      ...base,
+      reasonCode: 'R_RECIPE_DEPTH_UNDECLARED',
+      requiredDepthMm: requiredDepthMm ?? null,
+      ownerThicknessMm,
+      message:
+        `${purpose} Ø${diameterMm} on ${ownerPanel.role} ${ownerPanel.id}: ` +
+        `${recipeSource} declares no usable bore depth — operation refused (fail closed).`,
+    };
+  }
+
+  if (ownerThicknessMm === null) {
+    return {
+      ...base,
+      reasonCode: 'R_MEMBER_THICKNESS_UNDECLARED',
+      requiredDepthMm,
+      ownerThicknessMm: null,
+      message:
+        `${purpose} Ø${diameterMm} on ${ownerPanel.role} ${ownerPanel.id}: ` +
+        `owner panel declares no usable realThickness, so a ${requiredDepthMm}mm blind bore ` +
+        `cannot be adjudicated — operation refused (fail closed).`,
+    };
+  }
+
+  if (requiredDepthMm >= ownerThicknessMm) {
+    return {
+      ...base,
+      reasonCode: 'R_BLIND_BORE_EXCEEDS_MEMBER_THICKNESS',
+      requiredDepthMm,
+      ownerThicknessMm,
+      message:
+        `${purpose} Ø${diameterMm} needs a ${requiredDepthMm}mm blind bore but ` +
+        `${ownerPanel.role} ${ownerPanel.id} is only ${ownerThicknessMm}mm thick — ` +
+        `the bore would break through. Recipe source: ${recipeSource}. ` +
+        `Depth was NOT reduced: no compatible recipe exists for this member, so zero ` +
+        `operations are emitted for this joint.`,
+    };
+  }
+
+  return null;
+}
+
 /** Default Minifix S200 config for 18mm panels (project default) */
 /**
  * สเปค corner dowel (single source — worldSynthesis อ้างตัวเดียวกัน, ADR-061c)
@@ -1788,6 +1962,16 @@ export function generateMinifixDrillMap(
   // Map to collect points per panel
   const panelPointsMap = new Map<string, DrillMapPoint[]>();
 
+  // F-07: structured, machine-readable record of operations REFUSED because
+  // the fastener recipe cannot physically exist in the owning panel.
+  const refusalsByKey = new Map<string, BlindBoreRefusal>();
+  const recordRefusals = (rs: BlindBoreRefusal[]): void => {
+    for (const r of rs) {
+      const k = refusalKey(r);
+      if (!refusalsByKey.has(k)) refusalsByKey.set(k, r);
+    }
+  };
+
   // ========================================
   // CALCULATE SYSTEM32 RUN LENGTH
   // ========================================
@@ -2180,35 +2364,107 @@ export function generateMinifixDrillMap(
         }
       };
 
+      // ────────────────────────────────────────────────────────────────────
+      // F-07 [P0] PRE-FLIGHT: refuse the junction BEFORE any operation exists
+      // ────────────────────────────────────────────────────────────────────
+      // The recipe is resolved and checked against the OWNER panel's own
+      // thickness first. If any blind bore cannot physically exist, this
+      // junction emits ZERO machining features — back-owned AND side-owned,
+      // because a cam+entry with no bolt bore is a half-joint, not a fixing.
+      // Depths are never reduced, relocated or relabelled to make it fit.
+      const backJointRefusals = (
+        sideCfg: { includeDowels: boolean },
+        sidePanel: CabinetPanel,
+        corner: BackCornerType,
+      ): BlindBoreRefusal[] => {
+        const dowelsOn = sideCfg.includeDowels && fullConfig.includeDowel;
+        const candidates: Array<{
+          ownerPanel: CabinetPanel;
+          purpose: DrillPurpose;
+          diameterMm: number;
+          requiredDepthMm: number | undefined;
+          recipeSource: string;
+        }> = [
+          // BACK-owned FACE bores (generateBackPanelJointPoints: BOLT/BOLT_THREAD/back dowel)
+          {
+            ownerPanel: backPanel,
+            purpose: 'BOLT',
+            diameterMm: fullConfig.sleeveDia,
+            requiredDepthMm: fullConfig.boltBoreDepth ?? 17.5,
+            recipeSource: 'MinifixConfig.boltBoreDepth',
+          },
+          {
+            ownerPanel: backPanel,
+            purpose: 'BOLT_THREAD',
+            diameterMm: fullConfig.shaftDia,
+            requiredDepthMm: fullConfig.shaftLength,
+            recipeSource: 'MinifixConfig.shaftLength',
+          },
+          // SIDE-owned FACE bore (cam housing in the side panel's inner face)
+          {
+            ownerPanel: sidePanel,
+            purpose: 'CAM_LOCK',
+            diameterMm: fullConfig.camDia,
+            requiredDepthMm: fullConfig.camDepth,
+            recipeSource: 'MinifixConfig.camDepth',
+          },
+        ];
+        if (dowelsOn) {
+          candidates.push({
+            ownerPanel: backPanel,
+            purpose: 'DOWEL',
+            diameterMm: fullConfig.dowelDia,
+            requiredDepthMm: fullConfig.dowelDepthSideFace ?? 11,
+            recipeSource: 'MinifixConfig.dowelDepthSideFace',
+          });
+        }
+        // NOTE (scope): BOLT_ENTRY (Ø7.5 D24) and the side dowel (D19) are EDGE
+        // bores into the side panel's back edge — their limiting dimension is
+        // the panel's depth span, not its thickness. Not adjudicated here.
+        return candidates
+          .map((c) => evaluateBlindBoreFeasibility({ ...c, joint: 'BACK_OVERLAY', corner }))
+          .filter((r): r is BlindBoreRefusal => r !== null);
+      };
+
       // LEFT side junction (BACK ↔ LEFT_SIDE)
       if (backPanelConnectors.left.enabled && leftSide) {
-        for (let i = 0; i < backSys32Positions.length; i++) {
-          const sys32Y = backSys32Positions[i];
-          const backCorner: BackCornerType = 'BACK_LEFT';
-          const configWithDowels = {
-            ...fullConfig,
-            includeDowel: backPanelConnectors.left.includeDowels && fullConfig.includeDowel,
-          };
-          const result = generateBackPanelJointPoints(
-            backCorner, sys32Y, i, backPanel, leftSide, configWithDowels, fullParams,
-          );
-          pushResult(result);
+        const refusals = backJointRefusals(backPanelConnectors.left, leftSide, 'BACK_LEFT');
+        if (refusals.length > 0) {
+          recordRefusals(refusals);
+        } else {
+          for (let i = 0; i < backSys32Positions.length; i++) {
+            const sys32Y = backSys32Positions[i];
+            const backCorner: BackCornerType = 'BACK_LEFT';
+            const configWithDowels = {
+              ...fullConfig,
+              includeDowel: backPanelConnectors.left.includeDowels && fullConfig.includeDowel,
+            };
+            const result = generateBackPanelJointPoints(
+              backCorner, sys32Y, i, backPanel, leftSide, configWithDowels, fullParams,
+            );
+            pushResult(result);
+          }
         }
       }
 
       // RIGHT side junction (BACK ↔ RIGHT_SIDE)
       if (backPanelConnectors.right.enabled && rightSide) {
-        for (let i = 0; i < backSys32Positions.length; i++) {
-          const sys32Y = backSys32Positions[i];
-          const backCorner: BackCornerType = 'BACK_RIGHT';
-          const configWithDowels = {
-            ...fullConfig,
-            includeDowel: backPanelConnectors.right.includeDowels && fullConfig.includeDowel,
-          };
-          const result = generateBackPanelJointPoints(
-            backCorner, sys32Y, i, backPanel, rightSide, configWithDowels, fullParams,
-          );
-          pushResult(result);
+        const refusals = backJointRefusals(backPanelConnectors.right, rightSide, 'BACK_RIGHT');
+        if (refusals.length > 0) {
+          recordRefusals(refusals);
+        } else {
+          for (let i = 0; i < backSys32Positions.length; i++) {
+            const sys32Y = backSys32Positions[i];
+            const backCorner: BackCornerType = 'BACK_RIGHT';
+            const configWithDowels = {
+              ...fullConfig,
+              includeDowel: backPanelConnectors.right.includeDowels && fullConfig.includeDowel,
+            };
+            const result = generateBackPanelJointPoints(
+              backCorner, sys32Y, i, backPanel, rightSide, configWithDowels, fullParams,
+            );
+            pushResult(result);
+          }
         }
       }
     }
@@ -2222,6 +2478,81 @@ export function generateMinifixDrillMap(
   // (Q6=A, 2026-07-26)"; vocabulary '-B' retained in pairKeyV2 for
   // historical keys. The depth-distributed B-run generation loop that lived
   // here was deleted; A-run cam+bolt+dowel secures the corners.
+
+  // ========================================
+  // F-07 [P0] UNIVERSAL BLIND-BORE NET (fail-closed backstop)
+  // ========================================
+  // The back-overlay family is refused at source above. This sweep is the
+  // backstop for EVERY other emitter (overlay corners, inset corners, shelf
+  // junctions, Connector OS synthesis, future paths): no drill map may leave
+  // this function containing a blind FACE bore that is as deep as, or deeper
+  // than, the panel it is drilled into.
+  //
+  // Face vs edge is decided from the panel's OWN geometry — the thinnest AABB
+  // extent is the thickness axis — not from a role assumption. Edge bores are
+  // limited by the panel's in-plane span, not its thickness, and are left
+  // alone (see the scope note on the back-overlay pre-flight).
+  //
+  // On a violation the whole pairId group is withdrawn, on every panel: a
+  // half-joint is not a fixing. Nothing is clamped, relocated or relabelled.
+  {
+    const panelById = new Map(cabinet.panels.map((p) => [p.id, p]));
+    const doomedPairIds = new Set<string>();
+    const sweepRefusals: BlindBoreRefusal[] = [];
+
+    for (const [panelId, pts] of panelPointsMap) {
+      const ownerPanel = panelById.get(panelId);
+      if (!ownerPanel) continue;
+
+      const aabb = calculatePanelAABB(ownerPanel);
+      const extents: [number, number, number] = [
+        aabb.max[0] - aabb.min[0],
+        aabb.max[1] - aabb.min[1],
+        aabb.max[2] - aabb.min[2],
+      ];
+      let thicknessAxis = 0;
+      if (extents[1] < extents[thicknessAxis]) thicknessAxis = 1;
+      if (extents[2] < extents[thicknessAxis]) thicknessAxis = 2;
+
+      for (const pt of pts) {
+        if (pt.throughHole === true) continue;  // declared through = intentional
+        const n = pt.normal.map(Math.abs);
+        let drillAxis = 0;
+        if (n[1] > n[drillAxis]) drillAxis = 1;
+        if (n[2] > n[drillAxis]) drillAxis = 2;
+        if (drillAxis !== thicknessAxis) continue;  // edge bore — out of scope
+
+        const refusal = evaluateBlindBoreFeasibility({
+          ownerPanel,
+          purpose: pt.purpose,
+          diameterMm: pt.diameter,
+          requiredDepthMm: pt.depth,
+          recipeSource: 'emitted DrillMapPoint.depth',
+          joint: pt.cornerType ?? 'UNSCOPED',
+          corner: pt.cornerType,
+        });
+        if (refusal) {
+          sweepRefusals.push(refusal);
+          if (pt.pairId) doomedPairIds.add(pt.pairId);
+          else doomedPairIds.add(`__point__:${pt.id}`);
+        }
+      }
+    }
+
+    if (sweepRefusals.length > 0) {
+      recordRefusals(sweepRefusals);
+      for (const [panelId, pts] of panelPointsMap) {
+        panelPointsMap.set(
+          panelId,
+          pts.filter(
+            (pt) =>
+              !(pt.pairId && doomedPairIds.has(pt.pairId)) &&
+              !doomedPairIds.has(`__point__:${pt.id}`),
+          ),
+        );
+      }
+    }
+  }
 
   // ========================================
   // CENTRALIZED HARDWARE CATALOG ENRICHMENT
@@ -2275,6 +2606,15 @@ export function generateMinifixDrillMap(
 
   // Attach traceability meta
   drillMap.meta = meta;
+
+  // F-07: publish the refusals on the map itself (structured, not a console
+  // warning) so the Safety Gate, the factory packet and the UI all see WHY a
+  // joint has no machining features. Deterministic order for stable diffs.
+  if (refusalsByKey.size > 0) {
+    drillMap.manufacturabilityRefusals = [...refusalsByKey.keys()]
+      .sort()
+      .map((k) => refusalsByKey.get(k)!);
+  }
 
   // ========================================
   // POST-GENERATION VALIDATION: bolt → pocket linkage contract

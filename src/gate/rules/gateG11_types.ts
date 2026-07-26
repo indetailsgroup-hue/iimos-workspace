@@ -149,6 +149,15 @@ export type G11IssueCode =
   // G11.8 Edge Banding on Join Edge (v1.1)
   | 'B_G11_EDGE_BAND_JOIN_FORBIDDEN'
   | 'W_G11_EDGE_BAND_JOIN_WARNING'
+  // G11.9 Panel Breakthrough (ADR-005 MON-BS-001 conformance test)
+  | 'B_G11_PANEL_BREAKTHROUGH'
+  | 'I_G11_BREAKTHROUGH_NOT_EVALUATED'
+  /**
+   * G11.9b — the generator REFUSED to emit a joint's operations (F-07).
+   * Surfaces DrillMap.manufacturabilityRefusals so "zero operations" is never
+   * mistaken for "nothing was needed". Non-waivable.
+   */
+  | 'B_G11_MANUFACTURABILITY_REFUSAL'
   // General
   | 'I_G11_CONNECTOR_COUNT_SUBOPTIMAL';
 
@@ -217,6 +226,21 @@ export interface G11DrillPoint {
    * recompute what the generator already declared.
    */
   targetPocketCenter?: [number, number, number];
+  /**
+   * G11.9 (ADR-005 `panel breakthrough`): the OWNER panel's own real
+   * thickness in mm, carried alongside the point so the gate never has to
+   * fall back on a cabinet-level default. validateG11FromDrillMap copies it
+   * from DrillMapPanel.dimensions.thickness, which the generator fills from
+   * `panel.computed.realThickness` (generateDrillMap.ts, DrillMapPanel
+   * assembly). A G11Panel entry with computed.realThickness takes priority.
+   */
+  panelThickness?: number;
+  /**
+   * G11.9: a bore the generator DECLARED as through. A through hole is
+   * intentional (depth reaches the far face by design) and is therefore not
+   * a breakthrough. Absent/false = blind bore.
+   */
+  throughHole?: boolean;
 }
 
 /**

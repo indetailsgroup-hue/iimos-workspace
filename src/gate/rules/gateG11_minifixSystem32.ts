@@ -26,6 +26,10 @@
 
 import type { Severity } from '../../spec';
 import type { DrillMapPoint, DrillMap } from '../../core/manufacturing/drillMap/types';
+// Type-only (erased at runtime — no generator code is pulled into the gate).
+// Importing it also brings the `DrillMap.manufacturabilityRefusals` module
+// augmentation declared in generateDrillMap.ts into scope. F-07.
+import type { BlindBoreRefusal } from '../../core/manufacturing/drillMap/generateDrillMap';
 import type { NCenterPolicy, ManufacturingMode, EdgeBandMap } from '../../core/connector/types';
 import {
   G11_CONSTANTS,
@@ -965,6 +969,140 @@ export function ruleG11_EdgeBandJoinForbidden(
 }
 
 // ============================================
+// G11.9: PANEL BREAKTHROUGH (ADR-005 MON-BS-001)
+// ============================================
+
+/**
+ * G11.9: A blind bore may not be as deep as, or deeper than, the panel that
+ * owns it.
+ *
+ * ADR-005 (`docs/adr/ADR-005-boring-standard.en.md`) lists `panel breakthrough`
+ * among the conformance tests MON-BS-001 requires. Until this rule existed no
+ * breakthrough check lived anywhere in src/gate or src/core/manufacturing/
+ * drillMap — only comments mentioned one. Review finding F-07 [P0] is the
+ * concrete failure it was missing: a 6mm overlay back panel receiving
+ * back-owned 17.5mm and 11mm blind bores.
+ *
+ * ## The single geometric fact this rule relies on (nothing invented)
+ * A BLIND bore whose depth is >= the owner panel's own thickness cannot exist
+ * in that panel — it reaches or passes the far face. `depth === thickness` is
+ * included: at that point the bore is a through hole, not a blind one, and it
+ * was not declared as such.
+ *
+ * This is NOT a margin rule. 17.5mm in an 18mm panel (0.5mm residual — the
+ * normal Häfele S200 case) PASSES. Whether 0.5mm of residual wall is
+ * structurally adequate is a different question that needs a cited Häfele
+ * member-thickness range; MinifixConfig declares none, so this rule
+ * deliberately does not adjudicate it. See the UNKNOWN note below.
+ *
+ * ## Owner thickness authority (per-panel, never a cabinet default)
+ * 1. `panels[].computed.realThickness` for the owning panel, else
+ * 2. `point.panelThickness` — copied by validateG11FromDrillMap from
+ *    DrillMapPanel.dimensions.thickness, which the generator fills from that
+ *    panel's own `computed.realThickness`.
+ *
+ * ## Scope: FACE bores only
+ * Only bores driven along the owner panel's THICKNESS axis are adjudicated.
+ * For an EDGE bore (BOLT_ENTRY Ø7.5 D24 into a side panel's back edge, the
+ * D19 dowel edge bore, ...) the limiting dimension is the panel's in-plane
+ * span, not its thickness — the G11 input carries no panel-local basis, so
+ * that half of the breakthrough test is deliberately left unimplemented
+ * rather than guessed at.
+ *
+ * ## UNKNOWN / fail-visible, never silently passed
+ * When the owner's role or thickness cannot be resolved the rule cannot
+ * adjudicate. It emits `I_G11_BREAKTHROUGH_NOT_EVALUATED` (INFO) rather than
+ * returning a clean pass. It is INFO and not a BLOCKER because the fail-CLOSED
+ * duty sits one layer up: the generator refuses to emit the operation at all
+ * (generateDrillMap.ts `evaluateBlindBoreFeasibility`), and every drill map
+ * that reaches this gate through validateG11FromDrillMap does carry per-panel
+ * thickness. Blocking here on absent metadata would only over-block
+ * hand-assembled point arrays, not protect any real panel.
+ *
+ * @param drillPoints - All drill points
+ * @param panels - Panel information (owner thickness authority)
+ * @returns Array of validation issues
+ */
+export function ruleG11_PanelBreakthrough(
+  drillPoints: G11DrillPoint[],
+  panels: G11Panel[] = [],
+): G11Issue[] {
+  const issues: G11Issue[] = [];
+
+  const panelById = new Map(panels.map(p => [p.id, p]));
+
+  for (const point of drillPoints) {
+    // No bore, or a bore whose depth was never declared → nothing to measure.
+    if (!Number.isFinite(point.depth) || point.depth <= 0) continue;
+    // A declared through hole is intentional, not a breakthrough.
+    if (point.throughHole === true) continue;
+
+    const ownerPanel = panelById.get(point.panelId);
+    const panelRole = point.connectedPanelRole ||
+                      ownerPanel?.role ||
+                      inferPanelRoleFromPoint(point);
+
+    if (!panelRole) {
+      issues.push({
+        id: issueId('I_G11_BREAKTHROUGH_NOT_EVALUATED', point.id),
+        severity: 'INFO',
+        code: 'I_G11_BREAKTHROUGH_NOT_EVALUATED',
+        message: `Breakthrough not evaluated for ${point.id}: owner panel role is unknown, so the bore axis cannot be classified.`,
+        drillPointIds: [point.id],
+        panelIds: [point.panelId],
+        context: { reason: 'OWNER_ROLE_UNKNOWN', measured: point.depth },
+      });
+      continue;
+    }
+
+    // Thickness is only the limiting dimension for bores along the thickness axis.
+    if (inferBoreTypeFromNormal(point.normal, panelRole) !== 'FACE_BORE') continue;
+
+    const declaredThickness = ownerPanel?.computed?.realThickness ?? point.panelThickness;
+    if (declaredThickness === undefined ||
+        !Number.isFinite(declaredThickness) ||
+        declaredThickness <= 0) {
+      issues.push({
+        id: issueId('I_G11_BREAKTHROUGH_NOT_EVALUATED', point.id),
+        severity: 'INFO',
+        code: 'I_G11_BREAKTHROUGH_NOT_EVALUATED',
+        message: `Breakthrough not evaluated for ${point.id}: owner panel ${point.panelId} declares no usable thickness.`,
+        drillPointIds: [point.id],
+        panelIds: [point.panelId],
+        context: { reason: 'OWNER_THICKNESS_UNDECLARED', measured: point.depth, panelRole },
+      });
+      continue;
+    }
+
+    if (point.depth >= declaredThickness) {
+      issues.push({
+        id: issueId('B_G11_PANEL_BREAKTHROUGH', point.id),
+        severity: 'BLOCKER',
+        code: 'B_G11_PANEL_BREAKTHROUGH',
+        message:
+          `Blind bore ${point.id} (${point.purpose} Ø${point.diameter}) needs ${point.depth}mm ` +
+          `but its owner panel ${point.panelId} (${panelRole}) is only ${declaredThickness}mm thick — ` +
+          `the bore breaks through the far face. Reducing the depth would invent a nonfunctional ` +
+          `fixing: resolve the fastener recipe instead.`,
+        drillPointIds: [point.id],
+        panelIds: [point.panelId],
+        corner: point.cornerType,
+        context: {
+          measured: point.depth,
+          expected: declaredThickness,
+          panelRole,
+          boreType: 'FACE_BORE',
+          purpose: point.purpose,
+          waivable: false,
+        },
+      });
+    }
+  }
+
+  return issues;
+}
+
+// ============================================
 // MAIN GATE FUNCTION
 // ============================================
 
@@ -1012,6 +1150,9 @@ export function runG11Rules(
 
   // G11.5: Bolt Tip ↔ CAM Center Alignment
   allIssues.push(...ruleG11_BoltCamAlignment(drillPoints, policy));
+
+  // G11.9: Panel Breakthrough (ADR-005 MON-BS-001 conformance test)
+  allIssues.push(...ruleG11_PanelBreakthrough(drillPoints, panels));
 
   // v1.1 Rules (only when context is provided)
   if (v11Context) {
@@ -1116,11 +1257,77 @@ export function validateG11FromDrillMap(
         connectedPanelRole: point.connectedPanelRole,
         // G11.5 single authority: the generator's emitted cam pocket center
         targetPocketCenter: point.targetPocketCenter,
+        // G11.9 owner-thickness authority: the OWNING panel's own value.
+        // DrillMapPanel.dimensions.thickness is filled by the generator from
+        // that panel's `computed.realThickness` — never a cabinet default.
+        // A per-point override (point.panelThickness) wins if the emitter set one.
+        panelThickness: point.panelThickness ?? panel.dimensions?.thickness,
+        // G11.9: a bore the generator declared as through is not a breakthrough
+        throughHole: point.throughHole,
       });
     }
   }
 
-  return runG11Rules(allPoints, panels, policy);
+  const result = runG11Rules(allPoints, panels, policy);
+
+  // G11.9b (F-07): a refused joint leaves NO drill points behind, so the
+  // point-level rules above can never see it. Without this, "the generator
+  // withheld every operation because the fastener cannot exist in this panel"
+  // would read as a clean PASS. Surface each refusal as a non-waivable BLOCKER.
+  const refusalIssues = refusalsToG11Issues(drillMap);
+  if (refusalIssues.length === 0) return result;
+
+  const issues = [...refusalIssues, ...result.issues];
+  return {
+    ...result,
+    status: 'FAIL',
+    issues,
+    summary: {
+      ...result.summary,
+      blockers: issues.filter(i => i.severity === 'BLOCKER').length,
+      warnings: issues.filter(i => i.severity === 'WARNING').length,
+      info: issues.filter(i => i.severity === 'INFO').length,
+    },
+  };
+}
+
+/**
+ * Translate the generator's structured refusals into G11 blockers.
+ *
+ * `DrillMap.manufacturabilityRefusals` is written by generateDrillMap when a
+ * fastener recipe cannot physically exist in the panel that would own it
+ * (F-07). Those joints emit zero machining features on purpose — this makes
+ * the reason visible to the Safety Gate instead of leaving a silently empty
+ * panel. Never waivable: the fix is a compatible recipe or a different
+ * construction, not a shallower hole.
+ */
+export function refusalsToG11Issues(drillMap: DrillMap | null): G11Issue[] {
+  const refusals: BlindBoreRefusal[] = drillMap?.manufacturabilityRefusals ?? [];
+
+  return refusals.map((r) => ({
+    id: issueId(
+      'B_G11_MANUFACTURABILITY_REFUSAL',
+      r.joint,
+      r.ownerPanelId,
+      r.purpose,
+      String(r.requiredDepthMm),
+    ),
+    severity: 'BLOCKER' as Severity,
+    code: 'B_G11_MANUFACTURABILITY_REFUSAL' as G11IssueCode,
+    message: `[${r.reasonCode}] ${r.message}`,
+    panelIds: [r.ownerPanelId],
+    corner: r.corner,
+    context: {
+      reason: r.reasonCode,
+      measured: r.requiredDepthMm ?? undefined,
+      expected: r.ownerThicknessMm ?? undefined,
+      panelRole: r.ownerPanelRole,
+      purpose: r.purpose,
+      recipeSource: r.recipeSource,
+      joint: r.joint,
+      waivable: false,
+    },
+  }));
 }
 
 // ============================================

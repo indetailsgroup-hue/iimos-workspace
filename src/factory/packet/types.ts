@@ -63,11 +63,49 @@ export interface PacketDrillPanel {
 /**
  * DrillMap section of packet
  */
+/**
+ * A machining feature the generator refused to emit (F-07). Mirrors
+ * `BlindBoreRefusal` from generateDrillMap.ts as plain, serializable data.
+ */
+export interface PacketManufacturabilityRefusal {
+  reasonCode: string;
+  joint: string;
+  corner?: string;
+  ownerPanelId: string;
+  ownerPanelRole: string;
+  purpose: string;
+  diameterMm: number;
+  /** Depth the recipe requires — recorded AS-IS, never reduced to fit. */
+  requiredDepthMm: number | null;
+  /** Owner panel's own thickness, never a cabinet default. */
+  ownerThicknessMm: number | null;
+  recipeSource: string;
+  /** Always false: the fix is a compatible recipe, not a shallower hole. */
+  waivable: false;
+  message: string;
+}
+
 export interface PacketDrillMap {
   /** Schema version */
   version: 'drillmap.v1';
   /** Panels with drill data */
   panels: PacketDrillPanel[];
+  /**
+   * F-07: machining features the generator REFUSED to emit because the
+   * fastener recipe cannot physically exist in the panel that would own it
+   * (e.g. a 17.5mm blind bore into a 6mm back panel). Present only when
+   * something was refused.
+   *
+   * Without this, drillmap.json is byte-identical between a cabinet whose
+   * back panel legitimately needs no machining and one whose back joint was
+   * refused — and reading the second as the first is precisely what the
+   * refusal mechanism exists to prevent. The artifact declares its own status.
+   *
+   * OPTIONAL and additive, so `drillmap.v1` readers that predate it are
+   * unaffected. Whether a reader may IGNORE it is a governance question for
+   * the owner, not a schema one.
+   */
+  manufacturabilityRefusals?: PacketManufacturabilityRefusal[];
   /** Summary counts */
   summary: {
     totalDrills: number;
