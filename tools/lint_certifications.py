@@ -448,12 +448,6 @@ def main(argv: list[str]) -> int:
     a = ap.parse_args(argv)
 
     paths = a.paths or [DEFAULT_PATH]
-    missing = [p for p in paths if not Path(p).exists()]
-    if missing:
-        for p in missing:
-            print(f"no such path: {p}", file=sys.stderr)
-        return 2
-
     # An explicitly named excluded path is refused with exit 2, not skipped.
     # `collect_files` still skips them defensively for library callers, but at
     # the CLI a silent skip prints "every certification carries evidence" over
@@ -463,6 +457,12 @@ def main(argv: list[str]) -> int:
         for p in refused:
             print(f"refusing excluded path: {p} (third-party tree; see EXCLUDED_DIR_NAMES)",
                   file=sys.stderr)
+        return 2
+
+    missing = [p for p in paths if not Path(p).exists()]
+    if missing:
+        for p in missing:
+            print(f"no such path: {p}", file=sys.stderr)
         return 2
 
     files = collect_files(paths)

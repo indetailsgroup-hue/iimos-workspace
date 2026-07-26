@@ -421,12 +421,6 @@ def main(argv: list[str]) -> int:
         pass
 
     paths = args.paths or default_paths()
-    missing = [p for p in paths if not p.exists()]
-    if missing:
-        for p in missing:
-            print(f"no such path: {p}", file=sys.stderr)
-        return 2
-
     # An explicitly named excluded path is refused, not skipped. Skipping would
     # print a clean summary and exit 0 — a green light for a tree this tool is
     # forbidden to inspect, which is a stronger false claim than any it lints.
@@ -435,6 +429,12 @@ def main(argv: list[str]) -> int:
         for p in refused:
             print(f"refusing excluded path: {p} (third-party tree; see EXCLUDED_DIRS)",
                   file=sys.stderr)
+        return 2
+
+    missing = [p for p in paths if not p.exists()]
+    if missing:
+        for p in missing:
+            print(f"no such path: {p}", file=sys.stderr)
         return 2
 
     files = iter_markdown_files(paths)
