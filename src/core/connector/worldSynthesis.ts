@@ -9,9 +9,10 @@
  * ใช้เป็น parity target: ถ้า output ตรง generateDrillMap 100% บนตู้จริง →
  * ส่วน corner-minifix ของ generator สลับมาใช้ตัวนี้ได้ (drop-in)
  *
- * scope v3 (bolt-family ครบ): CAM+BOLT+BOLT_ENTRY+BOLT_THREAD ทั้ง OVERLAY+INSET 90°
- * DOWELS = นอก scope โดยตั้งใจ (harness เผยว่า dowel จริงมาจากหลายระบบ:
- * corner-branch + B-run + depth ต่างจากสูตร corner — ต้อง mapping session แยก) — มุมองศาอื่น = skip แบบ no-guess (รายงานตรง)
+ * scope v4: CAM+BOLT+BOLT_ENTRY+BOLT_THREAD + corner DOWELS ทั้ง OVERLAY+INSET 90°
+ * (corner dowel สังเคราะห์แล้วทั้งสอง construction — OVERLAY: side EDGE 18 + horiz FACE 12,
+ * INSET v4.0: side FACE 12 + horiz EDGE 18 — ดู CORNER_DOWEL_SPEC ด้านล่าง;
+ * B-run dowels ยังนอก scope — ต้อง mapping session แยก) — มุมองศาอื่น = skip แบบ no-guess (รายงานตรง)
  */
 
 import type { Cabinet } from '../types/Cabinet';

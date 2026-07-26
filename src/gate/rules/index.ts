@@ -38,9 +38,11 @@ export {
 } from './gateG11_minifixSystem32';
 
 // G11 Types (re-export for convenience)
+// getExpectedDowelDepth deliberately NOT re-exported (T10): deprecated
+// bore-type-keyed remnant — dowel depth follows bore orientation, not panel
+// role. Use ruleG11_DowelDepth / G11_CONSTANTS instead.
 export {
   getExpectedBoreType,
-  getExpectedDowelDepth,
   isSidePanel,
   isHorizontalPanel,
   calculateExpectedConnectorCount,

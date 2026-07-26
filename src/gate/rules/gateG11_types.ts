@@ -321,17 +321,24 @@ export function getExpectedBoreType(panelRole: string, purpose?: string): DrillB
 }
 
 /**
- * Determine expected dowel depth for panel role.
+ * Expected dowel depth for a bore orientation.
  *
- * v4.0 Side-covers-Top Construction:
- * - SIDE panels: 12mm (FACE_BORE, shallow to avoid outer face)
- * - HORIZ panels: 18mm (EDGE_BORE, deeper into end grain)
+ * @deprecated Kept only as the bore-type→depth mapping. The original
+ * `(panelRole) => depth` signature was deleted (T10): panel role alone
+ * CANNOT determine dowel depth — the 18mm/12mm split follows the actual
+ * bore orientation, and which panel carries which bore flips between
+ * constructions (OVERLAY: side=EDGE 18 / horiz=FACE 12 · INSET v4.0:
+ * side=FACE 12 / horiz=EDGE 18). The role-based version was only correct
+ * for INSET A-run corner dowels and contradicted the live construction-aware
+ * rule (S16). The live validator derives bore type from the drill normal
+ * (inferBoreTypeFromNormal in gateG11_minifixSystem32.ts) and keys depth
+ * off that. If you only have a panel role, you cannot answer this
+ * question — obtain the bore orientation first.
  */
-export function getExpectedDowelDepth(panelRole: string): number {
-  const sideRoles = ['LEFT_SIDE', 'RIGHT_SIDE', 'SIDE'];
-  return sideRoles.includes(panelRole)
-    ? G11_CONSTANTS.DOWEL_DEPTH_SIDE_FACE   // 12mm face bore on SIDE
-    : G11_CONSTANTS.DOWEL_DEPTH_HORIZ_EDGE; // 18mm edge bore on HORIZ
+export function getExpectedDowelDepth(boreType: DrillBoreType): number {
+  return boreType === 'EDGE_BORE'
+    ? G11_CONSTANTS.DOWEL_DEPTH_HORIZ_EDGE  // 18mm — into end grain
+    : G11_CONSTANTS.DOWEL_DEPTH_SIDE_FACE;  // 12mm — into panel face
 }
 
 /**

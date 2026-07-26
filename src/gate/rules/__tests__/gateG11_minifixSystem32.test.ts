@@ -165,18 +165,20 @@ function createDowelPoint(
 // ============================================
 
 describe('G11 Helper Functions', () => {
-  describe('getExpectedDowelDepth', () => {
-    // v4.0 Side-covers-Top: SIDE=12mm (face bore), HORIZ=18mm (edge bore)
-    it('should return 12mm for SIDE panels (v4.0 face bore)', () => {
-      expect(getExpectedDowelDepth('LEFT_SIDE')).toBe(12);
-      expect(getExpectedDowelDepth('RIGHT_SIDE')).toBe(12);
-      expect(getExpectedDowelDepth('SIDE')).toBe(12);
+  describe('getExpectedDowelDepth (deprecated, bore-type-keyed)', () => {
+    // T10: the old (panelRole) => depth signature was deleted — panel role
+    // alone CANNOT determine dowel depth. The 18/12 split follows the actual
+    // bore orientation, which flips between constructions:
+    //   OVERLAY:    side = EDGE_BORE 18mm · horiz = FACE_BORE 12mm
+    //   INSET v4.0: side = FACE_BORE 12mm · horiz = EDGE_BORE 18mm
+    // The live rule (ruleG11_DowelDepth) derives bore type from the drill
+    // normal — see the S16 OVERLAY + G11.2 INSET suites in this file.
+    it('maps EDGE_BORE → 18mm (end grain)', () => {
+      expect(getExpectedDowelDepth('EDGE_BORE')).toBe(18);
     });
 
-    it('should return 18mm for horizontal panels (v4.0 edge bore)', () => {
-      expect(getExpectedDowelDepth('TOP')).toBe(18);
-      expect(getExpectedDowelDepth('BOTTOM')).toBe(18);
-      expect(getExpectedDowelDepth('SHELF')).toBe(18);
+    it('maps FACE_BORE → 12mm', () => {
+      expect(getExpectedDowelDepth('FACE_BORE')).toBe(12);
     });
   });
 

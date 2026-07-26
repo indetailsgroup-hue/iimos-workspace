@@ -10,15 +10,21 @@
  * ## Rule Set
  * - G11-OP.1: CAM Housing - Ø15, BORE, direction='V' (FACE), on TOP/BOTTOM
  * - G11-OP.2: Bolt Sleeve - Ø10, DRILL/BORE, direction='H' (EDGE), on SIDE
- * - G11-OP.3: Dowel Side - Ø8, depth=18mm, direction='H', on SIDE
- * - G11-OP.4: Dowel Horizontal - Ø8, depth=12mm, direction='V', on TOP/BOTTOM
+ * - G11-OP.3: Dowel Side - Ø8 on SIDE panel, depth follows bore orientation
+ * - G11-OP.4: Dowel Horizontal - Ø8 on TOP/BOTTOM panel, depth follows bore orientation
  * - G11-OP.5: Distance B - Must be 24mm (or 34mm alternate) from mating edge
  *
  * ## Canonical Spec Reference
  * - CAM Housing: Ø15mm face bore on horizontal panel
  * - Bolt Sleeve: Ø10mm edge bore on side panel
- * - Dowel Side: Ø8mm × 18mm edge bore on side panel
- * - Dowel Horizontal: Ø8mm × 12mm face bore on horizontal panel
+ * - Dowel depth is BORE-AWARE, not role-based (matches drill-map validator
+ *   gateG11_minifixSystem32 S16): EDGE_BORE (direction='H', end grain) = 18mm,
+ *   FACE_BORE (direction='V') = 12mm, total 30mm. Which panel carries which
+ *   bore flips between constructions:
+ *   - OVERLAY: side EDGE 18mm + horiz FACE 12mm
+ *   - INSET v4.0 (side-covers-top): side FACE 12mm + horiz EDGE 18mm
+ *   When an operation has no direction, the strongest honest check is the
+ *   symmetric pair {12, 18}; the single-value expectation cannot be asserted.
  */
 
 import type {
@@ -38,9 +44,10 @@ export const G11_OP_CONSTANTS = {
   BOLT_SLEEVE_DIAMETER: 10,
   DOWEL_DIAMETER: 8,
 
-  // Depths (mm)
-  DOWEL_DEPTH_EDGE: 18,    // SIDE panel (EDGE_BORE)
-  DOWEL_DEPTH_FACE: 12,    // TOP/BOTTOM panel (FACE_BORE)
+  // Depths (mm) — keyed by bore orientation, NOT by panel role
+  // (which panel carries the edge bore flips between OVERLAY and INSET)
+  DOWEL_DEPTH_EDGE: 18,    // EDGE_BORE (direction='H', into end grain)
+  DOWEL_DEPTH_FACE: 12,    // FACE_BORE (direction='V', into panel face)
 
   // Distance B
   DIMENSION_B_STANDARD: 24,
@@ -293,16 +300,83 @@ function validateBoltSleeve(op: DrillOperation | BoreOperation, meta: G11Operati
 }
 
 /**
+ * Shared bore-aware dowel depth check (G11-OP.3 / G11-OP.4).
+ *
+ * Depth follows the actual bore orientation carried by the operation
+ * (direction: 'H' = EDGE_BORE = 18mm end grain, 'V' = FACE_BORE = 12mm),
+ * matching the drill-map G11 validator (gateG11_minifixSystem32, S16).
+ * The old role-based hardcode (SIDE=18 / HORIZ=12) was OVERLAY-only and
+ * wrongly flagged every INSET v4.0 cabinet.
+ *
+ * When direction is absent (optional for backward compat), the strongest
+ * honest check is the symmetric pair {12, 18}: reject anything else, and
+ * flag orientation-unknown as INFO instead of asserting a single value
+ * that would be wrong for one of the two constructions.
+ */
+function validateDowelDepthBoreAware(
+  op: DrillOperation,
+  purposeLabel: 'DOWEL_SIDE' | 'DOWEL_HORIZONTAL',
+  depthCode: string
+): G11OpIssue[] {
+  const issues: G11OpIssue[] = [];
+  const { DOWEL_DEPTH_EDGE, DOWEL_DEPTH_FACE, DEPTH_TOLERANCE } = G11_OP_CONSTANTS;
+
+  if (op.direction === 'H' || op.direction === 'V') {
+    // Orientation known — assert the single bore-aware expected depth
+    const boreType = op.direction === 'H' ? 'EDGE_BORE' : 'FACE_BORE';
+    const expected = op.direction === 'H' ? DOWEL_DEPTH_EDGE : DOWEL_DEPTH_FACE;
+
+    if (!almostEqual(op.depth, expected, DEPTH_TOLERANCE)) {
+      issues.push({
+        id: issueId(depthCode, op.id),
+        severity: 'BLOCKER',
+        code: depthCode,
+        message: `${purposeLabel} depth must be ${expected}mm for ${boreType} (direction='${op.direction}'), found ${op.depth}mm`,
+        operationId: op.id,
+        context: { expected, actual: op.depth, boreType, direction: op.direction },
+      });
+    }
+  } else {
+    // Orientation unknown — accept the {12, 18} pair symmetrically
+    const matchesEdge = almostEqual(op.depth, DOWEL_DEPTH_EDGE, DEPTH_TOLERANCE);
+    const matchesFace = almostEqual(op.depth, DOWEL_DEPTH_FACE, DEPTH_TOLERANCE);
+
+    if (!matchesEdge && !matchesFace) {
+      issues.push({
+        id: issueId(depthCode, op.id),
+        severity: 'BLOCKER',
+        code: depthCode,
+        message: `${purposeLabel} depth must be ${DOWEL_DEPTH_FACE}mm (FACE_BORE) or ${DOWEL_DEPTH_EDGE}mm (EDGE_BORE), found ${op.depth}mm`,
+        operationId: op.id,
+        context: { expectedFace: DOWEL_DEPTH_FACE, expectedEdge: DOWEL_DEPTH_EDGE, actual: op.depth },
+      });
+    } else {
+      issues.push({
+        id: issueId('I_G11_OP_DOWEL_ORIENTATION_UNKNOWN', op.id),
+        severity: 'INFO',
+        code: 'I_G11_OP_DOWEL_ORIENTATION_UNKNOWN',
+        message: `${purposeLabel} at ${op.id}: no direction on operation — depth ${op.depth}mm accepted as ${matchesEdge ? `EDGE_BORE (${DOWEL_DEPTH_EDGE}mm)` : `FACE_BORE (${DOWEL_DEPTH_FACE}mm)`} without orientation confirmation`,
+        operationId: op.id,
+        context: { actual: op.depth, assumedBoreType: matchesEdge ? 'EDGE_BORE' : 'FACE_BORE' },
+      });
+    }
+  }
+
+  return issues;
+}
+
+/**
  * G11-OP.3: Dowel Side Validation
  *
  * Dowel on SIDE panel must be:
  * - Ø8mm DRILL operation
- * - Depth = 18mm (EDGE_BORE)
- * - Direction = 'H'
+ * - Depth consistent with its bore orientation:
+ *   EDGE_BORE (direction='H') = 18mm — OVERLAY construction
+ *   FACE_BORE (direction='V') = 12mm — INSET v4.0 construction
  */
 function validateDowelSide(op: DrillOperation, meta: G11OperationMeta): G11OpIssue[] {
   const issues: G11OpIssue[] = [];
-  const { DOWEL_DIAMETER, DOWEL_DEPTH_EDGE, DIAMETER_TOLERANCE, DEPTH_TOLERANCE } = G11_OP_CONSTANTS;
+  const { DOWEL_DIAMETER, DIAMETER_TOLERANCE } = G11_OP_CONSTANTS;
 
   // Check diameter
   if (op.diameter !== undefined && !almostEqual(op.diameter, DOWEL_DIAMETER, DIAMETER_TOLERANCE)) {
@@ -316,29 +390,8 @@ function validateDowelSide(op: DrillOperation, meta: G11OperationMeta): G11OpIss
     });
   }
 
-  // Check depth (must be 18mm for edge bore)
-  if (!almostEqual(op.depth, DOWEL_DEPTH_EDGE, DEPTH_TOLERANCE)) {
-    issues.push({
-      id: issueId('B_G11_OP_DOWEL_SIDE_DEPTH', op.id),
-      severity: 'BLOCKER',
-      code: 'B_G11_OP_DOWEL_SIDE_DEPTH',
-      message: `DOWEL_SIDE depth must be ${DOWEL_DEPTH_EDGE}mm, found ${op.depth}mm`,
-      operationId: op.id,
-      context: { expected: DOWEL_DEPTH_EDGE, actual: op.depth },
-    });
-  }
-
-  // Check direction (must be horizontal = edge bore)
-  if (op.direction && op.direction !== 'H') {
-    issues.push({
-      id: issueId('B_G11_OP_DOWEL_SIDE_DIR', op.id),
-      severity: 'BLOCKER',
-      code: 'B_G11_OP_DOWEL_SIDE_DIR',
-      message: `DOWEL_SIDE must be EDGE_BORE (direction='H'), found direction='${op.direction}'`,
-      operationId: op.id,
-      context: { expected: 'H', actual: op.direction },
-    });
-  }
+  // Check depth against actual bore orientation (construction-agnostic)
+  issues.push(...validateDowelDepthBoreAware(op, 'DOWEL_SIDE', 'B_G11_OP_DOWEL_SIDE_DEPTH'));
 
   // Check panel role
   if (meta.panelRole && !isSidePanel(meta.panelRole)) {
@@ -360,12 +413,13 @@ function validateDowelSide(op: DrillOperation, meta: G11OperationMeta): G11OpIss
  *
  * Dowel on TOP/BOTTOM panel must be:
  * - Ø8mm DRILL operation
- * - Depth = 12mm (FACE_BORE)
- * - Direction = 'V'
+ * - Depth consistent with its bore orientation:
+ *   FACE_BORE (direction='V') = 12mm — OVERLAY construction
+ *   EDGE_BORE (direction='H') = 18mm — INSET v4.0 construction
  */
 function validateDowelHorizontal(op: DrillOperation, meta: G11OperationMeta): G11OpIssue[] {
   const issues: G11OpIssue[] = [];
-  const { DOWEL_DIAMETER, DOWEL_DEPTH_FACE, DIAMETER_TOLERANCE, DEPTH_TOLERANCE } = G11_OP_CONSTANTS;
+  const { DOWEL_DIAMETER, DIAMETER_TOLERANCE } = G11_OP_CONSTANTS;
 
   // Check diameter
   if (op.diameter !== undefined && !almostEqual(op.diameter, DOWEL_DIAMETER, DIAMETER_TOLERANCE)) {
@@ -379,29 +433,8 @@ function validateDowelHorizontal(op: DrillOperation, meta: G11OperationMeta): G1
     });
   }
 
-  // Check depth (must be 12mm for face bore)
-  if (!almostEqual(op.depth, DOWEL_DEPTH_FACE, DEPTH_TOLERANCE)) {
-    issues.push({
-      id: issueId('B_G11_OP_DOWEL_HORIZ_DEPTH', op.id),
-      severity: 'BLOCKER',
-      code: 'B_G11_OP_DOWEL_HORIZ_DEPTH',
-      message: `DOWEL_HORIZONTAL depth must be ${DOWEL_DEPTH_FACE}mm, found ${op.depth}mm`,
-      operationId: op.id,
-      context: { expected: DOWEL_DEPTH_FACE, actual: op.depth },
-    });
-  }
-
-  // Check direction (must be vertical = face bore)
-  if (op.direction && op.direction !== 'V') {
-    issues.push({
-      id: issueId('B_G11_OP_DOWEL_HORIZ_DIR', op.id),
-      severity: 'BLOCKER',
-      code: 'B_G11_OP_DOWEL_HORIZ_DIR',
-      message: `DOWEL_HORIZONTAL must be FACE_BORE (direction='V'), found direction='${op.direction}'`,
-      operationId: op.id,
-      context: { expected: 'V', actual: op.direction },
-    });
-  }
+  // Check depth against actual bore orientation (construction-agnostic)
+  issues.push(...validateDowelDepthBoreAware(op, 'DOWEL_HORIZONTAL', 'B_G11_OP_DOWEL_HORIZ_DEPTH'));
 
   // Check panel role
   if (meta.panelRole && !isHorizontalPanel(meta.panelRole)) {

@@ -46,7 +46,7 @@ function drillOp(
   id: string,
   diameter: number,
   depth: number,
-  direction: 'V' | 'H',
+  direction: 'V' | 'H' | undefined,
   meta: G11OperationMeta
 ): DrillOperation {
   return {
@@ -340,7 +340,10 @@ describe('G11-OP.3 Dowel Side Validation', () => {
     expect(result.issues[0].message).toContain('18mm');
   });
 
-  it('should FAIL for wrong direction (V instead of H)', () => {
+  it('should FAIL for depth inconsistent with bore orientation (FACE_BORE V with 18mm)', () => {
+    // 'V' = FACE_BORE → 12mm. 18mm on a face bore is wrong in BOTH constructions.
+    // (Formerly pinned as a DIR error under the OVERLAY-only hardcode — the
+    // direction itself is legal now: INSET side dowels are FACE_BORE.)
     const ops = [drillOp('dowel-1', 8, 18, 'V', {
       panelRole: 'LEFT_SIDE',
       purpose: 'DOWEL_SIDE',
@@ -349,8 +352,9 @@ describe('G11-OP.3 Dowel Side Validation', () => {
     const result = validateG11Operations(ops);
 
     expect(result.status).toBe('FAIL');
-    expect(result.issues[0].code).toBe('B_G11_OP_DOWEL_SIDE_DIR');
-    expect(result.issues[0].message).toContain('EDGE_BORE');
+    expect(result.issues[0].code).toBe('B_G11_OP_DOWEL_SIDE_DEPTH');
+    expect(result.issues[0].message).toContain('12mm');
+    expect(result.issues[0].message).toContain('FACE_BORE');
   });
 
   it('should FAIL for wrong panel (TOP instead of SIDE)', () => {
@@ -405,7 +409,10 @@ describe('G11-OP.4 Dowel Horizontal Validation', () => {
     expect(result.issues[0].message).toContain('12mm');
   });
 
-  it('should FAIL for wrong direction (H instead of V)', () => {
+  it('should FAIL for depth inconsistent with bore orientation (EDGE_BORE H with 12mm)', () => {
+    // 'H' = EDGE_BORE → 18mm. 12mm on an edge bore is wrong in BOTH constructions.
+    // (Formerly pinned as a DIR error under the OVERLAY-only hardcode — the
+    // direction itself is legal now: INSET horizontal dowels are EDGE_BORE.)
     const ops = [drillOp('dowel-1', 8, 12, 'H', {
       panelRole: 'TOP',
       purpose: 'DOWEL_HORIZONTAL',
@@ -414,8 +421,9 @@ describe('G11-OP.4 Dowel Horizontal Validation', () => {
     const result = validateG11Operations(ops);
 
     expect(result.status).toBe('FAIL');
-    expect(result.issues[0].code).toBe('B_G11_OP_DOWEL_HORIZ_DIR');
-    expect(result.issues[0].message).toContain('FACE_BORE');
+    expect(result.issues[0].code).toBe('B_G11_OP_DOWEL_HORIZ_DEPTH');
+    expect(result.issues[0].message).toContain('18mm');
+    expect(result.issues[0].message).toContain('EDGE_BORE');
   });
 
   it('should FAIL for wrong panel (SIDE instead of TOP/BOTTOM)', () => {
@@ -428,6 +436,73 @@ describe('G11-OP.4 Dowel Horizontal Validation', () => {
 
     expect(result.status).toBe('FAIL');
     expect(result.issues[0].code).toBe('B_G11_OP_DOWEL_HORIZ_PANEL');
+  });
+});
+
+// ============================================
+// BORE-AWARE DOWEL DEPTH (construction-agnostic)
+// ============================================
+
+describe('G11-OP dowel depth is bore-aware (INSET v4.0 support)', () => {
+  // INSET v4.0 side-covers-top: side dowel = FACE_BORE (direction 'V') 12mm,
+  // horizontal dowel = EDGE_BORE (direction 'H') 18mm — the exact mirror of
+  // OVERLAY. Depth follows the actual bore orientation, not the panel role.
+  // Same truth as the drill-map validator (gateG11_minifixSystem32 S16).
+  it('should PASS for INSET-style dowels: side FACE_BORE 12mm (V) + horiz EDGE_BORE 18mm (H)', () => {
+    const ops = [
+      drillOp('dowel-side-inset', 8, 12, 'V', {
+        panelRole: 'LEFT_SIDE',
+        purpose: 'DOWEL_SIDE',
+      }),
+      drillOp('dowel-horiz-inset', 8, 18, 'H', {
+        panelRole: 'TOP',
+        purpose: 'DOWEL_HORIZONTAL',
+      }),
+    ];
+
+    const result = validateG11Operations(ops);
+
+    expect(result.status).toBe('PASS');
+    expect(result.summary.blockers).toBe(0);
+  });
+
+  it('should accept the {12, 18} pair symmetrically when direction is missing, with orientation-unknown INFO', () => {
+    // direction is optional (backward compat). Without it, neither 12 nor 18
+    // can be singled out — asserting one would be wrong for one construction.
+    const ops = [
+      drillOp('dowel-nodir-18', 8, 18, undefined, {
+        panelRole: 'LEFT_SIDE',
+        purpose: 'DOWEL_SIDE',
+      }),
+      drillOp('dowel-nodir-12', 8, 12, undefined, {
+        panelRole: 'TOP',
+        purpose: 'DOWEL_HORIZONTAL',
+      }),
+    ];
+
+    const result = validateG11Operations(ops);
+
+    expect(result.status).toBe('PASS');
+    expect(result.summary.blockers).toBe(0);
+    const infoIssues = result.issues.filter(
+      i => i.code === 'I_G11_OP_DOWEL_ORIENTATION_UNKNOWN'
+    );
+    expect(infoIssues.length).toBe(2);
+    expect(result.summary.info).toBe(2);
+  });
+
+  it('should still FAIL when direction is missing and depth matches neither 12 nor 18', () => {
+    const ops = [drillOp('dowel-nodir-bad', 8, 15, undefined, {
+      panelRole: 'LEFT_SIDE',
+      purpose: 'DOWEL_SIDE',
+    })];
+
+    const result = validateG11Operations(ops);
+
+    expect(result.status).toBe('FAIL');
+    expect(result.issues[0].code).toBe('B_G11_OP_DOWEL_SIDE_DEPTH');
+    expect(result.issues[0].message).toContain('12mm');
+    expect(result.issues[0].message).toContain('18mm');
   });
 });
 
