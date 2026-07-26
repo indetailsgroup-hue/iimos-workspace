@@ -421,3 +421,71 @@ These are the accepted Task 4 implementation/fix gates recorded in the refreshed
 - Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.
 - No push, merge, rebase, or branch change was performed.
 - Task 5 is next and has not started.
+
+## Task 5 closeout — 27 July 2026
+
+**Status:** COMPLETE
+**Task 5 base:** `ea161d00011d369aa48e19d752fb9036a63a1a3b`
+**Implementation commit:** `ba033d0f701cac732e7e27c107e1d5806f6d8b69`
+**Review-fix commit:** `33c48582ecef65e081c949435d82a660ce16529c`
+**Current boundary:** Task 6 is next and has not started. This current closeout supersedes only the earlier Task 4 boundary statement that recorded Task 5 as next or not started; the Task 1–4 statements remain preserved as historical snapshots.
+
+### Exact tracked Task 5 scope
+
+The combined two-commit range from the Task 5 base changes exactly four Task 5 paths:
+
+1. `packages/component-master/src/monolith_component_master/qualification.py`
+2. `tests/component_master/registry/test_qualification.py`
+3. `data/component-master/registry/v1/materials.jsonl`
+4. `data/component-master/registry/v1/qualification-envelopes.jsonl`
+
+The implementation commit created all four paths. The review-fix commit changed only `qualification.py` and `test_qualification.py`; the two zero-record seed files remained unchanged. No owner-root or nested-runtime file was changed.
+
+### Exact material and joint-qualification foundation
+
+- `Verdict` has exactly five members with identical uppercase values: `QUALIFIED`, `CONDITIONALLY_QUALIFIED`, `UNQUALIFIED`, `INSUFFICIENT_EVIDENCE`, and `DISCONTINUED_OR_UNORDERABLE`. `ThicknessEvidenceKind` has exactly three members with identical uppercase values: `EXACT_POINT`, `DECLARED_RANGE`, and `APPROVED_INTERPOLATION`; there is no inferred or nearest-neighbour evidence kind.
+- Frozen `MaterialInstance` has exactly `substrate`, `core`, `density_kg_m3`, `moisture_pct`, `orientation`, `nominal_thickness_mm`, `measured_thickness_mm`, and `facing_thickness_mm`.
+- Frozen `MaterialConstraint` has exactly `substrate`, `core`, `density_min_kg_m3`, `density_max_kg_m3`, `moisture_min_pct`, `moisture_max_pct`, `orientation`, `nominal_thickness_min_mm`, `nominal_thickness_max_mm`, `measured_thickness_min_mm`, `measured_thickness_max_mm`, `facing_thickness_min_mm`, `facing_thickness_max_mm`, and `thickness_evidence_kind`.
+- Frozen `JointConfiguration` has exactly `connector_sku_id`, `panel_a`, and `panel_b`. Frozen `QualificationEnvelope` has exactly `envelope_id`, `connector_sku_id`, `panel_a`, `panel_b`, `verdict`, and `evidence_assertion_ids`. Frozen `QualificationResult` has exactly `verdict`, `envelope_id`, and `reason_codes`.
+- Panel A and Panel B are independent and never swapped. Each side must match its own constraint for substrate, core, density, moisture, orientation, nominal thickness, measured thickness, and facing thickness within the same envelope.
+- `EXACT_POINT` requires collapsed nominal and measured bounds. `DECLARED_RANGE` qualifies only inside its explicit inclusive bounds. `APPROVED_INTERPOLATION` qualifies only inside its explicit evidenced range, and every envelope carries at least one canonical `assertion:` evidence ID. Separate exact evidence at 15 mm and 18 mm does not qualify 16 mm. There is no extrapolation, nearest substitute, panel swap, or nominal-for-measured substitution.
+- No match returns `INSUFFICIENT_EVIDENCE` with `NO_EXACT_CONFIGURATION_EVIDENCE`. Any multiple match, including one qualified record plus a conflicting record, and any sole non-qualified match fail closed as `UNQUALIFIED` with `AMBIGUOUS_OR_NONQUALIFIED_ENVELOPE`. Exactly one qualified match returns its exact envelope ID.
+- `materials.jsonl` and `qualification-envelopes.jsonl` are valid tracked JSONL seeds with zero records. Task 5 does not fabricate material or qualification evidence.
+
+### Honest review and TDD chronology
+
+| Stage | Verdict / result | Disposition |
+| --- | --- | --- |
+| Original TDD | RED: expected missing `qualification` module; GREEN: 48/48 original Task 5 tests | Established the first implementation without claiming review acceptance. |
+| First review | `NEEDS_FIXES` | P1: `MaterialConstraint` admitted `moisture_max_pct > 100`. P1: contradictory public `QualificationResult` states were constructible because verdict, envelope, and reasons lacked cross-field invariants. |
+| Review-fix RED | 3 focused regression methods ran; 12 subtests failed | Production code was unchanged for the RED run. Valid boundary and result-shape controls passed. |
+| Minimal review fix | Only `qualification.py` + test changed | Enforced `moisture_max_pct <= 100`; required `QUALIFIED` to have an envelope and exactly empty reasons; required `CONDITIONALLY_QUALIFIED` to have an envelope and at least one nonblank reason; required all three refusal verdicts to have no envelope and at least one nonblank reason; defensively snapshotted reasons before validation. |
+| Review-fix GREEN | Focused regressions passed 3/3; complete Task 5 module passed 51/51 | The fix added exactly three Task 5 regression methods beyond the original 48. |
+| Fresh rereview | Spec `ACCEPTED`; Quality `ACCEPTED`; overall `ACCEPTED` | No findings remained. |
+
+### Accepted final gates
+
+These are the accepted Task 5 implementation/fix gates recorded in the refreshed report; the docs-only ledger closeout did not rerun product tests.
+
+| Gate | Accepted result |
+| --- | --- |
+| Complete Task 5 qualification module | 51/51 tests passed; `OK`. |
+| Prior Task 2 + Task 3 + Task 4 + legacy regression cohort | 104/104 tests passed; `OK`. |
+| Focused verifier contracts | 12/12 tests passed; `OK`. |
+| Full dynamic discovery | 415/415 tests passed; `OK`. |
+| Single clean-HEAD verifier | Schema `1.1.0`; 13/13 checks passed; governed suites exact at 20 Component Master + 7 identity-tenancy; dynamic suite 415; Python compile, JSON/JSONL parsing, and clean Git evidence passed. |
+
+### Evidence integrity and cleanup
+
+- Refreshed Task 5 report: `.superpowers/sdd/task-5-qualification-report.md`; 12,269 bytes; SHA-256 `d819894ef49ad1ad3cc2d7a99a6a7948b22383e914b4f98ad9aa48d3ccb17ac5`.
+- Refreshed native full-index binary review package: `.superpowers/sdd/task-5-qualification-review-package.diff`; 59,874 bytes; SHA-256 `84ff64c4267b236865cb2c755edfcc00a5a6842054b7b0af8fbcc3114f7eed3d`; it contains exactly the four Task 5 paths and reverse-applies cleanly at the review-fix HEAD.
+- The generated verifier summary was recorded, then removed. Exactly eight generated `__pycache__` directories were removed. The implementation/fix worktree was clean at `33c48582ecef65e081c949435d82a660ce16529c`.
+
+### Task 5 authority boundary
+
+- Task 5 establishes only immutable, evidence-bound joint matching and two empty seeds.
+- It does not add W × D × H cabinet evaluation, connector count or spacing, structural extrapolation, lifecycle resolution, BOM mutation, ingestion, release authority, runtime integration, or production/manufacturing authority.
+- NOT-FOR-PRODUCTION remains active. Software tests do not establish machine, coupon, first-article, field, security, operational, or production readiness.
+- Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.
+- No push or merge was performed.
+- Task 6 is next and has not started.

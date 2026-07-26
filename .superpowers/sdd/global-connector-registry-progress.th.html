@@ -379,5 +379,60 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
 <li>ไม่ได้ push, merge, rebase หรือเปลี่ยน branch</li>
 <li>งานที่ 5 เป็นงานถัดไปและยังไม่ได้เริ่ม</li>
 </ul>
+<h2>การปิดงานที่ 5 — 27 กรกฎาคม 2026</h2>
+<p><strong>สถานะ:</strong> COMPLETE <strong>Base ของงานที่ 5:</strong> <code>ea161d00011d369aa48e19d752fb9036a63a1a3b</code> <strong>Implementation commit:</strong> <code>ba033d0f701cac732e7e27c107e1d5806f6d8b69</code> <strong>Review-fix commit:</strong> <code>33c48582ecef65e081c949435d82a660ce16529c</code> <strong>ขอบเขตปัจจุบัน:</strong> งานที่ 6 เป็นงานถัดไปและยังไม่ได้เริ่ม การปิดงานปัจจุบันนี้แทนที่เฉพาะข้อความขอบเขตเดิมในงานที่ 4 ที่บันทึกว่างานที่ 5 เป็นงานถัดไปหรือยังไม่ได้เริ่ม โดยยังรักษาข้อความของงานที่ 1–4 ไว้เป็น snapshot ทางประวัติศาสตร์</p>
+<h3>ขอบเขต tracked ของงานที่ 5 แบบ exact</h3>
+<p>ช่วงรวมสอง commit จาก base ของงานที่ 5 เปลี่ยนพาธของงานที่ 5 exactly สี่รายการ:</p>
+<ol>
+<li><code>packages/component-master/src/monolith_component_master/qualification.py</code></li>
+<li><code>tests/component_master/registry/test_qualification.py</code></li>
+<li><code>data/component-master/registry/v1/materials.jsonl</code></li>
+<li><code>data/component-master/registry/v1/qualification-envelopes.jsonl</code></li>
+</ol>
+<p>Implementation commit สร้างทั้งสี่พาธ ส่วน review-fix commit เปลี่ยนเฉพาะ <code>qualification.py</code> และ <code>test_qualification.py</code> โดยไฟล์ seed แบบศูนย์ record ทั้งสองไม่เปลี่ยนแปลง ไม่มีการเปลี่ยนไฟล์ใน owner root หรือ nested runtime</p>
+<h3>รากฐาน material และ joint qualification แบบ exact</h3>
+<ul>
+<li><code>Verdict</code> มีสมาชิก exactly ห้าค่าพร้อม value ตัวพิมพ์ใหญ่ตรงกับชื่อ ได้แก่ <code>QUALIFIED</code>, <code>CONDITIONALLY_QUALIFIED</code>, <code>UNQUALIFIED</code>, <code>INSUFFICIENT_EVIDENCE</code> และ <code>DISCONTINUED_OR_UNORDERABLE</code> ส่วน <code>ThicknessEvidenceKind</code> มีสมาชิก exactly สามค่าพร้อม value ตัวพิมพ์ใหญ่ตรงกับชื่อ ได้แก่ <code>EXACT_POINT</code>, <code>DECLARED_RANGE</code> และ <code>APPROVED_INTERPOLATION</code> โดยไม่มี evidence kind แบบ inferred หรือ nearest-neighbour</li>
+<li><code>MaterialInstance</code> แบบ frozen มี exactly <code>substrate</code>, <code>core</code>, <code>density_kg_m3</code>, <code>moisture_pct</code>, <code>orientation</code>, <code>nominal_thickness_mm</code>, <code>measured_thickness_mm</code> และ <code>facing_thickness_mm</code></li>
+<li><code>MaterialConstraint</code> แบบ frozen มี exactly <code>substrate</code>, <code>core</code>, <code>density_min_kg_m3</code>, <code>density_max_kg_m3</code>, <code>moisture_min_pct</code>, <code>moisture_max_pct</code>, <code>orientation</code>, <code>nominal_thickness_min_mm</code>, <code>nominal_thickness_max_mm</code>, <code>measured_thickness_min_mm</code>, <code>measured_thickness_max_mm</code>, <code>facing_thickness_min_mm</code>, <code>facing_thickness_max_mm</code> และ <code>thickness_evidence_kind</code></li>
+<li><code>JointConfiguration</code> แบบ frozen มี exactly <code>connector_sku_id</code>, <code>panel_a</code> และ <code>panel_b</code> ส่วน <code>QualificationEnvelope</code> แบบ frozen มี exactly <code>envelope_id</code>, <code>connector_sku_id</code>, <code>panel_a</code>, <code>panel_b</code>, <code>verdict</code> และ <code>evidence_assertion_ids</code> และ <code>QualificationResult</code> แบบ frozen มี exactly <code>verdict</code>, <code>envelope_id</code> และ <code>reason_codes</code></li>
+<li>Panel A และ Panel B เป็นอิสระต่อกันและไม่ถูกสลับ แต่ละด้านต้องตรงกับ constraint ของตนเองสำหรับ substrate, core, density, moisture, orientation, nominal thickness, measured thickness และ facing thickness ภายใน envelope เดียวกัน</li>
+<li><code>EXACT_POINT</code> กำหนดให้ขอบเขต nominal และ measured ยุบเป็นจุดเดียว <code>DECLARED_RANGE</code> อนุมัติเฉพาะภายในขอบเขต inclusive ที่ประกาศอย่าง explicit ส่วน <code>APPROVED_INTERPOLATION</code> อนุมัติเฉพาะภายในช่วงที่มีหลักฐาน explicit และทุก envelope ต้องมี canonical evidence ID ที่ขึ้นต้นด้วย <code>assertion:</code> อย่างน้อยหนึ่งรายการ หลักฐาน exact แยกกันที่ 15 มม. และ 18 มม. ไม่อนุมัติ 16 มม. ระบบไม่มี extrapolation, nearest substitute, การสลับ panel หรือการใช้ nominal แทน measured</li>
+<li>เมื่อไม่ match ระบบคืน <code>INSUFFICIENT_EVIDENCE</code> พร้อม <code>NO_EXACT_CONFIGURATION_EVIDENCE</code> ส่วนการ match หลายรายการทุกแบบ รวมถึง qualified หนึ่งรายการร่วมกับ record ที่ขัดแย้ง และการ match record เดียวที่ไม่ qualified จะ fail closed เป็น <code>UNQUALIFIED</code> พร้อม <code>AMBIGUOUS_OR_NONQUALIFIED_ENVELOPE</code> มีเพียงการ match qualified exactly หนึ่งรายการเท่านั้นที่คืน exact envelope ID</li>
+<li><code>materials.jsonl</code> และ <code>qualification-envelopes.jsonl</code> เป็น tracked JSONL seed ที่ valid และมีศูนย์ record งานที่ 5 ไม่สร้างหลักฐาน material หรือ qualification ขึ้นมาเอง</li>
+</ul>
+<h3>ลำดับ review และ TDD ตามจริง</h3>
+<div class="tablewrap"><table><thead><tr><th>ขั้น</th><th>คำตัดสิน / ผล</th><th>การจัดการ</th></tr></thead><tbody>
+<tr><td>TDD รอบแรก</td><td>RED: ไม่พบ module <code>qualification</code> ตามที่คาด; GREEN: ผ่าน test เดิมของงานที่ 5 จำนวน 48/48</td><td>สร้าง implementation รอบแรกโดยไม่ได้อ้างว่า review ยอมรับแล้ว</td></tr>
+<tr><td>Review แรก</td><td><code>NEEDS_FIXES</code></td><td>P1: <code>MaterialConstraint</code> ยอมรับ <code>moisture_max_pct &gt; 100</code> และ P1: สามารถสร้าง public <code>QualificationResult</code> ที่ขัดแย้งกันได้ เพราะ verdict, envelope และ reasons ไม่มี cross-field invariant</td></tr>
+<tr><td>RED สำหรับ review fix</td><td>รัน focused regression methods 3 รายการ; subtests ล้มเหลว 12 รายการ</td><td>Production code ยังไม่เปลี่ยนตอนรัน RED ส่วน control ของ boundary และ result shape ที่ valid ผ่าน</td></tr>
+<tr><td>Review fix แบบน้อยที่สุด</td><td>เปลี่ยนเฉพาะ <code>qualification.py</code> + test</td><td>บังคับ <code>moisture_max_pct &lt;= 100</code>; กำหนดให้ <code>QUALIFIED</code> มี envelope และ reasons ว่างแบบ exact; กำหนดให้ <code>CONDITIONALLY_QUALIFIED</code> มี envelope และ nonblank reason อย่างน้อยหนึ่งรายการ; กำหนดให้ refusal verdict ทั้งสามไม่มี envelope และมี nonblank reason อย่างน้อยหนึ่งรายการ; ทำ defensive snapshot ของ reasons ก่อน validate</td></tr>
+<tr><td>GREEN สำหรับ review fix</td><td>Focused regressions ผ่าน 3/3; module งานที่ 5 ทั้งหมดผ่าน 51/51</td><td>Fix เพิ่ม regression methods ของงานที่ 5 exactly สามรายการจากเดิม 48</td></tr>
+<tr><td>Rereview ใหม่</td><td>Spec <code>ACCEPTED</code>; Quality <code>ACCEPTED</code>; คำตัดสินรวม <code>ACCEPTED</code></td><td>ไม่เหลือ finding</td></tr>
+</tbody></table></div>
+<h3>Gate สุดท้ายที่ยอมรับแล้ว</h3>
+<p>รายการต่อไปนี้คือ gate ของ implementation/fix งานที่ 5 ที่ยอมรับและบันทึกในรายงานที่ refresh แล้ว การปิด ledger แบบ docs-only นี้ไม่ได้รัน product test ซ้ำ</p>
+<div class="tablewrap"><table><thead><tr><th>Gate</th><th>ผลที่ยอมรับแล้ว</th></tr></thead><tbody>
+<tr><td>Qualification module ของงานที่ 5 ทั้งหมด</td><td>ผ่าน 51/51 tests; <code>OK</code></td></tr>
+<tr><td>Regression cohort ของงานที่ 2 + งานที่ 3 + งานที่ 4 + legacy</td><td>ผ่าน 104/104 tests; <code>OK</code></td></tr>
+<tr><td>Focused verifier contracts</td><td>ผ่าน 12/12 tests; <code>OK</code></td></tr>
+<tr><td>Full dynamic discovery</td><td>ผ่าน 415/415 tests; <code>OK</code></td></tr>
+<tr><td>Verifier ครั้งเดียวจาก clean HEAD</td><td>Schema <code>1.1.0</code>; ผ่าน 13/13 checks; governed suites exact ที่ Component Master 20 + identity-tenancy 7; dynamic suite 415; Python compile, การ parse JSON/JSONL และหลักฐาน Git ที่สะอาดผ่าน</td></tr>
+</tbody></table></div>
+<h3>ความสมบูรณ์ของหลักฐานและ cleanup</h3>
+<ul>
+<li>รายงานงานที่ 5 ที่ refresh แล้ว: <code>.superpowers/sdd/task-5-qualification-report.md</code>; 12,269 ไบต์; SHA-256 <code>d819894ef49ad1ad3cc2d7a99a6a7948b22383e914b4f98ad9aa48d3ccb17ac5</code></li>
+<li>Native full-index binary review package ที่ refresh แล้ว: <code>.superpowers/sdd/task-5-qualification-review-package.diff</code>; 59,874 ไบต์; SHA-256 <code>84ff64c4267b236865cb2c755edfcc00a5a6842054b7b0af8fbcc3114f7eed3d</code>; มี exactly สี่พาธของงานที่ 5 และตรวจ reverse apply ผ่านที่ review-fix HEAD</li>
+<li>บันทึก verifier summary ที่สร้างแล้วจึงลบออก และลบไดเรกทอรี <code>__pycache__</code> ที่สร้าง exactly แปดรายการ Worktree ของ implementation/fix สะอาดที่ <code>33c48582ecef65e081c949435d82a660ce16529c</code></li>
+</ul>
+<h3>ขอบเขตอำนาจของงานที่ 5</h3>
+<ul>
+<li>งานที่ 5 สร้างเฉพาะ joint matching แบบ immutable ที่ผูกกับหลักฐาน และ seed ว่างสองไฟล์</li>
+<li>งานนี้ไม่ได้เพิ่มการประเมินตู้แบบ W × D × H, connector count หรือ spacing, structural extrapolation, lifecycle resolution, การ mutate BOM, ingestion, release authority, runtime integration หรือ production/manufacturing authority</li>
+<li>NOT-FOR-PRODUCTION ยังทำงานอยู่ Software test ไม่ได้ยืนยัน machine, coupon, first-article, field, security, operational หรือ production readiness</li>
+<li>Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data</li>
+<li>ไม่ได้ push หรือ merge</li>
+<li>งานที่ 6 เป็นงานถัดไปและยังไม่ได้เริ่ม</li>
+</ul>
 </main></body>
 </html>

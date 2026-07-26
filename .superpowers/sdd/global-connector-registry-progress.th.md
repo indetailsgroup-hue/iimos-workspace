@@ -421,3 +421,71 @@ Implementation commit สร้างทั้งสี่พาธ ส่วน
 - Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data
 - ไม่ได้ push, merge, rebase หรือเปลี่ยน branch
 - งานที่ 5 เป็นงานถัดไปและยังไม่ได้เริ่ม
+
+## การปิดงานที่ 5 — 27 กรกฎาคม 2026
+
+**สถานะ:** COMPLETE
+**Base ของงานที่ 5:** `ea161d00011d369aa48e19d752fb9036a63a1a3b`
+**Implementation commit:** `ba033d0f701cac732e7e27c107e1d5806f6d8b69`
+**Review-fix commit:** `33c48582ecef65e081c949435d82a660ce16529c`
+**ขอบเขตปัจจุบัน:** งานที่ 6 เป็นงานถัดไปและยังไม่ได้เริ่ม การปิดงานปัจจุบันนี้แทนที่เฉพาะข้อความขอบเขตเดิมในงานที่ 4 ที่บันทึกว่างานที่ 5 เป็นงานถัดไปหรือยังไม่ได้เริ่ม โดยยังรักษาข้อความของงานที่ 1–4 ไว้เป็น snapshot ทางประวัติศาสตร์
+
+### ขอบเขต tracked ของงานที่ 5 แบบ exact
+
+ช่วงรวมสอง commit จาก base ของงานที่ 5 เปลี่ยนพาธของงานที่ 5 exactly สี่รายการ:
+
+1. `packages/component-master/src/monolith_component_master/qualification.py`
+2. `tests/component_master/registry/test_qualification.py`
+3. `data/component-master/registry/v1/materials.jsonl`
+4. `data/component-master/registry/v1/qualification-envelopes.jsonl`
+
+Implementation commit สร้างทั้งสี่พาธ ส่วน review-fix commit เปลี่ยนเฉพาะ `qualification.py` และ `test_qualification.py` โดยไฟล์ seed แบบศูนย์ record ทั้งสองไม่เปลี่ยนแปลง ไม่มีการเปลี่ยนไฟล์ใน owner root หรือ nested runtime
+
+### รากฐาน material และ joint qualification แบบ exact
+
+- `Verdict` มีสมาชิก exactly ห้าค่าพร้อม value ตัวพิมพ์ใหญ่ตรงกับชื่อ ได้แก่ `QUALIFIED`, `CONDITIONALLY_QUALIFIED`, `UNQUALIFIED`, `INSUFFICIENT_EVIDENCE` และ `DISCONTINUED_OR_UNORDERABLE` ส่วน `ThicknessEvidenceKind` มีสมาชิก exactly สามค่าพร้อม value ตัวพิมพ์ใหญ่ตรงกับชื่อ ได้แก่ `EXACT_POINT`, `DECLARED_RANGE` และ `APPROVED_INTERPOLATION` โดยไม่มี evidence kind แบบ inferred หรือ nearest-neighbour
+- `MaterialInstance` แบบ frozen มี exactly `substrate`, `core`, `density_kg_m3`, `moisture_pct`, `orientation`, `nominal_thickness_mm`, `measured_thickness_mm` และ `facing_thickness_mm`
+- `MaterialConstraint` แบบ frozen มี exactly `substrate`, `core`, `density_min_kg_m3`, `density_max_kg_m3`, `moisture_min_pct`, `moisture_max_pct`, `orientation`, `nominal_thickness_min_mm`, `nominal_thickness_max_mm`, `measured_thickness_min_mm`, `measured_thickness_max_mm`, `facing_thickness_min_mm`, `facing_thickness_max_mm` และ `thickness_evidence_kind`
+- `JointConfiguration` แบบ frozen มี exactly `connector_sku_id`, `panel_a` และ `panel_b` ส่วน `QualificationEnvelope` แบบ frozen มี exactly `envelope_id`, `connector_sku_id`, `panel_a`, `panel_b`, `verdict` และ `evidence_assertion_ids` และ `QualificationResult` แบบ frozen มี exactly `verdict`, `envelope_id` และ `reason_codes`
+- Panel A และ Panel B เป็นอิสระต่อกันและไม่ถูกสลับ แต่ละด้านต้องตรงกับ constraint ของตนเองสำหรับ substrate, core, density, moisture, orientation, nominal thickness, measured thickness และ facing thickness ภายใน envelope เดียวกัน
+- `EXACT_POINT` กำหนดให้ขอบเขต nominal และ measured ยุบเป็นจุดเดียว `DECLARED_RANGE` อนุมัติเฉพาะภายในขอบเขต inclusive ที่ประกาศอย่าง explicit ส่วน `APPROVED_INTERPOLATION` อนุมัติเฉพาะภายในช่วงที่มีหลักฐาน explicit และทุก envelope ต้องมี canonical evidence ID ที่ขึ้นต้นด้วย `assertion:` อย่างน้อยหนึ่งรายการ หลักฐาน exact แยกกันที่ 15 มม. และ 18 มม. ไม่อนุมัติ 16 มม. ระบบไม่มี extrapolation, nearest substitute, การสลับ panel หรือการใช้ nominal แทน measured
+- เมื่อไม่ match ระบบคืน `INSUFFICIENT_EVIDENCE` พร้อม `NO_EXACT_CONFIGURATION_EVIDENCE` ส่วนการ match หลายรายการทุกแบบ รวมถึง qualified หนึ่งรายการร่วมกับ record ที่ขัดแย้ง และการ match record เดียวที่ไม่ qualified จะ fail closed เป็น `UNQUALIFIED` พร้อม `AMBIGUOUS_OR_NONQUALIFIED_ENVELOPE` มีเพียงการ match qualified exactly หนึ่งรายการเท่านั้นที่คืน exact envelope ID
+- `materials.jsonl` และ `qualification-envelopes.jsonl` เป็น tracked JSONL seed ที่ valid และมีศูนย์ record งานที่ 5 ไม่สร้างหลักฐาน material หรือ qualification ขึ้นมาเอง
+
+### ลำดับ review และ TDD ตามจริง
+
+| ขั้น | คำตัดสิน / ผล | การจัดการ |
+| --- | --- | --- |
+| TDD รอบแรก | RED: ไม่พบ module `qualification` ตามที่คาด; GREEN: ผ่าน test เดิมของงานที่ 5 จำนวน 48/48 | สร้าง implementation รอบแรกโดยไม่ได้อ้างว่า review ยอมรับแล้ว |
+| Review แรก | `NEEDS_FIXES` | P1: `MaterialConstraint` ยอมรับ `moisture_max_pct > 100` และ P1: สามารถสร้าง public `QualificationResult` ที่ขัดแย้งกันได้ เพราะ verdict, envelope และ reasons ไม่มี cross-field invariant |
+| RED สำหรับ review fix | รัน focused regression methods 3 รายการ; subtests ล้มเหลว 12 รายการ | Production code ยังไม่เปลี่ยนตอนรัน RED ส่วน control ของ boundary และ result shape ที่ valid ผ่าน |
+| Review fix แบบน้อยที่สุด | เปลี่ยนเฉพาะ `qualification.py` + test | บังคับ `moisture_max_pct <= 100`; กำหนดให้ `QUALIFIED` มี envelope และ reasons ว่างแบบ exact; กำหนดให้ `CONDITIONALLY_QUALIFIED` มี envelope และ nonblank reason อย่างน้อยหนึ่งรายการ; กำหนดให้ refusal verdict ทั้งสามไม่มี envelope และมี nonblank reason อย่างน้อยหนึ่งรายการ; ทำ defensive snapshot ของ reasons ก่อน validate |
+| GREEN สำหรับ review fix | Focused regressions ผ่าน 3/3; module งานที่ 5 ทั้งหมดผ่าน 51/51 | Fix เพิ่ม regression methods ของงานที่ 5 exactly สามรายการจากเดิม 48 |
+| Rereview ใหม่ | Spec `ACCEPTED`; Quality `ACCEPTED`; คำตัดสินรวม `ACCEPTED` | ไม่เหลือ finding |
+
+### Gate สุดท้ายที่ยอมรับแล้ว
+
+รายการต่อไปนี้คือ gate ของ implementation/fix งานที่ 5 ที่ยอมรับและบันทึกในรายงานที่ refresh แล้ว การปิด ledger แบบ docs-only นี้ไม่ได้รัน product test ซ้ำ
+
+| Gate | ผลที่ยอมรับแล้ว |
+| --- | --- |
+| Qualification module ของงานที่ 5 ทั้งหมด | ผ่าน 51/51 tests; `OK` |
+| Regression cohort ของงานที่ 2 + งานที่ 3 + งานที่ 4 + legacy | ผ่าน 104/104 tests; `OK` |
+| Focused verifier contracts | ผ่าน 12/12 tests; `OK` |
+| Full dynamic discovery | ผ่าน 415/415 tests; `OK` |
+| Verifier ครั้งเดียวจาก clean HEAD | Schema `1.1.0`; ผ่าน 13/13 checks; governed suites exact ที่ Component Master 20 + identity-tenancy 7; dynamic suite 415; Python compile, การ parse JSON/JSONL และหลักฐาน Git ที่สะอาดผ่าน |
+
+### ความสมบูรณ์ของหลักฐานและ cleanup
+
+- รายงานงานที่ 5 ที่ refresh แล้ว: `.superpowers/sdd/task-5-qualification-report.md`; 12,269 ไบต์; SHA-256 `d819894ef49ad1ad3cc2d7a99a6a7948b22383e914b4f98ad9aa48d3ccb17ac5`
+- Native full-index binary review package ที่ refresh แล้ว: `.superpowers/sdd/task-5-qualification-review-package.diff`; 59,874 ไบต์; SHA-256 `84ff64c4267b236865cb2c755edfcc00a5a6842054b7b0af8fbcc3114f7eed3d`; มี exactly สี่พาธของงานที่ 5 และตรวจ reverse apply ผ่านที่ review-fix HEAD
+- บันทึก verifier summary ที่สร้างแล้วจึงลบออก และลบไดเรกทอรี `__pycache__` ที่สร้าง exactly แปดรายการ Worktree ของ implementation/fix สะอาดที่ `33c48582ecef65e081c949435d82a660ce16529c`
+
+### ขอบเขตอำนาจของงานที่ 5
+
+- งานที่ 5 สร้างเฉพาะ joint matching แบบ immutable ที่ผูกกับหลักฐาน และ seed ว่างสองไฟล์
+- งานนี้ไม่ได้เพิ่มการประเมินตู้แบบ W × D × H, connector count หรือ spacing, structural extrapolation, lifecycle resolution, การ mutate BOM, ingestion, release authority, runtime integration หรือ production/manufacturing authority
+- NOT-FOR-PRODUCTION ยังทำงานอยู่ Software test ไม่ได้ยืนยัน machine, coupon, first-article, field, security, operational หรือ production readiness
+- Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data
+- ไม่ได้ push หรือ merge
+- งานที่ 6 เป็นงานถัดไปและยังไม่ได้เริ่ม
