@@ -25,11 +25,20 @@ from .catalog import (
     default_data_dir,
     load_default_catalog,
 )
+from .registry_models import (
+    CommercialSku,
+    LifecycleState,
+    ProductModel,
+    Registry,
+    VerificationDimension,
+    VerificationState,
+)
 from .validators import ValidationIssue, report, validate_project_hardware
 from .finishes import assess_finish_equivalence
 
 __all__ = [
     "BoringSystem",
+    "CommercialSku",
     "ComponentSpec",
     "Dimensions",
     "DrillProgram",
@@ -37,11 +46,16 @@ __all__ = [
     "Face",
     "HardwareCatalog",
     "Hole",
+    "LifecycleState",
+    "ProductModel",
+    "Registry",
     "SpecStatus",
     "Substitutability",
     "SupplierSKU",
     "ThreadClass",
     "ValidationIssue",
+    "VerificationDimension",
+    "VerificationState",
     "boring_recipe",
     "assess_finish_equivalence",
     "build_cross_dowel_joint",
