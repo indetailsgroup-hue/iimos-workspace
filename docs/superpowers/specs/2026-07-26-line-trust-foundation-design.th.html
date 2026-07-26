@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MONOLITH LINE Trust Foundation — ข้อกำหนดการออกแบบที่อนุมัติแล้ว</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --text: #18202a;
+  --muted: #5d6976;
+  --border: #d9dee5;
+  --accent: #146c5a;
+  --code: #eef2f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11161b;
+    --surface: #182028;
+    --text: #e9eef3;
+    --muted: #aab5bf;
+    --border: #34404b;
+    --accent: #67d1b5;
+    --code: #202a33;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+  line-height: 1.65;
+}
+main {
+  max-width: 1120px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 40px 28px 72px;
+  background: var(--surface);
+}
+h1 {
+  font-size: 2rem;
+  line-height: 1.2;
+  border-bottom: 3px solid var(--accent);
+  padding-bottom: 0.5rem;
+}
+h2 {
+  margin-top: 2.4rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border);
+}
+h3 { margin-top: 1.7rem; }
+p, li { max-width: 92ch; }
+blockquote {
+  margin-left: 0;
+  padding: 0.2rem 1rem;
+  border-left: 4px solid var(--accent);
+  color: var(--muted);
+}
+table {
+  width: 100%;
+  margin: 1rem 0 1.5rem;
+  border-collapse: collapse;
+  font-size: 0.94rem;
+}
+th, td {
+  padding: 0.65rem 0.7rem;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--code); }
+code {
+  padding: 0.12rem 0.3rem;
+  border-radius: 4px;
+  background: var(--code);
+}
+pre {
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code);
+}
+pre code { padding: 0; }
+a { color: var(--accent); }
+hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 720px) {
+  main { padding: 24px 16px; }
+  table { display: block; overflow-x: auto; }
+  h1 { font-size: 1.55rem; }
+}
+@media print {
+  body { background: #ffffff; color: #000000; }
+  main { max-width: none; padding: 0; }
+  a { color: #000000; text-decoration: none; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>แบบระบบ MONOLITH LINE Trust Foundation</h1>
+<p><strong>ฉบับ:</strong> ภาษาไทย<br>
+<strong>วันที่:</strong> 26 กรกฎาคม 2026<br>
+<strong>สถานะ:</strong> แบบระบบผ่านการอนุมัติระหว่างการทบทวนเชิงโต้ตอบ; รอการตรวจฉบับเอกสาร<br>
+<strong>สถานะการพัฒนา:</strong> เอกสารนี้ยังไม่ได้เริ่ม implementation<br>
+<strong>Product repository:</strong> <code>determined-williams/</code> ซึ่งเป็น nested active product repository<br>
+<strong>Governance repository:</strong> workspace root ชั้นนอก<br>
+<strong>แนวทางที่เลือก:</strong> Trust Kernel Spine โดยใช้ LINE เป็น vertical slice แรก</p>
+<h2>1. คำตัดสินระดับบริหาร</h2>
+<p>MONOLITH จะคง LINE ไว้เป็น <strong>Human Surface</strong> ของระบบ LINE OA, LINE Groups, Rooms, LIFF และ Personal Push ยังคงเป็นช่องทางสื่อสารที่ผู้ใช้คุ้นเคย แต่ LINE ไม่ใช่ฐานข้อมูลหลัก ไม่ใช่ผู้มีอำนาจตัดสินสิทธิ์ และไม่ใช่แอปแชทภายในตัวใหม่</p>
+<p>ทุก event หรือ action ที่มีผลต่อความจริงทางธุรกิจต้องผ่าน Trust Kernel กลางเพียงชุดเดียว ซึ่งทำหน้าที่:</p>
+<ol>
+<li>ระบุ channel และ Tenant เจ้าของ;</li>
+<li>ระบุบุคคลและ tenant-local profile;</li>
+<li>ระบุ organization, site, project, resource และ revision;</li>
+<li>ตรวจ membership, role, project-party relationship, scoped grant และ delegation;</li>
+<li>ตรวจ workflow state, ความเสี่ยงของ action และระดับความมั่นใจในการยืนยันตัวตน;</li>
+<li>ตัดสินผลเป็น <code>PERMIT</code>, <code>DENY</code>, <code>STEP_UP</code> หรือ <code>QUARANTINE</code>;</li>
+<li>บันทึก business write, decision audit และ atomic delivery intent ใน transaction ที่ถูกต้อง</li>
+</ol>
+<p>รุ่นแรกถือว่าสำเร็จเมื่อ Tenant ที่สองผ่าน <strong>Shadow Proof</strong> โดยไม่มีการส่งข้อความถึงลูกค้าจริง และมีหลักฐาน negative isolation tests, grant revocation, risk-based step-up, audit completeness และ delivery reliability ครบถ้วน</p>
+<h2>2. ขอบเขต Repository และหลักฐานปัจจุบัน</h2>
+<p>MONOLITH เป็นระบบสอง Git root:</p>
+<ul>
+<li>root ชั้นนอกเป็น governance/bootstrap repository;</li>
+<li><code>determined-williams/</code> ชั้นในเป็น active product repository</li>
+</ul>
+<p>แบบนี้ปฏิบัติตาม <code>CONTEXT.md</code> และเอกสารแก้ไขขอบเขต repository วันที่ 21 กรกฎาคม 2026 ใน nested repository มี implementation ด้าน LINE, workflow, database, field และ manufacturing จำนวนมาก แต่การมี source ไม่ได้พิสูจน์ deployment หรือ production readiness</p>
+<p>แบบระบบนี้ตอบสนองต่อหลักฐานที่ตรวจพบใน nested product source เมื่อวันที่ 26 กรกฎาคม 2026:</p>
+<ul>
+<li>มี LINE webhook, outbound sender, LINE Login, group flows, approval flows และ notification workers;</li>
+<li>LINE Login สร้างค่า <code>state</code> แต่ callback path ที่ตรวจยังไม่ยืนยัน server-side transaction state ก่อนผูกตัวตน;</li>
+<li>approval/postback แยกอยู่หลาย ingress path ทั้งที่ Messaging API channel มี webhook endpoint เดียว;</li>
+<li>group business action บางรายการยังไม่ได้ resolve บุคคลและ authorize action ต่อ project อย่างสม่ำเสมอ;</li>
+<li><code>line_oa_outbound_messages</code> ยังไม่เป็น atomic claim/lease outbox contract ที่สมบูรณ์;</li>
+<li>migration model ปัจจุบันพึ่ง <code>site_code</code> อย่างมาก และยังไม่มี canonical Tenant–Organization–Site invariant ที่พิสูจน์แล้ว;</li>
+<li>group handler failure บางกรณีสามารถถูกส่งกลับเป็นค่า แล้วถูกบันทึกว่า processed;</li>
+<li>audit ปัจจุบันจำกัดการแก้/ลบ แต่ยังไม่พิสูจน์ human-actor envelope, tamper evidence, retention และ purge lifecycle อย่างครบถ้วน</li>
+</ul>
+<p>ข้อเหล่านี้เป็นข้อมูลสำหรับการออกแบบ ไม่ใช่ข้ออ้างว่า deployment ทุกแห่งมีสถานะเดียวกัน ต้องมี fresh implementation verification เสมอ</p>
+<h2>3. วัตถุประสงค์</h2>
+<p>Trust Foundation ต้อง:</p>
+<ol>
+<li>กำหนด Tenant เป็นขอบเขตด้านสัญญา ความปลอดภัย และข้อมูล;</li>
+<li>ให้ business resource ทุกชิ้นมี Tenant เจ้าของเพียงหนึ่งราย;</li>
+<li>รองรับองค์กรภายนอกด้วยสิทธิ์ที่ระบุชัด มีวันหมดอายุ และเพิกถอนได้;</li>
+<li>แยก global authentication ออกจากข้อมูลบุคคลและการจ้างงานที่ Tenant เป็นเจ้าของ;</li>
+<li>รวม business-action authorization ไว้จุดเดียว โดยไม่สร้าง IAM ซ้ำใน LINE;</li>
+<li>ให้ผู้ใช้ LINE ที่ยังไม่ยืนยันตัวตนส่งหลักฐานได้โดยไม่มีอำนาจธุรกิจ;</li>
+<li>บังคับ risk-based step-up สำหรับ action ที่มีผลผูกพัน;</li>
+<li>ทำ delegation ให้ explicit, scoped, non-transitive และไม่เพิ่มสิทธิ์เกินผู้มอบ;</li>
+<li>ย้ายจาก <code>site_code</code> แบบ additive โดยไม่หยุดการทำงานของ Daph;</li>
+<li>ป้องกัน partial business state, false processed-success และ duplicate delivery;</li>
+<li>สร้าง decision record ที่ครบถ้วน คุ้มครองข้อมูลส่วนบุคคล และตรวจการแก้ไขย้อนหลังได้;</li>
+<li>ปิด live tenant expansion จน Tenant ที่สองผ่าน shadow proof</li>
+</ol>
+<h2>4. สิ่งที่ไม่อยู่ในขอบเขต</h2>
+<p>แบบนี้ไม่:</p>
+<ul>
+<li>สร้างแอปแชทภายในตัวใหม่;</li>
+<li>ทำให้ LINE เป็น master database;</li>
+<li>เปลี่ยน <code>site_code</code> ทุกจุดทั้งแพลตฟอร์มแบบ big bang;</li>
+<li>เปิด Tenant ที่สองให้ส่งข้อความลูกค้าจริง;</li>
+<li>ถือว่าสมาชิก LINE Group มีสิทธิ์โดยอัตโนมัติ;</li>
+<li>ทำให้ Daph เป็นเจ้าของแพลตฟอร์มหรือ canonical platform tenant;</li>
+<li>ทำ customer campaign, AI sales automation, analytics หรือประสบการณ์ LINE ส่วนอื่นให้เสร็จในรอบนี้;</li>
+<li>อ้าง production readiness จาก source, design approval หรือการมี unit tests</li>
+</ul>
+<h2>5. Owner decisions ที่อนุมัติแล้ว</h2>
+<table>
+<thead>
+<tr>
+<th>ประเด็น</th>
+<th>กฎที่อนุมัติ</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Ownership model</td>
+<td>Tenant Boundary + Project Parties</td>
+</tr>
+<tr>
+<td>การทำงานข้ามองค์กร</td>
+<td>Owner Tenant เดียว; คู่ค้าใช้ scoped guest access</td>
+</tr>
+<tr>
+<td>ตัวตนบุคคล</td>
+<td>Minimal global auth subject + tenant-local profile</td>
+</tr>
+<tr>
+<td>Authorization</td>
+<td>Membership, role, project party, grant, delegation, เวลา และ workflow state แบบซ้อนชั้น</td>
+</tr>
+<tr>
+<td>Default</td>
+<td>Deny จนพิสูจน์สิทธิ์ของ action ที่แน่นอนได้</td>
+</tr>
+<tr>
+<td>ผู้ใช้ Group ที่ไม่รู้จัก</td>
+<td>Quarantined evidence เท่านั้น</td>
+</tr>
+<tr>
+<td>Action ที่มีผลสูง</td>
+<td>Risk-based step-up ผ่าน LIFF/Login</td>
+</tr>
+<tr>
+<td>Delegation</td>
+<td>ระบุ capability, resource, เวลา และเหตุผล; เพิกถอนได้และส่งต่อไม่ได้</td>
+</tr>
+<tr>
+<td>Migration</td>
+<td>Additive compatibility bridge จาก <code>site_code</code></td>
+</tr>
+<tr>
+<td>Success gate แรก</td>
+<td>Tenant 2 shadow proof โดยไม่มี live customer messaging</td>
+</tr>
+<tr>
+<td>Delivery</td>
+<td>Transactional notification intent + atomic outbox</td>
+</tr>
+<tr>
+<td>Stop rule</td>
+<td>ห้าม live onboarding Tenant 2 หรือขยาย customer messaging จนผ่าน release gate ทุกข้อ</td>
+</tr>
+</tbody></table>
+<h2>6. แนวคิดมาตรฐาน</h2>
+<h3>6.1 Tenant</h3>
+<p>Tenant คือขอบเขตด้านความปลอดภัย ธรรมาภิบาลข้อมูล และสัญญาทางการค้า Daph เป็น pilot tenant หนึ่งราย ห้ามอนุมาน Tenant จากชื่อแบรนด์ ชื่อ LINE Group, <code>site_code</code> หรือการเลือกของ operator</p>
+<h3>6.2 Organization, Site และ Project</h3>
+<ul>
+<li><strong>Organization:</strong> ฝ่ายทางกฎหมายหรือฝ่ายปฏิบัติการ เช่น studio, dealer, factory, contractor หรือ customer organization</li>
+<li><strong>Site:</strong> สถานที่ปฏิบัติงานของ organization หนึ่งภายใต้ Tenant context หนึ่ง</li>
+<li><strong>Project:</strong> ความร่วมมือทางธุรกิจที่ Tenant หนึ่งเป็นเจ้าของ</li>
+<li><strong>Project Party:</strong> organization ที่เข้าร่วม Project ด้วยความสัมพันธ์และ scope ที่ประกาศชัด</li>
+</ul>
+<p>Project หนึ่งมีหลาย organization ได้ แต่มี Owner Tenant หลายรายไม่ได้</p>
+<h3>6.3 Global auth subject และ tenant-local profile</h3>
+<p>Global auth subject เป็น pseudonymous authentication anchor เก็บเฉพาะข้อมูลขั้นต่ำสำหรับจดจำ authenticated subject และ assurance state</p>
+<p>ชื่อ ข้อมูลการจ้างงาน ข้อมูลลูกค้า ความสัมพันธ์กับ LINE, role, membership และข้อมูลส่วนบุคคลอยู่ใน tenant-local profile บุคคลคนเดียวมี profile ในหลาย Tenant ได้ โดยไม่สร้าง global personal-data master</p>
+<h3>6.4 Membership, Role, Grant และ Delegation</h3>
+<ul>
+<li><strong>Membership</strong> ระบุความสัมพันธ์ของ subject กับ Tenant หรือ Organization</li>
+<li><strong>Role</strong> ให้ baseline ของกลุ่ม action ที่จำกัดขอบเขตแล้ว</li>
+<li><strong>Project Party</strong> พิสูจน์เหตุผลที่ organization ภายนอกเข้าร่วม Project</li>
+<li><strong>Access Grant</strong> จำกัด resource และ action พร้อมเวลาเริ่ม หมดอายุ และเพิกถอน</li>
+<li><strong>Delegation</strong> มอบ capability ที่ระบุชัดให้ทำแทน principal อื่น</li>
+</ul>
+<p>Effective permission เป็นผลตัดร่วมของ control เหล่านี้ ไม่มีชั้นใดเพิ่มอำนาจเกิน policy ของ Owner Tenant หรือสิทธิ์จริงของผู้มอบได้</p>
+<h3>6.5 LINE identity binding</h3>
+<p>LINE identity binding เชื่อม provider/channel identity ที่ยืนยันแล้วกับ tenant-local profile พร้อม assurance, lifecycle status, verification method และเวลา การตรวจ webhook signature พิสูจน์แหล่ง transport และความครบถ้วนของข้อมูล แต่ไม่พิสูจน์ว่าผู้ส่งมีสิทธิ์ทำ business action</p>
+<h2>7. สถาปัตยกรรม Trust Kernel</h2>
+<p>Trust Kernel เป็น shared policy boundary ไม่ใช่ permission database เฉพาะ LINE</p>
+<h3>7.1 Components</h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>หน้าที่</th>
+<th>สิ่งที่ห้ามทำ</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Unified LINE ingress</td>
+<td>ตรวจ raw signature, บันทึกรับ event, deduplicate, normalize และ dispatch ตาม event type</td>
+<td>ตัดสิน business permission</td>
+</tr>
+<tr>
+<td>Tenant/resource resolver</td>
+<td>Resolve owner tenant, organization, site, project, resource, revision และ bridge mappings</td>
+<td>เดา Tenant จากข้อความแสดงผล</td>
+</tr>
+<tr>
+<td>Principal resolver</td>
+<td>Resolve LINE binding, auth subject, tenant profile, membership และ assurance</td>
+<td>ถือ group membership เป็นตัวตน</td>
+</tr>
+<tr>
+<td>Action classifier</td>
+<td>สร้าง canonical action, resource references, risk tier, expected revision และ payload digest</td>
+<td>เปลี่ยน business state</td>
+</tr>
+<tr>
+<td>Policy decision point</td>
+<td>คืน permit, deny, step-up หรือ quarantine พร้อม reason codes และ policy version</td>
+<td>ส่ง LINE โดยตรง</td>
+</tr>
+<tr>
+<td>Domain command handler</td>
+<td>ทำ workflow transition หรือ business mutation ที่ได้รับอนุญาต</td>
+<td>ข้าม policy หรือ audit</td>
+</tr>
+<tr>
+<td>Decision audit</td>
+<td>บันทึก actor, delegation, action, resource, decision, reason และ causation</td>
+<td>เก็บ secret หรือ PII ที่ไม่จำเป็น</td>
+</tr>
+<tr>
+<td>Atomic outbox</td>
+<td>บันทึก delivery intent ใน transaction เดียวกับ business state และ audit</td>
+<td>เรียก LINE ก่อน commit</td>
+</tr>
+<tr>
+<td>Delivery worker</td>
+<td>Claim แบบ atomic, ใช้ lease, ส่งด้วย stable retry identity และบันทึกผล</td>
+<td>ตัดสิน business permission ซ้ำ</td>
+</tr>
+<tr>
+<td>Compatibility bridge</td>
+<td>Map <code>site_code</code> เดิมไป canonical site, organization และ tenant</td>
+<td>คงอยู่เป็น security boundary ถาวร</td>
+</tr>
+</tbody></table>
+<h3>7.2 Non-bypass invariant</h3>
+<p>Business mutation ทุกชนิดที่มาจาก LINE ต้องเรียก policy decision point ถ้า database function, Edge Function, webhook handler, LIFF callback, postback handler, worker หรือ operator tool เปลี่ยน business state โดยข้าม decision นี้ ให้ถือว่าไม่ conform</p>
+<h2>8. Conceptual data model</h2>
+<p>ชื่อ migration จริงปรับตาม convention ของ repository ได้ แต่แนวคิดต่อไปนี้เป็นข้อบังคับ</p>
+<table>
+<thead>
+<tr>
+<th>Entity</th>
+<th>Minimum invariant</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>tenants</code></td>
+<td>Stable opaque ID, lifecycle status และ policy version</td>
+</tr>
+<tr>
+<td><code>organizations</code></td>
+<td>Owner Tenant หนึ่งราย, organization type และ status</td>
+</tr>
+<tr>
+<td><code>sites</code></td>
+<td>Organization และ Tenant เดียว; legacy alias แยกจาก identity</td>
+</tr>
+<tr>
+<td><code>projects</code></td>
+<td>Owner Tenant เดียว; owning organization/site ตามบริบท</td>
+</tr>
+<tr>
+<td><code>auth_subjects</code></td>
+<td>Minimal global authentication anchor; ไม่มี tenant-owned profile data</td>
+</tr>
+<tr>
+<td><code>tenant_profiles</code></td>
+<td>Tenant context เดียว; PII เข้ารหัสและเก็บขั้นต่ำ</td>
+</tr>
+<tr>
+<td><code>memberships</code></td>
+<td>ความสัมพันธ์ profile-to-tenant/organization พร้อม lifecycle</td>
+</tr>
+<tr>
+<td><code>project_parties</code></td>
+<td>ความสัมพันธ์ project-to-organization พร้อม purpose และ status</td>
+</tr>
+<tr>
+<td><code>access_grants</code></td>
+<td>Subject/party, actions, resources, start, expiry, revocation และ issuer</td>
+</tr>
+<tr>
+<td><code>delegations</code></td>
+<td>Delegator, delegate, capabilities, resource scope, เวลา, เหตุผล และ non-transitive flag</td>
+</tr>
+<tr>
+<td><code>line_identity_bindings</code></td>
+<td>Provider, channel, LINE subject, tenant profile, assurance และ lifecycle</td>
+</tr>
+<tr>
+<td><code>step_up_transactions</code></td>
+<td>State, nonce, action digest, expected revision, redirect URI, expiry และ consumed time</td>
+</tr>
+<tr>
+<td><code>inbound_events</code></td>
+<td>Event key, channel, raw digest, processing state, lease, attempts และ last error</td>
+</tr>
+<tr>
+<td><code>policy_decisions</code></td>
+<td>Policy version, actor envelope, action, resource, reason codes และ outcome</td>
+</tr>
+<tr>
+<td><code>delivery_outbox</code></td>
+<td>Intent, destination, stable retry key, status, lease, attempts, next attempt และ result</td>
+</tr>
+<tr>
+<td><code>site_code_mappings</code></td>
+<td>Legacy code, canonical IDs, validity interval และ migration status</td>
+</tr>
+</tbody></table>
+<p>Tenant-owned row ต้องมี Tenant ID หรือ derive ผ่าน foreign-key path ที่บังคับไม่ให้ข้าม Tenant ได้ Resource reference ที่ใช้ authorize ต้อง canonical และ stable</p>
+<h2>9. Authorization decision contract</h2>
+<h3>9.1 Input</h3>
+<p><code>authorize_business_action()</code> รับ canonical envelope:</p>
+<ul>
+<li>authenticated หรือ transport principal;</li>
+<li>tenant-local profile และ membership context;</li>
+<li>owner tenant;</li>
+<li>organization, site, project, resource และ expected revision;</li>
+<li>requested action และ normalized payload digest;</li>
+<li>channel และ source context;</li>
+<li>role, project-party relationship, access grants และ delegation;</li>
+<li>workflow state;</li>
+<li>risk tier และ assurance ปัจจุบัน;</li>
+<li>request time และ correlation identifiers</li>
+</ul>
+<h3>9.2 Output</h3>
+<p>ผลตัดสินมีเพียง:</p>
+<ul>
+<li><code>PERMIT</code>: ทำ command ที่ระบุได้;</li>
+<li><code>DENY</code>: ห้ามเกิด business mutation;</li>
+<li><code>STEP_UP</code>: ต้องยืนยันตัวตนที่แรงขึ้นและผูกกับ action;</li>
+<li><code>QUARANTINE</code>: เก็บหลักฐานได้แต่ไม่มี business authority</li>
+</ul>
+<p>ผลยังต้องมี:</p>
+<ul>
+<li>policy version;</li>
+<li>machine-readable reason codes;</li>
+<li>required assurance เมื่อจำเป็นต้อง step-up;</li>
+<li>normalized tenant/resource/action identifiers;</li>
+<li>decision timestamp และ audit reference</li>
+</ul>
+<h3>9.3 Mandatory rules</h3>
+<ol>
+<li>Default deny</li>
+<li>หนึ่ง Owner Tenant ต่อหนึ่ง resource</li>
+<li>Unknown identity ห้าม approve, accept, order, change scope หรือ transition workflow</li>
+<li>Group membership เป็น context ไม่ใช่ permission</li>
+<li>Grant และ delegation ต้อง active ณ เวลาตัดสิน</li>
+<li>Delegation ส่งต่อไม่ได้และเพิ่มสิทธิ์ไม่ได้</li>
+<li>Consequential approval ต้องผูกกับ action digest และ expected revision</li>
+<li>Revision, amount, scope หรือ payload ที่เปลี่ยนทำให้ approval transaction เดิมใช้ไม่ได้</li>
+<li>Revocation มีผลในการ policy check ครั้งถัดไป; cache ต้อง invalidate ตาม policy/grant version</li>
+<li>Policy หรือ audit ล้มเหลวต้อง fail closed</li>
+</ol>
+<h2>10. Risk และ Assurance</h2>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>ตัวอย่าง</th>
+<th>พฤติกรรมบังคับ</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Low</td>
+<td>ส่งรูป แจ้งปัญหา ขอข้อมูล</td>
+<td>ใช้ bound identity เมื่อมี; unknown actor เป็น quarantined evidence</td>
+</tr>
+<tr>
+<td>Medium</td>
+<td>รับทราบงาน ยืนยันเข้าหน้างาน ส่ง structured field record</td>
+<td>ใช้ short-lived one-time action token ผูกกับ resource และ revision</td>
+</tr>
+<tr>
+<td>High</td>
+<td>อนุมัติแบบ รับมอบงานติดตั้ง สร้าง binding order อนุมัติ scope/ราคา</td>
+<td>LIFF/Login step-up, state/nonce ที่ตรวจแล้ว, explicit consequence screen, action digest, expected revision และ TTL สั้น</td>
+</tr>
+<tr>
+<td>ห้ามทำด้วย LINE อย่างเดียว</td>
+<td>Action ที่ owner policy หรือกฎหมายจำกัด</td>
+<td>ส่งต่อไป authoritative application หรือ human-controlled process</td>
+</tr>
+</tbody></table>
+<p>Step-up ไม่ใช่ generic login session แต่เป็น authorization transaction สำหรับ action เดียว</p>
+<h2>11. Identity binding และ Step-up lifecycle</h2>
+<h3>11.1 Binding lifecycle</h3>
+<p><code>pending → active → suspended → revoked</code></p>
+<p>Activation ต้องใช้ server-side transaction ที่มี:</p>
+<ul>
+<li><code>state</code> ที่เดาไม่ได้;</li>
+<li>OIDC <code>nonce</code> เมื่อเกี่ยวข้อง;</li>
+<li>exact redirect URI;</li>
+<li>Tenant และ profile เป้าหมาย;</li>
+<li>one-time bind-token digest;</li>
+<li>creation/expiry time;</li>
+<li>consumed marker</li>
+</ul>
+<p>Callback ต้องเปรียบเทียบและ consume transaction ก่อนผูก LINE identity หรือ mint MONOLITH session ถ้าขาด หมดอายุ ไม่ตรง ถูก replay หรือเคยใช้แล้ว ต้อง fail closed</p>
+<h3>11.2 Step-up lifecycle</h3>
+<p><code>created → presented → authenticated → confirmed → consumed</code></p>
+<p>Transaction ต้องเก็บ tenant, actor, resource, action, payload digest, expected revision, assurance requirement และ expiry ที่แน่นอน หากค่าใดเปลี่ยน confirmation ต้องล้มเหลว</p>
+<h2>12. Canonical LINE data flow</h2>
+<h3>12.1 Inbound</h3>
+<ol>
+<li>รับ raw webhook ที่ ingress เดียวของ Messaging API channel</li>
+<li>Resolve channel configuration และตรวจ signature บน raw body ก่อน parse</li>
+<li>บันทึก idempotent inbox receipt เป็น <code>RECEIVED</code></li>
+<li>Claim processing แบบ atomic พร้อม lease</li>
+<li>Resolve tenant/resource context และบังคับให้ channel, group/conversation, project และ bridge mappings ตรงกัน</li>
+<li>Resolve human principal, tenant profile, membership และ assurance</li>
+<li>Normalize canonical action envelope</li>
+<li>ประเมิน Trust Kernel decision</li>
+<li>ถ้า <code>DENY</code> ให้บันทึก decision และตอบอย่างปลอดภัยโดยไม่ mutation</li>
+<li>ถ้า <code>QUARANTINE</code> ให้เก็บ evidence พร้อม source/review state โดยไม่เปลี่ยน workflow</li>
+<li>ถ้า <code>STEP_UP</code> ให้สร้าง one-time action-bound LIFF/Login transaction ที่มี expiry</li>
+<li>ถ้า <code>PERMIT</code> ให้บันทึก domain state, decision audit และ notification intent ใน database transaction เดียว</li>
+<li>Mark inbound event เป็น <code>SUCCEEDED</code> หลัง transaction commit เท่านั้น</li>
+</ol>
+<h3>12.2 Outbound</h3>
+<ol>
+<li>Domain logic สร้าง notification intent ไม่เรียก LINE โดยตรง</li>
+<li>Notification policy เลือก recipient, channel, urgency, SLA, escalation และ template</li>
+<li>Delivery intent commit เข้า atomic outbox พร้อม business state และ audit</li>
+<li>Worker claim row แบบ atomic พร้อม lease</li>
+<li>Worker ใช้ stable retry key สำหรับ LINE send API ที่รองรับ</li>
+<li>บันทึก success, duplicate acceptance, retryable failure, permanent failure และ response metadata</li>
+<li>Retryable row ใช้ bounded backoff; เมื่อหมดโอกาสหรือเป็น permanent failure ให้เข้า dead letter</li>
+<li>Operator resolution ต้องถูก audit</li>
+</ol>
+<h2>13. Processing และ Failure semantics</h2>
+<p>Inbound processing states:</p>
+<p><code>RECEIVED → PROCESSING → SUCCEEDED</code></p>
+<p>Failure paths:</p>
+<p><code>PROCESSING → RETRYABLE → PROCESSING</code> หรือ <code>DEAD_LETTER</code></p>
+<p>กฎ:</p>
+<ul>
+<li>duplicate ที่เป็น <code>SUCCEEDED</code> เท่านั้นจึง ack เป็น no-op;</li>
+<li>error string ที่ return กลับมาไม่ใช่ success;</li>
+<li>stale processing lease reclaim ได้อย่างปลอดภัย;</li>
+<li>domain, audit หรือ outbox failure ต้อง rollback transaction ทั้งหมด;</li>
+<li>ห้ามมี external side effect ก่อน commit;</li>
+<li>LINE timeout, <code>429</code> และ <code>5xx</code> ใช้ stable retry identity และ backoff;</li>
+<li>permanent <code>4xx</code> ห้าม retry ไม่สิ้นสุด;</li>
+<li>delivery failure ห้ามเปลี่ยนเป็น delivered;</li>
+<li>ข้อความถึงผู้ใช้ห้ามอ้างว่าอนุมัติหรือส่งสำเร็จก่อนมี confirmation</li>
+</ul>
+<h2>14. Audit, Privacy และ Retention</h2>
+<p>Governed event ทุกตัวต้องบันทึก:</p>
+<ul>
+<li>owner tenant และ resource;</li>
+<li>transport actor และ human principal แยกกัน;</li>
+<li>tenant profile และ delegated-by principal เมื่อมี;</li>
+<li>action, expected revision และ payload/action digest;</li>
+<li>policy version, assurance, reason codes และ outcome;</li>
+<li>event, correlation และ causation identifiers;</li>
+<li>UTC timestamps;</li>
+<li>before/after state digest เมื่อเหมาะสม;</li>
+<li>retention class และ data classification</li>
+</ul>
+<p>Audit ต้อง append-only และ tamper-evident ด้วย chained digest หรือ external immutable archive การห้าม update/delete อย่างเดียวไม่เพียงพอสำหรับคำกล่าวว่า tamper-evident</p>
+<p>Secret, access token, bind token, raw authorization code และ PII ที่ไม่จำเป็นห้ามอยู่ใน log/audit Raw LINE payload และ quarantined evidence ต้องมี retention, encryption, review, export และ purge policy ที่ชัด การ pseudonymize/delete tenant-local personal data ต้องรักษา lawful audit record ขั้นต่ำโดยไม่เก็บเนื้อหาเกินจำเป็น</p>
+<h2>15. Additive compatibility migration</h2>
+<h3>Phase 0 — Baseline</h3>
+<p>Inventory <code>site_code</code>, LINE channel, group, conversation, identity binding, project, policy path และ tenant-relevant RLS rule ที่ active ทั้งหมด พร้อม reproducible baseline</p>
+<h3>Phase 1 — Add</h3>
+<p>เพิ่ม canonical tenant, organization, site, profile, membership, project-party, grant, delegation, decision และ mapping structures โดยยังไม่เปลี่ยนพฤติกรรม Daph</p>
+<h3>Phase 2 — Map และ Backfill</h3>
+<p>สร้าง mapping จาก <code>site_code</code> ปัจจุบันของ Daph ไป canonical site, organization และ tenant ID ตรวจ duplicate, orphan, ambiguous mapping และ cross-scope conflict Backfill ต้องรันซ้ำได้อย่าง idempotent</p>
+<h3>Phase 3 — Shadow decisions</h3>
+<p>รัน Trust Kernel resolution/policy ขนานกับ behavior เดิม บันทึกความต่างโดยยังไม่เปลี่ยน outcome ความต่างที่อธิบายไม่ได้ต้อง block enforcement</p>
+<h3>Phase 4 — Enforce LINE vertical slice</h3>
+<p>บังคับ LINE-originated business mutation ทุกตัวผ่าน Trust Kernel Tenant context ที่ resolve ไม่ได้หรือไม่สอดคล้องต้อง fail closed ส่วน unknown actor ยังส่ง quarantined evidence ได้</p>
+<h3>Phase 5 — Tenant 2 shadow proof</h3>
+<p>สร้าง Tenant ที่สองพร้อม organization, site, profile, grant, LINE configuration และ project แยก ใน non-live environment หรือ blocked-delivery mode แล้วพิสูจน์ isolation, collaboration, revocation, step-up, audit, retry และ operator recovery</p>
+<p><code>site_code</code> อยู่เป็น legacy alias ชั่วคราวได้ แต่ห้ามเป็น security boundary</p>
+<h2>16. Verification strategy</h2>
+<h3>16.1 Policy unit และ Property tests</h3>
+<p>Generate combination ของ role, membership, party, grant, delegation, เวลา, workflow state, risk และ assurance เพื่อพิสูจน์ default deny, non-amplification, expiry, revocation และ deterministic reason codes</p>
+<h3>16.2 Database และ RLS denial tests</h3>
+<p>ต้องพิสูจน์:</p>
+<ul>
+<li>cross-tenant read/write ถูกปฏิเสธ;</li>
+<li>project resource อ้าง owner tenant อื่นไม่ได้;</li>
+<li>guest access จำกัดเฉพาะ resource/action ที่ grant;</li>
+<li>revocation และ expiry ปฏิเสธ access;</li>
+<li>service-role path ไม่กลายเป็น undocumented authorization bypass</li>
+</ul>
+<h3>16.3 Webhook และ Identity integration</h3>
+<p>ทดสอบ:</p>
+<ul>
+<li>signature before parse;</li>
+<li>unknown channel;</li>
+<li>replay และ duplicate delivery;</li>
+<li>webhook ingress เดียว dispatch message, postback, group, room, follow, join, leave และ event type ที่เกี่ยวข้อง;</li>
+<li>OAuth <code>state</code>/<code>nonce</code> positive และ negative paths;</li>
+<li>bind-token replay, callback swapping, exact redirect URI, expiry และ lifecycle transitions</li>
+</ul>
+<h3>16.4 LINE Group security</h3>
+<p>ทดสอบ unknown actor quarantine, source spoofing, wrong group/project, wrong tenant, approval-token reuse, non-primary customer, authorized delegate, expired grant และ non-transitive delegation</p>
+<h3>16.5 Outbox reliability</h3>
+<p>ทดสอบ concurrent claim, lease expiry, worker crash ก่อน/หลัง LINE response, result-record failure, stable retry identity, duplicate acceptance, <code>429</code>, <code>5xx</code>, permanent <code>4xx</code>, bounded attempts และ dead-letter replay</p>
+<h3>16.6 Migration, End-to-end และ Operations</h3>
+<p>ทดสอบ idempotent backfill, uniqueness, orphan detection, shadow-decision comparison, Daph regression, Tenant 2 shadow journey, backup/restore, rollback, monitoring และ operator runbooks</p>
+<h2>17. Release gates</h2>
+<p>ต้องผ่านครบทุกข้อ:</p>
+<ol>
+<li>Active LINE/project record ใน scope มี canonical tenant mapping ที่ชัดเจนทุกตัว</li>
+<li>Daph regression verification ผ่านด้วย fresh evidence</li>
+<li>Cross-tenant denial, revoke, expired grant, non-transitive delegation และ action-digest tests ผ่าน</li>
+<li>OAuth state/nonce, step-up TTL, one-time consumption และ exact-action binding ผ่านทั้ง positive/negative tests</li>
+<li>Outbox concurrency, partial failure, retry, duplicate acceptance และ dead-letter tests ผ่าน</li>
+<li>Tenant 2 ผ่าน shadow journey โดยไม่มี live customer messaging</li>
+<li>Audit completeness, tamper evidence, retention และ secret/PII leakage checks ผ่าน</li>
+<li>ซ้อม monitoring, operator resolution, backup/restore และ rollback</li>
+<li>ไม่มี Critical/High security finding ที่ยังเปิดใน Trust Foundation scope</li>
+<li>Release evidence ระบุ commit, migration set, configuration, test run, environment และ approvers</li>
+</ol>
+<p>ถ้า gate ใดไม่ผ่าน:</p>
+<ul>
+<li>tenant-2 live onboarding ต้องปิดต่อ;</li>
+<li>customer-messaging expansion ต้องปิดต่อ;</li>
+<li>Daph อยู่บน controlled compatibility path;</li>
+<li>gate ที่ล้มเหลวต้องมี owner, evidence requirement และ remediation plan</li>
+</ul>
+<h2>18. Operational signals</h2>
+<p>Dashboard/alert ขั้นต่ำ:</p>
+<ul>
+<li>inbound events แยก processing state และอายุเก่าสุด;</li>
+<li>signature/channel rejection rate;</li>
+<li>tenant-resolution mismatch count;</li>
+<li>quarantine queue age และ review backlog;</li>
+<li>permit/deny/step-up/quarantine แยก reason code และ policy version;</li>
+<li>step-up completion, expiry และ replay rejection;</li>
+<li>grant/delegation ที่ active, ใกล้หมดอายุ และ revoked;</li>
+<li>outbox pending age, attempts, lease recovery และ dead-letter count;</li>
+<li>delivery outcome แยก LINE endpoint/error class;</li>
+<li>audit append failure และ tamper-verification failure;</li>
+<li>unresolved <code>site_code</code> mapping count;</li>
+<li>Tenant 2 shadow isolation violation ซึ่งต้องเป็นศูนย์</li>
+</ul>
+<h2>19. ทางเลือกที่พิจารณา</h2>
+<h3>ย้ายทั้งแพลตฟอร์มก่อน</h3>
+<p>ไม่เลือกในรอบนี้ เพราะ blast radius สูง ทำให้การปิด LINE trust gap ช้า และไม่ปลอดภัยใน worktree ที่กำลังเปลี่ยนหนัก Target platform model ยังรองรับการย้าย domain อื่นภายหลัง</p>
+<h3>สร้าง permission wrapper เฉพาะ LINE</h3>
+<p>ไม่เลือก เพราะทำให้ identity/authorization truth ซ้ำ เกิด policy drift และต้องรื้อใหม่ภายหลัง</p>
+<h3>ใช้ <code>site_code</code> เป็น Tenant ต่อ</h3>
+<p>ไม่เลือก เพราะ Site, legal organization, contract boundary, brand, factory และ customer organization เป็นคนละแนวคิด</p>
+<h3>ให้ Project มีหลาย Owner Tenant</h3>
+<p>ไม่เลือก เพราะ shared ownership ทำให้ deletion, export, legal control, incident response และ authorization authority ไม่ชัด Collaboration ใช้ owner เดียว + scoped grants</p>
+<h2>20. Risks และ Mitigations</h2>
+<table>
+<thead>
+<tr>
+<th>ความเสี่ยง</th>
+<th>วิธีลดความเสี่ยง</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Existing path ข้าม policy point</td>
+<td>Inventory mutation entrypoints; เพิ่ม contract tests และ deny direct calls</td>
+</tr>
+<tr>
+<td>โมเดลเก่า–ใหม่ drift ระหว่าง migration</td>
+<td>Mapping table, shadow comparison, metrics และ cutover gate</td>
+</tr>
+<tr>
+<td>Global identity กลายเป็น PII master</td>
+<td>Minimal auth subject + tenant-local encrypted profiles</td>
+</tr>
+<tr>
+<td>Guest access ค้างหลังจบงาน</td>
+<td>Required expiry, revocation, periodic review และ active-use checks</td>
+</tr>
+<tr>
+<td>Step-up ทำให้ใช้งานยาก</td>
+<td>ใช้ risk tier; low-risk evidence ยังเป็นธรรมชาติใน LINE</td>
+</tr>
+<tr>
+<td>LINE retry ทำข้อความซ้ำ</td>
+<td>Stable retry identity, atomic claims, leases และ result reconciliation</td>
+</tr>
+<tr>
+<td>Audit กลายเป็นคลังข้อมูลอ่อนไหว</td>
+<td>Data minimization, digests, retention classes, encryption และ purge</td>
+</tr>
+<tr>
+<td>Tenant 2 ถูกอ้างเป็น proof เร็วเกินไป</td>
+<td>Shadow-only delivery block และ mandatory negative isolation evidence</td>
+</tr>
+</tbody></table>
+<h2>21. Completion definition ของ Design Cycle นี้</h2>
+<p>Design cycle นี้เสร็จเมื่อ:</p>
+<ul>
+<li>ฉบับอังกฤษและไทยที่เนื้อหาตรงกันได้รับการตรวจ;</li>
+<li>Markdown และ standalone HTML ทั้งสองภาษาถูก commit;</li>
+<li>ผู้ใช้อนุมัติ written spec;</li>
+<li>มี implementation plan แยกต่างหากจากแบบที่อนุมัติ;</li>
+<li>ยังไม่เริ่ม implementation ก่อนแผนดังกล่าวได้รับการตรวจ</li>
+</ul>
+<p>Design cycle ถัดไปตามลำดับ:</p>
+<ol>
+<li>Unified LINE ingress และ dispatcher;</li>
+<li>LINE Login/binding และ risk-based step-up;</li>
+<li>Group action authorization และ quarantine review;</li>
+<li>Reliable delivery outbox;</li>
+<li>Audit, privacy, retention และ operator controls;</li>
+<li>ประสบการณ์ LINE สำหรับลูกค้าและหน้างานในวงกว้าง</li>
+</ol>
+</main>
+</body>
+</html>

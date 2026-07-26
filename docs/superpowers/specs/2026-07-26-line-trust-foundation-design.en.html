@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MONOLITH LINE Trust Foundation — Approved Design Specification</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --text: #18202a;
+  --muted: #5d6976;
+  --border: #d9dee5;
+  --accent: #146c5a;
+  --code: #eef2f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11161b;
+    --surface: #182028;
+    --text: #e9eef3;
+    --muted: #aab5bf;
+    --border: #34404b;
+    --accent: #67d1b5;
+    --code: #202a33;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+  line-height: 1.65;
+}
+main {
+  max-width: 1120px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 40px 28px 72px;
+  background: var(--surface);
+}
+h1 {
+  font-size: 2rem;
+  line-height: 1.2;
+  border-bottom: 3px solid var(--accent);
+  padding-bottom: 0.5rem;
+}
+h2 {
+  margin-top: 2.4rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border);
+}
+h3 { margin-top: 1.7rem; }
+p, li { max-width: 92ch; }
+blockquote {
+  margin-left: 0;
+  padding: 0.2rem 1rem;
+  border-left: 4px solid var(--accent);
+  color: var(--muted);
+}
+table {
+  width: 100%;
+  margin: 1rem 0 1.5rem;
+  border-collapse: collapse;
+  font-size: 0.94rem;
+}
+th, td {
+  padding: 0.65rem 0.7rem;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--code); }
+code {
+  padding: 0.12rem 0.3rem;
+  border-radius: 4px;
+  background: var(--code);
+}
+pre {
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code);
+}
+pre code { padding: 0; }
+a { color: var(--accent); }
+hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 720px) {
+  main { padding: 24px 16px; }
+  table { display: block; overflow-x: auto; }
+  h1 { font-size: 1.55rem; }
+}
+@media print {
+  body { background: #ffffff; color: #000000; }
+  main { max-width: none; padding: 0; }
+  a { color: #000000; text-decoration: none; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>MONOLITH LINE Trust Foundation Design</h1>
+<p><strong>Edition:</strong> English<br>
+<strong>Date:</strong> 26 July 2026<br>
+<strong>Status:</strong> Design approved in interactive review; written-spec review pending<br>
+<strong>Implementation status:</strong> Not started by this document<br>
+<strong>Product repository:</strong> <code>determined-williams/</code> (nested active product repository)<br>
+<strong>Governance repository:</strong> parent workspace root<br>
+<strong>Chosen approach:</strong> Trust Kernel Spine with LINE as the first vertical slice</p>
+<h2>1. Executive decision</h2>
+<p>MONOLITH will keep LINE as the system&#39;s <strong>Human Surface</strong>. LINE OA, LINE groups, rooms, LIFF, and personal push remain natural engagement channels. LINE is not the system of record, is not the authorization authority, and is not a replacement internal chat application.</p>
+<p>Every event or action that can affect business truth must pass through one canonical Trust Kernel that resolves:</p>
+<ol>
+<li>channel and owning tenant;</li>
+<li>human principal and tenant-local profile;</li>
+<li>organization, site, project, resource, and revision;</li>
+<li>membership, role, project-party relationship, scoped grant, and delegation;</li>
+<li>workflow state, action risk, and authentication assurance;</li>
+<li>a policy decision of <code>PERMIT</code>, <code>DENY</code>, <code>STEP_UP</code>, or <code>QUARANTINE</code>;</li>
+<li>a transactional business write, decision audit, and atomic delivery intent.</li>
+</ol>
+<p>The first release is successful only when a second tenant completes a <strong>shadow proof</strong> with no live customer messaging and with negative isolation tests, grant revocation, risk-based step-up, audit completeness, and delivery reliability proven.</p>
+<h2>2. Repository and evidence baseline</h2>
+<p>MONOLITH is a two-root system:</p>
+<ul>
+<li>the parent root is the governance/bootstrap repository;</li>
+<li>the nested <code>determined-williams/</code> root is the active product repository.</li>
+</ul>
+<p>This design follows <code>CONTEXT.md</code> and the mandatory 21 July 2026 repository-scope correction. The nested repository contains substantial LINE, workflow, database, field, and manufacturing implementation. Source presence does not prove deployment or production readiness.</p>
+<p>The design responds to evidence observed in the nested product source on 26 July 2026:</p>
+<ul>
+<li>LINE webhook, outbound sender, LINE Login, group flows, approval flows, and notification workers exist;</li>
+<li>LINE Login creates a <code>state</code> value but the inspected callback path does not verify a stored transaction state before binding identity;</li>
+<li>approval/postback handling is split across ingress paths even though a Messaging API channel has one webhook endpoint;</li>
+<li>some group business actions do not consistently resolve the human actor and authorize the exact project action;</li>
+<li><code>line_oa_outbound_messages</code> does not provide a complete atomic-claim/lease outbox contract;</li>
+<li>the current migration model relies heavily on <code>site_code</code>, while a canonical Tenant–Organization–Site invariant is not established;</li>
+<li>some group handler failures can be returned as values and then recorded as processed;</li>
+<li>the current audit implementation is append-restricted but does not yet prove a complete human-actor envelope, tamper evidence, retention, and purge lifecycle.</li>
+</ul>
+<p>These are design inputs, not claims that every deployment has the same state. Fresh implementation verification remains mandatory.</p>
+<h2>3. Objectives</h2>
+<p>The Trust Foundation must:</p>
+<ol>
+<li>make Tenant the contractual and security boundary;</li>
+<li>preserve one owning tenant for every business resource;</li>
+<li>support external organizations through explicit, expiring, revocable access;</li>
+<li>separate global authentication from tenant-owned personal and employment data;</li>
+<li>centralize business-action authorization without duplicating IAM inside LINE;</li>
+<li>make unknown LINE participants useful for evidence capture without granting authority;</li>
+<li>require risk-based step-up for consequential actions;</li>
+<li>make delegation explicit, scoped, non-transitive, and non-amplifying;</li>
+<li>migrate from <code>site_code</code> additively without stopping Daph operations;</li>
+<li>prevent partial business state, false processed-success, and duplicate delivery;</li>
+<li>produce complete, privacy-aware, tamper-evident decision records;</li>
+<li>block live tenant expansion until a second-tenant shadow proof passes.</li>
+</ol>
+<h2>4. Non-goals</h2>
+<p>This design does not:</p>
+<ul>
+<li>build a new internal chat application;</li>
+<li>make LINE a master database;</li>
+<li>perform a platform-wide big-bang replacement of every <code>site_code</code>;</li>
+<li>onboard a second tenant to live customer messaging;</li>
+<li>authorize actions from LINE group membership alone;</li>
+<li>make Daph the platform owner or canonical platform tenant;</li>
+<li>complete broader LINE customer-experience features, campaigns, AI sales automation, or analytics;</li>
+<li>claim production readiness from source, design approval, or unit-test presence.</li>
+</ul>
+<h2>5. Approved owner decisions</h2>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Approved rule</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Ownership model</td>
+<td>Tenant Boundary + Project Parties</td>
+</tr>
+<tr>
+<td>Cross-organization work</td>
+<td>One owner tenant; partners receive scoped guest access</td>
+</tr>
+<tr>
+<td>Person identity</td>
+<td>Minimal global auth subject + tenant-local profile</td>
+</tr>
+<tr>
+<td>Authorization</td>
+<td>Layered: membership, role, project party, grant, delegation, time, workflow state</td>
+</tr>
+<tr>
+<td>Default</td>
+<td>Deny unless the exact action is proven permitted</td>
+</tr>
+<tr>
+<td>Unknown group actor</td>
+<td>Quarantined evidence only</td>
+</tr>
+<tr>
+<td>Consequential actions</td>
+<td>Risk-based step-up through LIFF/Login</td>
+</tr>
+<tr>
+<td>Delegation</td>
+<td>Explicit capability, resource, time, reason; revocable and non-transitive</td>
+</tr>
+<tr>
+<td>Migration</td>
+<td>Additive compatibility bridge from <code>site_code</code></td>
+</tr>
+<tr>
+<td>First success gate</td>
+<td>Tenant 2 shadow proof, with no live customer messaging</td>
+</tr>
+<tr>
+<td>Delivery approach</td>
+<td>Transactional notification intent plus atomic outbox</td>
+</tr>
+<tr>
+<td>Expansion stop rule</td>
+<td>No tenant-2 live onboarding or broader customer messaging until every release gate passes</td>
+</tr>
+</tbody></table>
+<h2>6. Canonical concepts</h2>
+<h3>6.1 Tenant</h3>
+<p>A Tenant is the security, data-governance, and commercial-contract boundary. Daph is one pilot tenant. Tenant identity must not be inferred from brand name, LINE group name, <code>site_code</code>, or operator choice.</p>
+<h3>6.2 Organization, site, and project</h3>
+<ul>
+<li><strong>Organization:</strong> a legal or operating party, such as studio, dealer, factory, contractor, or customer organization.</li>
+<li><strong>Site:</strong> an operational location belonging to one organization within one tenant context.</li>
+<li><strong>Project:</strong> a business collaboration owned by exactly one tenant.</li>
+<li><strong>Project Party:</strong> an organization participating in a project with a declared relationship and permitted scope.</li>
+</ul>
+<p>A project can involve many organizations, but it never has multiple owner tenants.</p>
+<h3>6.3 Global auth subject and tenant-local profile</h3>
+<p>The global auth subject is a pseudonymous authentication anchor. It stores the minimum needed to recognize an authenticated subject and its assurance state.</p>
+<p>Names, employment details, customer details, LINE relationship metadata, roles, memberships, and personal data belong to a tenant-local profile. The same human may have profiles in more than one tenant without creating a global personal-data master.</p>
+<h3>6.4 Membership, role, grant, and delegation</h3>
+<ul>
+<li><strong>Membership</strong> establishes a subject&#39;s relationship with a tenant or organization.</li>
+<li><strong>Role</strong> supplies a bounded baseline of permitted action classes.</li>
+<li><strong>Project Party</strong> proves why an external organization participates.</li>
+<li><strong>Access Grant</strong> narrows access to resources and actions, with start, expiry, and revocation.</li>
+<li><strong>Delegation</strong> authorizes an explicit capability on behalf of another principal.</li>
+</ul>
+<p>Effective permission is the intersection of these controls. No layer can increase authority beyond the owner tenant&#39;s policy or the grantor&#39;s own authority.</p>
+<h3>6.5 LINE identity binding</h3>
+<p>A LINE identity binding associates a verified provider/channel identity with a tenant-local profile and records assurance, lifecycle status, verification method, and timestamps. LINE webhook signature verification proves transport origin and integrity; it does not prove that the source user is authorized for a business action.</p>
+<h2>7. Trust Kernel architecture</h2>
+<p>The Trust Kernel is a shared policy boundary, not a LINE-specific permission database.</p>
+<h3>7.1 Components</h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Responsibility</th>
+<th>Must not do</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Unified LINE ingress</td>
+<td>Verify raw signature, record receipt, deduplicate, normalize events, dispatch by event type</td>
+<td>Decide business permission</td>
+</tr>
+<tr>
+<td>Tenant/resource resolver</td>
+<td>Resolve owner tenant, organization, site, project, resource, revision, and bridge mappings</td>
+<td>Guess tenant from display text</td>
+</tr>
+<tr>
+<td>Principal resolver</td>
+<td>Resolve LINE binding, auth subject, tenant profile, membership, and assurance</td>
+<td>Treat group membership as identity</td>
+</tr>
+<tr>
+<td>Action classifier</td>
+<td>Produce canonical action, resource references, risk tier, expected revision, and payload digest</td>
+<td>Mutate business state</td>
+</tr>
+<tr>
+<td>Policy decision point</td>
+<td>Return permit, deny, step-up, or quarantine with reason codes and policy version</td>
+<td>Send LINE messages directly</td>
+</tr>
+<tr>
+<td>Domain command handler</td>
+<td>Apply the permitted workflow transition or business mutation</td>
+<td>Bypass policy or audit</td>
+</tr>
+<tr>
+<td>Decision audit</td>
+<td>Record actor, delegation, action, resource, decision, reason, and causation</td>
+<td>Store secrets or unnecessary PII</td>
+</tr>
+<tr>
+<td>Atomic outbox</td>
+<td>Persist delivery intent in the same transaction as business state and audit</td>
+<td>Call LINE before commit</td>
+</tr>
+<tr>
+<td>Delivery worker</td>
+<td>Atomically claim, lease, send with stable retry identity, and record result</td>
+<td>Recompose business permission</td>
+</tr>
+<tr>
+<td>Compatibility bridge</td>
+<td>Map legacy <code>site_code</code> to canonical site, organization, and tenant</td>
+<td>Remain a permanent security boundary</td>
+</tr>
+</tbody></table>
+<h3>7.2 Non-bypass invariant</h3>
+<p>Every business mutation originating from LINE must call the policy decision point. A direct database function, Edge Function, webhook handler, LIFF callback, postback handler, worker, or operator tool that can mutate business state is non-conforming if it bypasses this decision.</p>
+<h2>8. Conceptual data model</h2>
+<p>Exact migration names may follow repository conventions, but the following concepts are mandatory.</p>
+<table>
+<thead>
+<tr>
+<th>Entity</th>
+<th>Minimum invariant</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>tenants</code></td>
+<td>Stable opaque ID; lifecycle status; policy version</td>
+</tr>
+<tr>
+<td><code>organizations</code></td>
+<td>One owning tenant; organization type and status</td>
+</tr>
+<tr>
+<td><code>sites</code></td>
+<td>One organization and tenant; legacy alias separated from identity</td>
+</tr>
+<tr>
+<td><code>projects</code></td>
+<td>Exactly one owner tenant; owning organization/site as applicable</td>
+</tr>
+<tr>
+<td><code>auth_subjects</code></td>
+<td>Minimal global authentication anchor; no tenant-owned profile data</td>
+</tr>
+<tr>
+<td><code>tenant_profiles</code></td>
+<td>One tenant context; encrypted/minimized PII</td>
+</tr>
+<tr>
+<td><code>memberships</code></td>
+<td>Profile-to-tenant/organization relationship with lifecycle</td>
+</tr>
+<tr>
+<td><code>project_parties</code></td>
+<td>Project-to-organization relationship, purpose, and status</td>
+</tr>
+<tr>
+<td><code>access_grants</code></td>
+<td>Subject/party, actions, resources, start, expiry, revocation, issuer</td>
+</tr>
+<tr>
+<td><code>delegations</code></td>
+<td>Delegator, delegate, explicit capabilities, resource scope, time, reason, non-transitive flag</td>
+</tr>
+<tr>
+<td><code>line_identity_bindings</code></td>
+<td>Provider, channel, LINE subject, tenant profile, assurance, lifecycle</td>
+</tr>
+<tr>
+<td><code>step_up_transactions</code></td>
+<td>State, nonce, action digest, expected revision, redirect URI, expiry, consumed time</td>
+</tr>
+<tr>
+<td><code>inbound_events</code></td>
+<td>Event key, channel, raw digest, processing state, lease, attempts, last error</td>
+</tr>
+<tr>
+<td><code>policy_decisions</code></td>
+<td>Policy version, full actor envelope, action, resource, reason codes, outcome</td>
+</tr>
+<tr>
+<td><code>delivery_outbox</code></td>
+<td>Intent, destination, stable retry key, status, lease, attempts, next attempt, result</td>
+</tr>
+<tr>
+<td><code>site_code_mappings</code></td>
+<td>Legacy code, canonical IDs, validity interval, migration status</td>
+</tr>
+</tbody></table>
+<p>Tenant identifiers are required on tenant-owned rows or must be derivable by an enforced foreign-key path that cannot cross tenants. Resource references used for authorization must be canonical and stable.</p>
+<h2>9. Authorization decision contract</h2>
+<h3>9.1 Input</h3>
+<p><code>authorize_business_action()</code> receives a canonical envelope:</p>
+<ul>
+<li>authenticated or transport principal;</li>
+<li>tenant-local profile and membership context;</li>
+<li>owner tenant;</li>
+<li>organization, site, project, resource, and expected revision;</li>
+<li>requested action and normalized payload digest;</li>
+<li>channel and source context;</li>
+<li>role, project-party relationship, access grants, and delegation;</li>
+<li>workflow state;</li>
+<li>risk tier and current assurance;</li>
+<li>request time and correlation identifiers.</li>
+</ul>
+<h3>9.2 Output</h3>
+<p>The decision is exactly one of:</p>
+<ul>
+<li><code>PERMIT</code>: the exact command may run;</li>
+<li><code>DENY</code>: no business mutation may run;</li>
+<li><code>STEP_UP</code>: stronger, action-bound authentication is required;</li>
+<li><code>QUARANTINE</code>: evidence may be retained without granting business authority.</li>
+</ul>
+<p>The result also carries:</p>
+<ul>
+<li>policy version;</li>
+<li>machine-readable reason codes;</li>
+<li>required assurance when step-up is needed;</li>
+<li>normalized tenant/resource/action identifiers;</li>
+<li>decision timestamp and audit reference.</li>
+</ul>
+<h3>9.3 Mandatory rules</h3>
+<ol>
+<li>Default deny.</li>
+<li>One owner tenant per resource.</li>
+<li>Unknown identities cannot approve, accept, order, change scope, or transition workflow.</li>
+<li>Group membership is context, never permission.</li>
+<li>Grants and delegations must be active at decision time.</li>
+<li>Delegation is non-transitive and cannot amplify privilege.</li>
+<li>Consequential approval is bound to the exact action digest and expected revision.</li>
+<li>A changed revision, amount, scope, or payload invalidates the prior approval transaction.</li>
+<li>Revocation takes effect on the next policy check; caches must invalidate by policy/grant version.</li>
+<li>Policy and audit failure cause fail-closed behavior.</li>
+</ol>
+<h2>10. Risk and assurance</h2>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Examples</th>
+<th>Required behavior</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Low</td>
+<td>Submit photo, report issue, request information</td>
+<td>Bound identity where available; unknown actor becomes quarantined evidence</td>
+</tr>
+<tr>
+<td>Medium</td>
+<td>Acknowledge task, confirm attendance, submit structured field record</td>
+<td>Short-lived, one-time action token bound to resource and revision</td>
+</tr>
+<tr>
+<td>High</td>
+<td>Approve design, accept installation, create binding order, approve scope/price</td>
+<td>LIFF/Login step-up, verified state and nonce, explicit consequence screen, action digest, expected revision, short TTL</td>
+</tr>
+<tr>
+<td>Prohibited by LINE-only interaction</td>
+<td>Actions restricted by owner policy or law</td>
+<td>Redirect to the authoritative application or human-controlled process</td>
+</tr>
+</tbody></table>
+<p>Step-up is not a generic login session. It is an authorization transaction for one explicit action.</p>
+<h2>11. Identity binding and step-up lifecycle</h2>
+<h3>11.1 Binding lifecycle</h3>
+<p><code>pending → active → suspended → revoked</code></p>
+<p>Activation requires a server-side transaction containing:</p>
+<ul>
+<li>unpredictable <code>state</code>;</li>
+<li>OIDC <code>nonce</code> where applicable;</li>
+<li>exact redirect URI;</li>
+<li>intended tenant and profile;</li>
+<li>one-time bind-token digest;</li>
+<li>creation and expiry time;</li>
+<li>consumed marker.</li>
+</ul>
+<p>The callback must compare and consume the transaction before binding the LINE identity or minting a MONOLITH session. Missing, expired, mismatched, replayed, or already-consumed transactions fail closed.</p>
+<h3>11.2 Step-up lifecycle</h3>
+<p><code>created → presented → authenticated → confirmed → consumed</code></p>
+<p>The transaction contains the exact tenant, actor, resource, action, payload digest, expected revision, assurance requirement, and expiry. Confirmation fails if any bound value changed.</p>
+<h2>12. Canonical LINE data flow</h2>
+<h3>12.1 Inbound</h3>
+<ol>
+<li>Receive the raw webhook at one ingress for the Messaging API channel.</li>
+<li>Resolve channel configuration and verify the signature on the raw body before parsing.</li>
+<li>Persist an idempotent inbox receipt with <code>RECEIVED</code> status.</li>
+<li>Claim processing atomically with a lease.</li>
+<li>Resolve tenant and resource context; require channel, group/conversation, project, and bridge mappings to agree.</li>
+<li>Resolve the human principal, tenant profile, membership, and assurance.</li>
+<li>Normalize a canonical action envelope.</li>
+<li>Evaluate the Trust Kernel decision.</li>
+<li>For <code>DENY</code>, record the decision and return a safe response without mutation.</li>
+<li>For <code>QUARANTINE</code>, store evidence with source and review state, without workflow mutation.</li>
+<li>For <code>STEP_UP</code>, create an expiring, one-time, action-bound LIFF/Login transaction.</li>
+<li>For <code>PERMIT</code>, execute domain state, decision audit, and notification intent in one database transaction.</li>
+<li>Mark the inbound event <code>SUCCEEDED</code> only after the transaction commits.</li>
+</ol>
+<h3>12.2 Outbound</h3>
+<ol>
+<li>Domain logic creates a notification intent, not a direct LINE call.</li>
+<li>Notification policy selects recipients, channel, urgency, SLA, escalation, and template.</li>
+<li>The delivery intent is committed to the atomic outbox with business state and audit.</li>
+<li>A worker atomically claims rows with a lease.</li>
+<li>The worker uses a stable retry key for supported LINE send APIs.</li>
+<li>Success, duplicate acceptance, retryable failure, permanent failure, and response metadata are recorded.</li>
+<li>Retryable rows use bounded backoff; exhausted or permanent failures enter dead letter.</li>
+<li>Operator resolution is audited.</li>
+</ol>
+<h2>13. Processing and failure semantics</h2>
+<p>Inbound processing states:</p>
+<p><code>RECEIVED → PROCESSING → SUCCEEDED</code></p>
+<p>Failure paths:</p>
+<p><code>PROCESSING → RETRYABLE → PROCESSING</code> or <code>DEAD_LETTER</code></p>
+<p>Rules:</p>
+<ul>
+<li>only <code>SUCCEEDED</code> duplicates are acknowledged as no-op;</li>
+<li>a returned error string is not success;</li>
+<li>a stale processing lease may be reclaimed safely;</li>
+<li>domain, audit, or outbox failure rolls back the whole transaction;</li>
+<li>no external side effect occurs before commit;</li>
+<li>LINE timeout, <code>429</code>, and <code>5xx</code> use stable retry identity and backoff;</li>
+<li>permanent <code>4xx</code> failures do not retry indefinitely;</li>
+<li>delivery failure never changes status to delivered;</li>
+<li>customer-facing text must not claim approval or delivery before confirmation.</li>
+</ul>
+<h2>14. Audit, privacy, and retention</h2>
+<p>Every governed event records:</p>
+<ul>
+<li>owner tenant and resource;</li>
+<li>transport actor and human principal separately;</li>
+<li>tenant profile and delegated-by principal where applicable;</li>
+<li>action, expected revision, and payload/action digest;</li>
+<li>policy version, assurance, reason codes, and outcome;</li>
+<li>event, correlation, and causation identifiers;</li>
+<li>UTC timestamps;</li>
+<li>before/after state digest where appropriate;</li>
+<li>retention class and data classification.</li>
+</ul>
+<p>Audit records are append-only and tamper-evident through a chained digest or external immutable archive. Append restriction alone is insufficient for a tamper-evidence claim.</p>
+<p>Secrets, access tokens, bind tokens, raw authorization codes, and unnecessary PII must never appear in logs or audits. Raw LINE payloads and quarantined evidence receive explicit retention, encryption, review, export, and purge policies. Pseudonymization or deletion of tenant-local personal data must preserve the minimum lawful audit record without retaining unnecessary content.</p>
+<h2>15. Additive compatibility migration</h2>
+<h3>Phase 0 — Baseline</h3>
+<p>Inventory every active <code>site_code</code>, LINE channel, group, conversation, identity binding, project, policy path, and tenant-relevant RLS rule. Record a reproducible baseline.</p>
+<h3>Phase 1 — Add</h3>
+<p>Add canonical tenant, organization, site, profile, membership, project-party, grant, delegation, decision, and mapping structures. Do not change Daph runtime behavior yet.</p>
+<h3>Phase 2 — Map and backfill</h3>
+<p>Create explicit mappings from Daph&#39;s current <code>site_code</code> values to canonical site, organization, and tenant IDs. Detect duplicates, orphans, ambiguous mappings, and cross-scope conflicts. Backfill scripts must be idempotent.</p>
+<h3>Phase 3 — Shadow decisions</h3>
+<p>Run Trust Kernel resolution and policy evaluation beside existing behavior. Record differences without changing outcomes. Any unexplained difference blocks enforcement.</p>
+<h3>Phase 4 — Enforce the LINE vertical slice</h3>
+<p>Require every LINE-originated business mutation to pass the Trust Kernel. Unresolved or inconsistent tenant context fails closed; unknown actors may still submit quarantined evidence.</p>
+<h3>Phase 5 — Tenant 2 shadow proof</h3>
+<p>Create a second tenant with separate organizations, sites, profiles, grants, LINE configuration, and projects in a non-live environment or blocked-delivery mode. Prove isolation, collaboration, revocation, step-up, audit, retry, and operator recovery.</p>
+<p><code>site_code</code> may remain as a legacy alias during the bridge. It must not remain the security boundary.</p>
+<h2>16. Verification strategy</h2>
+<h3>16.1 Policy unit and property tests</h3>
+<p>Generate combinations of roles, memberships, parties, grants, delegations, times, workflow states, risks, and assurance. Prove default deny, non-amplification, expiry, revocation, and deterministic reason codes.</p>
+<h3>16.2 Database and RLS denial tests</h3>
+<p>Prove:</p>
+<ul>
+<li>cross-tenant reads and writes are denied;</li>
+<li>project resources cannot reference a different owner tenant;</li>
+<li>guest access is limited to granted resources/actions;</li>
+<li>revocation and expiry deny access;</li>
+<li>service-role paths cannot become an undocumented authorization bypass.</li>
+</ul>
+<h3>16.3 Webhook and identity integration</h3>
+<p>Test:</p>
+<ul>
+<li>signature before parse;</li>
+<li>unknown channel;</li>
+<li>replay and duplicate delivery;</li>
+<li>one webhook ingress dispatching message, postback, group, room, follow, join, leave, and relevant event types;</li>
+<li>OAuth <code>state</code> and <code>nonce</code> positive and negative paths;</li>
+<li>bind-token replay, callback swapping, exact redirect URI, expiry, and lifecycle transitions.</li>
+</ul>
+<h3>16.4 LINE group security</h3>
+<p>Test unknown actor quarantine, source spoofing, wrong group/project, wrong tenant, approval-token reuse, non-primary customer, authorized delegate, expired grant, and non-transitive delegation.</p>
+<h3>16.5 Outbox reliability</h3>
+<p>Test concurrent claim, lease expiry, worker crash before and after LINE response, result-record failure, stable retry identity, duplicate acceptance, <code>429</code>, <code>5xx</code>, permanent <code>4xx</code>, bounded attempts, and dead-letter replay.</p>
+<h3>16.6 Migration, end-to-end, and operations</h3>
+<p>Test idempotent backfill, uniqueness, orphan detection, shadow-decision comparison, Daph regression, Tenant 2 shadow journey, backup/restore, rollback, monitoring, and operator runbooks.</p>
+<h2>17. Release gates</h2>
+<p>All gates are mandatory:</p>
+<ol>
+<li>Every active LINE/project record in scope has an unambiguous canonical tenant mapping.</li>
+<li>Daph regression verification passes with fresh evidence.</li>
+<li>Cross-tenant denial, revoke, expired grant, non-transitive delegation, and action-digest tests pass.</li>
+<li>OAuth state/nonce, step-up TTL, one-time consumption, and exact-action binding pass positive and negative tests.</li>
+<li>Outbox concurrency, partial failure, retry, duplicate acceptance, and dead-letter tests pass.</li>
+<li>Tenant 2 completes the shadow journey with no live customer messaging.</li>
+<li>Audit completeness, tamper evidence, retention, and secret/PII leakage checks pass.</li>
+<li>Monitoring, operator resolution, backup/restore, and rollback are rehearsed.</li>
+<li>No open Critical or High security finding remains in the Trust Foundation scope.</li>
+<li>Release evidence identifies commit, migration set, configuration, test run, environment, and approvers.</li>
+</ol>
+<p>If any gate fails:</p>
+<ul>
+<li>tenant-2 live onboarding remains off;</li>
+<li>customer-messaging expansion remains off;</li>
+<li>Daph stays on the controlled compatibility path;</li>
+<li>the failed gate receives an owner, evidence requirement, and remediation plan.</li>
+</ul>
+<h2>18. Operational signals</h2>
+<p>Minimum dashboards and alerts:</p>
+<ul>
+<li>inbound events by processing state and oldest age;</li>
+<li>signature/channel rejection rate;</li>
+<li>tenant-resolution mismatch count;</li>
+<li>quarantine queue age and review backlog;</li>
+<li>permit/deny/step-up/quarantine decisions by reason code and policy version;</li>
+<li>step-up completion, expiry, and replay rejection;</li>
+<li>active, expiring, and revoked grants/delegations;</li>
+<li>outbox pending age, attempts, lease recovery, and dead-letter count;</li>
+<li>delivery outcome by LINE endpoint and error class;</li>
+<li>audit append failure and tamper-verification failure;</li>
+<li>unresolved <code>site_code</code> mapping count;</li>
+<li>Tenant 2 shadow isolation violations, which must remain zero.</li>
+</ul>
+<h2>19. Alternatives considered</h2>
+<h3>Platform-wide migration first</h3>
+<p>Rejected for this cycle because it creates a large blast radius, delays closure of known LINE trust gaps, and is unsafe in a highly active worktree. The target platform model remains compatible with later domain migration.</p>
+<h3>LINE-local permission wrapper</h3>
+<p>Rejected because it would duplicate identity and authorization truth, create policy drift, and require later replacement.</p>
+<h3>Keep <code>site_code</code> as tenant</h3>
+<p>Rejected because site, legal organization, contract boundary, brand, factory, and customer organization are not the same concept.</p>
+<h3>Multi-tenant project co-ownership</h3>
+<p>Rejected because shared ownership obscures deletion, export, legal control, incident response, and authorization authority. Collaboration uses one owner plus scoped grants.</p>
+<h2>20. Risks and mitigations</h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Existing paths bypass the policy point</td>
+<td>Inventory mutation entrypoints; add contract tests and deny direct calls</td>
+</tr>
+<tr>
+<td>Dual-model drift during migration</td>
+<td>Explicit mapping table, shadow comparison, metrics, and cutover gate</td>
+</tr>
+<tr>
+<td>Global identity becomes a PII master</td>
+<td>Minimal auth subject; tenant-local encrypted profiles</td>
+</tr>
+<tr>
+<td>Guest access remains after project work</td>
+<td>Required expiry, revocation, periodic review, and active-use checks</td>
+</tr>
+<tr>
+<td>Step-up harms usability</td>
+<td>Risk tiers; low-risk evidence remains natural in LINE</td>
+</tr>
+<tr>
+<td>LINE retry creates duplicate messages</td>
+<td>Stable retry identity, atomic claims, leases, and result reconciliation</td>
+</tr>
+<tr>
+<td>Audit becomes a sensitive-data lake</td>
+<td>Data minimization, digests, retention classes, encryption, and purge</td>
+</tr>
+<tr>
+<td>Second tenant is treated as proof too early</td>
+<td>Shadow-only delivery block and mandatory negative isolation evidence</td>
+</tr>
+</tbody></table>
+<h2>21. Completion definition for this design cycle</h2>
+<p>This design cycle is complete when:</p>
+<ul>
+<li>this English edition and the aligned Thai edition are reviewed;</li>
+<li>both Markdown and standalone HTML versions are committed;</li>
+<li>the user approves the written spec;</li>
+<li>a separate implementation plan is created using the approved design;</li>
+<li>implementation does not begin before that plan is reviewed.</li>
+</ul>
+<p>The next design cycles, in order, are:</p>
+<ol>
+<li>Unified LINE ingress and dispatcher;</li>
+<li>LINE Login/binding and risk-based step-up;</li>
+<li>Group action authorization and quarantine review;</li>
+<li>Reliable delivery outbox;</li>
+<li>audit, privacy, retention, and operator controls;</li>
+<li>broader LINE customer and field experience.</li>
+</ol>
+</main>
+</body>
+</html>
