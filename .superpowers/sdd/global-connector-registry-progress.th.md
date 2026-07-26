@@ -353,3 +353,71 @@ Implementation commit `24c83de030013e8fde7d9240de4ea5f116dc1d92` เปลี่
 - Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data
 - ไม่ได้ push หรือ merge
 - งานที่ 4 เป็นงานถัดไปและยังไม่ได้เริ่ม
+
+## การปิดงานที่ 4 — 27 กรกฎาคม 2026
+
+**สถานะ:** COMPLETE
+**Base ของงานที่ 4:** `3f09a8b40a9bffe64c0bcd2cda5e2c054592d7e1`
+**Implementation commit:** `a715943995b308dff5e8d9bb71f260687b2680d5`
+**Review-fix commit:** `30403137cef216ce373f8fba76d90ef5f03f3285`
+**ขอบเขตปัจจุบัน:** งานที่ 5 เป็นงานถัดไปและยังไม่ได้เริ่ม การปิดงานปัจจุบันนี้แทนที่เฉพาะข้อความขอบเขตเดิมในงานที่ 1–3 ที่บันทึกว่างานที่ 4 เป็นงานถัดไปหรือยังไม่ได้เริ่ม โดยยังรักษาข้อความเหล่านั้นไว้เป็น snapshot ทางประวัติศาสตร์
+
+### ขอบเขต tracked ของงานที่ 4 แบบ exact
+
+ช่วงรวมสอง commit จาก base ของงานที่ 4 เปลี่ยนพาธของงานที่ 4 exactly สี่รายการ:
+
+1. `packages/component-master/src/monolith_component_master/compatibility.py`
+2. `tests/component_master/registry/test_compatibility.py`
+3. `data/component-master/registry/v1/bom-edges.jsonl`
+4. `data/component-master/registry/v1/compatibility-edges.jsonl`
+
+Implementation commit สร้างทั้งสี่พาธ ส่วน review-fix commit เปลี่ยนเฉพาะ `compatibility.py` และ `test_compatibility.py` โดยไฟล์ seed แบบศูนย์ record ทั้งสองไม่เปลี่ยนแปลง ไม่มีการเปลี่ยนไฟล์ใน owner root หรือ nested runtime
+
+### รากฐาน BOM และ compatibility graph แบบ exact
+
+- `EdgeType` มี literal value exactly 13 ค่า ได้แก่ `REQUIRES`, `OPTIONALLY_USES`, `COMPATIBLE_WITH`, `INCOMPATIBLE_WITH`, `REPLACES`, `SUPERSEDES`, `REGION_VARIANT_OF`, `GEOMETRY_VARIANT_OF`, `TOOLED_BY`, `MACHINED_BY`, `INSTALLED_WITH`, `QUALIFIED_WITH` และ `REQUIRES_MATERIAL_CONDITION`
+- `BomEdge` แบบ frozen มี exactly `assembly_sku_id`, `component_id`, `edge_type`, `quantity`, `region` และ `evidence_assertion_ids` ส่วน `CompatibilityEdge` แบบ frozen มี exactly `source_id`, `target_id`, `edge_type`, `region` และ `evidence_assertion_ids` และ `GraphIssue` แบบ frozen มี exactly `code`, `entity_id`, `related_id` และ `message`
+- `CompatibilityGraph` รับ `Registry` ที่มี type ถูกต้อง, snapshot แบบ immutable ของ iterable สำหรับ BOM edge และ compatibility edge และ registered non-SKU extras แบบ optional ชุด registered entity คือ SKU ID ใน registry รวมกับ canonical extra ใน namespace `tool`, `machine`, `material` และ `qualification` แบบ exact โดย ID ผิดรูปแบบ, type ผิด และ exact edge record ซ้ำจะ fail closed
+- การ validate release คืน tuple แบบ immutable ของ structured issue ที่เรียงอย่าง deterministic ตาม code, entity, related entity และ message โดยมี issue code แบบ exact คือ `UNKNOWN_ASSEMBLY`, `ASSEMBLY_REGION_MISMATCH`, `ASSEMBLY_LIFECYCLE_INVALID`, `EMPTY_RELEASE_BOM`, `UNREGISTERED_REQUIRED_TARGET`, `TARGET_REGION_MISMATCH`, `TARGET_LIFECYCLE_INVALID`, `INCOMPATIBLE_BOM_TARGET` และ `COMPATIBILITY_CONTRADICTION` ระบบจึงปฏิเสธ assembly ที่ไม่รู้จัก, region ของ assembly หรือ target ที่ผิด, lifecycle ที่ release ไม่ได้, release BOM ใน exact region ที่ว่าง, required target ที่ไม่ได้ register, incompatibility แบบ explicit ระหว่าง release entity แบบ non-optional ที่มีอยู่จริงทุกคู่ และ contradiction แบบ directed ที่คู่เดียวกันทั้ง compatible และ incompatible
+- Target ของ `REQUIRES`, `TOOLED_BY`, `MACHINED_BY`, `INSTALLED_WITH`, `QUALIFIED_WITH` และ `REQUIRES_MATERIAL_CONDITION` ต้องถูก register ส่วน candidate แบบ `OPTIONALLY_USES` จะไม่เติม release BOM ที่ว่าง และจะไม่ block จาก registration, region, lifecycle, incompatibility หรือ contradiction จนกว่าจะมี contract การเลือกแบบ explicit ในอนาคต
+- Fixture cam + bolt + cap ใน exact region ที่ครบถ้วนคืนศูนย์ issue Declaration incompatibility แบบ symmetric สร้าง canonical component-pair issue หนึ่งรายการ และตรวจ component pair ได้ทั้งสองทิศทาง
+- `REPLACES`, `SUPERSEDES`, `REGION_VARIANT_OF` และ `GEOMETRY_VARIANT_OF` เป็นความสัมพันธ์ด้านหลักฐานเท่านั้น Required target แบบ exact ที่หายไปจะไม่ถูก auto-substitute หรือ auto-resolve และ graph ไม่มี API สำหรับ resolve, substitute, auto-select, mutation, add-edge หรือ remove-edge
+- `bom-edges.jsonl` และ `compatibility-edges.jsonl` เป็น tracked JSONL seed ที่ valid และมีศูนย์ record งานที่ 4 ไม่สร้าง BOM หรือ compatibility catalog ที่มีข้อมูลขึ้นมาเอง
+
+### ลำดับ review และ TDD ตามจริง
+
+| ขั้น | คำตัดสิน / ผล | การจัดการ |
+| --- | --- | --- |
+| TDD รอบแรก | RED: ไม่พบ module `compatibility` ตามที่คาด; GREEN: ผ่าน test เดิมของงานที่ 4 จำนวน 36/36 | สร้าง implementation รอบแรกโดยไม่ได้อ้างว่า review ยอมรับแล้ว |
+| Review แรก | `NEEDS_FIXES` | P1: incompatibility ระหว่าง required component pair อาจหลุดผ่าน release validation; P1: optional candidate อาจทำให้ graph ที่ release BOM ว่างดูเหมือนไม่ว่างและ overblock จาก region, lifecycle, incompatibility หรือ contradiction; P2: namespaced ID ยอมรับ segment ว่าง เครื่องหมายที่ไม่รองรับ รูปแบบชิด whitespace และอักขระนอก ASCII |
+| RED สำหรับ review fix | รัน focused regression 11 รายการ; ล้มเหลว 10 รายการ | Production code ยังไม่เปลี่ยนตอนรัน RED Control สองรายการยังผ่าน และจำนวน failure ที่รายงานยังเป็น 10 เพราะการตรวจคู่สองทิศทางใช้ subtest ภายใน test method เดียว |
+| Review fix แบบน้อยที่สุด | เปลี่ยนเฉพาะ code + test | บังคับ grammar ของ ASCII namespaced ID หนึ่งแบบ; ตัด optional candidate ออกจาก release validation; ตรวจ incompatibility ของ present non-optional entity ทุกคู่ทั้งสองทิศทาง; คงการรายงาน assembly ก่อน, เรียง component pair แบบ lexical และ deduplicate structured issue |
+| GREEN สำหรับ review fix | focused regression ผ่าน 11/11; module งานที่ 4 ทั้งหมดผ่าน 46/46 | Fix เพิ่ม regression test ของงานที่ 4 exactly 10 รายการจากเดิม 36 |
+| Rereview ใหม่ | Spec `ACCEPTED`; Quality `ACCEPTED`; คำตัดสินรวม `ACCEPTED` | ไม่เหลือ finding |
+
+### Gate สุดท้ายที่ยอมรับแล้ว
+
+รายการต่อไปนี้คือ gate ของ implementation/fix งานที่ 4 ที่ยอมรับและบันทึกในรายงานที่ refresh แล้ว การปิด ledger แบบ docs-only นี้ไม่ได้รัน product test ซ้ำ
+
+| Gate | ผลที่ยอมรับแล้ว |
+| --- | --- |
+| Compatibility module ของงานที่ 4 ทั้งหมด | ผ่าน 46/46 tests; `OK` |
+| Compatibility กับงานที่ 2 + งานที่ 3 + legacy | ผ่าน 58/58 tests: identity-model 24 + evidence-vault 24 + seed-integrity 10; `OK` |
+| Focused verifier contracts | ผ่าน 12/12 tests; `OK` |
+| Full dynamic discovery | ผ่าน 364/364 tests; `OK` |
+| Verifier ครั้งเดียวจาก clean HEAD | Schema `1.1.0`; ผ่าน 13/13 checks; governed suites exact ที่ Component Master 20 + identity-tenancy 7; dynamic suite 364; Python compile, การ parse JSON/JSONL และหลักฐาน Git ที่สะอาดผ่าน |
+
+### ความสมบูรณ์ของหลักฐานและ cleanup
+
+- รายงานงานที่ 4 ที่ refresh แล้ว: `.superpowers/sdd/task-4-bom-graph-report.md`; 10,491 ไบต์; SHA-256 `03dd372d0dd30bf2b9312221be832f98647ec8325511747b1c89ede3bf35b8fa`
+- Native full-index binary review package ที่ refresh แล้ว: `.superpowers/sdd/task-4-bom-graph-review-package.diff`; 63,106 ไบต์; SHA-256 `f15d4405e125d16cde47af751e5b06086c05963b9b774bbbe74f6d2cb3463f7b`; มี exactly สี่พาธของงานที่ 4 และตรวจ reverse apply ผ่านที่ review-fix HEAD
+- บันทึก verifier summary ที่สร้างแล้วจึงลบออก และลบไดเรกทอรี cache ที่สร้างทั้งหมด Worktree ของ implementation/fix สะอาดที่ `30403137cef216ce373f8fba76d90ef5f03f3285`
+
+### ขอบเขตอำนาจของงานที่ 4
+
+- งานที่ 4 สร้างเฉพาะรากฐาน graph แบบ immutable และ seed ว่างสองไฟล์
+- งานนี้ไม่ได้สร้าง BOM ที่มีข้อมูล, automatic substitution, material/thickness qualification, ingestion, release signing, runtime integration หรือ production/manufacturing authority
+- NOT-FOR-PRODUCTION ยังทำงานอยู่ Software test ไม่ได้ยืนยัน machine, coupon, first-article, field, security, operational หรือ production readiness
+- Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data
+- ไม่ได้ push, merge, rebase หรือเปลี่ยน branch
+- งานที่ 5 เป็นงานถัดไปและยังไม่ได้เริ่ม

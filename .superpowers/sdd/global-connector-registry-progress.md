@@ -353,3 +353,71 @@ No owner-root or nested-runtime file was changed.
 - Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.
 - No push or merge was performed.
 - Task 4 is next and has not started.
+
+## Task 4 closeout — 27 July 2026
+
+**Status:** COMPLETE
+**Task 4 base:** `3f09a8b40a9bffe64c0bcd2cda5e2c054592d7e1`
+**Implementation commit:** `a715943995b308dff5e8d9bb71f260687b2680d5`
+**Review-fix commit:** `30403137cef216ce373f8fba76d90ef5f03f3285`
+**Current boundary:** Task 5 is next and has not started. This current closeout supersedes only the earlier Task 1–3 boundary statements that recorded Task 4 as next or not started; those statements remain preserved as historical snapshots.
+
+### Exact tracked Task 4 scope
+
+The combined two-commit range from the Task 4 base changes exactly four Task 4 paths:
+
+1. `packages/component-master/src/monolith_component_master/compatibility.py`
+2. `tests/component_master/registry/test_compatibility.py`
+3. `data/component-master/registry/v1/bom-edges.jsonl`
+4. `data/component-master/registry/v1/compatibility-edges.jsonl`
+
+The implementation commit created all four paths. The review-fix commit changed only `compatibility.py` and `test_compatibility.py`; the two zero-record seed files remained unchanged. No owner-root or nested-runtime file was changed.
+
+### Exact BOM and compatibility graph foundation
+
+- `EdgeType` has exactly 13 literal values: `REQUIRES`, `OPTIONALLY_USES`, `COMPATIBLE_WITH`, `INCOMPATIBLE_WITH`, `REPLACES`, `SUPERSEDES`, `REGION_VARIANT_OF`, `GEOMETRY_VARIANT_OF`, `TOOLED_BY`, `MACHINED_BY`, `INSTALLED_WITH`, `QUALIFIED_WITH`, and `REQUIRES_MATERIAL_CONDITION`.
+- Frozen `BomEdge` has exactly `assembly_sku_id`, `component_id`, `edge_type`, `quantity`, `region`, and `evidence_assertion_ids`. Frozen `CompatibilityEdge` has exactly `source_id`, `target_id`, `edge_type`, `region`, and `evidence_assertion_ids`. Frozen `GraphIssue` has exactly `code`, `entity_id`, `related_id`, and `message`.
+- `CompatibilityGraph` accepts the typed `Registry`, immutable snapshots of the BOM and compatibility edge iterables, and optional registered non-SKU extras. Its registered entity set is exactly the registry SKU IDs plus canonical extras in the `tool`, `machine`, `material`, and `qualification` namespaces; malformed IDs, wrong types, and duplicate exact edge records fail closed.
+- Release validation returns an immutable tuple of structured issues sorted deterministically by code, entity, related entity, and message. Its exact issue codes are `UNKNOWN_ASSEMBLY`, `ASSEMBLY_REGION_MISMATCH`, `ASSEMBLY_LIFECYCLE_INVALID`, `EMPTY_RELEASE_BOM`, `UNREGISTERED_REQUIRED_TARGET`, `TARGET_REGION_MISMATCH`, `TARGET_LIFECYCLE_INVALID`, `INCOMPATIBLE_BOM_TARGET`, and `COMPATIBILITY_CONTRADICTION`. It therefore refuses an unknown assembly, wrong assembly or target region, non-releasable lifecycle, an empty exact-region release BOM, an unregistered required target, an explicit incompatibility between any two present non-optional release entities, and a directed compatible/incompatible contradiction.
+- Required `REQUIRES`, `TOOLED_BY`, `MACHINED_BY`, `INSTALLED_WITH`, `QUALIFIED_WITH`, and `REQUIRES_MATERIAL_CONDITION` targets must be registered. `OPTIONALLY_USES` candidates do not fill an empty release BOM and do not block on registration, region, lifecycle, incompatibility, or contradiction until a future explicit selection contract exists.
+- The complete exact-region cam + bolt + cap fixture returns zero issues. Symmetric incompatibility declarations produce one canonical component-pair issue, and component-pair checks work in either direction.
+- `REPLACES`, `SUPERSEDES`, `REGION_VARIANT_OF`, and `GEOMETRY_VARIANT_OF` are evidence relationships only. A missing exact required target is never auto-substituted or auto-resolved, and the graph exposes no resolve, substitute, auto-select, mutation, add-edge, or remove-edge API.
+- `bom-edges.jsonl` and `compatibility-edges.jsonl` are valid tracked JSONL seeds with zero records. Task 4 does not fabricate a populated BOM or compatibility catalog.
+
+### Honest review and TDD chronology
+
+| Stage | Verdict / result | Disposition |
+| --- | --- | --- |
+| Original TDD | RED: expected missing `compatibility` module; GREEN: 36/36 original Task 4 tests | Established the first implementation without claiming review acceptance. |
+| First review | `NEEDS_FIXES` | P1: required component-pair incompatibility could escape release validation. P1: optional candidates could both make an empty release appear nonempty and overblock on region, lifecycle, incompatibility, or contradiction. P2: namespaced IDs admitted loose empty, punctuation, whitespace-adjacent, and non-ASCII segments. |
+| Review-fix RED | 11 focused regressions ran; 10 failed | Production code was unchanged for the RED run. Two controls still passed; the reported failure count remained 10 because the directional pair check used subtests inside one test method. |
+| Minimal review fix | Only code + test changed | Enforced one ASCII namespaced-ID grammar; excluded optional candidates from release validation; checked incompatibility across every present non-optional entity pair in either direction; retained assembly-first reporting, lexical component-pair ordering, and structured issue deduplication. |
+| Review-fix GREEN | 11/11 focused regressions passed; complete Task 4 module 46/46 | The fix added exactly 10 Task 4 regression tests beyond the original 36. |
+| Fresh rereview | Spec `ACCEPTED`; Quality `ACCEPTED`; overall `ACCEPTED` | No findings remained. |
+
+### Accepted final gates
+
+These are the accepted Task 4 implementation/fix gates recorded in the refreshed report; the docs-only ledger closeout did not rerun product tests.
+
+| Gate | Accepted result |
+| --- | --- |
+| Complete Task 4 compatibility module | 46/46 tests passed; `OK`. |
+| Prior Task 2 + Task 3 + legacy compatibility | 58/58 tests passed: 24 identity-model + 24 evidence-vault + 10 seed-integrity; `OK`. |
+| Focused verifier contracts | 12/12 tests passed; `OK`. |
+| Full dynamic discovery | 364/364 tests passed; `OK`. |
+| Single clean-HEAD verifier | Schema `1.1.0`; 13/13 checks passed; governed suites exact at 20 Component Master + 7 identity-tenancy; dynamic suite 364; Python compile, JSON/JSONL parsing, and clean Git evidence passed. |
+
+### Evidence integrity and cleanup
+
+- Refreshed Task 4 report: `.superpowers/sdd/task-4-bom-graph-report.md`; 10,491 bytes; SHA-256 `03dd372d0dd30bf2b9312221be832f98647ec8325511747b1c89ede3bf35b8fa`.
+- Refreshed native full-index binary review package: `.superpowers/sdd/task-4-bom-graph-review-package.diff`; 63,106 bytes; SHA-256 `f15d4405e125d16cde47af751e5b06086c05963b9b774bbbe74f6d2cb3463f7b`; it contains exactly the four Task 4 paths and reverse-applies cleanly at the review-fix HEAD.
+- The generated verifier summary was recorded, then removed. All generated cache directories were removed. The implementation/fix worktree was clean at `30403137cef216ce373f8fba76d90ef5f03f3285`.
+
+### Task 4 authority boundary
+
+- Task 4 establishes only an immutable graph foundation and two empty seeds.
+- It does not provide a populated BOM, automatic substitution, material/thickness qualification, ingestion, release signing, runtime integration, or production/manufacturing authority.
+- NOT-FOR-PRODUCTION remains active. Software tests do not establish machine, coupon, first-article, field, security, operational, or production readiness.
+- Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.
+- No push, merge, rebase, or branch change was performed.
+- Task 5 is next and has not started.
