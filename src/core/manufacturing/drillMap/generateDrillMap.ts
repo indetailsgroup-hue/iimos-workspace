@@ -42,6 +42,10 @@
  * | Mating Tolerance | 0.1mm                    |
  */
 
+// SKU-bound recipe evidence (Häfele DGH-M 2021, HDE-en, 11/20). Used ONLY to
+// make a refusal actionable — it names the article that IS qualified for the
+// member in front of the user. It does NOT change any emitted depth.
+import { selectMinifixHousing } from '../../hardware/catalog/hafeleMinifix';
 import { getSpreadGridPositions } from '../../connector/placer';
 import type { Cabinet, CabinetPanel, PanelRole, JointType, ShelfConnectorConfig, BackPanelConnectorConfig } from '../../types/Cabinet';
 import { DEFAULT_SHELF_CONNECTOR_CONFIG, DEFAULT_BACK_PANEL_CONNECTOR_CONFIG } from '../../types/Cabinet';
@@ -359,6 +363,37 @@ export function pairJointRoot(pairId: string): string {
  * such range, so no margin number is invented here. Adding one without a cited
  * Häfele source would be exactly the kind of made-up tolerance F-07 warns about.
  */
+/**
+ * Turn a refusal into something the user can act on.
+ *
+ * A correct refusal with no path forward is still a dead end, and thin panels
+ * hit exactly that: 12/15/16mm cores are offered in the material system, and
+ * every one of them lost all corner connectors to the single hardcoded 18mm
+ * recipe. Häfele publishes a housing per wood thickness from 12mm up, so the
+ * refusal can name the article that IS qualified instead of leaving the user
+ * with a blocker they cannot resolve.
+ *
+ * This is evidence, not a change of behaviour: no emitted depth is altered by
+ * this function, and the numbers it quotes are transcribed with a page citation
+ * (see hafeleMinifix.ts). Selecting that recipe for emission is a separate,
+ * owner-authorised step.
+ */
+function qualifiedRecipeHint(memberThicknessMm: number | null): string {
+    if (memberThicknessMm === null) return '';
+    const sel = selectMinifixHousing(memberThicknessMm);
+    if (sel.ok) {
+        const v = sel.variant;
+        return (
+            `A qualified alternative EXISTS for a ${memberThicknessMm}mm member: ` +
+            `Häfele Minifix housing ${v.articleNos.join(' / ')} ` +
+            `(bore Ø${v.drillDiameterMm}, depth ${v.drillDepthMm}${v.drillDepthTolerance}, ` +
+            `dim A ${v.dimAMm}) — ${v.citation.catalogueRevision} p.${v.citation.page}. ` +
+            `Binding the recipe to that article is an owner decision, not an automatic substitution.`
+        );
+    }
+    return `No qualified Häfele Minifix recipe for this member: ${sel.message}.`;
+}
+
 export function evaluateBlindBoreFeasibility(args: {
   ownerPanel: CabinetPanel;
   purpose: DrillPurpose;
@@ -440,7 +475,7 @@ export function evaluateBlindBoreFeasibility(args: {
           `${ownerPanel.role} ${ownerPanel.id} is only ${ownerThicknessMm}mm thick — ` +
           `the bore would break through. Recipe source: ${recipeSource}. ` +
           `Depth was NOT reduced: no compatible recipe exists for this member, so zero ` +
-          `operations are emitted for this joint.`,
+          `operations are emitted for this joint. ` + qualifiedRecipeHint(ownerThicknessMm),
       };
     }
     return null;
@@ -491,7 +526,7 @@ export function evaluateBlindBoreFeasibility(args: {
 
   if (requiredDepthMm >= extent) {
     return { ...base, reasonCode: 'R_BORE_EXITS_PANEL', requiredDepthMm, ownerThicknessMm,
-      message: `${purpose} Ø${diameterMm} needs a ${requiredDepthMm}mm blind bore along ${AXIS_NAMES[axis]}, but ${ownerPanel.role} ${ownerPanel.id} only extends ${extent}mm in that direction — the bore would exit the panel. Recipe source: ${recipeSource}. Depth was NOT reduced: zero operations are emitted for this joint.` };
+      message: `${purpose} Ø${diameterMm} needs a ${requiredDepthMm}mm blind bore along ${AXIS_NAMES[axis]}, but ${ownerPanel.role} ${ownerPanel.id} only extends ${extent}mm in that direction — the bore would exit the panel. Recipe source: ${recipeSource}. Depth was NOT reduced: zero operations are emitted for this joint. ` + qualifiedRecipeHint(ownerThicknessMm) };
   }
 
   return null;

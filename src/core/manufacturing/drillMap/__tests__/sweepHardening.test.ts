@@ -107,6 +107,22 @@ describe('sweep withdraws the WHOLE joint, dowel sub-ids included (orphan-dowel 
       'dowels ride on suffixed pairIds and must go with their parent connector').toEqual([]);
   });
 
+  it('tells the user which Häfele article IS qualified for their 16mm panel', () => {
+    // A correct refusal with no path forward is still a dead end, and 12/15/16mm
+    // cores are offered in the material system. Häfele publishes a housing per
+    // wood thickness from 12mm up (DGH-M 2021, HDE-en, 11/20 p.22 and p.24), so
+    // the blocker can name the article instead of leaving the user stuck.
+    const dm = quietGenerate(thinCarcassCab(16));
+    const messages = (dm.manufacturabilityRefusals ?? []).map((r) => r.message).join(' | ');
+
+    expect(messages, 'the qualified 16mm housing article').toContain('262.26.033');
+    expect(messages, 'its bore depth, with the printed tolerance').toContain('12.5+0.5');
+    expect(messages, 'and where that came from').toContain('DGH-M 2021');
+    expect(messages, 'substituting it is the owner decision, not automatic')
+      .toMatch(/owner decision/i);
+    expect(messages, 'the refused depth is still stated as-is').toContain('17.5');
+  });
+
   it('still emits the full joint on 18mm material — the refusal is not a blanket ban', () => {
     // Positive control. Without this, "no dowels" above could be satisfied by a
     // sweep that simply deletes everything.
