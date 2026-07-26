@@ -10,8 +10,9 @@
 import React from 'react';
 import { useGateStore } from './gateStore';
 import { focusAndSelectFinding, clearEntityFocus } from './focusEntity';
-import { applyFindingFix } from './applyGatePatch';
+import { applyFindingFixDetailed, toGatePatches } from './applyGatePatch';
 import type { GateFinding, GateResult, Severity } from './gateTypes';
+import type { MinifixGateFinding } from '../rules/connectors/minifixConstraintTypes';
 import { SEVERITY_COLORS, SEVERITY_BG, countBySeverity } from './gateTypes';
 import { useDrillMapStore } from '../../core/store/useDrillMapStore';
 import { validateMinifixGate } from '../rules/connectors/validateMinifixConnector';
@@ -137,6 +138,38 @@ function FindingCard({ finding, isSelected, onFocus, onApplyFix, onCopy }: Findi
 }
 
 // ============================================
+// PRODUCER → CONSUMER MAPPING
+// ============================================
+
+/**
+ * Convert a Minifix gate finding (producer shape) into a UI GateFinding.
+ *
+ * Exported so the producer → consumer → applier chain can be tested end to end
+ * without rendering React: this is the EXACT mapping runGateValidation uses.
+ *
+ * The patch path is NOT rewritten here. The producer
+ * (rules/connectors/drillMapIndex.ts:151-161) already emits a fully-qualified
+ * `/useDrillMapStore/drillMap/...` path; this used to prepend that prefix a
+ * SECOND time, which made every "Apply fix" a silent no-op that reported
+ * success. `toGatePatches` passes the path through and refuses anything that
+ * is not already correctly rooted.
+ */
+export function minifixFindingToBlockerFinding(f: MinifixGateFinding): GateFinding {
+  return {
+    key: `${f.code}:${f.entityIds.join(',')}`,
+    code: f.code,
+    message: f.message,
+    severity: 'BLOCKER' as Severity,
+    entityIds: f.entityIds,
+    patch: toGatePatches(f.suggestedFix?.patch),
+    context: {
+      ...(f.measured || {}),
+      ...(f.tolerance || {}),
+    },
+  };
+}
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 
@@ -228,22 +261,7 @@ export function runGateValidation(): Promise<void> {
           blockers: [
             ...gateResult.findings
               .filter(f => f.severity === 'ERROR')
-              .map(f => ({
-                key: `${f.code}:${f.entityIds.join(',')}`,
-                code: f.code,
-                message: f.message,
-                severity: 'BLOCKER' as Severity,
-                entityIds: f.entityIds,
-                patch: f.suggestedFix?.patch?.map(p => ({
-                  op: p.op as 'replace' | 'add' | 'remove',
-                  path: `/useDrillMapStore/drillMap${p.path}`,
-                  value: p.value,
-                })),
-                context: {
-                  ...(f.measured || {}),
-                  ...(f.tolerance || {}),
-                },
-              })),
+              .map(minifixFindingToBlockerFinding),
             ...extraBlockers,
           ],
           warnings: [
@@ -318,6 +336,8 @@ export function SafetyPanel() {
   const lastResult = useGateStore(s => s.lastResult);
   const isRunning = useGateStore(s => s.isRunning);
   const selectedFindingKey = useGateStore(s => s.selectedFindingKey);
+  // A refused "Apply fix" must be visible in the UI, not only in the console.
+  const [fixError, setFixError] = React.useState<string | null>(null);
 
   // ────────────────────────────────────────────────────────────────────────
   // Handlers
@@ -328,11 +348,19 @@ export function SafetyPanel() {
   };
 
   const handleApplyFix = (finding: GateFinding) => {
-    const success = applyFindingFix(finding);
-    if (success) {
-      // Re-run validation after fix to verify the issue is resolved
+    const outcome = applyFindingFixDetailed(finding);
+    if (outcome.ok) {
+      setFixError(null);
+      // Re-run validation after fix to verify the issue is resolved.
+      // Required, not cosmetic: applyGatePatches replaced the drill map object,
+      // so the stored verdict is now STALE (gateStore.isGateResultFresh) and
+      // freeze/export refuse until this run completes.
       runGateValidation();
       console.log('[SafetyPanel] Fix applied successfully, re-running validation');
+    } else {
+      // Never report a phantom success: the store was left untouched.
+      setFixError(`${finding.code}: fix NOT applied — ${outcome.failure.reason}`);
+      console.error('[SafetyPanel] Fix refused:', outcome.failure);
     }
   };
 
@@ -436,6 +464,14 @@ export function SafetyPanel() {
           )}
         </div>
       </div>
+
+      {/* Fix refusal — a fix that did not apply must say so */}
+      {fixError && (
+        <div className="p-2 rounded-lg mb-2 bg-red-500/10 border border-red-500/30">
+          <div className="text-[10px] text-red-400 font-medium mb-0.5">Fix not applied</div>
+          <div className="text-[9px] text-red-300 break-words">{fixError}</div>
+        </div>
+      )}
 
       {/* Findings List */}
       <div className="flex-1 overflow-y-auto space-y-1.5">
