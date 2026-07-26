@@ -63,17 +63,16 @@ class UnittestEvidenceContractTests(unittest.TestCase):
         identity_ok: bool = True,
     ) -> verifier.Evidence:
         def fake_run(command: list[str]) -> dict[str, object]:
-            joined = " ".join(command).replace("\\", "/")
             if "compileall" in command:
                 return command_result(command)
-            if "tests/component_master" in joined:
+            if "tests.component_master.test_boring_standard" in command:
                 return unittest_result(
                     command,
                     component_count,
                     exit_code=component_exit,
                     ok=component_ok,
                 )
-            if "tests/identity_tenancy" in joined:
+            if "tests.identity_tenancy.test_contracts" in command:
                 return unittest_result(
                     command,
                     identity_count,
@@ -109,6 +108,41 @@ class UnittestEvidenceContractTests(unittest.TestCase):
             7,
             governed["details"]["suites"]["identity_tenancy"]["test_count"],
         )
+
+    def test_governed_suites_pin_adopted_modules_and_exact_counts(self) -> None:
+        evidence = self.run_command_checks()
+        governed = check_by_name(evidence, "governed_kernel_unittest_suites")
+
+        component_master = governed["details"]["suites"]["component_master"]
+        self.assertEqual(
+            [
+                verifier.sys.executable,
+                "-m",
+                "unittest",
+                "tests.component_master.test_boring_standard",
+                "tests.component_master.test_catalog_baseline",
+                "tests.component_master.test_finish_taxonomy",
+                "tests.component_master.test_seed_integrity",
+                "-v",
+            ],
+            component_master["command"],
+        )
+        self.assertEqual(20, component_master["expected_test_count"])
+        self.assertEqual(20, component_master["test_count"])
+
+        identity_tenancy = governed["details"]["suites"]["identity_tenancy"]
+        self.assertEqual(
+            [
+                verifier.sys.executable,
+                "-m",
+                "unittest",
+                "tests.identity_tenancy.test_contracts",
+                "-v",
+            ],
+            identity_tenancy["command"],
+        )
+        self.assertEqual(7, identity_tenancy["expected_test_count"])
+        self.assertEqual(7, identity_tenancy["test_count"])
 
     def test_core_count_drift_missing_ok_and_nonzero_exit_are_rejected(self) -> None:
         cases = {

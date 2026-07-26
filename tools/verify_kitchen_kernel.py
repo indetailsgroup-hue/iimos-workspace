@@ -22,6 +22,19 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "artifacts" / "verification" / "kitchen-kernel-bootstrap-summary.json"
 PACKAGE_SOURCE = ROOT / "packages" / "component-master" / "src"
 GOVERNED_CORE_TEST_FLOOR = 27
+GOVERNED_COMPONENT_MASTER_TEST_MODULES = (
+    "tests.component_master.test_boring_standard",
+    "tests.component_master.test_catalog_baseline",
+    "tests.component_master.test_finish_taxonomy",
+    "tests.component_master.test_seed_integrity",
+)
+GOVERNED_IDENTITY_TENANCY_TEST_MODULES = (
+    "tests.identity_tenancy.test_contracts",
+)
+GOVERNED_UNITTEST_SUITES = (
+    ("component_master", GOVERNED_COMPONENT_MASTER_TEST_MODULES, 20),
+    ("identity_tenancy", GOVERNED_IDENTITY_TENANCY_TEST_MODULES, 7),
+)
 # 1.1.0 adds governed sub-suite evidence and replaces bootstrap Git evidence.
 OUTPUT_SCHEMA_VERSION = "1.1.0"
 
@@ -151,20 +164,13 @@ def check_commands(evidence: Evidence) -> None:
     )
 
     governed_suites: dict[str, dict[str, Any]] = {}
-    for name, start_directory, expected_count in (
-        ("component_master", "tests/component_master", 20),
-        ("identity_tenancy", "tests/identity_tenancy", 7),
-    ):
+    for name, modules, expected_count in GOVERNED_UNITTEST_SUITES:
         result = run(
             [
                 sys.executable,
                 "-m",
                 "unittest",
-                "discover",
-                "-s",
-                start_directory,
-                "-t",
-                ".",
+                *modules,
                 "-v",
             ]
         )
