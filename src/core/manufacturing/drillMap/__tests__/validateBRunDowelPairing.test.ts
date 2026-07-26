@@ -1,7 +1,13 @@
 /**
  * validateBRunDowelPairing — unit tests
  *
- * Tests the B-run dowel pair contract guard.
+ * Tests the B-run dowel pair contract guard with SYNTHETIC fixtures only.
+ *
+ * NOTE (owner ruling Q6=A, 2026-07-26): the generator no longer emits
+ * B-run points — generateBRunDowelPoints was retired (see B_RUN_RETIRED in
+ * generateDrillMap.ts and __tests__/bRunDowelGeneration.test.ts). The
+ * validator source is retained for HISTORICAL drill-map data that may still
+ * carry '-B-' keys, so these pure unit tests stay as its contract.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -20,21 +26,25 @@ function mkPoint(overrides: Partial<BRunPointLike> & { pairKeyV2: string }): BRu
 
 describe('validateBRunDowelPairing', () => {
   // ---- Pass cases ----
+  // Fixture coordinates follow the corrected B-run contract (owner ruling
+  // Q4=A 2026-07-26): pairs at FIXED X = the SIDE panel's mid-thickness
+  // plane (±291 on the 600-wide fixture), distributed along DEPTH
+  // (worldZ ∈ {523, 37} from stations {37, 523}), ON the panel bodies.
 
   it('returns [] for a correct pair (opposing normals, same X/Z, same Ø)', () => {
     const points: BRunPointLike[] = [
-      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-horiz', position: [10, 702, 536], normal: [0, 1, 0] }),
-      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-side', position: [10, 720, 536], normal: [0, -1, 0] }),
+      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-horiz', position: [-291, 702, 523], normal: [0, 1, 0] }),
+      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-side', position: [-291, 720, 523], normal: [0, -1, 0] }),
     ];
     expect(validateBRunDowelPairing(points)).toEqual([]);
   });
 
   it('returns [] for multiple correct pairs', () => {
     const points: BRunPointLike[] = [
-      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-horiz', position: [10, 702, 536], normal: [0, 1, 0] }),
-      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-side', position: [10, 720, 536], normal: [0, -1, 0] }),
-      mkPoint({ pairKeyV2: 'pair2-TOP_RIGHT-B-545-dowel-brun-horiz', position: [-254, 702, 536], normal: [0, 1, 0] }),
-      mkPoint({ pairKeyV2: 'pair2-TOP_RIGHT-B-545-dowel-brun-side', position: [-254, 720, 536], normal: [0, -1, 0] }),
+      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-horiz', position: [-291, 702, 523], normal: [0, 1, 0] }),
+      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-side', position: [-291, 720, 523], normal: [0, -1, 0] }),
+      mkPoint({ pairKeyV2: 'pair2-TOP_RIGHT-B-523-dowel-brun-horiz', position: [291, 702, 37], normal: [0, 1, 0] }),
+      mkPoint({ pairKeyV2: 'pair2-TOP_RIGHT-B-523-dowel-brun-side', position: [291, 720, 37], normal: [0, -1, 0] }),
     ];
     expect(validateBRunDowelPairing(points)).toEqual([]);
   });
@@ -58,7 +68,7 @@ describe('validateBRunDowelPairing', () => {
 
   it('flags odd pair count (1 member)', () => {
     const points: BRunPointLike[] = [
-      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-horiz', position: [10, 702, 536], normal: [0, 1, 0] }),
+      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-horiz', position: [-291, 702, 523], normal: [0, 1, 0] }),
       // missing side bore
     ];
     const issues = validateBRunDowelPairing(points);
@@ -70,8 +80,8 @@ describe('validateBRunDowelPairing', () => {
 
   it('flags diameter mismatch', () => {
     const points: BRunPointLike[] = [
-      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-horiz', diameter: 8, position: [10, 702, 536], normal: [0, 1, 0] }),
-      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-side', diameter: 10, position: [10, 720, 536], normal: [0, -1, 0] }),
+      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-horiz', diameter: 8, position: [-291, 702, 523], normal: [0, 1, 0] }),
+      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-side', diameter: 10, position: [-291, 720, 523], normal: [0, -1, 0] }),
     ];
     const issues = validateBRunDowelPairing(points);
     expect(issues).toHaveLength(1);
@@ -82,8 +92,8 @@ describe('validateBRunDowelPairing', () => {
 
   it('flags parallel normals (same direction)', () => {
     const points: BRunPointLike[] = [
-      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-horiz', position: [10, 702, 536], normal: [0, 1, 0] }),
-      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-side', position: [10, 720, 536], normal: [0, 1, 0] }), // WRONG: same direction
+      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-horiz', position: [-291, 702, 523], normal: [0, 1, 0] }),
+      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-side', position: [-291, 720, 523], normal: [0, 1, 0] }), // WRONG: same direction
     ];
     const issues = validateBRunDowelPairing(points);
     expect(issues.some(i => i.code === 'DRILLMAP:BRUN_NORMALS_NOT_OPPOSING')).toBe(true);
@@ -93,8 +103,8 @@ describe('validateBRunDowelPairing', () => {
 
   it('flags X position mismatch', () => {
     const points: BRunPointLike[] = [
-      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-horiz', position: [10, 702, 536], normal: [0, 1, 0] }),
-      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-side', position: [50, 720, 536], normal: [0, -1, 0] }), // X off by 40mm
+      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-horiz', position: [-291, 702, 523], normal: [0, 1, 0] }),
+      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-side', position: [-251, 720, 523], normal: [0, -1, 0] }), // X off by 40mm
     ];
     const issues = validateBRunDowelPairing(points);
     expect(issues.some(i => i.code === 'DRILLMAP:BRUN_POSITION_MISMATCH')).toBe(true);
@@ -102,8 +112,8 @@ describe('validateBRunDowelPairing', () => {
 
   it('flags Z position mismatch', () => {
     const points: BRunPointLike[] = [
-      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-horiz', position: [10, 702, 536], normal: [0, 1, 0] }),
-      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-side', position: [10, 720, 400], normal: [0, -1, 0] }), // Z off by 136mm
+      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-horiz', position: [-291, 702, 523], normal: [0, 1, 0] }),
+      mkPoint({ pairKeyV2: 'pair2-TOP_LEFT-B-37-dowel-brun-side', position: [-291, 720, 387], normal: [0, -1, 0] }), // Z off by 136mm
     ];
     const issues = validateBRunDowelPairing(points);
     expect(issues.some(i => i.code === 'DRILLMAP:BRUN_POSITION_MISMATCH')).toBe(true);

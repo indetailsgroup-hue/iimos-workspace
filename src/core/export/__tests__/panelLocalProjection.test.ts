@@ -30,12 +30,12 @@
  *     CAM        Ø15  D13.5  basisX = 24 / 540 → drawX = 540 / 24, y ∈ {37,293,517}
  *     BOLT_ENTRY Ø7.5 D24    edge bores at basisX 0/564, zOffset = 711−702 = 9
  *     DOWEL      Ø8   D18    edge bores, y ∈ {69,261,325,485}, zOffset 9
- *     B-run DOWEL Ø8  D12    FACE bores at basisX ∈ {37,527}, basisY = 24
- *                            (worldZ = 560−24, generateDrillMap.ts:1194-1233)
  *
- *   B-run SIDE edge bores ([worldX, 720|0, 536], generateDrillMap.ts:1235-1249) sit
- *   37mm/527mm OFF the side panel body in flush INSET (side spans x∈[−300,−282]) →
- *   module must fail-closed report them, never draw them.
+ *   B-run: RETIRED (owner ruling Q6=A 2026-07-26 — B_RUN_RETIRED in
+ *   generateDrillMap.ts; retirement pin in bRunDowelGeneration.test.ts).
+ *   The generator emits ZERO B-run points, so this fixture's real input is
+ *   80 points (was 96 with the 16 B-run bores) and the projection produces
+ *   ZERO B-run-caused skips (previously 8 FACE_OUT_OF_BOUNDS on TOP/BOTTOM).
  */
 import { describe, it, expect, vi } from 'vitest';
 import type { Cabinet, CabinetPanel } from '../../types/Cabinet';
@@ -227,18 +227,19 @@ describe('panelLocalProjection — flush INSET real drill map', () => {
     expect(ladder(dowels)).toEqual([69, 261, 325, 485]);
   });
 
-  it('A4: TOP panel — FACE bores (incl. Ø8×12 B-run dowels) inside the drawing; EDGE bores tagged with drawing-frame edge + zOffset', () => {
+  it('A4: TOP panel — FACE bores inside the drawing; no B-run face bores exist (retired Q6=A); EDGE bores tagged with drawing-frame edge + zOffset', () => {
     const top = byId('t');
     const faces = top.bores.filter(b => b.boreType === 'FACE' && b.sourceId !== 'syn-top-face');
 
-    // B-run dowel FACE bores: Ø8 depth 12 drilled up into the machining (bottom) face
-    const brun = faces.filter(b => b.diameter === 8 && b.depth === 12);
-    expect(brun.length).toBeGreaterThan(0);
-    for (const b of brun) {
-      expect(r2(b.y), `B-run ${b.sourceId} y = drillingDistanceB`).toBe(24);
-      expect([37, 527], `B-run ${b.sourceId} x`).toContain(r2(b.x));
-      expect(b.layerHint).toBe('DRILL_V_8_D12');
-    }
+    // B-run retired (Q6=A 2026-07-26): the generator emits no Ø8×12 face
+    // bores on the horizontals and therefore no FACE_OUT_OF_BOUNDS reports
+    // for the TOP panel (before retirement: 4 reports at drawX 573/−9).
+    const dowelFaces = faces.filter(b => b.diameter === 8 && b.depth === 12);
+    expect(dowelFaces, 'no Ø8×12 face bores on TOP after B-run retirement').toHaveLength(0);
+    const topFaceOob = build().result.skipped.filter(
+      s => s.panelId === 't' && s.reason === 'FACE_OUT_OF_BOUNDS',
+    );
+    expect(topFaceOob, 'zero TOP face-oob skips after B-run retirement').toHaveLength(0);
 
     // CAM face bores Ø15×13.5: Distance B = 24 from each mate edge, stations {37,293,517}
     const cams = faces.filter(b => b.diameter === 15);
@@ -278,7 +279,7 @@ describe('panelLocalProjection — flush INSET real drill map', () => {
     expect(synEdge!.zOffset).toBeCloseTo(9, 6);
   });
 
-  it('A5: fail-closed — unknown panel, zero normal, oblique normal, and off-panel B-run side bores are reported, never silently drawn', () => {
+  it('A5: fail-closed — unknown panel, zero normal, oblique normal reported; B-run retired (Q6=A) → zero B-run bores and zero B-run skips', () => {
     const { result, totalInputPoints } = build();
 
     const reason = (id: string) => result.skipped.find(s => s.pointId === id)?.reason;
@@ -286,14 +287,37 @@ describe('panelLocalProjection — flush INSET real drill map', () => {
     expect(reason('syn-zero-normal')).toBe('ZERO_NORMAL');
     expect(reason('syn-oblique')).toBe('OBLIQUE_NORMAL');
 
-    // Generator emits B-run SIDE edge bores whose entry is 37mm/527mm off the side
-    // panel body in flush INSET (4 corners × 2 stations) — fail-closed, all reported.
+    // Every real generator point projects onto its panel body — no
+    // EDGE_ENTRY_OFF_PANEL reports on this fixture.
     const offPanel = result.skipped.filter(s => s.reason === 'EDGE_ENTRY_OFF_PANEL');
-    expect(offPanel.length).toBe(8);
-    for (const s of offPanel) expect(['l', 'r']).toContain(s.panelId);
+    expect(offPanel, 'no edge bore may fall off its panel').toHaveLength(0);
 
-    // Conservation: every input point is either projected or reported — no silent drops.
+    // B-run retired (Q6=A 2026-07-26): before retirement its 8 horiz FACE
+    // bores fail-closed here as FACE_OUT_OF_BOUNDS — now ZERO skips remain
+    // from B-run, and the only skips are the 3 bad synthetic probes.
+    const faceOob = result.skipped.filter(s => s.reason === 'FACE_OUT_OF_BOUNDS');
+    expect(faceOob, 'zero FACE_OUT_OF_BOUNDS after B-run retirement').toHaveLength(0);
+    expect(result.skipped, 'only the 3 bad synthetic probes are skipped').toHaveLength(3);
+
+    // Retirement pin at the projection layer: the sides carry no Ø8×18
+    // EDGE bores any more (those entered through the TOP/BOTTOM end-grain
+    // and only ever came from the retired B-run emitter).
+    for (const sideId of ['l', 'r'] as const) {
+      const side = byId(sideId);
+      const brunEdges = side.bores.filter(
+        b => b.boreType === 'EDGE' && b.diameter === 8 && b.depth === 18,
+      );
+      expect(brunEdges, `${sideId}: B-run side edge bores must be gone`).toHaveLength(0);
+    }
+
+    // Conservation: every input point is either projected or reported — no
+    // silent drops. Real generator points dropped 96 → 80 with retirement:
+    //   48 non-dowel (12× BOLT/CAM/BOLT_ENTRY/BOLT_THREAD) + 32 A-run dowels
+    //   + 7 synthetic probes = 87 inputs; 87 − 3 skipped = 84 projected.
+    expect(totalInputPoints, 'inputs = 80 real + 7 synthetic').toBe(87);
+    expect(totalInputPoints - SYN_POINTS.length, 'real generator points').toBe(80);
     const totalBores = result.panels.reduce((n, p) => n + p.bores.length, 0);
+    expect(totalBores, 'projected bores after retirement').toBe(84);
     expect(totalBores + result.skipped.length).toBe(totalInputPoints);
 
     // Skipped probes never appear as bores

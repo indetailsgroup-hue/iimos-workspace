@@ -152,3 +152,9 @@ PRD ต้องเพิ่ม/แก้:
 - [ ] technical: 10 ไฟล์
 - [ ] main/plan.md, main/tasks.md
 - [ ] strategy, testing, templates
+
+## [ตัดสินแล้ว Q6=A, 26 ก.ค. 2026] B-run vertical dowel retired (Q6=A, 2026-07-26)
+- Born broken: emitter รุ่นแรก (pre-Q4) วาง side bore หลุดนอกแผ่น + ตำแหน่งซ้ำ world position (บันทึกไว้ใน header เดิมของ bRunDowelGeneration.test.ts ก่อน rewrite เป็น retirement pin); geometry ฉบับแก้ (Q4=A) ตรวจจากพิกัด golden แล้วชนช่อง Minifix bolt ครบทั้ง 4 มุม (BOLT_ENTRY Ø7.5 กับ B-run side bore ใช้แนวแกนเดียวกันที่ mid-thickness ของแผ่นข้าง)
+- ความเป็นไปได้ทางกายภาพจำกัดเฉพาะ OVERLAY top: flush INSET = รูทะลุขอบโชว์ (show rim), rabbeted INSET = web เหลือศูนย์ — เป็นเหตุผลใน ruling Q6=A ที่บันทึกโดย owner (2026-07-26)
+- ไม่เคยถึงผู้บริโภคจริง: ถูก render-hidden ใน Cabinet3D, ไม่อยู่ใน corner engine parity (cornerEngineFlip.test.ts strip), ไม่มี shipped export เส้นไหน consume จุด B-run → การถอดจึงไม่แตะ artifact ที่ส่งมอบแล้ว; A-run cam+bolt+dowel ยึดมุมอยู่แล้ว (golden A_RUN_INSET_600x720x560_18mm.golden.json หลัง regen: 96→80 จุด, จุด non-B-run 80 จุดเดิมไม่เปลี่ยน — เทียบ byte ต่อ point แล้วตรงกัน)
+- ร่องรอยในโค้ด: `B_RUN_RETIRED = 'Q6-A 2026-07-26'` + tombstone ที่ generateDrillMap.ts (จุดที่เคยเป็น generateBRunDowelPoints และ caller loop); retirement pin = bRunDowelGeneration.test.ts (INSET + OVERLAY fixtures, 0 จุดที่ key มี '-B-'/'pair-B-'/'-brun-'); คง pairKeyV2 '-B' vocabulary + validateBRunDowelPairing.ts ไว้เพื่อ historical data (G3 อาจกวาดทีหลัง); PRD (docs/PRD.md:348) ที่ระบุ "B-run dowel generation" = historical นับจาก ruling นี้

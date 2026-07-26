@@ -1127,129 +1127,21 @@ function generateCornerJointPoints(
 }
 
 // ============================================
-// B-RUN DOWEL GENERATION (WIDTH AXIS)
+// B-RUN DOWEL GENERATION — RETIRED
 // ============================================
+// B-run retired — owner ruling Q6=A 2026-07-26; see
+// docs/SPECS-RECONCILIATION-NOTES.md entry "B-run vertical dowel retired
+// (Q6=A, 2026-07-26)"; vocabulary '-B' retained in pairKeyV2 for
+// historical keys (pairKeyV2.ts RUN_AXIS_TAG / PAIR_KEY_V2_RE).
+// generateBRunDowelPoints was deleted here; the retirement pin lives in
+// __tests__/bRunDowelGeneration.test.ts.
 
 /**
- * Generate dowel pairs for a single B-run position at one corner.
- *
- * B-run = width axis (X direction) for lateral alignment / anti-rack.
- * Each position produces a dowel pair:
- *   - HORIZ panel FACE bore (Ø8 × 11mm) — drills into TOP/BOTTOM inner face
- *   - SIDE panel EDGE bore (Ø8 × 19mm)  — drills into LEFT_SIDE/RIGHT_SIDE top/bottom edge
- *
- * Construction: Side-covers-Top
- *   TOP corners: SIDE panel top edge ↔ TOP panel bottom face
- *   BOTTOM corners: SIDE panel bottom edge ↔ BOTTOM panel top face
- *
- * @param corner - Corner type
- * @param sys32X - System32 position along width axis (mm from corner's edge)
- * @param positionIndex - Index for unique ID generation
- * @param panelsByRole - Panel lookup
- * @param config - Minifix config
+ * Retirement marker for the B-run vertical dowel system.
+ * Referenced by __tests__/bRunDowelGeneration.test.ts so the retirement
+ * is greppable and cannot be silently reverted.
  */
-// ========================================
-// B-RUN DOWEL CONTRACT (LOCKED — see bRunDowelGeneration.test.ts)
-// ========================================
-// Each B-run position produces EXACTLY 2 points (1 pair):
-//   1. HORIZ face bore  — panel=TOP/BOTTOM, depth=dowelDepthSideFace(11mm)
-//   2. SIDE edge bore   — panel=LEFT_SIDE/RIGHT_SIDE, depth=dowelDepthHorizEdge(19mm)
-//
-// Invariants:
-//   a) Both bores share the same Ø (config.dowelDia, default 8mm)
-//   b) Normals are OPPOSING (dot = -1) — they face each other at the joint
-//   c) pairId/pairKeyV2 roots are SHARED (suffix distinguishes -horiz / -side)
-//   d) worldX and worldZ are IDENTICAL between paired bores
-//
-// DO NOT change bore assignments, depths, or normal directions without
-// also updating validateBRunDowelPairing and bRunDowelGeneration.test.ts.
-// ========================================
-
-function generateBRunDowelPoints(
-  corner: CornerType,
-  sys32X: number,
-  positionIndex: number,
-  panelsByRole: PanelsByRole,
-  config: MinifixConfig,
-): DrillMapPoint[] {
-  const points: DrillMapPoint[] = [];
-  const { horizontal, vertical } = getCornerPanels(corner, panelsByRole);
-  if (!horizontal || !vertical) return points;
-
-  const horizAabb = calculatePanelAABB(horizontal);
-  const sideAabb = calculatePanelAABB(vertical);
-
-  const isLeft = corner === 'TOP_LEFT' || corner === 'BOTTOM_LEFT';
-  const isTop = corner === 'TOP_LEFT' || corner === 'TOP_RIGHT';
-
-  // Content-addressed key with B-run namespace
-  const pairId = `pair-B-${corner}-${positionIndex}`;
-  const pairKeyV2 = buildPairKeyV2(corner, sys32X, 'B');
-
-  // X position: corner-relative from width edge
-  const worldX = isLeft
-    ? horizAabb.min[0] + sys32X
-    : horizAabb.max[0] - sys32X;
-
-  // Z position: drillingDistanceB from FRONT edge (maxZ)
-  const worldZ = horizAabb.max[2] - config.drillingDistanceB;
-
-  // Panel roles
-  const horizPanelRole = isTop ? 'TOP' : 'BOTTOM';
-  const sidePanelRole = isLeft ? 'LEFT_SIDE' : 'RIGHT_SIDE';
-
-  // ---- HORIZ panel face bore (Ø8 × 11mm) ----
-  // Drill into inner face of TOP/BOTTOM panel
-  const horizFaceY = isTop ? horizAabb.min[1] : horizAabb.max[1]; // inner face
-  const horizNormal: Vec3Tuple = isTop ? [0, 1, 0] : [0, -1, 0]; // drill into face
-
-  // ---- SIDE panel edge bore (Ø8 × 19mm) ----
-  // Drill into top/bottom edge of SIDE panel
-  const sideEdgeY = isTop ? sideAabb.max[1] : sideAabb.min[1]; // top or bottom edge
-  const sideNormal: Vec3Tuple = isTop ? [0, -1, 0] : [0, 1, 0]; // opposing direction
-
-  // DEV-ONLY: contract assertion — normals must oppose
-  if (import.meta.env.DEV) {
-    const dot = horizNormal[0] * sideNormal[0] + horizNormal[1] * sideNormal[1] + horizNormal[2] * sideNormal[2];
-    if (Math.abs(dot + 1) > 0.001) {
-      console.error(`[B-run] CONTRACT VIOLATION: normals not opposing for ${corner} (dot=${dot})`);
-    }
-  }
-
-  points.push(createDrillPoint({
-    panelId: horizontal.id,
-    position: [worldX, horizFaceY, worldZ],
-    normal: horizNormal,
-    diameter: config.dowelDia,
-    depth: config.dowelDepthSideFace ?? 11,  // face bore = 11mm (shallow)
-    specLength: config.dowelLength,
-    purpose: 'DOWEL',
-    pairId: `${pairId}-dowel-brun-horiz`,
-    pairKeyV2: `${pairKeyV2}-dowel-brun-horiz`,
-    edgeDistance: config.drillingDistanceB,
-    depthPosition: sys32X,
-    cornerType: corner,
-    connectedPanelRole: horizPanelRole,
-  }));
-
-  points.push(createDrillPoint({
-    panelId: vertical.id,
-    position: [worldX, sideEdgeY, worldZ],
-    normal: sideNormal,
-    diameter: config.dowelDia,
-    depth: config.dowelDepthHorizEdge ?? 19,  // edge bore = 19mm (deep)
-    specLength: config.dowelLength,
-    purpose: 'DOWEL',
-    pairId: `${pairId}-dowel-brun-side`,
-    pairKeyV2: `${pairKeyV2}-dowel-brun-side`,
-    edgeDistance: config.drillingDistanceB,
-    depthPosition: sys32X,
-    cornerType: corner,
-    connectedPanelRole: sidePanelRole,
-  }));
-
-  return points;
-}
+export const B_RUN_RETIRED = 'Q6-A 2026-07-26';
 
 // ============================================
 // SHELF JUNCTION GENERATION
@@ -2323,39 +2215,13 @@ export function generateMinifixDrillMap(
   }
 
   // ========================================
-  // B-RUN: WIDTH AXIS DOWEL POSITIONS
+  // B-RUN CALLER — RETIRED
   // ========================================
-  // B-run = dowel-only along width (X) for lateral alignment / anti-rack.
-  // Spec: always 2 positions per corner. If panel too narrow (< 2× firstHoleZ)
-  // buildCadConnectorRunPositions may return 1 or collapse — warn and skip.
-  if (fullConfig.includeDowel && topPanel) {
-    const topAabb = calculatePanelAABB(topPanel);
-    const widthSpan = topAabb.max[0] - topAabb.min[0]; // X span = width
-    const minSpanForBRun = fullParams.firstHoleZ * 2; // need room for 2 setback positions
-
-    if (widthSpan >= minSpanForBRun) {
-      const sys32WidthPositions = buildCadConnectorRunPositions(widthSpan, fullParams.firstHoleZ, 2); // B-run always 2
-
-      for (const corner of CORNERS) {
-        // Skip B-run dowels for corners disabled by connector config
-        if (!isCornerEnabled(corner)) continue;
-
-        for (let i = 0; i < sys32WidthPositions.length; i++) {
-          const sys32X = sys32WidthPositions[i]!;
-          const bRunPoints = generateBRunDowelPoints(corner, sys32X, i, panelsByRole, fullConfig);
-          for (const point of bRunPoints) {
-            const points = panelPointsMap.get(point.panelId) || [];
-            points.push(point);
-            panelPointsMap.set(point.panelId, points);
-          }
-        }
-      }
-    } else if (import.meta.env.DEV) {
-      console.warn(
-        `[DrillMap] B-run skipped: widthSpan ${widthSpan.toFixed(1)}mm < ${minSpanForBRun}mm minimum`,
-      );
-    }
-  }
+  // B-run retired — owner ruling Q6=A 2026-07-26; see
+  // docs/SPECS-RECONCILIATION-NOTES.md entry "B-run vertical dowel retired
+  // (Q6=A, 2026-07-26)"; vocabulary '-B' retained in pairKeyV2 for
+  // historical keys. The depth-distributed B-run generation loop that lived
+  // here was deleted; A-run cam+bolt+dowel secures the corners.
 
   // ========================================
   // CENTRALIZED HARDWARE CATALOG ENRICHMENT
