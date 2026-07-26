@@ -11,8 +11,7 @@
     "source_bytes_must_match": true,
     "target_path_must_remain_inside_target_root": true,
     "permitted_actions": [
-      "ADD",
-      "REPLACE"
+      "ADD"
     ],
     "nested_runtime_in_scope": false,
     "production_claim": false
@@ -20,7 +19,7 @@
   "summary": {
     "included_file_count": 77,
     "total_bytes": 712400,
-    "inventory_sha256": "e423bf6192e7009da3c0654ec3afebe5923324abd80ef8797f9640821177f4cc",
+    "inventory_sha256": "1d25a3fdc6bb008d227fcfc80e865dd244396f8842778135e5afa833bbabb2db",
     "inventory_digest_contract": {
       "algorithm": "SHA-256",
       "payload_json_pointer": "/files",
@@ -541,7 +540,7 @@
       "purpose_group": "component-master-engine",
       "source_git_state": "untracked",
       "target_action": "ADD",
-      "required_by": "Imported by Component Master tests and compiled by verify_kitchen_kernel.py."
+      "required_by": "Preserves package-local build-system and project metadata so the Component Master source can be adopted as one coherent Python package."
     },
     {
       "path": "packages/component-master/src/monolith_component_master/__init__.py",
@@ -739,7 +738,7 @@
       "purpose_group": "bootstrap-configuration",
       "source_git_state": "untracked",
       "target_action": "ADD",
-      "required_by": "Defines the Component Master package source layout used by the 27-test package probes and compile step."
+      "required_by": "Preserves repository-level Python build metadata and setuptools package-discovery configuration for standard packaging and repository tooling."
     },
     {
       "path": "tests/component_master/__init__.py",
