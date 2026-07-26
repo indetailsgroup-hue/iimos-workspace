@@ -148,8 +148,10 @@ test.describe('DXF Export', () => {
                     await page.waitForTimeout(3000);
                 }
             } else {
-                // Default state (spec not export-ready): the RELEASED-only export guardrail
-                // MUST block export — button disabled, gate reason surfaced. Deterministic.
+                // Default state (spec not export-ready): the export guardrail MUST block —
+                // button disabled, gate reason surfaced. Deterministic.
+                // Gate model (EXPORT_OPTIONS, ExportPanel.tsx): cutlist/bom allowed in DRAFT,
+                // DXF requires FROZEN, CNC is the RELEASED-only format.
                 await expect(exportButton).toBeDisabled();
                 await expect(exportButton).toHaveAttribute('title', /FROZEN|RELEASED|export/i);
                 await expect(page.getByText(/gate blocked/i).first()).toBeVisible();
@@ -309,43 +311,63 @@ test.describe('DXF Export', () => {
 
     test.describe('Panel Selection', () => {
         test('should allow selecting/deselecting panels for export', async ({ page }) => {
-            // Look for panel selection checkboxes
-            const panelCheckboxes = page.locator('[data-testid^="panel-select-"]').or(
-                page.locator('input[type="checkbox"]').filter({ hasText: /panel|side|top|bottom/i })
-            );
+            // KNOWN GAP, self-clearing: marked expected-to-fail because this spec does not
+            // yet drive its own precondition (role FACTORY/ADMIN -> Export tab -> FROZEN).
+            // Playwright reports it in the run instead of hiding it as a silent skip, and
+            // the moment the precondition + data-testid land it will PASS — which Playwright
+            // then flags as "expected to fail but passed", forcing this marker's removal.
+            test.fail();
 
+            // Single selector: the per-panel checkbox carries data-testid="panel-select-<id>"
+            // (ExportPanel PanelRow). The former `input[type=checkbox]).filter({hasText})`
+            // fallback was deleted — hasText matches an element's own/descendant text and a
+            // void <input> has neither (its label text lives in a sibling div), so that
+            // branch could never match and turned this test into a permanent silent skip.
+            const panelCheckboxes = page.locator('[data-testid^="panel-select-"]');
             const checkboxCount = await panelCheckboxes.count();
 
-            if (checkboxCount > 0) {
-                // Click first checkbox to toggle
-                const firstCheckbox = panelCheckboxes.first();
-                const initialState = await firstCheckbox.isChecked();
+            // Visible, not silent: the panel list mounts only for FACTORY/ADMIN on the
+            // Export tab, and the checkboxes are disabled until the spec is FROZEN.
+            // Until this spec drives that precondition itself, record the gap in the
+            // report instead of passing green on zero coverage.
+            expect(
+                checkboxCount,
+                'no panel-select checkboxes reachable — needs role FACTORY/ADMIN + Export tab + FROZEN spec',
+            ).toBeGreaterThan(0);
 
-                await firstCheckbox.click();
+            const firstCheckbox = panelCheckboxes.first();
+            const initialState = await firstCheckbox.isChecked();
 
-                // Verify state changed
-                const newState = await firstCheckbox.isChecked();
-                expect(newState).not.toBe(initialState);
+            await firstCheckbox.click();
+            expect(await firstCheckbox.isChecked()).not.toBe(initialState);
 
-                // Toggle back
-                await firstCheckbox.click();
-            } else {
-                // Panel selection might not be visible
-                test.skip();
-            }
+            // Toggle back
+            await firstCheckbox.click();
+            expect(await firstCheckbox.isChecked()).toBe(initialState);
         });
 
         test('should show Select All / Deselect All buttons', async ({ page }) => {
+            // Same self-clearing known gap as the sibling test — see its comment.
+            test.fail();
+
             const selectAllButton = page.getByRole('button', { name: /select all/i });
             const deselectAllButton = page.getByRole('button', { name: /deselect|clear/i });
 
             const hasSelectAll = await selectAllButton.isVisible({ timeout: 3000 }).catch(() => false);
             const hasDeselectAll = await deselectAllButton.isVisible({ timeout: 3000 }).catch(() => false);
 
-            // At least one should exist if panel selection is available
-            if (!hasSelectAll && !hasDeselectAll) {
-                test.skip();
-            }
+            // Same known gap as the sibling test: the toggle mounts only on the Export tab
+            // for FACTORY/ADMIN. Recorded in the report rather than skipped silently.
+            test.info().annotations.push({
+                type: 'coverage-gap',
+                description:
+                    'Select All/Deselect All not reachable without driving role FACTORY/ADMIN + Export tab; ' +
+                    `observed selectAll=${hasSelectAll} deselectAll=${hasDeselectAll}`,
+            });
+            expect(
+                hasSelectAll || hasDeselectAll,
+                'panel-selection toggle not reachable — precondition not driven by this spec',
+            ).toBe(true);
         });
     });
 

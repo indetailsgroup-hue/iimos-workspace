@@ -15,7 +15,7 @@ test.describe('Cabinet 3D Viewer', () => {
 
   test('@smoke should load the application', async ({ page }) => {
     // Check that the page title is correct
-    await expect(page).toHaveTitle(/Monolith|iimos/i);
+    await expect(page).toHaveTitle(/Monolith/i);
 
     // Check that the canvas is visible
     const canvas = page.locator('canvas');
