@@ -69,6 +69,13 @@ export interface ExportGateStatus {
   /** Blockers list for display */
   blockers: GateFinding[];
 
+  /**
+   * Is there a drill map to validate at all? Without one, all three validators
+   * short-circuit to PASS, so the verdict looks clean while covering nothing —
+   * a surface needs this to tell "nothing to validate" from "stale verdict".
+   */
+  hasDrillMap: boolean;
+
   /** Full result for advanced use */
   result: GateResult | null;
 }
@@ -79,6 +86,43 @@ export interface ExportGateActions {
 
   /** Get reason why export is blocked */
   getBlockReason: () => string;
+}
+
+// ============================================
+// WHY THE GATE IS REFUSING (single source)
+// ============================================
+
+/**
+ * The one place that turns a gate status into a sentence for a human.
+ *
+ * Owner tenet — easy front, rigorous back: the gate may refuse as hard as it
+ * likes, but the refusal must name the REAL cause and imply the next move.
+ * Returns '' when the gate authorizes the action.
+ *
+ * Ordering matters. The no-drill-map case must be checked BEFORE freshness:
+ * validateMinifixGate / validateG11FromDrillMap / runConnectorOsAudit all
+ * short-circuit to PASS on a null map, so that run records zero blockers and
+ * a null validated ref — clean and never fresh. Checked in the old order it
+ * came out as "the cabinet changed since the last Safety Gate run", which was
+ * both false and a dead end (re-running says the same thing forever). Seen
+ * live in the app on 2026-07-26.
+ */
+export function describeGateRefusal(status: ExportGateStatus): string {
+    if (status.isRunning) return 'the Safety Gate is still running';
+    if (!status.hasDrillMap) {
+        return 'there is no drill map to validate yet — generate the drill map for this cabinet first';
+    }
+    if (!status.hasRun) return 'the Safety Gate has not been run yet';
+    if (status.blockerCount === 1) {
+        return `1 Safety Gate blocker must be resolved: ${status.blockers[0]?.message ?? 'unknown issue'}`;
+    }
+    if (status.blockerCount > 1) {
+        return `${status.blockerCount} Safety Gate blockers must be resolved`;
+    }
+    if (!status.fresh) {
+        return 'the cabinet changed since the last Safety Gate run — run the gate again';
+    }
+    return '';
 }
 
 // ============================================
@@ -124,6 +168,7 @@ export function useExportGate(): ExportGateStatus & ExportGateActions {
       isRunning,
       blockerCount: blockers.length,
       warningCount: warnings.length,
+      hasDrillMap: currentDrillMap !== null && currentDrillMap !== undefined,
       blockers,
       result,
     };
@@ -143,26 +188,10 @@ export function useExportGate(): ExportGateStatus & ExportGateActions {
     }
   }, [status.blockers, selectFinding]);
 
-  const getBlockReason = useCallback((): string => {
-    if (status.isRunning) {
-      return 'Validation is running...';
-    }
-    if (!status.hasRun) {
-      return 'Gate validation has not been run yet';
-    }
-    // A clean-but-stale verdict blocks for a different reason than a dirty one,
-    // and the user needs the difference: re-run vs fix.
-    if (status.blockerCount === 0 && !status.fresh) {
-      return 'The cabinet changed since the last Safety Gate run — run the gate again';
-    }
-    if (status.blockerCount === 0) {
-      return ''; // No block
-    }
-    if (status.blockerCount === 1) {
-      return `1 blocker: ${status.blockers[0]?.message ?? 'Unknown issue'}`;
-    }
-    return `${status.blockerCount} blockers must be resolved`;
-  }, [status]);
+  const getBlockReason = useCallback(
+    (): string => describeGateRefusal(status),
+    [status],
+  );
 
   return {
     ...status,
@@ -199,6 +228,7 @@ export function getExportGateStatus(): ExportGateStatus {
     isRunning: state.isRunning,
     blockerCount: blockers.length,
     warningCount: warnings.length,
+    hasDrillMap: useDrillMapStore.getState().drillMap != null,
     blockers,
     result,
   };

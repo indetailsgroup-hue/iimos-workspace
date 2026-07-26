@@ -30,7 +30,11 @@ import {
   downloadDxfZipFromPacket,
 } from '../../core/export/dxfExportFromOperationGraph';
 // T8b: Safety-Gate authority for this toolbar's freeze/release/export actions.
-import { getExportGateStatus } from '../../gate/ui/useExportGate';
+import {
+    SHADOW_MODE_NOT_FOR_PRODUCTION,
+    NOT_FOR_PRODUCTION_LABEL,
+} from '../../core/config/shadowMode';
+import { describeGateRefusal, getExportGateStatus } from '../../gate/ui/useExportGate';
 import { runGateValidation } from '../../gate/ui/SafetyPanel';
 import { buildCutListData } from '../../factory/packet/builders';
 import { downloadCutListCsv } from '../../factory/packet/cutListCsv';
@@ -69,19 +73,6 @@ export function GateToolbar() {
   const cabinets = useCabinetStore((s) => s.cabinets);
   const activeCabinet = useCabinetStore((s) => s.cabinet);
 
-  /**
-   * Why the gate is refusing, in the user's terms (T8b).
-   * A stale-but-clean verdict is a different problem from a dirty one.
-   */
-  const gateRefusalReason = (gate: ReturnType<typeof getExportGateStatus>): string => {
-    if (!gate.hasRun) return 'run the Safety Gate first';
-    if (gate.blockerCount > 0) {
-      return `${gate.blockerCount} Safety Gate blocker(s) must be resolved`;
-    }
-    if (!gate.fresh) return 'the cabinet changed since the last Safety Gate run';
-    return 'Safety Gate did not pass';
-  };
-
   const handleStateAction = async () => {
     // Re-entry guard (G2): the freeze path awaits a gate run, so a second
     // click during that window would schedule a second validation and a second
@@ -107,7 +98,7 @@ export function GateToolbar() {
       // Read imperatively: the hook value in this closure predates the run.
       const gate = getExportGateStatus();
       if (!gate.canFreeze) {
-        setExportError(`Cannot freeze — ${gateRefusalReason(gate)}.`);
+        setExportError(`Cannot freeze — ${describeGateRefusal(gate)}.`);
         return;
       }
       setExportError(null);
@@ -115,7 +106,7 @@ export function GateToolbar() {
     } else if (specState === 'FROZEN') {
       const gate = getExportGateStatus();
       if (!gate.canRelease) {
-        setExportError(`Cannot release — ${gateRefusalReason(gate)}.`);
+        setExportError(`Cannot release — ${describeGateRefusal(gate)}.`);
         return;
       }
       setExportError(null);
@@ -136,7 +127,7 @@ export function GateToolbar() {
     // consulted it.
     const gate = getExportGateStatus();
     if (!gate.canExport) {
-      setExportError(`Cannot export ${format} — ${gateRefusalReason(gate)}.`);
+      setExportError(`Cannot export ${format} — ${describeGateRefusal(gate)}.`);
       setShowExportMenu(false);
       return;
     }
@@ -382,7 +373,7 @@ export function GateToolbar() {
         </button>
 
         {showExportMenu && gateStatus.canExport && !isExporting && (
-          <div className="absolute top-full right-0 mt-1 w-48 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-50">
+          <div className="absolute top-full right-0 mt-1 w-60 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-50">
             <button
               onClick={() => handleExport('CUT_LIST')}
               disabled={!canExport('CUT_LIST')}
@@ -395,7 +386,16 @@ export function GateToolbar() {
               disabled={!canExport('DXF')}
               className="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-700 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              📐 DXF Files
+              📐 DXF — Engineering Preview
+              {SHADOW_MODE_NOT_FOR_PRODUCTION && (
+                // These sheets carry machining INTENT. No nesting, post, NC,
+                // simulation or first-article evidence travels with them, so
+                // the label has to say so where the click happens — not only
+                // inside the ZIP the operator may never open.
+                <span className="block text-[10px] leading-tight text-amber-500">
+                  {NOT_FOR_PRODUCTION_LABEL} · not a machine program
+                </span>
+              )}
             </button>
             <button
               onClick={() => handleExport('CNC')}

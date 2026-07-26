@@ -39,6 +39,7 @@ vi.mock('../../../core/store/useDrillMapStore', () => {
 
 import { useGateStore } from '../gateStore';
 import {
+  describeGateRefusal,
   getExportGateStatus,
   isExportAllowed,
   isFreezeAllowed,
@@ -212,5 +213,73 @@ describe('T8a — a fresh Safety-Gate PASS is the authority for freeze and expor
     useGateStore.getState().setResult(failingResult(), validated);
     const dirty = getExportGateStatus();
     expect(dirty.passedWhenRun).toBe(false);
+  });
+});
+
+/**
+ * The refusal has to name the RIGHT cause (owner tenet: easy front, rigorous
+ * back — every "no" carries a path forward).
+ *
+ * Found live on 2026-07-26 in the running app: with no drill map generated,
+ * clicking Freeze auto-ran the gate and answered
+ *
+ *   "Cannot freeze — the cabinet changed since the last Safety Gate run."
+ *
+ * Nothing had changed and nothing had ever been validated. All three
+ * validators short-circuit to PASS on a null map, so the verdict is clean,
+ * blockerCount is 0, and freshness is false — which fell into the stale
+ * branch. The user is told to re-run a gate that will keep saying the same
+ * thing forever: a dead end, and a false statement about their cabinet.
+ *
+ * Second problem this pins: the wording lived in TWO places (getBlockReason
+ * here and gateRefusalReason in GateToolbar) which had already drifted apart.
+ * One exported function is now the single source.
+ */
+describe('describeGateRefusal — the refusal names the real cause', () => {
+  beforeEach(() => {
+    useGateStore.getState().reset();
+    setStoreMap(null);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  it('reports hasDrillMap so a surface can tell "nothing to validate" from "stale"', () => {
+    expect(getExportGateStatus().hasDrillMap).toBe(false);
+    setStoreMap(makeMap('present'));
+    expect(getExportGateStatus().hasDrillMap).toBe(true);
+  });
+
+  it('names the MISSING DRILL MAP, not a change that never happened', () => {
+    // Exactly the live sequence: no drill map, gate auto-run, verdict vacuously clean.
+    setStoreMap(null);
+    useGateStore.getState().setResult(passingResult(), null);
+
+    const reason = describeGateRefusal(getExportGateStatus());
+    expect(reason).toMatch(/drill map/i);
+    expect(reason, 'must not blame a change the user never made').not.toMatch(/changed/i);
+  });
+
+  it('still says CHANGED when the cabinet genuinely changed', () => {
+    const validated = makeMap('validated');
+    setStoreMap(validated);
+    useGateStore.getState().setResult(passingResult(), validated);
+    setStoreMap(makeMap('edited'));
+
+    expect(describeGateRefusal(getExportGateStatus())).toMatch(/changed/i);
+  });
+
+  it('prioritises real blockers over freshness wording', () => {
+    const map = makeMap('current');
+    setStoreMap(map);
+    useGateStore.getState().setResult(failingResult(), map);
+
+    expect(describeGateRefusal(getExportGateStatus())).toMatch(/blocker/i);
+  });
+
+  it('says nothing when the gate actually authorizes the action', () => {
+    const map = makeMap('current');
+    setStoreMap(map);
+    useGateStore.getState().setResult(passingResult(), map);
+
+    expect(describeGateRefusal(getExportGateStatus())).toBe('');
   });
 });

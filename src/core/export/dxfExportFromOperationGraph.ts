@@ -29,6 +29,14 @@
  */
 
 import JSZip from 'jszip';
+// ADR-065 Q3 shadow mode — same constants the factory packet uses, so the
+// DXF ZIP and the packet carry one consistent NOT-FOR-PRODUCTION marker.
+import {
+    SHADOW_MODE_NOT_FOR_PRODUCTION,
+    NOT_FOR_PRODUCTION_FILE,
+    NOT_FOR_PRODUCTION_LABEL,
+    NOT_FOR_PRODUCTION_NOTICE,
+} from '../config/shadowMode';
 import { buildOperationGraph, hasBuildErrors } from '../../cnc/mapping/buildOperationGraph';
 import { markPacketAsValidated } from '../../cnc/mapping/g9AssertValidPacket';
 import { getMachineProfile } from '../../cnc/machine';
@@ -569,10 +577,30 @@ export async function downloadDxfZipFromPacket(
         folder.file(panel.filename, panel.content);
     }
 
+    // F-11 / acceptance test 12: the artifact must declare its own status.
+    // The factory packet has carried this notice since ADR-065 Q3
+    // (buildFactoryPacket.ts) while this ZIP — the artifact most likely to
+    // reach a machine — carried nothing. That gap got MORE dangerous once the
+    // projected exporter landed: the sheets used to be obviously unusable, and
+    // now they look production-ready while the governing scrutinize review
+    // still records "Designer -> factory packet -> release path: reject for
+    // production" (2026-07-20 review, section 9). Same notice, same filename
+    // as the packet, so a shop sees one consistent marker.
+    if (SHADOW_MODE_NOT_FOR_PRODUCTION) {
+        folder.file(NOT_FOR_PRODUCTION_FILE, NOT_FOR_PRODUCTION_NOTICE);
+    }
+
     // Add manifest with G10 verification status
     const manifest = {
         generatedAt: new Date().toISOString(),
         machineId: result.machineId,
+        // Machine-readable status so a downstream consumer can refuse this
+        // artifact without parsing prose. These sheets carry machining INTENT;
+        // no nesting, post, NC, simulation or first-article evidence travels
+        // with them, so they are not qualified for execution.
+        notForProduction: SHADOW_MODE_NOT_FOR_PRODUCTION,
+        artifactClass: 'MACHINING_INTENT_NOT_QUALIFIED',
+        notice: `${NOT_FOR_PRODUCTION_LABEL} — see ${NOT_FOR_PRODUCTION_FILE}`,
         totalOperations: result.totalOperations,
         panels: result.panels.map(p => ({
             panelId: p.panelId,
@@ -633,7 +661,9 @@ export async function downloadDxfZipFromPacket(
 
     const link = document.createElement('a');
     link.href = url;
-    link.download = `DXF_${result.machineId}_${Date.now()}.zip`;
+    // A file on a shop PC is read by its name long before anyone opens it.
+    const nfpPrefix = SHADOW_MODE_NOT_FOR_PRODUCTION ? `${NOT_FOR_PRODUCTION_LABEL}_` : '';
+    link.download = `${nfpPrefix}DXF_${result.machineId}_${Date.now()}.zip`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

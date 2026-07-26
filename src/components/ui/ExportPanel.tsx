@@ -32,6 +32,7 @@ import { useFactoryPacket, PacketPreviewModal } from '../../factory/packet';
 import { NestingPanel } from '../nesting/NestingPanel';
 import { useNestingStore } from '../../core/store/useNestingStore';
 import type { NestingSheet, CutListRow } from '../../core/export/monolith/monolithExportContext';
+import { SHADOW_MODE_NOT_FOR_PRODUCTION, NOT_FOR_PRODUCTION_LABEL } from '../../core/config/shadowMode';
 
 // Validation types
 interface ValidationResult {
@@ -1140,7 +1141,7 @@ export function ExportPanel({ gateStatus: _gateStatus, onGateChange: _onGateChan
       </Section>
 
       {/* DXF Export Options (T008 enhanced) */}
-      <Section title="DXF Export" status={gateStatus === 'FROZEN' || gateStatus === 'RELEASED' ? 'ok' : 'warning'}>
+      <Section title="DXF — Engineering Preview" status={gateStatus === 'FROZEN' || gateStatus === 'RELEASED' ? 'ok' : 'warning'}>
         <div className="space-y-4">
           {/* Machine Profile Selector */}
           <MachineProfileSelector
@@ -1171,8 +1172,19 @@ export function ExportPanel({ gateStatus: _gateStatus, onGateChange: _onGateChan
               }`}
           >
             <span className="text-lg">📐</span>
-            {isDxfExporting ? 'Exporting...' : 'Generate DXF Files'}
+            {isDxfExporting ? 'Exporting...' : 'Generate DXF (Engineering Preview)'}
           </button>
+
+          {SHADOW_MODE_NOT_FOR_PRODUCTION && (
+            // The honest name of what this produces. These sheets carry
+            // machining INTENT — the nesting, post, NC, simulation and
+            // first-article evidence a machine program needs do not travel
+            // with them. Saying so at the button costs one line; discovering
+            // it at the machine costs a panel.
+            <p className="text-[11px] leading-snug text-amber-400/90 text-center">
+              {NOT_FOR_PRODUCTION_LABEL} — machining intent for review, not a machine program.
+            </p>
+          )}
 
           {gateStatus === 'DRAFT' && (
             <p className="text-xs text-amber-400 text-center">
