@@ -2044,6 +2044,10 @@ export function generateMinifixDrillMap(
     const unused = [...synth.bores];
     let applied = 0;
     let missed = 0;
+    // ตู้ flush INSET (store จริง: แผ่นนอน = W-2T) รู dowel สองฝั่งของ joint
+    // อยู่พิกัดโลกเดียวกัน → ต้องแยกด้วย panel class ไม่ใช่ระยะอย่างเดียว
+    const roleById = new Map(cabinet.panels.map((p) => [p.id, p.role]));
+    const appliedByKindPanel = new Map<string, number>();
     const CORNER_SET = new Set(['TOP_LEFT', 'TOP_RIGHT', 'BOTTOM_LEFT', 'BOTTOM_RIGHT']);
     for (const pts of panelPointsMap.values()) {
       for (const pt of pts) {
@@ -2052,12 +2056,17 @@ export function generateMinifixDrillMap(
         if (pt.pairId?.startsWith('pair-B-')) continue; // B-run = ระบบแยก นอก corner scope
         const kind = kindOf[pt.purpose];
         if (!kind) continue;
+        const ptRole = pt.connectedPanelRole ?? roleById.get(pt.panelId);
+        const ptClass: 'VERTICAL' | 'HORIZONTAL' | null =
+          ptRole === 'LEFT_SIDE' || ptRole === 'RIGHT_SIDE' ? 'VERTICAL' :
+          ptRole === 'TOP' || ptRole === 'BOTTOM' ? 'HORIZONTAL' : null;
         let bi = -1;
         let best = Infinity;
         for (let i = 0; i < unused.length; i++) {
           const b = unused[i];
           if (b.kind !== kind || b.corner !== pt.cornerType) continue;
           if (Math.abs(b.sys32Z - (pt.depthPosition ?? Number.NaN)) > 0.01) continue;
+          if (ptClass !== null && b.panel !== ptClass) continue;
           const d = Math.hypot(
             b.position[0] - pt.position[0],
             b.position[1] - pt.position[1],
@@ -2072,15 +2081,18 @@ export function generateMinifixDrillMap(
           pt.diameter = b.diameter;
           pt.depth = b.depth;
           applied += 1;
+          const kp = `${kind}:${b.panel}`;
+          appliedByKindPanel.set(kp, (appliedByKindPanel.get(kp) ?? 0) + 1);
         } else {
           missed += 1;
         }
       }
     }
     if (missed > 0 || unused.length > 0) {
+      const breakdown = [...appliedByKindPanel].map(([kp, n]) => `${kp}=${n}`).join(' ') || 'none';
       console.error(
         `[DrillMap] corner engine handover mismatch: missed=${missed} unusedSynth=${unused.length} ` +
-        `(applied=${applied}) — จุดที่ไม่ match คง legacy geometry (fail-visible)`,
+        `(applied=${applied}; ${breakdown}) — จุดที่ไม่ match คง legacy geometry (fail-visible)`,
       );
     }
   }
