@@ -144,12 +144,20 @@ function FindingCard({ finding, isSelected, onFocus, onApplyFix, onCopy }: Findi
  * Run Gate validation on the current drill map and update the store.
  * Converts validateMinifixGate result to GateResult format.
  */
-function runGateValidation(): void {
+export function runGateValidation(): Promise<void> {
   const { setRunning, setResult } = useGateStore.getState();
   const drillMap = useDrillMapStore.getState().drillMap;
 
   // Set running state
   setRunning(true);
+
+  // T8b: awaitable so a surface (e.g. the Freeze button) can auto-run the gate
+  // and then act on the verdict. Resolves after setResult/setRunning settle —
+  // never rejects, because the catch path already records the failure state.
+  let settle: () => void = () => {};
+  const done = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
 
   // DEBUG: version marker to ensure HMR reloads this code
   console.log('[SafetyPanel v2] Starting validation with debug logging...');
@@ -274,8 +282,12 @@ function runGateValidation(): void {
     } catch (error) {
       console.error('[SafetyPanel] Gate validation error:', error);
       setRunning(false);
+    } finally {
+      settle();
     }
   }, 50);
+
+  return done;
 }
 
 export function SafetyPanel() {

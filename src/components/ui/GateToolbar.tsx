@@ -29,6 +29,9 @@ import {
   exportDxfFromPacket,
   downloadDxfZipFromPacket,
 } from '../../core/export/dxfExportFromOperationGraph';
+// T8b: Safety-Gate authority for this toolbar's freeze/release/export actions.
+import { getExportGateStatus } from '../../gate/ui/useExportGate';
+import { runGateValidation } from '../../gate/ui/SafetyPanel';
 import { buildCutListData } from '../../factory/packet/builders';
 import { downloadCutListCsv } from '../../factory/packet/cutListCsv';
 
@@ -65,10 +68,43 @@ export function GateToolbar() {
   const cabinets = useCabinetStore((s) => s.cabinets);
   const activeCabinet = useCabinetStore((s) => s.cabinet);
 
-  const handleStateAction = () => {
+  /**
+   * Why the gate is refusing, in the user's terms (T8b).
+   * A stale-but-clean verdict is a different problem from a dirty one.
+   */
+  const gateRefusalReason = (gate: ReturnType<typeof getExportGateStatus>): string => {
+    if (!gate.hasRun) return 'run the Safety Gate first';
+    if (gate.blockerCount > 0) {
+      return `${gate.blockerCount} Safety Gate blocker(s) must be resolved`;
+    }
+    if (!gate.fresh) return 'the cabinet changed since the last Safety Gate run';
+    return 'Safety Gate did not pass';
+  };
+
+  const handleStateAction = async () => {
     if (specState === 'DRAFT') {
+      // Owner ruling Q2 (O2+O3): freeze requires a FRESH Safety-Gate PASS.
+      // Auto-run when stale so the user is not sent hunting for the Safety tab
+      // — the friction is the gate's verdict, not the gate's location.
+      if (!getExportGateStatus().fresh) {
+        setExportError(null);
+        await runGateValidation();
+      }
+      // Read imperatively: the hook value in this closure predates the run.
+      const gate = getExportGateStatus();
+      if (!gate.canFreeze) {
+        setExportError(`Cannot freeze — ${gateRefusalReason(gate)}.`);
+        return;
+      }
+      setExportError(null);
       freezeSpec();
     } else if (specState === 'FROZEN') {
+      const gate = getExportGateStatus();
+      if (!gate.canRelease) {
+        setExportError(`Cannot release — ${gateRefusalReason(gate)}.`);
+        return;
+      }
+      setExportError(null);
       releaseSpec();
     }
   };
@@ -76,6 +112,17 @@ export function GateToolbar() {
   const handleExport = useCallback(async (format: 'CUT_LIST' | 'DXF' | 'CNC') => {
     if (!canExport(format)) {
       setExportError(`Cannot export ${format}. Check gate status.`);
+      setShowExportMenu(false);
+      return;
+    }
+
+    // Owner ruling Q2 (O2+O3): nothing leaves this toolbar without a FRESH
+    // Safety-Gate PASS. Proven necessary 2026-07-25 — DXF exported from here
+    // while the Safety Gate on screen read FAILED, because this surface never
+    // consulted it.
+    const gate = getExportGateStatus();
+    if (!gate.canExport) {
+      setExportError(`Cannot export ${format} — ${gateRefusalReason(gate)}.`);
       setShowExportMenu(false);
       return;
     }

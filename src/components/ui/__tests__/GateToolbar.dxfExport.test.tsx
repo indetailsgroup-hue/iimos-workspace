@@ -76,11 +76,28 @@ const h = vi.hoisted(() => {
     contentHash: 'h',
     totalBytes: 0,
   };
+  // Safety-Gate verdict seen by the toolbar (T8b). Default: fresh PASS, so the
+  // packet-path tests below exercise export rather than the gate refusal.
+  const freshPass = {
+    canFreeze: true, canRelease: true, canExport: true,
+    hasRun: true, passedWhenRun: true, fresh: true,
+    isRunning: false, blockerCount: 0, warningCount: 0, blockers: [], result: null,
+  };
   return {
     cabinetA,
     cabinetB,
     previewFixture,
     cabState: { cabinets: [cabinetA] as unknown[], cabinet: cabinetA as unknown },
+    freshPass,
+    gateState: { ...freshPass } as Record<string, unknown>,
+    gateRuns: { count: 0 },
+    specState: { value: 'FROZEN' as 'DRAFT' | 'FROZEN' | 'RELEASED' },
+    spies: { freezeSpec: vi.fn(), releaseSpec: vi.fn() },
+    // Dimensional/spec gate (useSpecStore) — separate from the Safety Gate.
+    // It controls whether the Freeze button is enabled at all.
+    specGate: {
+      value: { canFreeze: false, canRelease: true, canExport: true, blockers: [] as string[] },
+    },
   };
 });
 
@@ -88,14 +105,14 @@ const h = vi.hoisted(() => {
 vi.mock('../../../core/store/useSpecStore', () => ({
   useSpecStore: vi.fn((sel: (s: Record<string, unknown>) => unknown) =>
     sel({
-      freezeSpec: vi.fn(),
-      releaseSpec: vi.fn(),
+      freezeSpec: h.spies.freezeSpec,
+      releaseSpec: h.spies.releaseSpec,
       unfreezeSpec: vi.fn(),
       runValidation: vi.fn(),
       canExport: () => true,
     })),
-  useSpecState: () => 'FROZEN',
-  useGateStatus: () => ({ canFreeze: false, canRelease: true, canExport: true, blockers: [] }),
+  useSpecState: () => h.specState.value,
+  useGateStatus: () => h.specGate.value,
   useValidation: () => null,
   useMachineProfile: () => ({
     id: 'kdt-nesting', name: 'KDT KN-2408', maxWidth: 2440, maxHeight: 1220, cncPresetId: 'KDT',
@@ -126,6 +143,20 @@ vi.mock('../../../factory/packet/builders', () => ({
 }));
 vi.mock('../../../factory/packet/cutListCsv', () => ({
   downloadCutListCsv: vi.fn(),
+}));
+
+// ─── Safety-Gate authority (T8b) ───
+// The toolbar reads the verdict imperatively and can auto-run the gate; both
+// are mocked so a test can put the gate in any state without a drill map.
+vi.mock('../../../gate/ui/useExportGate', () => ({
+  getExportGateStatus: () => h.gateState,
+}));
+vi.mock('../../../gate/ui/SafetyPanel', () => ({
+  runGateValidation: vi.fn(async () => {
+    h.gateRuns.count += 1;
+    // A real run makes the verdict fresh for the current map.
+    h.gateState = { ...h.gateState, ...h.freshPass };
+  }),
 }));
 
 // ─── Packet DXF path (T3) ───
@@ -171,6 +202,9 @@ describe('GateToolbar DXF menu item — packet path (Q1=A: quickDxf retired from
     vi.clearAllMocks();
     h.cabState.cabinets = [h.cabinetA];
     h.cabState.cabinet = h.cabinetA;
+    h.gateState = { ...h.freshPass };
+    h.gateRuns.count = 0;
+    h.specGate.value = { canFreeze: false, canRelease: true, canExport: true, blockers: [] };
     mockPreview.mockResolvedValue(h.previewFixture as never);
     mockExport.mockResolvedValue(OK_RESULT as never);
     mockDownload.mockResolvedValue(undefined);
@@ -266,5 +300,109 @@ describe('GateToolbar DXF menu item — packet path (Q1=A: quickDxf retired from
     expect(await screen.findByText(/DXF export failed: Packet has no drill map/)).toBeTruthy();
     expect(mockDownload).not.toHaveBeenCalled();
     expect(mockQuick).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// T8b — Safety-Gate authority on this toolbar (owner ruling Q2 = O2+O3)
+//
+// Proven live 2026-07-25: DXF exported from this toolbar while the Safety Gate
+// on screen read FAILED, because the toolbar never consulted it. These pin the
+// refusal, the reason the user is given, and the auto-run on Freeze.
+// ============================================================================
+describe('GateToolbar — freeze/export require a FRESH Safety-Gate PASS (T8b)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.cabState.cabinets = [h.cabinetA];
+    h.cabState.cabinet = h.cabinetA;
+    h.gateState = { ...h.freshPass };
+    h.gateRuns.count = 0;
+    h.specGate.value = { canFreeze: false, canRelease: true, canExport: true, blockers: [] };
+    h.specState.value = 'FROZEN';
+    mockPreview.mockResolvedValue(h.previewFixture as never);
+    mockExport.mockResolvedValue(OK_RESULT as never);
+    mockDownload.mockResolvedValue(undefined);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('REFUSES DXF export on a stale verdict and says the cabinet changed (not "fix blockers")', async () => {
+    // The run was clean, but the user edited the cabinet afterwards.
+    h.gateState = {
+      ...h.freshPass,
+      fresh: false,
+      canFreeze: false, canRelease: false, canExport: false,
+      passedWhenRun: true,
+    };
+
+    render(<GateToolbar />);
+    await clickDxfMenuItem();
+
+    expect(await screen.findByText(/cabinet changed since the last Safety Gate run/i)).toBeTruthy();
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockExport).not.toHaveBeenCalled();
+    expect(mockQuick).not.toHaveBeenCalled();
+  });
+
+  it('REFUSES DXF export when the fresh verdict has blockers, and names the count', async () => {
+    h.gateState = {
+      ...h.freshPass,
+      canFreeze: false, canRelease: false, canExport: false,
+      passedWhenRun: false,
+      blockerCount: 3,
+    };
+
+    render(<GateToolbar />);
+    await clickDxfMenuItem();
+
+    expect(await screen.findByText(/3 Safety Gate blocker\(s\) must be resolved/i)).toBeTruthy();
+    expect(mockDownload).not.toHaveBeenCalled();
+  });
+
+  it('REFUSES export when the gate has never been run', async () => {
+    h.gateState = {
+      ...h.freshPass,
+      hasRun: false, fresh: false, passedWhenRun: false,
+      canFreeze: false, canRelease: false, canExport: false,
+    };
+
+    render(<GateToolbar />);
+    await clickDxfMenuItem();
+
+    expect(await screen.findByText(/run the Safety Gate first/i)).toBeTruthy();
+    expect(mockDownload).not.toHaveBeenCalled();
+  });
+
+  it('AUTO-RUNS the gate when Freeze is clicked on a stale verdict, then freezes on a fresh PASS', async () => {
+    h.specState.value = 'DRAFT';
+    // Dimensional validation passes — the Freeze button is enabled; the Safety
+    // Gate is the thing that is stale.
+    h.specGate.value = { canFreeze: true, canRelease: true, canExport: true, blockers: [] };
+    h.gateState = {
+      ...h.freshPass,
+      fresh: false, canFreeze: false, passedWhenRun: true,
+    };
+
+    render(<GateToolbar />);
+    fireEvent.click(screen.getByRole('button', { name: /Freeze/i }));
+
+    await waitFor(() => expect(h.gateRuns.count).toBe(1));
+    await waitFor(() => expect(h.spies.freezeSpec).toHaveBeenCalledTimes(1));
+  });
+
+  it('does NOT auto-run when the verdict is already fresh — and freezes directly', async () => {
+    h.specState.value = 'DRAFT';
+    h.specGate.value = { canFreeze: true, canRelease: true, canExport: true, blockers: [] };
+
+    render(<GateToolbar />);
+    fireEvent.click(screen.getByRole('button', { name: /Freeze/i }));
+
+    await waitFor(() => expect(h.spies.freezeSpec).toHaveBeenCalledTimes(1));
+    expect(h.gateRuns.count).toBe(0);
   });
 });

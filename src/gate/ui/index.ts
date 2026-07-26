@@ -48,7 +48,7 @@ export type { ExportGateStatus, ExportGateActions } from './useExportGate';
 
 // UI Components
 export { GateStatusIndicator } from './GateStatusIndicator';
-export { SafetyPanel } from './SafetyPanel';
+export { SafetyPanel, runGateValidation } from './SafetyPanel';
 export { RightInspectorSafetySection } from './RightInspectorSafetySection';
 export { GateSceneHighlights } from './GateSceneHighlights';
 export { GateBlockerModal } from './GateBlockerModal';

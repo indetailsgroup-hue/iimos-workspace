@@ -513,12 +513,37 @@ export async function exportDxfFromPacket(
  */
 export async function downloadDxfZipFromPacket(
     packet: FactoryPacket,
-    options: DxfExportOptions = {}
+    options: DxfExportOptions = {},
+    /**
+     * Fail-closed controls (T8b, from the T4 review).
+     *
+     * Before this, the wrapper threw only on `!ok` and never inspected
+     * `skipped`, so the "never deliver sheets with undrawn drill points"
+     * guarantee lived entirely in the two UI callers — a third caller would
+     * have shipped bore-less DXF silently. The guarantee now lives here.
+     *
+     * `preValidatedResult` also lets a caller that already inspected the
+     * export hand the result back instead of paying for a second identical
+     * run (the wrapper used to recompute it internally).
+     */
+    guards: {
+        failOnSkipped?: boolean;
+        preValidatedResult?: DxfExportResult;
+    } = {}
 ): Promise<void> {
-    const result = await exportDxfFromPacket(packet, options);
+    const { failOnSkipped = true, preValidatedResult } = guards;
+    const result = preValidatedResult ?? (await exportDxfFromPacket(packet, options));
 
     if (!result.ok) {
         throw new Error(result.error);
+    }
+
+    if (failOnSkipped && result.skipped && result.skipped.length > 0) {
+        const first = result.skipped[0];
+        throw new Error(
+            `DXF BLOCKED: ${result.skipped.length} drill point(s) could not be drawn ` +
+            `(${first.reason}${first.panelId ? ` on ${first.panelId}` : ''}). No files delivered.`
+        );
     }
 
     // Create ZIP

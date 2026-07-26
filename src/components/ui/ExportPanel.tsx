@@ -575,6 +575,7 @@ function PanelRow({
     >
       <input
         type="checkbox"
+        data-testid={`panel-select-${panel.id}`}
         checked={isSelected}
         onChange={() => onToggle(panel.id)}
         disabled={disabled}
