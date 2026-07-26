@@ -185,7 +185,11 @@ export async function exportDxfFromPacket(
     options: DxfExportOptions = {}
 ): Promise<DxfExportFromPacketResult> {
     const {
-        machineId = 'KDT-6000',
+        // T4: default must be a REAL preset. 'KDT-6000' is not in the machine
+        // preset table (KDT/BIESSE/HOMAG/SCM/GENERIC), so the old default made
+        // every no-options call die on getMachineProfile (fail-fast trap,
+        // T3 reviewer note). Callers with a machine selection still pass it.
+        machineId = 'GENERIC',
         selectedPanelIds,
         onPanelProgress,
         panelPlacements,

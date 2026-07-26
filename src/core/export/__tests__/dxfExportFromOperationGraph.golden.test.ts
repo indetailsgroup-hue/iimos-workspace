@@ -257,12 +257,20 @@ describe('DXF golden — default flush INSET cabinet 600×720×560 (packet → p
     }
   });
 
-  it('G3: every sheet draws the CUT_OUT outline at its panel draw dims and EVERY circle is manufacturable inside it (world-coordinate defect gone)', () => {
+  it('G3: every sheet draws the PANEL_OUTLINE_FINISH outline (Q7=A: no shop flow saws from this DXF) at its panel draw dims and EVERY circle is manufacturable inside it (world-coordinate defect gone)', () => {
     for (const [role, [w, h]] of Object.entries(DIMS)) {
       const sheet = ctx.byRole.get(role);
       expect(sheet, `sheet ${role}`).toBeDefined();
-      const outlines = sheet!.parsed.polylines.filter((pl) => pl.layer === 'CUT_OUT');
-      expect(outlines.length, `${role} has exactly one CUT_OUT outline`).toBe(1);
+      // Q7=A rename: the outline is a FINISH reference frame, not a saw path.
+      // The legacy CUT_OUT name (kept in the dev-preview cabinetToDxf tool,
+      // where the outline IS cut dims) must not appear on packet-path sheets.
+      const outlines = sheet!.parsed.polylines.filter((pl) => pl.layer === 'PANEL_OUTLINE_FINISH');
+      expect(outlines.length, `${role} has exactly one PANEL_OUTLINE_FINISH outline`).toBe(1);
+      expect(
+        sheet!.parsed.polylines.filter((pl) => pl.layer === 'CUT_OUT'),
+        `${role} must carry NO CUT_OUT layer (Q7=A)`,
+      ).toEqual([]);
+      expect(sheet!.content, `${role} layer table has no CUT_OUT`).not.toContain('CUT_OUT');
       const xs = outlines[0].pts.map((p) => p.x), ys = outlines[0].pts.map((p) => p.y);
       expect(Math.min(...xs), `${role} outline min x`).toBeCloseTo(0, 3);
       expect(Math.max(...xs), `${role} outline max x`).toBeCloseTo(w, 3);

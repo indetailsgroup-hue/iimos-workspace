@@ -18,8 +18,14 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useCabinet } from '../../core/store/useCabinetStore';
 import { useSpecStore, useSpecState, MACHINE_PROFILES, useMachineProfile } from '../../core/store/useSpecStore';
-import { quickDxfExport } from '../../core/export/exportPipeline';
-import { downloadDxfZipFromPacket, canExportDxfFromOperationGraph } from '../../core/export/dxfExportFromOperationGraph';
+// T4 (Q1=A): quickDxfExport import removed — the legacy Cabinet-geometry
+// fallback is retired from user flows (it silently degraded to
+// non-manufacturable dev-preview sheets). Packet path or visible failure.
+import {
+  exportDxfFromPacket,
+  downloadDxfZipFromPacket,
+  canExportDxfFromOperationGraph,
+} from '../../core/export/dxfExportFromOperationGraph';
 import type { CabinetPanel } from '../../core/types/Cabinet';
 import { useExportGate, GateBlockerModal } from '../../gate/ui';
 import { useFactoryPacket, PacketPreviewModal } from '../../factory/packet';
@@ -902,59 +908,73 @@ export function ExportPanel({ gateStatus: _gateStatus, onGateChange: _onGateChan
             const cncMachineId = selectedProfile?.cncPresetId || 'GENERIC';
 
             if (!availability.available) {
-              // Fallback to legacy export if OperationGraph not available
-              console.warn('[DXF Export] OperationGraph not available, using legacy Cabinet export:', availability.reason);
-              await quickDxfExport(cabinet, {
-                includeSystem32: true,
-                includeBackGroove: true,
-                includeHingeCups: true,
-                includeConfirmat: true,
-                includeDimensions: true,
-                includePartInfo: true,
-                includeEdgeBanding: true,
-                machineProfile: selectedProfile,
-                selectedPanelIds: selectedPanels.map((p: CabinetPanel) => p.id),
-                onPanelProgress: (panelId: string, panelName: string, index: number, total: number) => {
-                  setDxfProgress({ current: index + 1, total, name: panelName });
-                  setPanelStates((prev) => {
-                    const newMap = new Map(prev);
-                    const state = newMap.get(panelId);
-                    if (state) {
-                      newMap.set(panelId, { ...state, status: 'done' });
-                    }
-                    return newMap;
-                  });
-                },
-              });
-            } else {
-              // Step 3: Export DXF via OperationGraph (source of truth - T008 compliant)
-              const packet = {
-                manifest: preview.manifest,
-                drillMap: preview.parsed.drillmap!,
-                connectors: preview.parsed.connectorsMinifix!,
-                cutList: preview.parsed.cutlist!,
-                gateResult: preview.parsed.gateResult!,
-              };
-
-              await downloadDxfZipFromPacket(packet, {
-                machineId: cncMachineId,
-                selectedPanelIds: selectedPanels.map((p: CabinetPanel) => p.id),
-                includeMetadata: true,
-                onPanelProgress: (panelId: string, panelName: string, index: number, total: number) => {
-                  setDxfProgress({ current: index, total, name: panelName });
-
-                  // Update individual panel status
-                  setPanelStates((prev) => {
-                    const newMap = new Map(prev);
-                    const state = newMap.get(panelId);
-                    if (state) {
-                      newMap.set(panelId, { ...state, status: 'done' });
-                    }
-                    return newMap;
-                  });
-                },
-              });
+              // T4 HARD-FAIL (Q1=A): the legacy quickDxfExport fallback is
+              // RETIRED — it silently degraded to non-manufacturable
+              // Cabinet-geometry sheets on a console.warn. Fail closed and
+              // show the packet error to the user instead.
+              throw new Error(
+                `DXF export unavailable: ${availability.reason}. ` +
+                `No files delivered — the legacy geometry export is retired from user flows (dev-only).`
+              );
             }
+
+            // Step 3: Export DXF via OperationGraph (source of truth - T008 compliant)
+            const packet = {
+              manifest: preview.manifest,
+              drillMap: preview.parsed.drillmap!,
+              connectors: preview.parsed.connectorsMinifix!,
+              cutList: preview.parsed.cutlist!,
+              gateResult: preview.parsed.gateResult!,
+            };
+
+            // PLACEMENT CONTRACT (T3): the packet drill map has role+dims but
+            // NO world position — supply CabinetPanel.position (panel CENTER)
+            // for ALL panels (not only selected ones: placements feed the
+            // projection stage, which runs over the whole drill map before
+            // the selected-sheet filter; missing placements become skips).
+            const panelPlacements = (cabinet.panels ?? []).map((p: CabinetPanel) => ({
+              panelId: p.id,
+              position: p.position,
+            }));
+
+            const dxfOptions = {
+              machineId: cncMachineId,
+              selectedPanelIds: selectedPanels.map((p: CabinetPanel) => p.id),
+              panelPlacements,
+              includeMetadata: true,
+            };
+
+            // Inspect the export result BEFORE delivering anything.
+            // T8 seam: freeze/gate freshness re-checks slot in HERE.
+            const dxfResult = await exportDxfFromPacket(packet, dxfOptions);
+            if (!dxfResult.ok) {
+              throw new Error(`DXF export failed: ${dxfResult.error}`);
+            }
+            if (dxfResult.skipped.length > 0) {
+              // FAIL-CLOSED (S0): never silently deliver bore-less sheets.
+              console.error('[DXF Export] blocked — undrawn drill points:', dxfResult.skipped);
+              throw new Error(
+                `DXF BLOCKED: ${dxfResult.skipped.length} drill point(s) could not be drawn ` +
+                `(${dxfResult.skipped[0].reason}). No files delivered.`
+              );
+            }
+
+            await downloadDxfZipFromPacket(packet, {
+              ...dxfOptions,
+              onPanelProgress: (panelId: string, panelName: string, index: number, total: number) => {
+                setDxfProgress({ current: index, total, name: panelName });
+
+                // Update individual panel status
+                setPanelStates((prev) => {
+                  const newMap = new Map(prev);
+                  const state = newMap.get(panelId);
+                  if (state) {
+                    newMap.set(panelId, { ...state, status: 'done' });
+                  }
+                  return newMap;
+                });
+              },
+            });
 
             // Mark all selected panels as done
             setPanelStates((prev) => {

@@ -33,6 +33,7 @@ import {
   HINGE_PARAMS,
 } from '../types/Production';
 import { generatePanelDXF, downloadDXF, DXFGeneratorOptions } from './DXFGenerator';
+import { getCoreThickness } from '../materials/materialThickness';
 import {
   type MinifixHousingType,
   type ConnectingBoltType,
@@ -742,7 +743,12 @@ export function cabinetPanelToProduction(
     cutDim: {
       w: panel.computed.cutWidth,
       h: panel.computed.cutHeight,
-      t: coreThickness,
+      // T4 label truth (fix/dxf-truth-chain): state the PANEL'S OWN core
+      // material thickness (Truth Module), not the option-level default —
+      // finishDim.t was already per-panel (realThickness) while this lied
+      // for any panel whose core ≠ the cabinet default. Falls back to the
+      // option-level value only when the registry does not know the id.
+      t: getCoreThickness(panel.coreMaterialId) || coreThickness,
     },
 
     edges,

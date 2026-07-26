@@ -506,9 +506,15 @@ export function operationGraphToDxf(
 export const PANEL_CUT_SIZE_STAMP =
     'panel cut size (finish - edge band, no premill) — formula-reference §3, D-2 ruling 2026-07-26';
 
-/** Legacy cut-drawing layer colors (DXFGenerator.ts:109-119 convention). */
+/**
+ * Cut-drawing layer colors (DXFGenerator.ts:109-119 legacy palette, with the
+ * outline layer RENAMED per owner ruling Q7=A: no shop flow saws from this
+ * DXF — the outline is the FINISH reference frame bores are measured from,
+ * not a saw path, so the legacy CUT_OUT name misstated its meaning here.
+ * (cabinetToDxf/DXFGenerator keep CUT_OUT: there the outline IS cut dims.)
+ */
 const PROJECTED_LAYER_COLORS = {
-    CUT_OUT: 7,     // White - cutting path
+    PANEL_OUTLINE_FINISH: 7,  // White - finish-frame outline (Q7=A, NOT a saw path)
     DRILL_V: 1,     // Red - vertical (face) drilling
     DRILL_H: 3,     // Green - horizontal (edge) drilling
     ANNOTATION: 8,  // Grey
@@ -591,7 +597,7 @@ export function projectedPanelToDxf(
     const h = projection.drawHeight;
 
     // ── Layer table ──
-    const layers = new Set<string>(['CUT_OUT']);
+    const layers = new Set<string>(['PANEL_OUTLINE_FINISH']);
     for (const bore of projection.bores) layers.add(bore.layerHint);
     if (includeAnnotations || includeMetadata) layers.add('ANNOTATION');
     const hasEdgeBanding = includeEdgeBanding && edgeBanding &&
@@ -601,7 +607,7 @@ export function projectedPanelToDxf(
     let dxf = DXF_HEADER;
     for (const layer of layers) {
         let color: number = PROJECTED_LAYER_COLORS.ANNOTATION;
-        if (layer === 'CUT_OUT') color = PROJECTED_LAYER_COLORS.CUT_OUT;
+        if (layer === 'PANEL_OUTLINE_FINISH') color = PROJECTED_LAYER_COLORS.PANEL_OUTLINE_FINISH;
         else if (layer.startsWith('DRILL_V')) color = PROJECTED_LAYER_COLORS.DRILL_V;
         else if (layer.startsWith('DRILL_H')) color = PROJECTED_LAYER_COLORS.DRILL_H;
         else if (layer === 'EDGE_BAND') color = PROJECTED_LAYER_COLORS.EDGE_BAND;
@@ -609,8 +615,9 @@ export function projectedPanelToDxf(
     }
     dxf += DXF_TABLES_END;
 
-    // ── CUT_OUT outline at the panel draw dims (finish frame, origin bottom-left) ──
-    dxf += dxfRectangle(0, 0, w, h, 'CUT_OUT');
+    // ── PANEL_OUTLINE_FINISH outline at the panel draw dims (finish frame,
+    // origin bottom-left; Q7=A — a reference frame, not a saw path) ──
+    dxf += dxfRectangle(0, 0, w, h, 'PANEL_OUTLINE_FINISH');
 
     // ── Bores: FINAL drawing coordinates verbatim (no extra mirror here) ──
     for (const bore of projection.bores) {

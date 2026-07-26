@@ -346,9 +346,17 @@ describe('exportDxfFromPacket', () => {
             expect(result.ok).toBe(true);
             if (result.ok) {
                 expect(result.panels).toHaveLength(1);
-                expect(result.machineId).toBe('KDT-6000');
+                expect(result.machineId).toBe('GENERIC');
                 expect(result.totalOperations).toBeGreaterThanOrEqual(0);
             }
+        });
+
+        // T4: default machine must be a REAL preset — 'KDT-6000' is not in the
+        // preset table, so the old default made the no-options call fail-fast
+        // on getMachineProfile (T3 reviewer note).
+        it('defaults machineId to GENERIC (a real preset) when no machineId is given', async () => {
+            await exportDxfFromPacket(createMockFactoryPacket());
+            expect(mockGetMachineProfile).toHaveBeenCalledWith('GENERIC');
         });
 
         it('generates correct filename from panel role', async () => {

@@ -18,8 +18,17 @@ import {
   SpecState
 } from '../../core/store/useSpecStore';
 import { useCabinetStore } from '../../core/store/useCabinetStore';
-import { quickDxfExport, quickDxfExportAll } from '../../core/export/exportPipeline';
-import { generateFactoryPacketFromStores } from '../../factory/packet';
+// T4 (Q1=A): quickDxfExport/quickDxfExportAll are RETIRED from user paths —
+// they draw from Cabinet geometry (dev-preview, G10-quarantined) and produced
+// the non-manufacturable Ø5-only sheets. User DXF goes through the packet path.
+import {
+  generateFactoryPacketFromStores,
+  generateFactoryPacketPreviewFromStores,
+} from '../../factory/packet';
+import {
+  exportDxfFromPacket,
+  downloadDxfZipFromPacket,
+} from '../../core/export/dxfExportFromOperationGraph';
 import { buildCutListData } from '../../factory/packet/builders';
 import { downloadCutListCsv } from '../../factory/packet/cutListCsv';
 
@@ -94,29 +103,78 @@ export function GateToolbar() {
         }
 
         case 'DXF': {
-          // Export DXF files for all cabinets or active cabinet
-          if (cabinets.length > 1) {
-            await quickDxfExportAll(cabinets, {
-              includeSystem32: true,
-              includeBackGroove: true,
-              includeHingeCups: true,
-              includeConfirmat: true,
-              includeDimensions: true,
-              includePartInfo: true,
-              machineProfile: machine,
-            });
-          } else if (activeCabinet) {
-            await quickDxfExport(activeCabinet, {
-              includeSystem32: true,
-              includeBackGroove: true,
-              includeHingeCups: true,
-              includeConfirmat: true,
-              includeDimensions: true,
-              includePartInfo: true,
-              machineProfile: machine,
-            });
+          // T4 (fix/dxf-truth-chain, Q1=A): user-facing DXF uses the PACKET
+          // path (projected manufacturable per-panel sheets, T3). The legacy
+          // quickDxfExport stays dev-only — it drew non-manufacturable sheets.
+          const cabinetsForExport =
+            cabinets.length > 0 ? cabinets : activeCabinet ? [activeCabinet] : [];
+          if (cabinetsForExport.length === 0) {
+            setExportError('No cabinet to export');
+            break;
           }
-          console.log('[GateToolbar] DXF export completed');
+
+          // SCOPE (S0: no silent narrowing): the store drill map — the
+          // packet's bore source — is generated from the ACTIVE cabinet only
+          // (Cabinet3D.tsx:1352 generateMinifixDrillMap(activeCabinetFromArray)),
+          // so a multi-cabinet project gets sheets for the active cabinet
+          // only. Surface that VISIBLY instead of narrowing in silence.
+          if (cabinetsForExport.length > 1) {
+            setExportError(
+              `DXF scope: this ZIP contains the ACTIVE cabinet only — ` +
+              `${cabinetsForExport.length - 1} other cabinet(s) are NOT included ` +
+              `(drill map covers the active cabinet). Select each cabinet and export it separately.`
+            );
+          }
+
+          const preview = await generateFactoryPacketPreviewFromStores();
+          const packet = {
+            manifest: preview.manifest,
+            drillMap: preview.parsed.drillmap!,
+            connectors: preview.parsed.connectorsMinifix!,
+            cutList: preview.parsed.cutlist!,
+            gateResult: preview.parsed.gateResult!,
+          };
+
+          // PLACEMENT CONTRACT (T3): the packet drill map has role+dims but
+          // NO world position — supply CabinetPanel.position (panel CENTER)
+          // for every store panel so the projection can build local frames.
+          const panelPlacements = cabinetsForExport.flatMap((cab) =>
+            (cab.panels ?? []).map((p) => ({
+              panelId: p.id,
+              position: p.position,
+            }))
+          );
+
+          const cncMachineId = machine?.cncPresetId || 'GENERIC';
+          const dxfOptions = {
+            machineId: cncMachineId,
+            panelPlacements,
+            includeMetadata: true,
+          };
+
+          // Inspect the export result BEFORE delivering anything (fail-closed).
+          // T8 seam: gate/freshness checks (frozen-spec hash vs live store,
+          // canExport re-verification) slot in HERE, before the download call.
+          const result = await exportDxfFromPacket(packet, dxfOptions);
+          if (!result.ok) {
+            setExportError(`DXF export failed: ${result.error}`);
+            break;
+          }
+          if (result.skipped.length > 0) {
+            // FAIL-CLOSED (S0): never silently deliver bore-less sheets.
+            console.error('[GateToolbar] DXF blocked — undrawn drill points:', result.skipped);
+            setExportError(
+              `DXF BLOCKED: ${result.skipped.length} drill point(s) could not be drawn ` +
+              `(${result.skipped[0].reason}). No files delivered — see console.`
+            );
+            break;
+          }
+
+          await downloadDxfZipFromPacket(packet, dxfOptions);
+          console.log('[GateToolbar] DXF export completed (packet path):', {
+            panels: result.panels.length,
+            machineId: result.machineId,
+          });
           break;
         }
 
