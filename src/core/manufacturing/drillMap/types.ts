@@ -192,7 +192,7 @@ export interface DrillMapPoint {
   panelThickness?: number;              // Thickness of the panel in mm
   face?: DrillFace6;               // Which face/edge of the panel (6 values)
   pairedHoleId?: string;                // ID of paired hole for connectors
-  connectedPanelRole?: string;          // Role of connected panel
+  connectedPanelRole?: string;          // Role of the panel this point is drilled into (host panel) — historical name is misleading
   operationId?: string;                 // Operation identifier
   throughHole?: boolean;                // Whether it's a through hole
   cornerAngleDeg?: number;              // Corner angle for angled joints (30-150°)

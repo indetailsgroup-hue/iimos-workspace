@@ -2056,7 +2056,9 @@ export function generateMinifixDrillMap(
         if (pt.pairId?.startsWith('pair-B-')) continue; // B-run = ระบบแยก นอก corner scope
         const kind = kindOf[pt.purpose];
         if (!kind) continue;
-        const ptRole = pt.connectedPanelRole ?? roleById.get(pt.panelId);
+        // authority: panelId = แผ่นที่ถูกเจาะจริง (definitional) → มาก่อน;
+        // connectedPanelRole เป็น fallback (ชื่อ historical — คือ role ของแผ่น host เอง)
+        const ptRole = roleById.get(pt.panelId) ?? pt.connectedPanelRole;
         const ptClass: 'VERTICAL' | 'HORIZONTAL' | null =
           ptRole === 'LEFT_SIDE' || ptRole === 'RIGHT_SIDE' ? 'VERTICAL' :
           ptRole === 'TOP' || ptRole === 'BOTTOM' ? 'HORIZONTAL' : null;
@@ -2066,7 +2068,8 @@ export function generateMinifixDrillMap(
           const b = unused[i];
           if (b.kind !== kind || b.corner !== pt.cornerType) continue;
           if (Math.abs(b.sys32Z - (pt.depthPosition ?? Number.NaN)) > 0.01) continue;
-          if (ptClass !== null && b.panel !== ptClass) continue;
+          // fail-closed: class ไม่รู้จัก (null) ห้ามแข่ง match — ตกไป missed++ (fail-visible)
+          if (ptClass === null || b.panel !== ptClass) continue;
           const d = Math.hypot(
             b.position[0] - pt.position[0],
             b.position[1] - pt.position[1],
