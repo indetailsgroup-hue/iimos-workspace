@@ -1,0 +1,1099 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>Global Exact-SKU Connector Living Registry Implementation Plan</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>Global Exact-SKU Connector Living Registry Implementation Plan</h1>
+<blockquote><p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p></blockquote>
+<p><strong>Goal:</strong> Build a governed global cabinet-connector registry that preserves exact commercial identity and evidence, validates complete system BOMs, evaluates arbitrary cabinet/material configurations fail-closed, and supplies the nested MONOLITH runtime with reproducible hash-pinned releases.</p>
+<p><strong>Architecture:</strong> The parent governance repository is the canonical registry producer: Python 3.11 models, reviewed evidence assertions, compatibility graph, qualification engine, coverage ledger and deterministic JSON release bundle. The nested TypeScript product is a consumer: it validates a pinned release, resolves explicit connector intent without family fallback, emits provenance into shadow factory packets and keeps production blocked until configuration-specific evidence passes.</p>
+<p><strong>Tech Stack:</strong> Python 3.11 standard library, dataclasses, Enum, JSON/JSONL, SHA-256, unittest; TypeScript 5, Zod 4, Vitest 3, fast-check, existing Connector OS and factory-packet modules; Markdown plus the existing <code>tools/render_docs.py</code> renderer.</p>
+<h2>Global Constraints</h2>
+<ul>
+<li>The parent root owns ontology, evidence policy, canonical identity, registry releases, qualification governance and coverage reporting.</li>
+<li>The nested product consumes a pinned release and must not become a competing product master.</li>
+<li>Daph is one consulted pilot/customer company; tenant overlays cannot mutate canonical facts.</li>
+<li>One orderable OEM identity is one SKU record; shared geometry is linked rather than merged.</li>
+<li><code>Verified</code> is multidimensional: identity, geometry, BOM, tooling, material/thickness, structural, commercial, field, lifecycle and rights states remain independent.</li>
+<li>Every verified field has a primary-source locator, source hash, edition/region and reviewer.</li>
+<li>AI or automated extraction creates pending candidates only.</li>
+<li>Arbitrary W × D × H and material thickness inputs are accepted, but unsupported configurations return a refusal.</li>
+<li>No interpolation, extrapolation, nearest-neighbour selection or silent family fallback is permitted without an explicit qualified rule.</li>
+<li>OEM assets remain outside Git unless redistribution rights are recorded.</li>
+<li>Historical and discontinued records remain reproducible.</li>
+<li>NOT-FOR-PRODUCTION remains active throughout this plan.</li>
+<li>Every project-facing document is delivered in aligned English and Thai Markdown with standalone HTML.</li>
+<li>Work in paired isolated worktrees at execution time; preserve the current 144 parent and 67 nested dirty-worktree entries.</li>
+</ul>
+<hr>
+<h2>Workstream and file map</h2>
+<h3>Parent canonical producer</h3>
+<p>Create:</p>
+<ul>
+<li><code>packages/component-master/src/monolith_component_master/registry_models.py</code> — canonical immutable domain types.</li>
+<li><code>packages/component-master/src/monolith_component_master/evidence.py</code> — source snapshots and field assertions.</li>
+<li><code>packages/component-master/src/monolith_component_master/compatibility.py</code> — complete BOM and typed graph validation.</li>
+<li><code>packages/component-master/src/monolith_component_master/qualification.py</code> — material/thickness and cabinet-joint evaluation.</li>
+<li><code>packages/component-master/src/monolith_component_master/ingestion.py</code> — candidate, review and quarantine workflow.</li>
+<li><code>packages/component-master/src/monolith_component_master/coverage.py</code> — denominator and dimension-level coverage.</li>
+<li><code>packages/component-master/src/monolith_component_master/releases.py</code> — deterministic bundle and manifest hashing.</li>
+<li><code>packages/component-master/src/monolith_component_master/tenant_overlays.py</code> — immutable tenant-local commercial overlay.</li>
+<li><code>packages/component-master/src/monolith_component_master/adapters/__init__.py</code></li>
+<li><code>packages/component-master/src/monolith_component_master/adapters/reviewed_assertions.py</code></li>
+<li><code>tools/connector_registry/ingest_reviewed.py</code></li>
+<li><code>tools/connector_registry/build_release.py</code></li>
+<li><code>tools/connector_registry/check_coverage.py</code></li>
+<li><code>data/component-master/registry/v1/.gitignore</code></li>
+<li><code>data/component-master/registry/v1/brand-universe.jsonl</code></li>
+<li><code>data/component-master/registry/v1/source-denominator.jsonl</code></li>
+<li><code>data/component-master/registry/v1/evidence-manifest.jsonl</code></li>
+<li><code>data/component-master/registry/v1/models.jsonl</code></li>
+<li><code>data/component-master/registry/v1/commercial-skus.jsonl</code></li>
+<li><code>data/component-master/registry/v1/bom-edges.jsonl</code></li>
+<li><code>data/component-master/registry/v1/compatibility-edges.jsonl</code></li>
+<li><code>data/component-master/registry/v1/geometries.jsonl</code></li>
+<li><code>data/component-master/registry/v1/materials.jsonl</code></li>
+<li><code>data/component-master/registry/v1/tooling.jsonl</code></li>
+<li><code>data/component-master/registry/v1/qualification-envelopes.jsonl</code></li>
+<li><code>data/component-master/registry/v1/lifecycle-events.jsonl</code></li>
+<li><code>data/component-master/registry/v1/coverage-snapshot.json</code></li>
+<li><code>data/component-master/registry/v1/releases/0.1.0/registry.json</code></li>
+<li><code>data/component-master/registry/v1/releases/0.1.0/manifest.json</code></li>
+<li>focused tests under <code>tests/component_master/registry/</code>.</li>
+</ul>
+<p>Modify:</p>
+<ul>
+<li><code>packages/component-master/src/monolith_component_master/__init__.py</code> — export approved registry APIs.</li>
+</ul>
+<h3>Nested release consumer</h3>
+<p>Create:</p>
+<ul>
+<li><code>src/core/hardware/registry/registryTypes.ts</code></li>
+<li><code>src/core/hardware/registry/registryReleaseSchema.ts</code></li>
+<li><code>src/core/hardware/registry/loadRegistryRelease.ts</code></li>
+<li><code>src/core/hardware/registry/selectRegistryConnector.ts</code></li>
+<li><code>src/core/hardware/registry/firstCohortRelease.json</code></li>
+<li>focused tests in <code>src/core/hardware/registry/__tests__/</code>.</li>
+</ul>
+<p>Modify:</p>
+<ul>
+<li><code>src/core/connector/types.ts</code> — carry exact SKU and release pin.</li>
+<li><code>src/core/connector/catalog.ts:247-253</code> — remove default-family resolution.</li>
+<li><code>src/factory/packet/builders/buildConnectorOps.ts:53-54</code> — consume explicit selection context.</li>
+<li><code>src/factory/packet/types.ts</code> — persist registry pin, verdict and refusal.</li>
+<li><code>src/factory/packet/verifyPacket.ts</code> — verify hash and applicable evidence gates.</li>
+</ul>
+<p>The committed nested JSON file is a materialized, hash-pinned release produced by the parent. It is not an independent authority.</p>
+<h2>Execution order</h2>
+<p>Tasks 1–8 establish the canonical engine. Tasks 9–12 populate the first cohort in four evidence-review waves. Task 13 proves tenant separation. Tasks 14–16 integrate and verify the nested runtime. Do not begin nested cutover before Task 8 produces a deterministic release.</p>
+<h3>Task 1: Establish paired worktrees and baseline gates</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Read: <code>CONTEXT.md</code></li>
+<li>Read: <code>docs/reports/2026-07-21-ima-schelling-monolith-repository-scope-correction.en.md</code></li>
+<li>Read: <code>docs/superpowers/specs/2026-07-26-global-exact-sku-connector-living-registry-design.en.md</code></li>
+<li>Record: <code>.superpowers/sdd/global-connector-registry-progress.md</code> in the parent implementation worktree</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: the parent commit containing this checked-in plan (with <code>92d67571</code> as the approved-design ancestor); nested commit <code>ed036a2c</code>.</li>
+<li>Produces: clean paired-worktree paths and a baseline ledger with exact commit hashes and gate results.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Create one isolated worktree per Git root</strong></li>
+</ul>
+<p>Use <code>superpowers:using-git-worktrees</code>. Create parent branch <code>codex/global-connector-registry</code> from the checked-in commit containing this plan and nested branch <code>codex/global-connector-runtime</code> from <code>ed036a2c</code>. Do not reuse the two dirty working directories.</p>
+<ul>
+<li>[ ] <strong>Step 2: Record the two-root baseline</strong></li>
+</ul>
+<p>The ledger must record both absolute worktree paths, branches, <code>git rev-parse HEAD</code>, <code>git status --short</code>, Python/Node/npm versions and NOT-FOR-PRODUCTION state.</p>
+<ul>
+<li>[ ] <strong>Step 3: Run the parent baseline</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-powershell">python -m unittest discover -s tests/component_master -v
+python tools/verify_kitchen_kernel.py</code></pre>
+<p>Expected: exit 0 with a visible unittest summary and verifier final summary. If either fails, stop; record the failure without changing production code.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run the nested targeted baseline</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-powershell">npm.cmd run test:run -- src/core/connector src/core/hardware/catalog src/factory/packet
+npm.cmd run typecheck:all</code></pre>
+<p>Expected: exit 0. The Minifix provenance tests must continue to report the live recipe as not fully sourced; that is an honest baseline, not a test failure.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit only the progress ledger</strong></li>
+</ul>
+<pre><code class="language-powershell">git add .superpowers/sdd/global-connector-registry-progress.md
+git commit -m "chore(connectors): record paired registry baselines"</code></pre>
+<h3>Task 2: Add canonical identity and verification models</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>packages/component-master/src/monolith_component_master/registry_models.py</code></li>
+<li>Create: <code>tests/component_master/registry/test_registry_models.py</code></li>
+<li>Modify: <code>packages/component-master/src/monolith_component_master/__init__.py</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>CommercialSku</code>, <code>ProductModel</code>, <code>VerificationDimension</code>, <code>VerificationState</code>, <code>LifecycleState</code>, <code>Registry</code>.</li>
+<li>Consumed by: Tasks 3–13.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write failing identity tests</strong></li>
+</ul>
+<pre><code class="language-python">def make_sku(order_code: str, geometry: VerificationState) -&gt; CommercialSku:
+    states = {
+        dimension: VerificationState.PENDING
+        for dimension in VerificationDimension
+    }
+    states[VerificationDimension.IDENTITY] = VerificationState.VERIFIED
+    states[VerificationDimension.GEOMETRY] = geometry
+    return CommercialSku(
+        global_id=f"sku:hafele:{order_code}:EU",
+        brand_id="brand:hafele",
+        model_id="model:hafele:minifix-15",
+        oem_order_code=order_code,
+        region="EU",
+        pack_qty=1,
+        verification=states,
+    )
+
+def test_same_geometry_does_not_collapse_distinct_order_codes():
+    a = make_sku("262.26.033", VerificationState.VERIFIED)
+    b = make_sku("262.26.533", VerificationState.VERIFIED)
+    assert a.global_id != b.global_id
+
+def test_verified_is_dimension_specific():
+    item = make_sku("262.26.033", VerificationState.PENDING)
+    assert item.is_verified(VerificationDimension.IDENTITY) is True
+    assert item.is_verified(VerificationDimension.GEOMETRY) is False</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_registry_models -v</code></pre>
+<p>Expected: import failure for <code>registry_models</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement immutable domain types</strong></li>
+</ul>
+<p>The implementation must expose this shape:</p>
+<pre><code class="language-python">class VerificationDimension(str, Enum):
+    IDENTITY = "identity"
+    GEOMETRY = "geometry"
+    BOM = "bom"
+    TOOLING = "tooling"
+    MATERIAL_THICKNESS = "material_thickness"
+    STRUCTURAL = "structural"
+    COMMERCIAL = "commercial"
+    FIELD = "field"
+    LIFECYCLE = "lifecycle"
+    RIGHTS = "rights"
+
+class VerificationState(str, Enum):
+    VERIFIED = "VERIFIED"
+    PENDING = "PENDING"
+    REGION_ONLY = "REGION_ONLY"
+    DISCONTINUED = "DISCONTINUED"
+    BLOCKED = "BLOCKED"
+
+@dataclass(frozen=True)
+class CommercialSku:
+    global_id: str
+    brand_id: str
+    model_id: str
+    oem_order_code: str
+    region: str
+    pack_qty: int
+    verification: Mapping[VerificationDimension, VerificationState]
+
+    def is_verified(self, dimension: VerificationDimension) -&gt; bool:
+        return self.verification.get(dimension) is VerificationState.VERIFIED</code></pre>
+<p>Validate IDs, order codes, region, pack and all ten verification dimensions. Keep legacy <code>SupplierSKU</code> unchanged.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify GREEN and legacy compatibility</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_registry_models tests.component_master.test_seed_integrity -v</code></pre>
+<p>Expected: exit 0.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-powershell">git add packages/component-master/src/monolith_component_master/registry_models.py packages/component-master/src/monolith_component_master/__init__.py tests/component_master/registry/test_registry_models.py
+git commit -m "feat(registry): add exact SKU identity model"</code></pre>
+<h3>Task 3: Implement evidence vault metadata and field assertions</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>packages/component-master/src/monolith_component_master/evidence.py</code></li>
+<li>Create: <code>tests/component_master/registry/test_evidence.py</code></li>
+<li>Create: <code>data/component-master/registry/v1/.gitignore</code></li>
+<li>Create: <code>data/component-master/registry/v1/evidence-manifest.jsonl</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>SourceSnapshot</code>, <code>FieldAssertion</code>, <code>EvidenceVault.register()</code>, <code>verify_source_hash()</code>.</li>
+<li>Consumed by: ingestion, qualification and release tasks.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write failing evidence tests</strong></li>
+</ul>
+<p>Test that a verified assertion is rejected without publisher, edition/region, locator, SHA-256, access date, reviewer and rights state. Test that <code>_source-cache/</code> content is ignored while its manifest remains tracked.</p>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_evidence -v</code></pre>
+<p>Expected: import failure for <code>evidence</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement field-level provenance</strong></li>
+</ul>
+<pre><code class="language-python">@dataclass(frozen=True)
+class SourceSnapshot:
+    source_id: str
+    publisher: str
+    url: str
+    edition: str
+    region: str
+    accessed_at: str
+    sha256: str
+    rights_state: str
+
+@dataclass(frozen=True)
+class FieldAssertion:
+    assertion_id: str
+    entity_id: str
+    field_path: str
+    value: object
+    source_id: str
+    locator: str
+    reviewer: str
+    review_state: str</code></pre>
+<p><code>VERIFIED</code> assertions must reference a registered source whose stored bytes match the manifest hash. Candidate assertions may reference remote metadata but remain pending.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify GREEN</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_evidence -v</code></pre>
+<p>Expected: exit 0 and tests for tampered bytes, absent rights state and field locator pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-powershell">git add packages/component-master/src/monolith_component_master/evidence.py tests/component_master/registry/test_evidence.py data/component-master/registry/v1/.gitignore data/component-master/registry/v1/evidence-manifest.jsonl
+git commit -m "feat(registry): enforce field-level OEM evidence"</code></pre>
+<h3>Task 4: Implement Complete System BOM and compatibility graph</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>packages/component-master/src/monolith_component_master/compatibility.py</code></li>
+<li>Create: <code>tests/component_master/registry/test_compatibility.py</code></li>
+<li>Create: <code>data/component-master/registry/v1/bom-edges.jsonl</code></li>
+<li>Create: <code>data/component-master/registry/v1/compatibility-edges.jsonl</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>BomEdge</code>, <code>CompatibilityEdge</code>, <code>CompatibilityGraph.validate_release_bom()</code>.</li>
+<li>Consumed by: Tasks 5, 7 and 15.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write failing graph tests</strong></li>
+</ul>
+<p>Cover a complete cam + bolt + cap BOM, a required edge targeting an unregistered mating SKU, an <code>INCOMPATIBLE_WITH</code> contradiction, region mismatch, lifecycle mismatch and a required tool edge.</p>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_compatibility -v</code></pre>
+<p>Expected: import failure.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement typed edges</strong></li>
+</ul>
+<pre><code class="language-python">class EdgeType(str, Enum):
+    REQUIRES = "REQUIRES"
+    OPTIONAL = "OPTIONALLY_USES"
+    COMPATIBLE = "COMPATIBLE_WITH"
+    INCOMPATIBLE = "INCOMPATIBLE_WITH"
+    SUPERSEDES = "SUPERSEDES"
+    REGION_VARIANT = "REGION_VARIANT_OF"
+    GEOMETRY_VARIANT = "GEOMETRY_VARIANT_OF"
+    TOOLED_BY = "TOOLED_BY"
+    MACHINED_BY = "MACHINED_BY"
+
+@dataclass(frozen=True)
+class BomEdge:
+    assembly_sku_id: str
+    component_id: str
+    edge_type: EdgeType
+    quantity: float
+    region: str
+    evidence_assertion_ids: tuple[str, ...]</code></pre>
+<p>Graph validation returns structured issues; it never auto-selects a substitute.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify GREEN</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_compatibility -v</code></pre>
+<p>Expected: exit 0 with the incomplete and contradictory BOM cases refused.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-powershell">git add packages/component-master/src/monolith_component_master/compatibility.py tests/component_master/registry/test_compatibility.py data/component-master/registry/v1/bom-edges.jsonl data/component-master/registry/v1/compatibility-edges.jsonl
+git commit -m "feat(registry): validate complete connector BOM graphs"</code></pre>
+<h3>Task 5: Implement material/thickness envelopes and joint qualification</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>packages/component-master/src/monolith_component_master/qualification.py</code></li>
+<li>Create: <code>tests/component_master/registry/test_qualification.py</code></li>
+<li>Create: <code>data/component-master/registry/v1/materials.jsonl</code></li>
+<li>Create: <code>data/component-master/registry/v1/qualification-envelopes.jsonl</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>MaterialInstance</code>, <code>JointConfiguration</code>, <code>QualificationEnvelope</code>, <code>QualificationResult</code>, <code>qualify_joint()</code>.</li>
+<li>Consumed by: Tasks 6, 7 and nested release.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write failing boundary tests</strong></li>
+</ul>
+<p>Use synthetic evidence fixtures to prove:</p>
+<ul>
+<li>Panel A and Panel B thickness are independent;</li>
+<li>15 mm and 18 mm evidence does not qualify 16 mm without an interpolation rule;</li>
+<li>core and facing thickness remain separate;</li>
+<li>material class, density, moisture and orientation travel with the envelope;</li>
+<li>no matching configuration returns <code>INSUFFICIENT_EVIDENCE</code>.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_qualification -v</code></pre>
+<p>Expected: import failure.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement fail-closed qualification</strong></li>
+</ul>
+<pre><code class="language-python">class Verdict(str, Enum):
+    QUALIFIED = "QUALIFIED"
+    CONDITIONALLY_QUALIFIED = "CONDITIONALLY_QUALIFIED"
+    UNQUALIFIED = "UNQUALIFIED"
+    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
+    DISCONTINUED_OR_UNORDERABLE = "DISCONTINUED_OR_UNORDERABLE"
+
+@dataclass(frozen=True)
+class MaterialInstance:
+    substrate: str
+    core: str
+    density_kg_m3: float
+    moisture_pct: float
+    orientation: str
+    nominal_thickness_mm: float
+    measured_thickness_mm: float
+    facing_thickness_mm: float
+
+def qualify_joint(
+    joint: JointConfiguration,
+    envelopes: Sequence[QualificationEnvelope],
+) -&gt; QualificationResult:
+    matches = tuple(envelope for envelope in envelopes if envelope.matches(joint))
+    if not matches:
+        return QualificationResult(
+            verdict=Verdict.INSUFFICIENT_EVIDENCE,
+            envelope_id=None,
+            reason_codes=("NO_EXACT_CONFIGURATION_EVIDENCE",),
+        )
+    qualified = tuple(
+        envelope for envelope in matches if envelope.verdict is Verdict.QUALIFIED
+    )
+    if len(qualified) != 1:
+        return QualificationResult(
+            verdict=Verdict.UNQUALIFIED,
+            envelope_id=None,
+            reason_codes=("AMBIGUOUS_OR_NONQUALIFIED_ENVELOPE",),
+        )
+    selected = qualified[0]
+    return QualificationResult(
+        verdict=Verdict.QUALIFIED,
+        envelope_id=selected.envelope_id,
+        reason_codes=(),
+    )</code></pre>
+<p>Only exact points, declared ranges or explicitly evidenced interpolation rules may return qualified.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify GREEN</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_qualification -v</code></pre>
+<p>Expected: exit 0; the unapproved 16 mm interpolation case remains refused.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-powershell">git add packages/component-master/src/monolith_component_master/qualification.py tests/component_master/registry/test_qualification.py data/component-master/registry/v1/materials.jsonl data/component-master/registry/v1/qualification-envelopes.jsonl
+git commit -m "feat(registry): add configuration-specific qualification"</code></pre>
+<h3>Task 6: Add arbitrary W × D × H cabinet evaluation</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>packages/component-master/src/monolith_component_master/qualification.py</code></li>
+<li>Create: <code>tests/component_master/registry/test_parametric_cabinets.py</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>CabinetConfiguration</code>, <code>CabinetEvaluation</code>, <code>evaluate_cabinet()</code>.</li>
+<li>Consumed by: release and runtime tasks.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write failing parametric/property cases</strong></li>
+</ul>
+<p>Generate base, wall, tall, wardrobe and custom cabinets across fractional W × D × H values. Assert that invalid numeric inputs are refused, unsupported spans never manufacture a guessed rule, and tall cabinets request only reinforcements/anchors backed by a selected policy.</p>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_parametric_cabinets -v</code></pre>
+<p>Expected: import or attribute failure naming <code>evaluate_cabinet</code> before implementation.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the cabinet pipeline</strong></li>
+</ul>
+<pre><code class="language-python">@dataclass(frozen=True)
+class CabinetConfiguration:
+    width_mm: float
+    depth_mm: float
+    height_mm: float
+    topology: str
+    joints: tuple[JointConfiguration, ...]
+    load_cases: tuple[str, ...]
+    mounting: str
+    wall_substrate: str | None
+
+def evaluate_cabinet(
+    cabinet: CabinetConfiguration,
+    registry: Registry,
+    machine_capabilities: frozenset[str],
+) -&gt; CabinetEvaluation:
+    """Normalize, qualify every joint, then aggregate refusals without fallback."""</code></pre>
+<p>Connector count and spacing come only from selected qualification rules. When increased connector count cannot resolve the governed demand, return an evidenced reinforcement/anchor requirement or refuse.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify GREEN</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_parametric_cabinets tests.component_master.registry.test_qualification -v</code></pre>
+<p>Expected: exit 0 with deterministic results for repeated identical inputs.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-powershell">git add packages/component-master/src/monolith_component_master/qualification.py tests/component_master/registry/test_parametric_cabinets.py
+git commit -m "feat(registry): evaluate parametric cabinet configurations"</code></pre>
+<h3>Task 7: Add reviewed ingestion and quarantine</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>packages/component-master/src/monolith_component_master/ingestion.py</code></li>
+<li>Create: <code>packages/component-master/src/monolith_component_master/adapters/__init__.py</code></li>
+<li>Create: <code>packages/component-master/src/monolith_component_master/adapters/reviewed_assertions.py</code></li>
+<li>Create: <code>tools/connector_registry/ingest_reviewed.py</code></li>
+<li>Create: <code>tests/component_master/registry/test_ingestion.py</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>CandidateRecord</code>, <code>QuarantineRecord</code>, <code>ReviewedAssertionAdapter.ingest()</code>.</li>
+<li>Consumed by: first-cohort waves.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write failing ingestion tests</strong></li>
+</ul>
+<p>Test unit conflict, OEM/distributor identity conflict, PDF/CAD geometry conflict, unreviewed AI candidate, missing mating part and rights uncertainty. Each becomes a reason-coded quarantine record and cannot enter a release.</p>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_ingestion -v</code></pre>
+<p>Expected: import failure.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the adapter contract</strong></li>
+</ul>
+<pre><code class="language-python">@dataclass(frozen=True)
+class CandidateRecord:
+    candidate_id: str
+    brand_id: str
+    entity_kind: str
+    assertions: tuple[FieldAssertion, ...]
+    extraction_method: str
+
+@dataclass(frozen=True)
+class QuarantineRecord:
+    candidate_id: str
+    reason_code: str
+    evidence_ids: tuple[str, ...]
+    owner_role: str
+
+@dataclass(frozen=True)
+class IngestionResult:
+    promoted: tuple[CandidateRecord, ...]
+    quarantined: tuple[QuarantineRecord, ...]
+
+class ReviewedAssertionAdapter:
+    def ingest(self, candidate: CandidateRecord) -&gt; IngestionResult:
+        if candidate.extraction_method != "HUMAN_REVIEWED":
+            return IngestionResult(
+                promoted=(),
+                quarantined=(
+                    QuarantineRecord(
+                        candidate_id=candidate.candidate_id,
+                        reason_code="REVIEW_REQUIRED",
+                        evidence_ids=tuple(
+                            assertion.assertion_id
+                            for assertion in candidate.assertions
+                        ),
+                        owner_role="OEM Evidence Curator",
+                    ),
+                ),
+            )
+        if any(
+            assertion.review_state != "VERIFIED"
+            for assertion in candidate.assertions
+        ):
+            return IngestionResult(
+                promoted=(),
+                quarantined=(
+                    QuarantineRecord(
+                        candidate_id=candidate.candidate_id,
+                        reason_code="ASSERTION_NOT_VERIFIED",
+                        evidence_ids=tuple(
+                            assertion.assertion_id
+                            for assertion in candidate.assertions
+                        ),
+                        owner_role="Identity and SKU Reviewer",
+                    ),
+                ),
+            )
+        return IngestionResult(promoted=(candidate,), quarantined=())</code></pre>
+<p>Promotion requires human-reviewed primary assertions for the promoted dimensions; the adapter never changes review state itself.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify GREEN and CLI behavior</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_ingestion -v
+python tools/connector_registry/ingest_reviewed.py --help</code></pre>
+<p>Expected: exit 0; help lists <code>--brand</code>, <code>--source-manifest</code>, <code>--assertions</code>, <code>--out</code> and <code>--quarantine</code>.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-powershell">git add packages/component-master/src/monolith_component_master/ingestion.py packages/component-master/src/monolith_component_master/adapters tools/connector_registry/ingest_reviewed.py tests/component_master/registry/test_ingestion.py
+git commit -m "feat(registry): quarantine unreviewed connector evidence"</code></pre>
+<h3>Task 8: Add coverage ledger and deterministic release</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>packages/component-master/src/monolith_component_master/coverage.py</code></li>
+<li>Create: <code>packages/component-master/src/monolith_component_master/releases.py</code></li>
+<li>Create: <code>tools/connector_registry/check_coverage.py</code></li>
+<li>Create: <code>tools/connector_registry/build_release.py</code></li>
+<li>Create: <code>tests/component_master/registry/test_release.py</code></li>
+<li>Create: <code>data/component-master/registry/v1/coverage-snapshot.json</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>CoverageSnapshot</code>, <code>RegistryRelease</code>, <code>build_release()</code>, SHA-256 manifest.</li>
+<li>Consumed by: Tasks 9–16.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write failing determinism and denominator tests</strong></li>
+</ul>
+<p>Assert source-order-independent output hashes, no unclassified discovered item, separate evidence-dimension counts, blocked-source reporting and no verified record with a missing assertion.</p>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_release -v</code></pre>
+<p>Expected: import failure.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement canonical serialization</strong></li>
+</ul>
+<p>Serialize UTF-8 JSON with sorted keys, stable record order, normalized line endings and no wall-clock field inside the hashed payload. The manifest contains release ID, semantic version, payload SHA-256, source denominator hash and creation metadata outside the payload digest.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify GREEN and byte replay</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_release -v
+python tools/connector_registry/build_release.py --root data/component-master/registry/v1 --version 0.1.0
+python tools/connector_registry/check_coverage.py --root data/component-master/registry/v1 --fail-on-unclassified</code></pre>
+<p>Expected: exit 0; two consecutive builds have identical <code>registry.json</code> hashes.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-powershell">git add packages/component-master/src/monolith_component_master/coverage.py packages/component-master/src/monolith_component_master/releases.py tools/connector_registry/check_coverage.py tools/connector_registry/build_release.py tests/component_master/registry/test_release.py data/component-master/registry/v1/coverage-snapshot.json
+git commit -m "feat(registry): publish deterministic coverage releases"</code></pre>
+<h3>Task 9: Declare the first-cohort brand and source denominator</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>data/component-master/registry/v1/brand-universe.jsonl</code></li>
+<li>Create: <code>data/component-master/registry/v1/source-denominator.jsonl</code></li>
+<li>Create: <code>tests/component_master/registry/test_first_cohort_denominator.py</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: the controlled denominator for 12 brands and Global/EU, US and Thailand/ASEAN review scopes.</li>
+<li>Consumed by: Tasks 10–12.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing exact-brand test</strong></li>
+</ul>
+<p>Assert the exact approved set: Häfele, Hettich, Titus, Lamello, Italiana Ferramenta, OVVO, Lockdowel, Välinge/Threespine, KNAPP, Festool DOMINO, Hoffmann Machine Company and Blum.</p>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_first_cohort_denominator -v</code></pre>
+<p>Expected: denominator files absent.</p>
+<ul>
+<li>[ ] <strong>Step 3: Add official-source roots</strong></li>
+</ul>
+<p>Seed official source roots only:</p>
+<div class="tablewrap"><table><thead><tr><th>Brand</th><th>Required official source root</th></tr></thead><tbody>
+<tr><td>Häfele</td><td><code>https://www.hafele.com/us/en/products/furniture-fittings-living-solutions/connectors-shelf-supports/connectors/50/</code></td></tr>
+<tr><td>Hettich</td><td><code>https://shop.hettich.com/us_EN/Further-products/Connecting-technology/Connecting-fittings-for-cabinet-bodies/c/group824491857740</code></td></tr>
+<tr><td>Titus</td><td><code>https://cabinet.titusplus.com/us/en/cabinet-connectors</code></td></tr>
+<tr><td>Lamello</td><td><code>https://lamello.com/products/p-system</code> and the current OEM catalog linked there</td></tr>
+<tr><td>Italiana Ferramenta</td><td><code>https://www.italianaferramenta.it/en/catalog/connectings</code></td></tr>
+<tr><td>OVVO</td><td><code>https://ovvotech.com/furniture-connector-types/</code></td></tr>
+<tr><td>Lockdowel</td><td><code>https://lockdowel.com/cabinets/</code> and <code>https://lockdowel.com/downloads/</code></td></tr>
+<tr><td>Välinge/Threespine</td><td><code>https://valinge.com/threespine/this-is-threespine/</code></td></tr>
+<tr><td>KNAPP</td><td><code>https://knappconnectors.com/industries/cabinets-closets-and-case-goods/</code></td></tr>
+<tr><td>Festool DOMINO</td><td><code>https://www.festoolusa.com/accessories/joining/accessories-for-joining/domino-connectors/576797---kv-sys-d8</code> and <code>https://www.festoolusa.com/accessories/joining/accessories-for-joining/domino-connectors/576795---sv-sys-d14</code></td></tr>
+<tr><td>Hoffmann</td><td><code>https://hoffmann-usa.com/faq/</code> plus OEM product/machine documents linked from the site</td></tr>
+<tr><td>Blum</td><td><code>https://www.blum.com/eu/en/products/various-products/thin-fronts/assembly/</code></td></tr>
+</tbody></table></div>
+<p>Each row records publisher, official URL, edition when printed, region, language, access date, rights state and one of <code>DISCOVERED</code>, <code>SOURCE_BLOCKED</code>, <code>DORMANT_OR_DEFUNCT</code> or <code>REVIEWED</code>.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify denominator integrity</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_first_cohort_denominator -v
+python tools/connector_registry/check_coverage.py --root data/component-master/registry/v1 --fail-on-unclassified</code></pre>
+<p>Expected: exit 0; no source or brand lacks a state.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-powershell">git add data/component-master/registry/v1/brand-universe.jsonl data/component-master/registry/v1/source-denominator.jsonl tests/component_master/registry/test_first_cohort_denominator.py
+git commit -m "data(registry): declare first-cohort source denominator"</code></pre>
+<h3>Task 10: Ingest cohort wave A — Häfele, Hettich and Titus</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>data/component-master/registry/v1/vendors/hafele/reviewed-assertions.jsonl</code></li>
+<li>Create: <code>data/component-master/registry/v1/vendors/hettich/reviewed-assertions.jsonl</code></li>
+<li>Create: <code>data/component-master/registry/v1/vendors/titus/reviewed-assertions.jsonl</code></li>
+<li>Create: <code>tests/component_master/registry/test_wave_a.py</code></li>
+<li>Modify: canonical models/SKUs/BOM/geometry/tooling datasets through the ingestion CLI.</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: classified exact order codes, BOM edges and unresolved evidence queues for the three brands.</li>
+<li>Consumed by: release and nested bridge tasks.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Add failing coverage assertions</strong></li>
+</ul>
+<p>For every reviewed source table/page, assert <code>discovered rows = verified + pending + region-only + discontinued + source-blocked + out-of-scope-with-reason</code>. Pin Häfele Minifix page-24 articles and the ambiguous page-23 articles as separate records with their honest states.</p>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_wave_a -v</code></pre>
+<p>Expected: wave records absent.</p>
+<ul>
+<li>[ ] <strong>Step 3: Transcribe and review primary assertions</strong></li>
+</ul>
+<p>Run <code>ingest_reviewed.py</code> separately for each brand. Preserve every OEM order code, region, pack, finish, mating part and tool reference. Hettich <code>Rastex</code> must resolve to its own reviewed identity or a reason-coded refusal; mapping it to Minifix is prohibited.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify and rebuild</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_wave_a -v
+python tools/connector_registry/check_coverage.py --root data/component-master/registry/v1 --brands hafele hettich titus --fail-on-unclassified
+python tools/connector_registry/build_release.py --root data/component-master/registry/v1 --version 0.1.0</code></pre>
+<p>Expected: exit 0; all three denominators classify every discovered row.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<p>Stage only the three vendor directories, generated canonical JSONL changes and wave test. Commit:</p>
+<pre><code class="language-powershell">git commit -m "data(registry): ingest first-cohort wave A"</code></pre>
+<h3>Task 11: Ingest cohort wave B — Lamello, Italiana Ferramenta and OVVO</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: vendor reviewed-assertion files under <code>vendors/lamello/</code>, <code>vendors/italiana/</code>, <code>vendors/ovvo/</code>.</li>
+<li>Create: <code>tests/component_master/registry/test_wave_b.py</code></li>
+<li>Modify: canonical registry datasets through the ingestion CLI.</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: P-System groove/CNC/tool dependencies, Target-family identities and OVVO thickness/process variants.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Add failing wave-B tests</strong></li>
+</ul>
+<p>Assert Lamello family/model separation, Italiana exact product-code preservation and OVVO drilling-versus-milling process separation. Require tool/cutter edges for proprietary machining.</p>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_wave_b -v</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Ingest reviewed OEM assertions</strong></li>
+</ul>
+<p>Classify each source-denominator row and preserve regional/lifecycle states. Product-family marketing names cannot stand in for exact order codes.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify and rebuild</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_wave_b -v
+python tools/connector_registry/check_coverage.py --root data/component-master/registry/v1 --brands lamello italiana ovvo --fail-on-unclassified
+python tools/connector_registry/build_release.py --root data/component-master/registry/v1 --version 0.1.0</code></pre>
+<p>Expected: exit 0.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-powershell">git commit -m "data(registry): ingest first-cohort wave B"</code></pre>
+<h3>Task 12: Ingest cohort waves C and D</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: reviewed-assertion files under <code>vendors/lockdowel/</code>, <code>vendors/threespine/</code>, <code>vendors/knapp/</code>, <code>vendors/festool/</code>, <code>vendors/hoffmann/</code>, <code>vendors/blum/</code>.</li>
+<li>Create: <code>tests/component_master/registry/test_wave_c_d.py</code></li>
+<li>Modify: canonical registry datasets through the ingestion CLI.</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: snap/slide/profile/dovetail/loose-tenon/thin-front identities with explicit licensing, tool and role constraints.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Add failing scope tests</strong></li>
+</ul>
+<p>Assert:</p>
+<ul>
+<li>Threespine licensing/process evidence remains distinct from SKU evidence;</li>
+<li>Festool D8 and D14 systems do not cross-map;</li>
+<li>Hoffmann connector keys require matching machining capability;</li>
+<li>Blum EXPANDO T remains a thin-front fixing and is not generalized to carcass joints;</li>
+<li>every discovered Lockdowel and KNAPP model has a classification.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_wave_c_d -v</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Ingest reviewed assertions for all six brands</strong></li>
+</ul>
+<p>Preserve proprietary-process and rights restrictions. If exact order codes are not present in primary evidence, retain the model as pending rather than fabricating an SKU.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify full-cohort coverage and rebuild</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_wave_c_d -v
+python tools/connector_registry/check_coverage.py --root data/component-master/registry/v1 --fail-on-unclassified
+python tools/connector_registry/build_release.py --root data/component-master/registry/v1 --version 0.1.0</code></pre>
+<p>Expected: exit 0; the ledger names all blocked and pending dimensions.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-powershell">git commit -m "data(registry): complete first-cohort classifications"</code></pre>
+<h3>Task 13: Enforce tenant overlays without canonical mutation</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>packages/component-master/src/monolith_component_master/tenant_overlays.py</code></li>
+<li>Create: <code>tests/component_master/registry/test_tenant_overlays.py</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>TenantCommercialOverlay</code>, <code>apply_tenant_overlay()</code>.</li>
+<li>Consumed by: procurement/UI integrations outside this release.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write failing isolation tests</strong></li>
+</ul>
+<p>Prove Daph can set preferred supplier, price, stock, lead time and an approval reference while canonical order code, geometry, evidence, qualification and lifecycle remain byte-identical. Prove a second tenant cannot read Daph overlays.</p>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_tenant_overlays -v</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Implement immutable overlay projection</strong></li>
+</ul>
+<pre><code class="language-python">@dataclass(frozen=True)
+class TenantCommercialOverlay:
+    tenant_id: str
+    sku_id: str
+    preferred: bool
+    price_minor: int | None
+    currency: str | None
+    local_stock: int | None
+    lead_time_days: int | None
+    approved_substitution_ref: str | None
+
+@dataclass(frozen=True)
+class TenantSkuView:
+    canonical: CommercialSku
+    commercial: TenantCommercialOverlay
+
+def apply_tenant_overlay(
+    canonical: CommercialSku,
+    overlay: TenantCommercialOverlay,
+    requesting_tenant_id: str,
+) -&gt; TenantSkuView:
+    if overlay.tenant_id != requesting_tenant_id:
+        raise PermissionError("tenant overlay access denied")
+    if overlay.sku_id != canonical.global_id:
+        raise ValueError("overlay SKU does not match canonical SKU")
+    return TenantSkuView(canonical=canonical, commercial=overlay)</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Verify GREEN</strong></li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_tenant_overlays -v</code></pre>
+<p>Expected: exit 0 with cross-tenant denial.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-powershell">git add packages/component-master/src/monolith_component_master/tenant_overlays.py tests/component_master/registry/test_tenant_overlays.py
+git commit -m "feat(registry): isolate tenant commercial overlays"</code></pre>
+<h3>Task 14: Build the nested hash-pinned release consumer</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>src/core/hardware/registry/registryTypes.ts</code></li>
+<li>Create: <code>src/core/hardware/registry/registryReleaseSchema.ts</code></li>
+<li>Create: <code>src/core/hardware/registry/loadRegistryRelease.ts</code></li>
+<li>Create: <code>src/core/hardware/registry/firstCohortRelease.json</code></li>
+<li>Create: <code>src/core/hardware/registry/__tests__/loadRegistryRelease.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: parent <code>RegistryRelease</code> version 0.1.0.</li>
+<li>Produces: <code>loadRegistryRelease(bytes, expectedSha256): RegistryRelease</code>.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Copy the exact parent release and write failing hash/schema tests</strong></li>
+</ul>
+<p>Tests cover valid load, one-byte tamper, unsupported schema version, duplicate SKU ID and a verified field missing evidence.</p>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<pre><code class="language-powershell">npm.cmd run test:run -- src/core/hardware/registry/__tests__/loadRegistryRelease.test.ts</code></pre>
+<p>Expected: module import failure.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement Zod validation and SHA-256 pinning</strong></li>
+</ul>
+<pre><code class="language-typescript">export type RegistryPin = {
+  releaseId: string;
+  version: string;
+  payloadSha256: string;
+};
+
+export async function loadRegistryRelease(
+  jsonText: string,
+  expectedSha256: string,
+): Promise&lt;RegistryRelease&gt; {
+  const bytes = new TextEncoder().encode(jsonText);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const actual = Array.from(new Uint8Array(digest))
+    .map((byte) =&gt; byte.toString(16).padStart(2, '0'))
+    .join('');
+  if (actual !== expectedSha256.toLowerCase()) {
+    throw new Error(`REGISTRY_HASH_MISMATCH expected=${expectedSha256} actual=${actual}`);
+  }
+  return RegistryReleaseSchema.parse(JSON.parse(jsonText));
+}</code></pre>
+<p>The JSON file header records its parent commit and release manifest hash.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify GREEN</strong></li>
+</ul>
+<pre><code class="language-powershell">npm.cmd run test:run -- src/core/hardware/registry
+npm.cmd run typecheck:all</code></pre>
+<p>Expected: exit 0.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit in the nested repository</strong></li>
+</ul>
+<pre><code class="language-powershell">git add src/core/hardware/registry
+git commit -m "feat(hardware): consume pinned connector registry release"</code></pre>
+<h3>Task 15: Replace connector fallback with explicit registry resolution</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>src/core/hardware/registry/selectRegistryConnector.ts</code></li>
+<li>Create: <code>src/core/hardware/registry/__tests__/selectRegistryConnector.test.ts</code></li>
+<li>Modify: <code>src/core/connector/types.ts</code></li>
+<li>Modify: <code>src/core/connector/catalog.ts:247-253</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>ConnectorResolution</code>, <code>selectRegistryConnector(input, release)</code>.</li>
+<li>Consumed by: factory packet task.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write failing resolution tests</strong></li>
+</ul>
+<p>Cover:</p>
+<ul>
+<li>exact Minifix SKU + compatible housing/BOM;</li>
+<li><code>RASTEX</code> intent returns <code>INSUFFICIENT_EVIDENCE</code> rather than Minifix;</li>
+<li>material/thickness outside envelope refuses;</li>
+<li>discontinued/region-only SKU refuses for the wrong region;</li>
+<li>unqualified live Minifix Ø10/17.5 recipe remains shadow-only because the current provenance audit records contradicted/unsourced values.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<pre><code class="language-powershell">npm.cmd run test:run -- src/core/hardware/registry/__tests__/selectRegistryConnector.test.ts</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Implement discriminated resolution</strong></li>
+</ul>
+<pre><code class="language-typescript">export type ConnectorResolution =
+  | {
+      ok: true;
+      mode: 'QUALIFIED' | 'SHADOW_ONLY';
+      skuId: string;
+      connectorSpec: ConnectorSpec;
+      registryPin: RegistryPin;
+      evidenceAssertionIds: string[];
+    }
+  | {
+      ok: false;
+      reason:
+        | 'SKU_NOT_FOUND'
+        | 'BOM_INCOMPLETE'
+        | 'MATERIAL_THICKNESS_UNQUALIFIED'
+        | 'TOOL_CAPABILITY_MISSING'
+        | 'STRUCTURAL_EVIDENCE_INSUFFICIENT'
+        | 'LIFECYCLE_OR_REGION_BLOCKED';
+      message: string;
+    };</code></pre>
+<p>Extend <code>ConnectorFamily</code> without another closed four-value list:</p>
+<pre><code class="language-typescript">export type LegacyConnectorFamily = 'MINIFIX' | 'TARGET_J' | 'RASTEX' | 'DOWEL';
+export type ConnectorFamily = LegacyConnectorFamily | `OEM:${string}`;</code></pre>
+<p>Delete the behavior in <code>selectConnector()</code> that returns Minifix for every family except Target J and dowel. Keep a deprecated wrapper only if every caller passes an exact SKU and handles refusal.</p>
+<ul>
+<li>[ ] <strong>Step 4: Verify GREEN and existing Connector OS tests</strong></li>
+</ul>
+<pre><code class="language-powershell">npm.cmd run test:run -- src/core/hardware/registry src/core/connector
+npm.cmd run typecheck:all</code></pre>
+<p>Expected: exit 0 and no Rastex-to-Minifix fallback test remains.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-powershell">git add src/core/hardware/registry/selectRegistryConnector.ts src/core/hardware/registry/__tests__/selectRegistryConnector.test.ts src/core/connector/types.ts src/core/connector/catalog.ts
+git commit -m "fix(connectors): resolve exact SKU without family fallback"</code></pre>
+<h3>Task 16: Wire registry truth into shadow factory packets</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>src/factory/packet/builders/buildConnectorOps.ts</code></li>
+<li>Modify: <code>src/factory/packet/types.ts</code></li>
+<li>Modify: <code>src/factory/packet/verifyPacket.ts</code></li>
+<li>Create: <code>src/factory/packet/__tests__/connectorRegistryPin.test.ts</code></li>
+<li>Modify: applicable factory-packet call sites to pass explicit selection context.</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: <code>ConnectorResolution</code>.</li>
+<li>Produces: packet registry pin, exact SKU/BOM, qualification verdict, evidence IDs and refusal records.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write failing packet tests</strong></li>
+</ul>
+<p>Assert:</p>
+<ul>
+<li>packet output contains release ID, SHA-256, exact SKU and BOM;</li>
+<li>identical inputs and release bytes produce identical packet hashes;</li>
+<li>tampered registry hash blocks verification;</li>
+<li><code>SHADOW_ONLY</code> emits NOT-FOR-PRODUCTION and a reason-coded refusal;</li>
+<li>missing explicit connector intent cannot fall back to Minifix;</li>
+<li>current drill-map/connector-ops parity tests remain intact.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 2: Verify RED</strong></li>
+</ul>
+<pre><code class="language-powershell">npm.cmd run test:run -- src/factory/packet/__tests__/connectorRegistryPin.test.ts</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Replace the hard-coded selection seam</strong></li>
+</ul>
+<p>Change <code>buildConnectorOpsData(drillMap)</code> to consume:</p>
+<pre><code class="language-typescript">export interface ConnectorSelectionContext {
+  resolution: ConnectorResolution;
+  materialAId: string;
+  materialBId: string;
+  measuredThicknessAMm: number;
+  measuredThicknessBMm: number;
+  machineCapabilityIds: string[];
+}
+
+export function buildConnectorOpsData(
+  drillMap: DrillMap | null,
+  context: ConnectorSelectionContext,
+): PacketConnectorOps</code></pre>
+<p>When <code>resolution.ok</code> is false, emit a refusal artifact and zero manufacturing operations. <code>SHADOW_ONLY</code> may emit comparison operations but must retain the NFP gate.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run scoped and full nested gates</strong></li>
+</ul>
+<pre><code class="language-powershell">npm.cmd run test:run -- src/core/hardware/registry src/core/connector src/factory/packet
+npm.cmd run typecheck:all
+npm.cmd run build</code></pre>
+<p>Expected: exit 0; factory packets remain explicitly NOT-FOR-PRODUCTION.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-powershell">git add src/factory/packet src/core/hardware/registry
+git commit -m "feat(factory): pin exact connector registry evidence"</code></pre>
+<h2>Final reconciliation and release gate</h2>
+<ul>
+<li>[ ] Run all parent component-master tests and <code>tools/verify_kitchen_kernel.py</code>.</li>
+<li>[ ] Rebuild release 0.1.0 twice and record identical SHA-256 values.</li>
+<li>[ ] Run full nested Vitest, typecheck and build with complete output.</li>
+<li>[ ] Diff parent release SKU IDs against nested materialized release; count and list any differences.</li>
+<li>[ ] Prove all 12 cohort brands have a denominator and every discovered row has a classification.</li>
+<li>[ ] Prove each <code>VERIFIED</code> field has primary-source evidence and rights state.</li>
+<li>[ ] Prove all incomplete BOMs, unsupported thicknesses, Rastex fallback attempts and tampered hashes fail closed.</li>
+<li>[ ] Record the current Minifix contradicted/unsourced geometry as an explicit blocker; do not relabel it qualified.</li>
+<li>[ ] Render a bilingual implementation report and coverage report to standalone HTML.</li>
+<li>[ ] Keep parent and nested commits separate; do not push until the owner reviews both histories and evidence.</li>
+</ul>
+<h2>Execution checkpoints</h2>
+<ol>
+<li><strong>Foundation checkpoint:</strong> after Task 8, review schema, graph, qualification and deterministic release before vendor data expansion.</li>
+<li><strong>Cohort checkpoint:</strong> after Task 12, review source denominators, rights and classifications before runtime import.</li>
+<li><strong>Runtime checkpoint:</strong> after Task 16, run independent spec-conformance and code-quality review plus full gates.</li>
+<li><strong>Production decision:</strong> outside this plan. Requires physical configuration qualification, machine/coupon/first-article evidence, security and owner ratification; software completion alone cannot remove NOT-FOR-PRODUCTION.</li>
+</ol>
+<h2>Spec-coverage self-review</h2>
+<div class="tablewrap"><table><thead><tr><th>Approved requirement</th><th>Implemented by</th></tr></thead><tbody>
+<tr><td>Global living brand registry and transparent denominator</td><td>Tasks 8–12</td></tr>
+<tr><td>Exact model/order code and multidimensional verification</td><td>Tasks 2, 3, 9–12</td></tr>
+<tr><td>Complete System BOM, tools and compatibility</td><td>Task 4 plus cohort data tasks</td></tr>
+<tr><td>All cabinet substrates and actual thickness</td><td>Task 5</td></tr>
+<tr><td>Arbitrary W × D × H and tall-cabinet refusal behavior</td><td>Task 6</td></tr>
+<tr><td>Primary-source hierarchy, immutable evidence and rights</td><td>Tasks 3, 7, 9–12</td></tr>
+<tr><td>Continuous ingestion, quarantine, lifecycle and coverage</td><td>Tasks 7–12</td></tr>
+<tr><td>Tenant-local Daph/commercial overlays</td><td>Task 13</td></tr>
+<tr><td>Parent canonical authority and nested pinned consumer</td><td>Tasks 1, 8, 14</td></tr>
+<tr><td>No Rastex/unknown-family fallback</td><td>Task 15</td></tr>
+<tr><td>Factory-packet provenance and NFP enforcement</td><td>Task 16</td></tr>
+<tr><td>Physical qualification remains separate from software proof</td><td>Final gate and production checkpoint</td></tr>
+</tbody></table></div>
+</main></body>
+</html>
