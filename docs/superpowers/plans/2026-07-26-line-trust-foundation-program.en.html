@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MONOLITH LINE Trust Foundation Program Plan</title>
+<style>:root{color-scheme:light dark;--bg:#f5f7f8;--surface:#fff;--text:#17202a;--muted:#5f6b76;--border:#d8dee4;--accent:#116a57;--code:#eef2f4} @media(prefers-color-scheme:dark){:root{--bg:#10161b;--surface:#182127;--text:#e9eef2;--muted:#aab5be;--border:#35414a;--accent:#67d2b4;--code:#202a31}} *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;line-height:1.65}main{max-width:1180px;min-height:100vh;margin:0 auto;padding:40px 30px 72px;background:var(--surface)}h1{font-size:2rem;line-height:1.2;border-bottom:3px solid var(--accent);padding-bottom:.5rem}h2{margin-top:2.4rem;border-bottom:1px solid var(--border);padding-bottom:.3rem}h3{margin-top:1.8rem}h4{margin-top:1.4rem}p,li{max-width:98ch}blockquote{margin-left:0;padding:.3rem 1rem;border-left:4px solid var(--accent);color:var(--muted)}table{width:100%;border-collapse:collapse;margin:1rem 0 1.5rem;font-size:.94rem}th,td{padding:.62rem .7rem;border:1px solid var(--border);text-align:left;vertical-align:top}th{background:var(--code)}code{padding:.12rem .3rem;border-radius:4px;background:var(--code)}pre{overflow:auto;padding:1rem;border:1px solid var(--border);border-radius:8px;background:var(--code)}pre code{padding:0}a{color:var(--accent)}input[type=checkbox]{margin-right:.45rem}@media(max-width:760px){main{padding:24px 16px}table{display:block;overflow-x:auto}h1{font-size:1.55rem}}@media print{body{background:#fff;color:#000}main{max-width:none;padding:0}a{color:#000;text-decoration:none}}</style>
+</head>
+<body>
+<main>
+<h1>MONOLITH LINE Trust Foundation Program Plan</h1>
+<p><strong>Edition:</strong> English<br>
+<strong>Date:</strong> 26 July 2026<br>
+<strong>Status:</strong> Program sequencing approved by the written design; implementation not started<br>
+<strong>Authoritative design:</strong> <code>docs/superpowers/specs/2026-07-26-line-trust-foundation-design.en.md</code><br>
+<strong>Active product repository:</strong> nested <code>determined-williams/</code> Git repository<br>
+<strong>Governance repository:</strong> parent workspace root</p>
+<h2>1. Executive outcome</h2>
+<p>MONOLITH will deliver the LINE Trust Foundation through six independently reviewable waves. Each wave must produce testable software, fresh evidence, a rollback boundary, and a commit that can be reviewed without accepting the next wave.</p>
+<p>The program is not a live customer-messaging expansion. Its first commercial proof remains a second-tenant shadow journey with delivery blocked.</p>
+<h2>2. Mandatory program invariants</h2>
+<ol>
+<li>LINE remains the Human Surface, not the system of record or authorization authority.</li>
+<li>Every business resource has exactly one owner tenant.</li>
+<li>Daph is one pilot tenant and does not own platform governance or shared canonical data.</li>
+<li>External organizations collaborate through scoped, expiring, revocable grants.</li>
+<li>Unknown LINE participants can submit quarantined evidence only.</li>
+<li>High-risk actions require action-bound step-up.</li>
+<li>Delegation is explicit, bounded, revocable, non-transitive, and non-amplifying.</li>
+<li><code>site_code</code> remains a compatibility alias during migration and never becomes the canonical tenant boundary.</li>
+<li>Business state, decision audit, and delivery intent commit atomically.</li>
+<li>No live Tenant-2 messaging or broader customer messaging is enabled until every release gate passes.</li>
+</ol>
+<h2>3. Repository and execution controls</h2>
+<ul>
+<li>Inspect the parent and nested Git roots before every wave.</li>
+<li>Read <code>CONTEXT.md</code> and the 21 July 2026 repository-scope correction before making maturity, runtime, migration, or readiness claims.</li>
+<li>Execute each wave in an isolated Git worktree created through <code>using-git-worktrees</code>.</li>
+<li>Preserve all pre-existing changes in both roots.</li>
+<li>Use <code>test-driven-development</code> for every feature or defect change.</li>
+<li>Use <code>verification-before-completion</code> before every success, test, build, migration, or release claim.</li>
+<li>Use <code>requesting-code-review</code> at the end of every wave.</li>
+<li>Produce all project-facing Markdown in English and Thai with matching standalone HTML.</li>
+<li>Keep live customer delivery disabled throughout Waves 1–6.</li>
+</ul>
+<h2>4. Dependency map</h2>
+<table>
+<thead>
+<tr>
+<th>Wave</th>
+<th>Deliverable</th>
+<th>Depends on</th>
+<th>Enables</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Trust Kernel contracts, canonical tenant bridge, shadow inbound observation</td>
+<td>Approved design</td>
+<td>Every later policy and isolation decision</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Unified LINE ingress and dispatcher enforcement</td>
+<td>Wave 1 shadow evidence</td>
+<td>One webhook path for message, postback, group, room, and lifecycle events</td>
+</tr>
+<tr>
+<td>3</td>
+<td>LINE identity binding and risk-based step-up</td>
+<td>Waves 1–2</td>
+<td>Consequential approvals and orders</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Group authorization and quarantined evidence</td>
+<td>Waves 1–3</td>
+<td>Safe field evidence and customer-group actions</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Atomic outbox and reliable LINE delivery</td>
+<td>Waves 1–4</td>
+<td>Retry-safe push/reply/group delivery</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Tamper-evident audit, privacy lifecycle, Tenant-2 shadow proof, release dossier</td>
+<td>Waves 1–5</td>
+<td>Executive go/no-go decision</td>
+</tr>
+</tbody></table>
+<h2>5. Wave 1 — Trust Kernel and shadow ingress</h2>
+<p><strong>Executable plan:</strong> <code>docs/superpowers/plans/2026-07-26-line-trust-kernel-wave-1.en.md</code></p>
+<h3>Scope</h3>
+<ul>
+<li>Create the canonical TypeScript decision contract.</li>
+<li>Add Tenant, Organization, Site, profile, membership, grant, delegation, and mapping structures additively.</li>
+<li>Preserve Daph behavior through a deterministic compatibility bridge.</li>
+<li>Add policy-decision records and a default-deny decision RPC.</li>
+<li>Observe verified LINE webhook events in a shadow inbox without changing business outcomes or sending messages.</li>
+<li>Produce a machine-readable shadow report.</li>
+</ul>
+<h3>Exit gate</h3>
+<ul>
+<li>New policy contract tests pass.</li>
+<li>Database isolation and mapping tests pass.</li>
+<li>Existing Daph LINE tests remain unchanged or pass with documented, reviewed updates.</li>
+<li>Every observed event has either a resolved owner tenant or an explicit unresolved reason.</li>
+<li>Shadow observation emits zero delivery intents.</li>
+<li>No live behavior is enforced.</li>
+</ul>
+<h2>6. Wave 2 — Unified ingress and dispatcher</h2>
+<h3>File boundary</h3>
+<ul>
+<li>Modify <code>supabase/functions/line-webhook/index.ts</code>.</li>
+<li>Modify <code>supabase/functions/approval-postback/index.ts</code> into a compatibility adapter that invokes the same ingress contract.</li>
+<li>Create <code>supabase/functions/_shared/line-oa/dispatcher.ts</code>.</li>
+<li>Create <code>supabase/functions/_shared/line-oa/dispatcher.test.ts</code>.</li>
+<li>Create <code>supabase/migrations/0165_line_trust_unified_ingress.sql</code> after confirming Wave 1 owns migrations <code>0162</code>–<code>0164</code>.</li>
+<li>Add <code>tests/line-oa-commerce/py/test_unified_ingress_property.py</code>.</li>
+</ul>
+<h3>Required behavior</h3>
+<ol>
+<li>Verify the LINE signature on the raw body before parsing.</li>
+<li>Resolve the receiving channel and owner tenant.</li>
+<li>Persist an idempotent receipt.</li>
+<li>Claim processing with a lease.</li>
+<li>Dispatch all supported event types through one registry.</li>
+<li>Mark <code>SUCCEEDED</code> only after domain, audit, and delivery-intent transactions commit.</li>
+<li>Record retryable failures as <code>RETRYABLE</code>; do not convert returned error values into success.</li>
+<li>Reclaim stale leases safely.</li>
+<li>Keep the separate approval URL disabled in LINE channel configuration.</li>
+</ol>
+<h3>Exit gate</h3>
+<ul>
+<li>Message, postback, follow, join, leave, group, room, and unsupported events have explicit test outcomes.</li>
+<li>Duplicate <code>SUCCEEDED</code> events no-op.</li>
+<li>Failed events are retryable or dead-lettered, never falsely succeeded.</li>
+<li>Approval postbacks traverse the unified dispatcher.</li>
+<li>Daph regression evidence passes before enforcement is enabled.</li>
+</ul>
+<h2>7. Wave 3 — Identity binding and action-bound step-up</h2>
+<h3>File boundary</h3>
+<ul>
+<li>Modify <code>supabase/functions/line-login/index.ts</code>.</li>
+<li>Create <code>supabase/functions/line-login/index.test.ts</code>.</li>
+<li>Create <code>supabase/functions/line-auth-start/index.ts</code>.</li>
+<li>Create <code>supabase/functions/line-auth-start/index.test.ts</code>.</li>
+<li>Create <code>src/pages/LineStepUpPage.tsx</code> and its component test.</li>
+<li>Modify <code>src/routes/index.tsx</code> to add the authoritative step-up route.</li>
+<li>Create <code>supabase/migrations/0166_line_trust_identity_step_up.sql</code>.</li>
+<li>Add <code>tests/line-oa-commerce/py/test_identity_step_up_property.py</code>.</li>
+</ul>
+<h3>Required behavior</h3>
+<ol>
+<li>Issue unpredictable server-side <code>state</code> and OIDC <code>nonce</code>.</li>
+<li>Bind exact redirect URI, tenant, profile, action digest, expected revision, expiry, and one-time token digest.</li>
+<li>Consume the transaction atomically before identity binding or session minting.</li>
+<li>Reject missing, expired, mismatched, replayed, callback-swapped, or previously consumed transactions.</li>
+<li>Show the exact consequence before confirmation.</li>
+<li>Invalidate the transaction when revision, amount, scope, or payload changes.</li>
+</ol>
+<h3>Exit gate</h3>
+<ul>
+<li>Positive and negative state/nonce tests pass.</li>
+<li>Replays and callback swaps fail closed.</li>
+<li>A high-risk action produces <code>STEP_UP</code> until the exact transaction is consumed.</li>
+<li>No generic login session can approve a different action.</li>
+</ul>
+<h2>8. Wave 4 — Group authorization and quarantine</h2>
+<h3>File boundary</h3>
+<ul>
+<li>Create <code>supabase/functions/_shared/line-oa/group-action-classifier.ts</code>.</li>
+<li>Create its unit test.</li>
+<li>Create <code>supabase/migrations/0167_line_trust_group_quarantine.sql</code>.</li>
+<li>Add <code>tests/line-oa-commerce/py/test_group_quarantine_property.py</code>.</li>
+<li>Add a quarantine review surface under <code>src/pages/</code> using the existing route and component conventions.</li>
+</ul>
+<h3>Required behavior</h3>
+<ol>
+<li>Resolve group, owner tenant, project, organization party, human profile, membership, grants, and delegation independently.</li>
+<li>Treat group membership as context only.</li>
+<li>Store unknown-actor photos and issue reports as quarantined evidence.</li>
+<li>Prohibit quarantined evidence from changing workflow state.</li>
+<li>Require exact-action authorization for approval, acceptance, ordering, scope, price, and workflow transition.</li>
+<li>Record review, promotion, rejection, retention, and purge events.</li>
+</ol>
+<h3>Exit gate</h3>
+<ul>
+<li>Wrong group, wrong project, wrong tenant, spoofed source, expired grant, and transitive delegation tests deny.</li>
+<li>Unknown actor evidence is retained without business mutation.</li>
+<li>Authorized low-risk evidence is linked to the correct project.</li>
+<li>High-risk group action requires Wave 3 step-up.</li>
+</ul>
+<h2>9. Wave 5 — Atomic outbox and delivery reliability</h2>
+<h3>File boundary</h3>
+<ul>
+<li>Modify <code>supabase/functions/line-outbound-sender/index.ts</code>.</li>
+<li>Extend <code>tests/line-oa-commerce/ts/senderClaimAndRecord.integration.test.ts</code>.</li>
+<li>Create <code>tests/line-oa-commerce/ts/senderLeaseAndRetry.integration.test.ts</code>.</li>
+<li>Create <code>supabase/migrations/0168_line_trust_atomic_outbox.sql</code>.</li>
+<li>Add <code>tests/line-oa-commerce/py/test_atomic_outbox_property.py</code>.</li>
+</ul>
+<h3>Required behavior</h3>
+<ol>
+<li>Persist delivery intent in the same transaction as business state and decision audit.</li>
+<li>Atomically claim rows with owner, lease token, and lease expiry.</li>
+<li>Use one stable retry key per delivery intent for LINE APIs that support it.</li>
+<li>Distinguish success, duplicate acceptance, retryable failure, permanent failure, and unknown-after-send.</li>
+<li>Use bounded backoff and dead letter.</li>
+<li>Require audited operator reconciliation for unknown-after-send.</li>
+<li>Never mark delivery successful when result recording fails.</li>
+</ol>
+<h3>Exit gate</h3>
+<ul>
+<li>Concurrent workers cannot own the same lease.</li>
+<li>Crash-before-send and crash-after-send scenarios reconcile without uncontrolled duplicates.</li>
+<li><code>429</code>, <code>5xx</code>, permanent <code>4xx</code>, duplicate acceptance, and lease expiry tests pass.</li>
+<li>Secrets and access tokens do not appear in logs, audits, or error details.</li>
+</ul>
+<h2>10. Wave 6 — Audit, privacy, Tenant-2 proof, and release dossier</h2>
+<h3>File boundary</h3>
+<ul>
+<li>Create <code>supabase/migrations/0169_line_trust_audit_privacy.sql</code>.</li>
+<li>Create <code>scripts/line-trust-shadow-report.mjs</code>.</li>
+<li>Create its Vitest test.</li>
+<li>Add <code>tests/line-oa-commerce/py/test_audit_privacy_property.py</code>.</li>
+<li>Create bilingual runbooks and matching HTML under <code>docs/runbooks/line-trust-foundation/</code>.</li>
+<li>Create machine-readable release evidence under <code>artifacts/line-trust/</code>.</li>
+</ul>
+<h3>Required behavior</h3>
+<ol>
+<li>Record transport actor, human principal, tenant profile, delegated-by principal, action, resource, revision, digest, policy version, assurance, decision, reason, causation, retention class, and data classification.</li>
+<li>Provide digest chaining or an external immutable archive proof.</li>
+<li>Block secrets, raw authorization codes, bind tokens, and unnecessary PII.</li>
+<li>Enforce retention, export, review, pseudonymization, and purge rules.</li>
+<li>Create a second tenant in a non-live or blocked-delivery environment.</li>
+<li>Prove negative tenant isolation, scoped collaboration, revocation, expiry, step-up, retry, backup/restore, rollback, and operator recovery.</li>
+<li>Produce a release dossier naming commit, migrations, configuration, tests, environment, evidence hashes, reviewers, and approvers.</li>
+</ol>
+<h3>Exit gate</h3>
+<ul>
+<li>All ten release gates in the approved design pass with fresh complete output.</li>
+<li>Tenant-2 live delivery remains blocked.</li>
+<li>No open Critical or High finding remains.</li>
+<li>Executive reviewers receive an explicit go/no-go recommendation; the program does not self-enable production messaging.</li>
+</ul>
+<h2>11. Rollback strategy</h2>
+<table>
+<thead>
+<tr>
+<th>Wave</th>
+<th>Rollback boundary</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Disable shadow observer; retain additive canonical tables and mappings</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Return routing to legacy behavior only after verifying no events remain leased; keep inbox records</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Disable step-up initiation and preserve consumed transaction audit</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Disable governed group actions; retain quarantined evidence under retention policy</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Stop workers, expire leases, reconcile unknown-after-send, then restore the previous sender</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Keep Tenant 2 blocked and retain release evidence; no live state needs reversal</td>
+</tr>
+</tbody></table>
+<p>Rollback must never delete audit or evidence required to explain actions already taken.</p>
+<h2>12. Program decision gates</h2>
+<p>At the end of each wave, the owner chooses one:</p>
+<ul>
+<li><strong>Proceed:</strong> every exit criterion passed with complete evidence.</li>
+<li><strong>Remediate:</strong> scope stays fixed and failed evidence receives an owner and correction.</li>
+<li><strong>Stop:</strong> disable the new runtime path and retain the evidence.</li>
+<li><strong>Redesign:</strong> return to brainstorming when the approved invariant or architecture must change.</li>
+</ul>
+<p>No wave may proceed on “expected to pass,” partial output, or source inspection alone.</p>
+<h2>13. Execution handoff</h2>
+<p>Wave 1 is the only implementation scope authorized by this program plan. Waves 2–6 each require their own reviewed agentic plan before code changes begin.</p>
+<p>Recommended execution mode for Wave 1 is <code>subagent-driven-development</code>; inline execution may use <code>executing-plans</code>. Either mode must begin from an isolated worktree and preserve the current dirty repositories.</p>
+</main>
+</body>
+</html>

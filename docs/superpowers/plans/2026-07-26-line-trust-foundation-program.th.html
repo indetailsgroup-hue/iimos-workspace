@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>แผนโปรแกรม MONOLITH LINE Trust Foundation</title>
+<style>:root{color-scheme:light dark;--bg:#f5f7f8;--surface:#fff;--text:#17202a;--muted:#5f6b76;--border:#d8dee4;--accent:#116a57;--code:#eef2f4} @media(prefers-color-scheme:dark){:root{--bg:#10161b;--surface:#182127;--text:#e9eef2;--muted:#aab5be;--border:#35414a;--accent:#67d2b4;--code:#202a31}} *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;line-height:1.65}main{max-width:1180px;min-height:100vh;margin:0 auto;padding:40px 30px 72px;background:var(--surface)}h1{font-size:2rem;line-height:1.2;border-bottom:3px solid var(--accent);padding-bottom:.5rem}h2{margin-top:2.4rem;border-bottom:1px solid var(--border);padding-bottom:.3rem}h3{margin-top:1.8rem}h4{margin-top:1.4rem}p,li{max-width:98ch}blockquote{margin-left:0;padding:.3rem 1rem;border-left:4px solid var(--accent);color:var(--muted)}table{width:100%;border-collapse:collapse;margin:1rem 0 1.5rem;font-size:.94rem}th,td{padding:.62rem .7rem;border:1px solid var(--border);text-align:left;vertical-align:top}th{background:var(--code)}code{padding:.12rem .3rem;border-radius:4px;background:var(--code)}pre{overflow:auto;padding:1rem;border:1px solid var(--border);border-radius:8px;background:var(--code)}pre code{padding:0}a{color:var(--accent)}input[type=checkbox]{margin-right:.45rem}@media(max-width:760px){main{padding:24px 16px}table{display:block;overflow-x:auto}h1{font-size:1.55rem}}@media print{body{background:#fff;color:#000}main{max-width:none;padding:0}a{color:#000;text-decoration:none}}</style>
+</head>
+<body>
+<main>
+<h1>แผนโปรแกรม MONOLITH LINE Trust Foundation</h1>
+<p><strong>ฉบับ:</strong> ภาษาไทย<br>
+<strong>วันที่:</strong> 26 กรกฎาคม 2026<br>
+<strong>สถานะ:</strong> ลำดับโปรแกรมได้รับรองจาก Written Design แล้ว; ยังไม่เริ่ม implementation<br>
+<strong>แบบระบบอ้างอิง:</strong> <code>docs/superpowers/specs/2026-07-26-line-trust-foundation-design.th.md</code><br>
+<strong>Product repository:</strong> nested Git repository <code>determined-williams/</code><br>
+<strong>Governance repository:</strong> workspace root ชั้นนอก</p>
+<h2>1. ผลลัพธ์ระดับบริหาร</h2>
+<p>MONOLITH จะส่งมอบ LINE Trust Foundation เป็น 6 Wave ที่ตรวจรับแยกกันได้ ทุก Wave ต้องให้ซอฟต์แวร์ที่ทดสอบได้ มีหลักฐานสด มีขอบเขต rollback และมี commit ที่ตรวจได้โดยไม่บังคับให้ยอมรับ Wave ถัดไป</p>
+<p>โปรแกรมนี้ไม่ใช่การขยาย customer messaging จริง Proof เชิงพาณิชย์แรกยังเป็น Tenant ที่สองใน shadow journey โดยปิด delivery</p>
+<h2>2. Program invariants ที่บังคับ</h2>
+<ol>
+<li>LINE ยังคงเป็น Human Surface ไม่ใช่ system of record หรือ authorization authority</li>
+<li>Business resource ทุกชิ้นมี Owner Tenant เดียว</li>
+<li>Daph เป็น pilot tenant หนึ่งรายและไม่ใช่เจ้าของ platform governance หรือ shared canonical data</li>
+<li>องค์กรภายนอกร่วมงานผ่าน grant ที่จำกัดขอบเขต มีวันหมดอายุ และเพิกถอนได้</li>
+<li>ผู้ใช้ LINE ที่ไม่รู้จักส่งได้เฉพาะ quarantined evidence</li>
+<li>Action ความเสี่ยงสูงต้องผ่าน action-bound step-up</li>
+<li>Delegation ต้อง explicit, bounded, revocable, non-transitive และไม่เพิ่มอำนาจ</li>
+<li><code>site_code</code> เป็น compatibility alias ระหว่าง migration และห้ามเป็น canonical tenant boundary</li>
+<li>Business state, decision audit และ delivery intent ต้อง commit แบบ atomic</li>
+<li>ห้าม Tenant-2 live messaging หรือขยาย customer messaging จนผ่าน release gate ทุกข้อ</li>
+</ol>
+<h2>3. การควบคุม Repository และการลงมือ</h2>
+<ul>
+<li>ตรวจ parent และ nested Git root ก่อนทุก Wave</li>
+<li>อ่าน <code>CONTEXT.md</code> และเอกสารแก้ไขขอบเขต repository วันที่ 21 กรกฎาคม 2026 ก่อนกล่าวถึง maturity, runtime, migration หรือ readiness</li>
+<li>ทำแต่ละ Wave ใน isolated Git worktree ที่สร้างผ่าน <code>using-git-worktrees</code></li>
+<li>รักษาการเปลี่ยนแปลงเดิมทั้งหมดใน Git root ทั้งสอง</li>
+<li>ใช้ <code>test-driven-development</code> กับทุก feature หรือ defect change</li>
+<li>ใช้ <code>verification-before-completion</code> ก่อนกล่าวว่า test, build, migration, release หรือ Wave ผ่าน</li>
+<li>ใช้ <code>requesting-code-review</code> เมื่อจบทุก Wave</li>
+<li>Project-facing Markdown ทุกฉบับต้องมี EN/TH และ standalone HTML ที่ตรงกัน</li>
+<li>ปิด live customer delivery ตลอด Wave 1–6</li>
+</ul>
+<h2>4. Dependency map</h2>
+<table>
+<thead>
+<tr>
+<th>Wave</th>
+<th>Deliverable</th>
+<th>ต้องมีมาก่อน</th>
+<th>สิ่งที่เปิดทางให้</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Trust Kernel contracts, canonical tenant bridge และ shadow inbound observation</td>
+<td>Approved design</td>
+<td>ทุก policy/isolation decision ถัดไป</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Unified LINE ingress และ dispatcher enforcement</td>
+<td>หลักฐาน Shadow จาก Wave 1</td>
+<td>Webhook เดียวสำหรับ message, postback, group, room และ lifecycle events</td>
+</tr>
+<tr>
+<td>3</td>
+<td>LINE identity binding และ risk-based step-up</td>
+<td>Wave 1–2</td>
+<td>Approval และ order ที่มีผลผูกพัน</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Group authorization และ quarantined evidence</td>
+<td>Wave 1–3</td>
+<td>Field evidence และ customer-group action ที่ปลอดภัย</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Atomic outbox และ reliable LINE delivery</td>
+<td>Wave 1–4</td>
+<td>Push/reply/group delivery ที่ retry ได้</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Tamper-evident audit, privacy lifecycle, Tenant-2 shadow proof และ release dossier</td>
+<td>Wave 1–5</td>
+<td>คำตัดสิน go/no-go ของผู้บริหาร</td>
+</tr>
+</tbody></table>
+<h2>5. Wave 1 — Trust Kernel และ Shadow Ingress</h2>
+<p><strong>แผนลงมือ:</strong> <code>docs/superpowers/plans/2026-07-26-line-trust-kernel-wave-1.th.md</code></p>
+<h3>Scope</h3>
+<ul>
+<li>สร้าง canonical TypeScript decision contract</li>
+<li>เพิ่มโครงสร้าง Tenant, Organization, Site, profile, membership, grant, delegation และ mapping แบบ additive</li>
+<li>รักษาพฤติกรรม Daph ผ่าน compatibility bridge ที่ deterministic</li>
+<li>เพิ่ม policy-decision records และ default-deny decision RPC</li>
+<li>Observe LINE webhook ที่ตรวจ signature แล้วใน shadow inbox โดยไม่เปลี่ยน business outcome หรือส่งข้อความ</li>
+<li>สร้าง machine-readable shadow report</li>
+</ul>
+<h3>Exit gate</h3>
+<ul>
+<li>Policy contract tests ใหม่ผ่าน</li>
+<li>Database isolation และ mapping tests ผ่าน</li>
+<li>Existing Daph LINE tests ไม่เปลี่ยน หรือผ่านพร้อมการแก้ที่มีเหตุผลและผ่าน review</li>
+<li>Observed event ทุกตัว resolve Owner Tenant ได้หรือมี unresolved reason ชัดเจน</li>
+<li>Shadow observation สร้าง delivery intent เป็นศูนย์</li>
+<li>ยังไม่มีการเปิด enforcement</li>
+</ul>
+<h2>6. Wave 2 — Unified Ingress และ Dispatcher</h2>
+<h3>File boundary</h3>
+<ul>
+<li>แก้ <code>supabase/functions/line-webhook/index.ts</code></li>
+<li>แก้ <code>supabase/functions/approval-postback/index.ts</code> เป็น compatibility adapter ที่เรียก ingress contract เดียวกัน</li>
+<li>สร้าง <code>supabase/functions/_shared/line-oa/dispatcher.ts</code></li>
+<li>สร้าง <code>supabase/functions/_shared/line-oa/dispatcher.test.ts</code></li>
+<li>สร้าง <code>supabase/migrations/0165_line_trust_unified_ingress.sql</code> หลังยืนยันว่า Wave 1 ใช้ migration <code>0162</code>–<code>0164</code></li>
+<li>เพิ่ม <code>tests/line-oa-commerce/py/test_unified_ingress_property.py</code></li>
+</ul>
+<h3>พฤติกรรมบังคับ</h3>
+<ol>
+<li>ตรวจ LINE signature บน raw body ก่อน parse</li>
+<li>Resolve receiving channel และ Owner Tenant</li>
+<li>บันทึก idempotent receipt</li>
+<li>Claim processing พร้อม lease</li>
+<li>Dispatch event type ที่รองรับทั้งหมดผ่าน registry เดียว</li>
+<li>Mark <code>SUCCEEDED</code> หลัง domain, audit และ delivery-intent transaction commit เท่านั้น</li>
+<li>บันทึก retryable failure เป็น <code>RETRYABLE</code>; ห้ามแปลง returned error value เป็น success</li>
+<li>Reclaim stale lease ได้อย่างปลอดภัย</li>
+<li>ปิด approval URL แยกใน LINE channel configuration</li>
+</ol>
+<h3>Exit gate</h3>
+<ul>
+<li>Message, postback, follow, join, leave, group, room และ unsupported event มี test outcome ชัดเจน</li>
+<li>Duplicate ที่ <code>SUCCEEDED</code> no-op</li>
+<li>Failed event เป็น retryable หรือ dead-letter ไม่ใช่ false success</li>
+<li>Approval postback ผ่าน unified dispatcher</li>
+<li>Daph regression evidence ผ่านก่อนเปิด enforcement</li>
+</ul>
+<h2>7. Wave 3 — Identity Binding และ Action-bound Step-up</h2>
+<h3>File boundary</h3>
+<ul>
+<li>แก้ <code>supabase/functions/line-login/index.ts</code></li>
+<li>สร้าง <code>supabase/functions/line-login/index.test.ts</code></li>
+<li>สร้าง <code>supabase/functions/line-auth-start/index.ts</code></li>
+<li>สร้าง <code>supabase/functions/line-auth-start/index.test.ts</code></li>
+<li>สร้าง <code>src/pages/LineStepUpPage.tsx</code> และ component test</li>
+<li>แก้ <code>src/routes/index.tsx</code> เพื่อเพิ่ม authoritative step-up route</li>
+<li>สร้าง <code>supabase/migrations/0166_line_trust_identity_step_up.sql</code></li>
+<li>เพิ่ม <code>tests/line-oa-commerce/py/test_identity_step_up_property.py</code></li>
+</ul>
+<h3>พฤติกรรมบังคับ</h3>
+<ol>
+<li>ออก server-side <code>state</code> และ OIDC <code>nonce</code> ที่เดาไม่ได้</li>
+<li>ผูก exact redirect URI, tenant, profile, action digest, expected revision, expiry และ one-time token digest</li>
+<li>Consume transaction แบบ atomic ก่อน identity binding หรือ session minting</li>
+<li>Reject transaction ที่ขาด หมดอายุ ไม่ตรง replay callback-swapped หรือเคย consume แล้ว</li>
+<li>แสดงผลกระทบที่แน่นอนก่อน confirmation</li>
+<li>Invalidate transaction เมื่อ revision, amount, scope หรือ payload เปลี่ยน</li>
+</ol>
+<h3>Exit gate</h3>
+<ul>
+<li>State/nonce positive และ negative tests ผ่าน</li>
+<li>Replay และ callback swap fail closed</li>
+<li>High-risk action ให้ <code>STEP_UP</code> จน exact transaction ถูก consume</li>
+<li>Generic login session อนุมัติ action อื่นไม่ได้</li>
+</ul>
+<h2>8. Wave 4 — Group Authorization และ Quarantine</h2>
+<h3>File boundary</h3>
+<ul>
+<li>สร้าง <code>supabase/functions/_shared/line-oa/group-action-classifier.ts</code></li>
+<li>สร้าง unit test ของไฟล์นี้</li>
+<li>สร้าง <code>supabase/migrations/0167_line_trust_group_quarantine.sql</code></li>
+<li>เพิ่ม <code>tests/line-oa-commerce/py/test_group_quarantine_property.py</code></li>
+<li>เพิ่ม quarantine review surface ใต้ <code>src/pages/</code> ตาม route/component convention ปัจจุบัน</li>
+</ul>
+<h3>พฤติกรรมบังคับ</h3>
+<ol>
+<li>Resolve group, owner tenant, project, organization party, human profile, membership, grants และ delegation แยกกัน</li>
+<li>Group membership เป็น context เท่านั้น</li>
+<li>เก็บรูปและ issue report จาก unknown actor เป็น quarantined evidence</li>
+<li>Quarantined evidence เปลี่ยน workflow state ไม่ได้</li>
+<li>Approval, acceptance, ordering, scope, price และ workflow transition ต้อง authorize exact action</li>
+<li>บันทึก review, promotion, rejection, retention และ purge</li>
+</ol>
+<h3>Exit gate</h3>
+<ul>
+<li>Wrong group/project/tenant, spoofed source, expired grant และ transitive delegation ถูก deny</li>
+<li>Unknown actor evidence ถูกเก็บโดยไม่มี business mutation</li>
+<li>Authorized low-risk evidence ผูก Project ถูกต้อง</li>
+<li>High-risk group action ต้องใช้ Step-up จาก Wave 3</li>
+</ul>
+<h2>9. Wave 5 — Atomic Outbox และ Delivery Reliability</h2>
+<h3>File boundary</h3>
+<ul>
+<li>แก้ <code>supabase/functions/line-outbound-sender/index.ts</code></li>
+<li>ขยาย <code>tests/line-oa-commerce/ts/senderClaimAndRecord.integration.test.ts</code></li>
+<li>สร้าง <code>tests/line-oa-commerce/ts/senderLeaseAndRetry.integration.test.ts</code></li>
+<li>สร้าง <code>supabase/migrations/0168_line_trust_atomic_outbox.sql</code></li>
+<li>เพิ่ม <code>tests/line-oa-commerce/py/test_atomic_outbox_property.py</code></li>
+</ul>
+<h3>พฤติกรรมบังคับ</h3>
+<ol>
+<li>บันทึก delivery intent ใน transaction เดียวกับ business state และ decision audit</li>
+<li>Claim row แบบ atomic พร้อม owner, lease token และ lease expiry</li>
+<li>ใช้ stable retry key หนึ่งค่าต่อ delivery intent สำหรับ LINE API ที่รองรับ</li>
+<li>แยก success, duplicate acceptance, retryable failure, permanent failure และ unknown-after-send</li>
+<li>ใช้ bounded backoff และ dead letter</li>
+<li>Unknown-after-send ต้องผ่าน audited operator reconciliation</li>
+<li>Result recording ล้มเหลวห้าม mark delivery ว่าสำเร็จ</li>
+</ol>
+<h3>Exit gate</h3>
+<ul>
+<li>Concurrent worker ครอง lease เดียวกันไม่ได้</li>
+<li>Crash-before-send และ crash-after-send reconcile ได้โดยไม่มี uncontrolled duplicate</li>
+<li>Tests สำหรับ <code>429</code>, <code>5xx</code>, permanent <code>4xx</code>, duplicate acceptance และ lease expiry ผ่าน</li>
+<li>Secret/access token ไม่อยู่ใน log, audit หรือ error detail</li>
+</ul>
+<h2>10. Wave 6 — Audit, Privacy, Tenant-2 Proof และ Release Dossier</h2>
+<h3>File boundary</h3>
+<ul>
+<li>สร้าง <code>supabase/migrations/0169_line_trust_audit_privacy.sql</code></li>
+<li>สร้าง <code>scripts/line-trust-shadow-report.mjs</code></li>
+<li>สร้าง Vitest test ของสคริปต์</li>
+<li>เพิ่ม <code>tests/line-oa-commerce/py/test_audit_privacy_property.py</code></li>
+<li>สร้าง runbook สองภาษาและ matching HTML ใต้ <code>docs/runbooks/line-trust-foundation/</code></li>
+<li>สร้าง machine-readable release evidence ใต้ <code>artifacts/line-trust/</code></li>
+</ul>
+<h3>พฤติกรรมบังคับ</h3>
+<ol>
+<li>บันทึก transport actor, human principal, tenant profile, delegated-by principal, action, resource, revision, digest, policy version, assurance, decision, reason, causation, retention class และ data classification</li>
+<li>มี digest chaining หรือ external immutable archive proof</li>
+<li>Block secret, raw authorization code, bind token และ PII ที่ไม่จำเป็น</li>
+<li>บังคับ retention, export, review, pseudonymization และ purge</li>
+<li>สร้าง Tenant ที่สองใน non-live หรือ blocked-delivery environment</li>
+<li>พิสูจน์ negative tenant isolation, scoped collaboration, revocation, expiry, step-up, retry, backup/restore, rollback และ operator recovery</li>
+<li>Release dossier ต้องระบุ commit, migrations, configuration, tests, environment, evidence hashes, reviewers และ approvers</li>
+</ol>
+<h3>Exit gate</h3>
+<ul>
+<li>Release gate ทั้ง 10 ข้อใน approved design ผ่านด้วย fresh complete output</li>
+<li>Tenant-2 live delivery ยังปิด</li>
+<li>ไม่มี Critical/High finding ค้าง</li>
+<li>ผู้บริหารได้รับ go/no-go recommendation ชัดเจน; โปรแกรมห้ามเปิด production messaging เอง</li>
+</ul>
+<h2>11. Rollback Strategy</h2>
+<table>
+<thead>
+<tr>
+<th>Wave</th>
+<th>Rollback boundary</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>ปิด shadow observer; เก็บ canonical tables และ mappings แบบ additive</td>
+</tr>
+<tr>
+<td>2</td>
+<td>กลับ legacy routing หลังยืนยันว่าไม่มี event ค้าง lease; เก็บ inbox records</td>
+</tr>
+<tr>
+<td>3</td>
+<td>ปิด step-up initiation และรักษา consumed transaction audit</td>
+</tr>
+<tr>
+<td>4</td>
+<td>ปิด governed group actions; เก็บ quarantined evidence ตาม retention policy</td>
+</tr>
+<tr>
+<td>5</td>
+<td>หยุด worker, expire lease, reconcile unknown-after-send แล้วจึงคืน sender เดิม</td>
+</tr>
+<tr>
+<td>6</td>
+<td>คง Tenant 2 ในสถานะ blocked และเก็บ release evidence; ไม่มี live state ต้องย้อน</td>
+</tr>
+</tbody></table>
+<p>Rollback ห้ามลบ audit หรือหลักฐานที่จำเป็นต่อการอธิบาย action ที่เกิดแล้ว</p>
+<h2>12. Program Decision Gates</h2>
+<p>เมื่อจบแต่ละ Wave Owner เลือกหนึ่งทาง:</p>
+<ul>
+<li><strong>Proceed:</strong> Exit criteria ผ่านพร้อม complete evidence</li>
+<li><strong>Remediate:</strong> Scope เดิม; failed evidence มี owner และ correction</li>
+<li><strong>Stop:</strong> ปิด runtime path ใหม่และเก็บหลักฐาน</li>
+<li><strong>Redesign:</strong> กลับ brainstorming เมื่อ invariant หรือ architecture ที่อนุมัติต้องเปลี่ยน</li>
+</ul>
+<p>ห้ามเดินหน้าด้วยคำว่า “น่าจะผ่าน” partial output หรือ source inspection อย่างเดียว</p>
+<h2>13. Execution Handoff</h2>
+<p>Program plan นี้อนุญาต Implementation เฉพาะ Wave 1 เท่านั้น Wave 2–6 ต้องมี agentic plan ของตัวเองและผ่าน review ก่อนแก้โค้ด</p>
+<p>โหมดแนะนำสำหรับ Wave 1 คือ <code>subagent-driven-development</code>; ถ้าทำใน session เดียวให้ใช้ <code>executing-plans</code> ทั้งสองแบบต้องเริ่มจาก isolated worktree และรักษา dirty repositories ปัจจุบัน</p>
+</main>
+</body>
+</html>
