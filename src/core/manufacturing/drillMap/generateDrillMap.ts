@@ -2039,6 +2039,11 @@ export function generateMinifixDrillMap(
       density,
       firstHoleZ: fullParams.firstHoleZ,
       distanceB: fullConfig.drillingDistanceB,
+      // authority เดียวกับ corner loop ข้างบน: ค่า resolve แล้ว (mainOverride ??
+      // options.connectorCount ?? density) — synthesis ห้าม recompute จาก density เอง
+      connectorCount,
+      // มุมที่ isCornerEnabled ปิด → synthesis ต้อง skip ด้วย ไม่งั้น bores ค้าง unusedSynth
+      excludeCorners: CORNERS.filter((c) => !isCornerEnabled(c)),
     });
     const skippedSet = new Set(synth.skippedCorners.map((c) => c.corner));
     const unused = [...synth.bores];

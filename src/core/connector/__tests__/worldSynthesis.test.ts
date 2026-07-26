@@ -70,6 +70,31 @@ describe('synthesizeCornerMinifixWorld', () => {
   });
 });
 
+describe('count/exclude authority (T1b — generator เป็นผู้ resolve)', () => {
+  it('opts.connectorCount=4 → 4 sys32 ต่อมุม (BOLT รวม 16) ไม่ใช่ density-derived 3', () => {
+    const r = synthesizeCornerMinifixWorld(overlayCabinet(), { connectorCount: 4 });
+    const bolts = r.bores.filter((b) => b.kind === 'BOLT');
+    expect(bolts).toHaveLength(16);
+    for (const corner of ['TOP_LEFT', 'TOP_RIGHT', 'BOTTOM_LEFT', 'BOTTOM_RIGHT'] as const) {
+      expect(new Set(bolts.filter((b) => b.corner === corner).map((b) => b.sys32Z)).size,
+        `sys32 ที่มุม ${corner}`).toBe(4);
+    }
+  });
+
+  it('ไม่ส่ง connectorCount → density-derived เดิม (backward compatible)', () => {
+    const r = synthesizeCornerMinifixWorld(overlayCabinet(), {});
+    expect(r.bores.filter((b) => b.kind === 'BOLT')).toHaveLength(12); // 3 × 4 มุม
+  });
+
+  it('opts.excludeCorners=[TOP_LEFT] → ไม่มี bores ที่มุมนั้น + รายงานใน skippedCorners', () => {
+    const r = synthesizeCornerMinifixWorld(overlayCabinet(), { excludeCorners: ['TOP_LEFT'] });
+    expect(r.bores.filter((b) => b.corner === 'TOP_LEFT')).toEqual([]);
+    expect(r.skippedCorners.some((s) => s.corner === 'TOP_LEFT')).toBe(true);
+    expect(r.bores.filter((b) => b.corner === 'TOP_RIGHT').length).toBeGreaterThan(0);
+    expect(r.bores.filter((b) => b.corner === 'BOTTOM_LEFT').length).toBeGreaterThan(0);
+  });
+});
+
 describe('compareWorldParity vs generateDrillMap (ของจริง)', () => {
   it('OVERLAY: parity 100% ทุก bore ภายใน 0.5mm', () => {
     const cab = overlayCabinet();

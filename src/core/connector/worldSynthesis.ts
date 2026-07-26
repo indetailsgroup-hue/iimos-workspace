@@ -61,11 +61,23 @@ const CORNERS: CornerType[] = ['TOP_LEFT', 'TOP_RIGHT', 'BOTTOM_LEFT', 'BOTTOM_R
  */
 export function synthesizeCornerMinifixWorld(
   cabinet: Cabinet,
-  opts: { density?: ConnectorDensity; firstHoleZ?: number; distanceB?: number } = {},
+  opts: {
+    density?: ConnectorDensity;
+    firstHoleZ?: number;
+    distanceB?: number;
+    /** จำนวน connector ที่ caller resolve แล้ว (override-aware: ConnectorList Add/Del →
+     *  connectorCountOverrides.main / options.connectorCount) — authority เดียวกับ generator;
+     *  ไม่ส่ง = density-derived เดิม (backward compatible) */
+    connectorCount?: number;
+    /** มุมที่ caller ปิดไว้ (เช่น generator's isCornerEnabled: connectionType 'none' /
+     *  side.enabled=false) — data-in ล้วน ไม่ผูก store; มุมที่ส่งมาจะไม่สังเคราะห์ bores */
+    excludeCorners?: readonly CornerType[];
+  } = {},
 ): WorldSynthesisResult {
   const density = opts.density ?? 'CAD_STANDARD';
   const firstHole = opts.firstHoleZ ?? 37;
   const distanceB = opts.distanceB ?? 24;
+  const excluded = new Set<CornerType>(opts.excludeCorners ?? []);
 
   const bores: SynthesizedBore[] = [];
   const skipped: WorldSynthesisResult['skippedCorners'] = [];
@@ -82,7 +94,9 @@ export function synthesizeCornerMinifixWorld(
   const runAabb = calculatePanelAABB(runPanel);
   const runLength = runAabb.max[2] - runAabb.min[2];
 
-  const count = computeConnectorCountForDensity(runLength, firstHole, density);
+  // count authority: caller-resolved มาก่อน (generator ส่งค่า override-aware มา —
+  // grid เดียว ไม่ recompute จาก density แข่งกัน), fallback = density-derived เดิม
+  const count = opts.connectorCount ?? computeConnectorCountForDensity(runLength, firstHole, density);
   const sys32Positions = getSpreadGridPositions(
     runLength,
     { ...KITCHEN_PREMIUM_PROFILE.system32, firstHole },
@@ -95,6 +109,11 @@ export function synthesizeCornerMinifixWorld(
   if (!cam || !bolt) return { bores, skippedCorners: [{ corner: 'TOP_LEFT', reason: 'spec missing features' }] };
 
   for (const corner of CORNERS) {
+    // มุมที่ caller ปิด (isCornerEnabled ฝั่ง generator) — skip แบบรายงานตรง (no-guess)
+    if (excluded.has(corner)) {
+      skipped.push({ corner, reason: 'corner disabled (excludeCorners จาก caller)' });
+      continue;
+    }
     const isTop = corner === 'TOP_LEFT' || corner === 'TOP_RIGHT';
     const isLeft = corner === 'TOP_LEFT' || corner === 'BOTTOM_LEFT';
     const horizontal = isTop ? top : bottom;
