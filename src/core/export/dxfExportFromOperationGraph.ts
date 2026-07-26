@@ -9,7 +9,23 @@
  *
  * Ensuring that DXF output exactly matches the G-code that will be generated.
  *
- * @version 1.1.0 - G10 Safety Gate Integration
+ * T3 (fix/dxf-truth-chain): per-panel DXF CONTENT is produced by projecting
+ * the packet's drill map WORLD points into panel-local cut-drawing
+ * coordinates (panelLocalProjection.ts) and rendering via
+ * projectedPanelToDxf. The OperationGraph remains the gate/provenance spine
+ * (G9/G10/G10.2/G10.3, operation counts) — ops keep world-truth positions;
+ * projection happens at this presentation layer only.
+ *
+ * PLACEMENT CONTRACT: the packet drill map carries per panel role +
+ * [finishWidth, finishHeight, realThickness] (buildDrillMap.ts:62-79) but NO
+ * worldPosition (dropped by the packet builder). World placements therefore
+ * come from the caller via DxfExportOptions.panelPlacements (store cabinet
+ * panels: CabinetPanel.position — same convention the drill-map generator
+ * uses via calculatePanelAABB). FAIL-CLOSED: points of panels without a
+ * placement are surfaced in result.skipped and drawn NOWHERE — never at raw
+ * world coordinates (S0 defect), never silently dropped.
+ *
+ * @version 1.2.0 - T3 panel-local projection wiring
  */
 
 import JSZip from 'jszip';
@@ -20,11 +36,19 @@ import type { MachineId, MachineProfile } from '../../cnc/machine';
 import type { OperationGraph } from '../../cnc/operation/operationTypes';
 import type { FactoryPacket } from '../../factory/packet/types';
 import {
-    operationGraphToDxf,
+    projectedPanelToDxf,
     validateOperationGraphForDxf,
     type OperationGraphDxfOptions,
     type DxfValidationResult,
 } from './operationGraphToDxf';
+import {
+    projectDrillPointsToPanelLocal,
+    type PanelDrawingProjection,
+    type ProjectionPanelInput,
+    type ProjectionPointInput,
+    type SkippedPointReport,
+} from './panelLocalProjection';
+import type { PanelRole } from '../types/Cabinet';
 import {
     assertDxfSafety,
     createOperationGraphProvenance,
@@ -63,6 +87,21 @@ export interface PanelDxfResult {
     semanticResult: SemanticValidationResult;
     /** G10.3 machine dialect validation result */
     dialectResult: MachineDialectResult;
+    /**
+     * Panel-local projection summary (T3). `null` = no world placement was
+     * available for this panel → drawing fail-closed to outline+annotations
+     * only, with every point surfaced in the export-level skipped[] channel.
+     */
+    projection: {
+        drawWidth: number;
+        drawHeight: number;
+        /** Q5=A machining-face view: true for RIGHT_SIDE and TOP (mirrored in-file). */
+        mirroredInX: boolean;
+        faceBoreCount: number;
+        edgeBoreCount: number;
+    } | null;
+    /** Number of this panel's drill points NOT drawn (fail-closed reports in result.skipped). */
+    skippedCount: number;
 }
 
 export interface DxfExportResult {
@@ -71,6 +110,12 @@ export interface DxfExportResult {
     totalOperations: number;
     machineId: string;
     warnings: string[];
+    /**
+     * FAIL-CLOSED SURFACING (T3): every packet drill point that was NOT drawn,
+     * with a machine-readable reason. Never silently dropped. Empty on the
+     * default cabinet with placements provided (Q6=A B-run retired).
+     */
+    skipped: SkippedPointReport[];
     /** G10 gate overall status */
     g10Status: {
         /** All panels passed G10 */
@@ -90,6 +135,20 @@ export interface DxfExportError {
 
 export type DxfExportFromPacketResult = DxfExportResult | DxfExportError;
 
+/**
+ * World placement for one packet panel (T3). The packet drill map carries the
+ * panel's role + finish dims + real thickness but NOT its world position —
+ * the caller supplies it (store convention: CabinetPanel.position = panel
+ * CENTER; same input calculatePanelAABB / the drill-map generator use).
+ */
+export interface PanelWorldPlacement {
+    panelId: string;
+    /** Panel CENTER world position [x, y, z] in mm (store convention). */
+    position?: [number, number, number];
+    /** Direct world AABB alternative (wins over position when both given). */
+    aabb?: { min: [number, number, number]; max: [number, number, number] };
+}
+
 export interface DxfExportOptions extends OperationGraphDxfOptions {
     /** Machine ID to build OperationGraph for */
     machineId?: string;
@@ -97,6 +156,12 @@ export interface DxfExportOptions extends OperationGraphDxfOptions {
     selectedPanelIds?: string[];
     /** Progress callback */
     onPanelProgress?: (panelId: string, panelName: string, index: number, total: number) => void;
+    /**
+     * World placements for the packet's panels (T3 projection stage). Panels
+     * without a placement FAIL CLOSED: their points are surfaced in
+     * result.skipped and are never drawn at raw world coordinates.
+     */
+    panelPlacements?: PanelWorldPlacement[];
 }
 
 // ============================================
@@ -123,6 +188,7 @@ export async function exportDxfFromPacket(
         machineId = 'KDT-6000',
         selectedPanelIds,
         onPanelProgress,
+        panelPlacements,
         ...dxfOptions
     } = options;
 
@@ -156,6 +222,91 @@ export async function exportDxfFromPacket(
 
     const graph = buildResult.graph;
     const warnings = [...buildResult.warnings];
+
+    // 3b. T3 PROJECTION STAGE: WORLD → PANEL-LOCAL cut-drawing coordinates.
+    // Packet mapping (documented, feeds T4 label work):
+    //   PacketDrillPanel.role          → ProjectionPanelInput.role
+    //   PacketDrillPanel.dimensions[0] → finishWidth  (drill-map generator fills
+    //   PacketDrillPanel.dimensions[1] → finishHeight  these from the panel's own
+    //   PacketDrillPanel.dimensions[2] → thickness     finishWidth/finishHeight/
+    //                                                  computed.realThickness —
+    //                                                  generateDrillMap.ts:2252-2256)
+    //   placement (position | aabb)    → caller-supplied (NOT in the packet)
+    // Points are the packet's drill-map points verbatim (same drill map the
+    // 3D/Safety Gate use — buildDrillMap copies them 1:1, world coords).
+    const placementById = new Map<string, PanelWorldPlacement>();
+    for (const pl of panelPlacements ?? []) placementById.set(pl.panelId, pl);
+
+    const skipped: SkippedPointReport[] = [];
+    const projectionPanels: ProjectionPanelInput[] = [];
+    const placedPanelIds = new Set<string>();
+
+    for (const p of packet.drillMap.panels) {
+        const [finishW, finishH, realT] = p.dimensions;
+        const placement = placementById.get(p.panelId);
+        if (placement?.aabb) {
+            projectionPanels.push({
+                panelId: p.panelId,
+                role: p.role as PanelRole,
+                thickness: realT,
+                aabb: placement.aabb,
+            });
+            placedPanelIds.add(p.panelId);
+        } else if (placement?.position) {
+            projectionPanels.push({
+                panelId: p.panelId,
+                role: p.role as PanelRole,
+                thickness: realT,
+                position: placement.position,
+                finishWidth: finishW,
+                finishHeight: finishH,
+            });
+            placedPanelIds.add(p.panelId);
+        } else {
+            // FAIL CLOSED: no placement → no drawing frame → every point of this
+            // panel is reported, none is drawn at raw world coordinates.
+            for (const pt of p.points) {
+                skipped.push({
+                    pointId: pt.id,
+                    panelId: p.panelId,
+                    reason: 'UNKNOWN_PANEL',
+                    detail:
+                        `no world placement for panel '${p.panelId}' — the packet drill map ` +
+                        `carries role+dims but no worldPosition; pass DxfExportOptions.panelPlacements`,
+                });
+            }
+        }
+    }
+
+    const projectionPoints: ProjectionPointInput[] = packet.drillMap.panels
+        .filter((p) => placedPanelIds.has(p.panelId))
+        .flatMap((p) =>
+            p.points.map((pt) => ({
+                id: pt.id,
+                panelId: pt.panelId,
+                position: pt.position,
+                normal: pt.normal,
+                diameter: pt.diameter,
+                depth: pt.depth,
+                purpose: pt.purpose,
+            })),
+        );
+
+    const projectionResult = projectDrillPointsToPanelLocal({
+        panels: projectionPanels,
+        points: projectionPoints,
+    });
+    skipped.push(...projectionResult.skipped);
+
+    const projectionByPanel = new Map<string, PanelDrawingProjection>(
+        projectionResult.panels.map((p) => [p.panelId, p]),
+    );
+
+    for (const s of skipped) {
+        warnings.push(
+            `[PROJECTION SKIP] ${s.panelId}${s.pointId ? `/${s.pointId}` : ''}: ${s.reason} — ${s.detail}`,
+        );
+    }
 
     // 4. Filter panels if selectedPanelIds is provided
     const panelIds = packet.drillMap.panels.map(p => p.panelId);
@@ -239,13 +390,43 @@ export async function exportDxfFromPacket(
             }
             : {};
 
+        // T3: render the MANUFACTURABLE per-panel drawing from the projection.
+        // Bores carry FINAL drawing coordinates (Q5 mirror + Face-B already
+        // applied by the projection — the writer adds NO extra mirror).
+        // No placement → fail-closed drawing frame from packet dims:
+        // outline + annotations only, zero bores, points surfaced in skipped[].
+        const projection = projectionByPanel.get(panelId) ?? null;
+        const drawingProjection: PanelDrawingProjection = projection ?? {
+            panelId,
+            role: panelData.role as PanelRole,
+            drawWidth: panelWidth,
+            drawHeight: panelHeight,
+            mirroredInX: false,
+            bores: [],
+        };
+        const panelSkippedCount = skipped.filter((s) => s.panelId === panelId).length;
+
+        // Q3=A dims: panel cut size = finish − edge band, NO premill.
+        // (The cut-list row's cutW/cutH include premill and are NOT used here.)
+        const eb = cutListRow?.edgeBanding ?? [0, 0, 0, 0];
+        const cutWidth = panelWidth - eb[0] - eb[1];
+        const cutHeight = panelHeight - eb[2] - eb[3];
+
         // Generate DXF even with warnings (but not errors)
-        const dxfContent = operationGraphToDxf(panelGraph, {
-            ...dxfOptions,
-            includeOutline: true,
-            panelWidth,
-            panelHeight,
+        const dxfContent = projectedPanelToDxf(drawingProjection, {
+            panelName,
+            role: panelData.role,
+            thickness: panelThickness,
+            cutWidth,
+            cutHeight,
+            materialId: cutListRow?.materialId,
+            includeAnnotations: dxfOptions.includeAnnotations,
+            includeMetadata: dxfOptions.includeMetadata,
             ...edgeBandingOption,
+            machineId,
+            operationCount: panelOperations.length,
+            toolsUsed: graph.toolsUsed,
+            skippedCount: panelSkippedCount,
         });
 
         // G10: Create provenance tracking
@@ -278,6 +459,16 @@ export async function exportDxfFromPacket(
             g10Result,
             semanticResult,
             dialectResult,
+            projection: projection
+                ? {
+                    drawWidth: projection.drawWidth,
+                    drawHeight: projection.drawHeight,
+                    mirroredInX: projection.mirroredInX,
+                    faceBoreCount: projection.bores.filter((b) => b.boreType === 'FACE').length,
+                    edgeBoreCount: projection.bores.filter((b) => b.boreType === 'EDGE').length,
+                }
+                : null,
+            skippedCount: panelSkippedCount,
         });
 
         totalOperations += panelOperations.length;
@@ -301,6 +492,7 @@ export async function exportDxfFromPacket(
         totalOperations,
         machineId,
         warnings,
+        skipped,
         g10Status,
     };
 }
@@ -347,6 +539,8 @@ export async function downloadDxfZipFromPacket(
             panelName: p.panelName,
             filename: p.filename,
             operationCount: p.operationCount,
+            projection: p.projection,
+            skippedCount: p.skippedCount,
             g10: {
                 ok: p.g10Result.ok,
                 source: p.provenance.source,
@@ -365,6 +559,12 @@ export async function downloadDxfZipFromPacket(
             },
         })),
         warnings: result.warnings,
+        // T3 fail-closed surfacing: every drill point NOT drawn, with reason.
+        // Never silently dropped — the factory sees exactly what is missing.
+        projection: {
+            skippedCount: result.skipped.length,
+            skipped: result.skipped,
+        },
         source: 'OperationGraph (AGENT-T008)',
         gate10: {
             allPassed: result.panels.every(p => p.g10Result.ok && !p.semanticResult.blocked),

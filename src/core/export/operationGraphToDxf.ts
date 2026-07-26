@@ -29,6 +29,7 @@ import type {
     ProfileOperation,
     SlotOperation,
 } from '../../cnc/operation/operationTypes';
+import type { PanelDrawingProjection } from './panelLocalProjection';
 import { getOperationDiameter } from './toolDiameterParser';
 
 // ============================================
@@ -491,6 +492,181 @@ export function operationGraphToDxf(
 
     dxf += DXF_FOOTER;
 
+    return dxf;
+}
+
+// ============================================
+// PROJECTED PANEL DRAWING (T3 — fix/dxf-truth-chain)
+// ============================================
+
+/**
+ * Q3=A definition stamp (owner ruling 2026-07-26): the dims stated on every
+ * per-panel drawing are the PANEL CUT SIZE = finish − edge band, NO premill.
+ */
+export const PANEL_CUT_SIZE_STAMP =
+    'panel cut size (finish - edge band, no premill) — formula-reference §3, D-2 ruling 2026-07-26';
+
+/** Legacy cut-drawing layer colors (DXFGenerator.ts:109-119 convention). */
+const PROJECTED_LAYER_COLORS = {
+    CUT_OUT: 7,     // White - cutting path
+    DRILL_V: 1,     // Red - vertical (face) drilling
+    DRILL_H: 3,     // Green - horizontal (edge) drilling
+    ANNOTATION: 8,  // Grey
+    EDGE_BAND: 30,  // Orange
+} as const;
+
+/** Format mm values the way the projection layer hints do (FP-noise-rounded). */
+const fmtMm = (n: number): string => String(Math.round(n * 1000) / 1000);
+
+export interface ProjectedPanelDxfOptions {
+    /** Display name for the annotation block. */
+    panelName: string;
+    /** Panel role (LEFT_SIDE, TOP, ...). */
+    role: string;
+    /** Per-panel REAL thickness (mm) — the panel's OWN material, packet dims[2]. */
+    thickness: number;
+    /** Q3=A panel cut size (finish − edge band, no premill), width direction. */
+    cutWidth: number;
+    /** Q3=A panel cut size (finish − edge band, no premill), height direction. */
+    cutHeight: number;
+    /** Material id from the panel's own cut-list row. */
+    materialId?: string;
+    /** Include the annotation block (default true). */
+    includeAnnotations?: boolean;
+    /** Include machine metadata lines (default true). */
+    includeMetadata?: boolean;
+    /** Include edge banding indicator lines. */
+    includeEdgeBanding?: boolean;
+    /** Edge banding data for indicator lines. */
+    edgeBanding?: EdgeBandingInfo;
+    machineId?: string;
+    operationCount?: number;
+    toolsUsed?: string[];
+    /** Fail-closed surfacing: points of this panel NOT drawn (each has a report upstream). */
+    skippedCount?: number;
+}
+
+/**
+ * Render one MANUFACTURABLE per-panel cut drawing from a panel-local
+ * projection (panelLocalProjection.ts).
+ *
+ * CONTRACT (T3, fix/dxf-truth-chain):
+ * - The projection's bores carry FINAL drawing coordinates: the machining-face
+ *   view mirror (Q5=A: RIGHT_SIDE and TOP mirrored in-file) and faceSide-B
+ *   handling are ALREADY applied by the projection. This writer must NOT apply
+ *   any additional legacy Face-B mirror — doing so would double-mirror
+ *   (hazard flagged in review).
+ * - Outline is drawn at the projection draw dims (finish frame). Bore
+ *   coordinates are measured from this outline's bottom-left corner, because
+ *   the workpiece at drilling time is the edge-banded FINISH panel — drawing
+ *   the outline at cut size would misstate every bore-to-edge distance by the
+ *   edge-band thickness on banded sides. The Q3=A "panel cut size" definition
+ *   is stated in the annotation block (dims line + stamp) instead.
+ * - FACE bores → circles on DRILL_V_<dia>_D<depth> (bore.layerHint).
+ * - EDGE bores → boundary marker circles on DRILL_H_<dia>_Z<z>_D<d>
+ *   (bore.layerHint; legacy drill_horizontal convention, DXFGenerator.ts:448-478).
+ */
+export function projectedPanelToDxf(
+    projection: PanelDrawingProjection,
+    options: ProjectedPanelDxfOptions
+): string {
+    const {
+        panelName,
+        role,
+        thickness,
+        cutWidth,
+        cutHeight,
+        materialId,
+        includeAnnotations = true,
+        includeMetadata = true,
+        includeEdgeBanding = false,
+        edgeBanding,
+        machineId,
+        operationCount,
+        toolsUsed,
+        skippedCount = 0,
+    } = options;
+
+    const w = projection.drawWidth;
+    const h = projection.drawHeight;
+
+    // ── Layer table ──
+    const layers = new Set<string>(['CUT_OUT']);
+    for (const bore of projection.bores) layers.add(bore.layerHint);
+    if (includeAnnotations || includeMetadata) layers.add('ANNOTATION');
+    const hasEdgeBanding = includeEdgeBanding && edgeBanding &&
+        (edgeBanding.top || edgeBanding.bottom || edgeBanding.left || edgeBanding.right);
+    if (hasEdgeBanding) layers.add('EDGE_BAND');
+
+    let dxf = DXF_HEADER;
+    for (const layer of layers) {
+        let color: number = PROJECTED_LAYER_COLORS.ANNOTATION;
+        if (layer === 'CUT_OUT') color = PROJECTED_LAYER_COLORS.CUT_OUT;
+        else if (layer.startsWith('DRILL_V')) color = PROJECTED_LAYER_COLORS.DRILL_V;
+        else if (layer.startsWith('DRILL_H')) color = PROJECTED_LAYER_COLORS.DRILL_H;
+        else if (layer === 'EDGE_BAND') color = PROJECTED_LAYER_COLORS.EDGE_BAND;
+        dxf += DXF_LAYER_TEMPLATE(layer, color);
+    }
+    dxf += DXF_TABLES_END;
+
+    // ── CUT_OUT outline at the panel draw dims (finish frame, origin bottom-left) ──
+    dxf += dxfRectangle(0, 0, w, h, 'CUT_OUT');
+
+    // ── Bores: FINAL drawing coordinates verbatim (no extra mirror here) ──
+    for (const bore of projection.bores) {
+        dxf += dxfCircle(bore.x, bore.y, bore.diameter / 2, bore.layerHint);
+    }
+
+    // ── Edge banding indicator lines (legacy convention) ──
+    if (hasEdgeBanding && edgeBanding) {
+        const INSET = 2; // mm inset from panel edge
+        if (edgeBanding.bottom) {
+            dxf += dxfLine(0, INSET, w, INSET, 'EDGE_BAND');
+            dxf += dxfText(w / 2, INSET + 1, 1.5, `EB:${edgeBanding.bottom.thickness}mm`, 'EDGE_BAND');
+        }
+        if (edgeBanding.top) {
+            dxf += dxfLine(0, h - INSET, w, h - INSET, 'EDGE_BAND');
+            dxf += dxfText(w / 2, h - INSET - 3, 1.5, `EB:${edgeBanding.top.thickness}mm`, 'EDGE_BAND');
+        }
+        if (edgeBanding.left) {
+            dxf += dxfLine(INSET, 0, INSET, h, 'EDGE_BAND');
+            dxf += dxfText(INSET + 1, h / 2, 1.5, `EB:${edgeBanding.left.thickness}mm`, 'EDGE_BAND');
+        }
+        if (edgeBanding.right) {
+            dxf += dxfLine(w - INSET, 0, w - INSET, h, 'EDGE_BAND');
+            dxf += dxfText(w - INSET - 1, h / 2, 1.5, `EB:${edgeBanding.right.thickness}mm`, 'EDGE_BAND');
+        }
+    }
+
+    // ── Annotation block (above the outline) ──
+    const lines: string[] = [];
+    if (includeAnnotations) {
+        lines.push(`Panel: ${panelName} | Role: ${role}`);
+        lines.push(`OUTLINE: ${fmtMm(w)} x ${fmtMm(h)} mm (finish frame - bore coordinates measured from this outline)`);
+        lines.push(`PANEL CUT SIZE: ${fmtMm(cutWidth)} x ${fmtMm(cutHeight)} x ${fmtMm(thickness)} mm`);
+        lines.push(PANEL_CUT_SIZE_STAMP);
+        lines.push(`Material: ${materialId ?? 'UNKNOWN'} | T=${fmtMm(thickness)}mm`);
+        if (projection.mirroredInX) {
+            // Q5=A: machining-face view — geometry is MIRRORED IN-FILE, there is
+            // no machine-side L/R flip. Stamped so the operator sees it.
+            lines.push('VIEW: MACHINING FACE (MIRRORED IN-FILE)');
+        }
+        if (skippedCount > 0) {
+            lines.push(`SKIPPED: ${skippedCount} POINT(S) FAIL-CLOSED - see export manifest`);
+        }
+    }
+    if (includeMetadata) {
+        lines.push(`Machine: ${machineId ?? 'UNKNOWN'}`);
+        lines.push(`Operations: ${operationCount ?? projection.bores.length}`);
+        if (toolsUsed && toolsUsed.length > 0) {
+            lines.push(`Tools: ${toolsUsed.join(', ')}`);
+        }
+    }
+    for (let i = 0; i < lines.length; i++) {
+        dxf += dxfText(0, h + 10 + i * 5, 3, lines[i], 'ANNOTATION');
+    }
+
+    dxf += DXF_FOOTER;
     return dxf;
 }
 
