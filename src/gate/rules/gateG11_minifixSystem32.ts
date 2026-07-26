@@ -981,6 +981,31 @@ export function ruleG11_EdgeBandJoinForbidden(
 // ============================================
 
 /**
+ * Ambient facts about the INPUT that a bare `G11DrillPoint[]` cannot carry.
+ *
+ * Only exists to separate the two cases documented on
+ * `ruleG11_PanelBreakthrough`: "no panel geometry was supplied" (a note) vs
+ * "panels WERE declared and this bore belongs to none of them" (a refusal).
+ *
+ * The rule derives the answer from `panels.length > 0` wherever it can — any
+ * resolved panel already proves panels were declared. This flag only carries
+ * the residue that derivation cannot see: a DrillMap that DECLARES panels whose
+ * declarations are too incomplete to survive into the synthesised `panels`
+ * array (e.g. a DrillMapPanel with no `dimensions`). Without it, deleting the
+ * geometry a map claims to have would silently downgrade a real refusal to a
+ * note — which is exactly the fail-open this closes.
+ */
+export interface G11BreakthroughContext {
+  /**
+   * True when the caller's input structurally DECLARES panels, whether or not
+   * any of those declarations were complete enough to be usable.
+   * `validateG11FromDrillMap` sets it from `drillMap.panels.length > 0`.
+   * Absent/false means a hand-assembled point array (CASE 1).
+   */
+  panelGeometryDeclared?: boolean;
+}
+
+/**
  * G11.9: A blind bore may not be as deep as, or deeper than, the panel that
  * owns it.
  *
@@ -1042,40 +1067,223 @@ export function ruleG11_EdgeBandJoinForbidden(
  * `applyGatePatches` still returns true. That double-prefix bug is real and
  * pre-existing; it is tracked separately and is NOT fixed here.
  *
- * ## UNKNOWN / fail-visible, never silently passed
- * When the owner's role, thickness, bore axis or in-plane span cannot be
- * resolved the rule cannot adjudicate. It emits
- * `I_G11_BREAKTHROUGH_NOT_EVALUATED` (INFO) with a `context.reason` naming
- * which input was missing, rather than returning a clean pass. It is INFO and
- * not a BLOCKER because the fail-CLOSED duty sits one layer up: the generator
- * refuses to emit the operation at all (generateDrillMap.ts
- * `evaluateBlindBoreFeasibility`), and every drill map that reaches this gate
- * through validateG11FromDrillMap now carries per-panel thickness AND per-panel
- * in-plane dimensions. Blocking here on absent metadata would only over-block
- * hand-assembled point arrays, not protect any real panel.
+ * ## Declared THROUGH holes are measured, not exempted (generator parity)
+ * `throughHole === true` used to be an unconditional `continue`. The generator
+ * does not do that (generateDrillMap.ts:515-525): a through hole is MEANT to
+ * exit, but how far past the part the tool may travel is declared NOWHERE in
+ * this repo, so a through bore that runs measurably beyond the owner panel is
+ * refused (`R_THROUGH_OVERTRAVEL_UNDECLARED`) rather than given an invented
+ * overtravel allowance. This rule now does the same, and preserves the
+ * generator's deliberate comparator split:
+ *   - declared THROUGH: refused when `depth >  extent`
+ *   - BLIND:            refused when `depth >= extent`
+ * A through hole that fits is legal and stays legal.
  *
- * Reasons emitted: `OWNER_ROLE_UNKNOWN`, `OWNER_THICKNESS_UNDECLARED`
- * (face half), `BORE_AXIS_AMBIGUOUS`, `OWNER_SPAN_UNRESOLVED` (edge half).
+ * ## UNKNOWN input: a note when nothing is contradicted, a refusal when it is
+ * When the owner's role, thickness, bore axis or in-plane span cannot be
+ * resolved the rule cannot adjudicate. What that MEANS depends on whether the
+ * input claimed to describe panels at all, and the two cases are NOT the same:
+ *
+ *   CASE 1 — no panel geometry supplied at all (`panels` is empty AND the
+ *     caller declared no panels; see `G11BreakthroughContext`). A caller handed
+ *     the rule bare points. Nothing is being contradicted, and blocking would
+ *     only over-block hand-assembled point arrays, not protect any real panel.
+ *     → `I_G11_BREAKTHROUGH_NOT_EVALUATED` (INFO), as before.
+ *
+ *   CASE 2 — the input DOES declare panels, yet THIS bore's owner is not among
+ *     them or declares no usable geometry. The data contradicts itself: the map
+ *     claims to describe panels, and a bore in it belongs to none of them. The
+ *     generator fail-CLOSES on exactly this input — a point whose owner panel
+ *     is not in `cabinet.panels` is refused with `R_MEMBER_THICKNESS_UNDECLARED`
+ *     ("the bore cannot be adjudicated against any member") and the whole joint
+ *     is withdrawn (generateDrillMap.ts ~:2666-2693).
+ *     → `B_G11_PANEL_BREAKTHROUGH` (BLOCKER, non-waivable).
+ *
+ * The earlier "INFO because the generator fail-closes one layer up" reasoning
+ * held only while every map reaching this gate had passed that sweep. A drill
+ * map mutated after generation (src/gate/ui/applyGatePatch.ts rewrites it by
+ * JSON path with no geometric re-adjudication) has not, and G11 is then the
+ * only remaining check.
+ *
+ * Reasons emitted: `OWNER_ROLE_UNKNOWN` (always INFO — the generator has no
+ * role-based classification at all, so there is nothing to be at parity with),
+ * `BORE_AXIS_AMBIGUOUS` (always INFO — see `resolveBoreAxis`, that gap is
+ * separate and still open), `OWNER_PANEL_UNRESOLVED`,
+ * `OWNER_THICKNESS_UNDECLARED`, `OWNER_SPAN_UNRESOLVED` (INFO in Case 1,
+ * BLOCKER in Case 2), `THROUGH_OVERTRAVEL_UNDECLARED` (always BLOCKER).
  *
  * @param drillPoints - All drill points
  * @param panels - Panel geometry (owner thickness + in-plane span authority)
+ * @param context - Ambient facts a bare point array cannot carry (Case 1 vs 2)
  * @returns Array of validation issues
  */
 export function ruleG11_PanelBreakthrough(
   drillPoints: G11DrillPoint[],
   panels: G11Panel[] = [],
+  context: G11BreakthroughContext = {},
 ): G11Issue[] {
   const issues: G11Issue[] = [];
 
   const panelById = new Map(panels.map(p => [p.id, p]));
 
+  // The Case 1 / Case 2 split, derived from data already present wherever
+  // possible: any resolved panel geometry already proves panels were declared.
+  // `panelGeometryDeclared` only has to carry the residue — a map that DECLARES
+  // panels but whose declarations are too incomplete to survive into `panels`.
+  const geometryDeclared = context.panelGeometryDeclared === true || panels.length > 0;
+
+  /**
+   * Un-adjudicable input. A note in Case 1, a non-waivable refusal in Case 2.
+   * The refusal wording mirrors the generator's ground for refusing: the bore
+   * cannot be adjudicated against any member.
+   */
+  const unadjudicable = (
+    point: G11DrillPoint,
+    reason: string,
+    infoMessage: string,
+    refusalMessage: string,
+    extra: Record<string, string | number | boolean | undefined> = {},
+  ): G11Issue => geometryDeclared
+    ? {
+        // NOT `B_G11_PANEL_BREAKTHROUGH`: nothing was measured, so nothing was
+        // shown to break through. The refusal is that the data contradicts
+        // itself. Naming it "breakthrough" would repeat the drift T10/T10b just
+        // finished clearing out of this file.
+        id: issueId('B_G11_BREAKTHROUGH_UNADJUDICABLE', point.id),
+        severity: 'BLOCKER' as Severity,
+        code: 'B_G11_BREAKTHROUGH_UNADJUDICABLE' as G11IssueCode,
+        message: refusalMessage,
+        drillPointIds: [point.id],
+        panelIds: [point.panelId],
+        corner: point.cornerType,
+        context: {
+          reason,
+          measured: point.depth,
+          purpose: point.purpose,
+          waivable: false,
+          ...extra,
+        },
+      }
+    : {
+        id: issueId('I_G11_BREAKTHROUGH_NOT_EVALUATED', point.id),
+        severity: 'INFO' as Severity,
+        code: 'I_G11_BREAKTHROUGH_NOT_EVALUATED' as G11IssueCode,
+        message: infoMessage,
+        drillPointIds: [point.id],
+        panelIds: [point.panelId],
+        context: { reason, measured: point.depth, ...extra },
+      };
+
+  /**
+   * The one geometric comparison, applied to whichever extent limits this bore
+   * (thickness for a face bore, in-plane span for an edge bore). The `>` for a
+   * declared through hole vs `>=` for a blind bore is the generator's split
+   * (generateDrillMap.ts:520 vs :527) and is deliberate — do not harmonise it.
+   */
+  const adjudicateDepth = (
+    point: G11DrillPoint,
+    panelRole: string,
+    boreType: DrillBoreType,
+    extent: number,
+    axisLabel?: string,
+  ): G11Issue | null => {
+    const limitPhrase = boreType === 'FACE_BORE'
+      ? `is only ${extent}mm thick`
+      : `only extends ${extent}mm along ${axisLabel}`;
+    const identity = `${point.purpose} Ø${point.diameter}`;
+    const blockerContext = {
+      measured: point.depth,
+      expected: extent,
+      panelRole,
+      boreType,
+      purpose: point.purpose,
+      waivable: false,
+      ...(axisLabel ? { axis: axisLabel } : {}),
+    };
+
+    if (point.throughHole === true) {
+      if (!(point.depth > extent)) return null;
+      return {
+        // NOT `B_G11_PANEL_BREAKTHROUGH`: the tool is MEANT to exit here. The
+        // defect is undeclared travel past the part, which is a different
+        // refusal with a different remedy — same distinction the generator
+        // draws between R_BORE_EXITS_PANEL and R_THROUGH_OVERTRAVEL_UNDECLARED.
+        id: issueId('B_G11_THROUGH_OVERTRAVEL_UNDECLARED', point.id),
+        severity: 'BLOCKER' as Severity,
+        code: 'B_G11_THROUGH_OVERTRAVEL_UNDECLARED' as G11IssueCode,
+        message:
+          `Bore ${point.id} (${identity}) is declared as a through hole at ${point.depth}mm, ` +
+          `but its owner panel ${point.panelId} (${panelRole}) ${limitPhrase} — ` +
+          `${(point.depth - extent).toFixed(1)}mm of tool travel past the part, into whatever ` +
+          `is holding it. No overtravel allowance is declared for this operation, so it is ` +
+          `refused rather than approximated.`,
+        drillPointIds: [point.id],
+        panelIds: [point.panelId],
+        corner: point.cornerType,
+        context: { reason: 'THROUGH_OVERTRAVEL_UNDECLARED', ...blockerContext },
+      };
+    }
+
+    if (!(point.depth >= extent)) return null;
+
+    return boreType === 'FACE_BORE'
+      ? {
+          id: issueId('B_G11_PANEL_BREAKTHROUGH', point.id),
+          severity: 'BLOCKER' as Severity,
+          code: 'B_G11_PANEL_BREAKTHROUGH' as G11IssueCode,
+          message:
+            `Blind bore ${point.id} (${identity}) needs ${point.depth}mm ` +
+            `but its owner panel ${point.panelId} (${panelRole}) is only ${extent}mm thick — ` +
+            `the bore breaks through the far face. Reducing the depth would invent a nonfunctional ` +
+            `fixing: resolve the fastener recipe instead.`,
+          drillPointIds: [point.id],
+          panelIds: [point.panelId],
+          corner: point.cornerType,
+          context: { reason: 'BORE_EXITS_PANEL', ...blockerContext },
+        }
+      : {
+          id: issueId('B_G11_PANEL_BREAKTHROUGH', point.id),
+          severity: 'BLOCKER' as Severity,
+          code: 'B_G11_PANEL_BREAKTHROUGH' as G11IssueCode,
+          message:
+            `Blind edge bore ${point.id} (${identity}) needs ${point.depth}mm ` +
+            `along ${axisLabel}, but its owner panel ${point.panelId} (${panelRole}) only ` +
+            `extends ${extent}mm in that direction — the bore exits the panel. Depth was NOT reduced: ` +
+            `clamping it would invent a nonfunctional fixing. Resolve the fastener recipe or the ` +
+            `panel size instead.`,
+          drillPointIds: [point.id],
+          panelIds: [point.panelId],
+          corner: point.cornerType,
+          context: { reason: 'BORE_EXITS_PANEL', ...blockerContext },
+        };
+  };
+
   for (const point of drillPoints) {
     // No bore, or a bore whose depth was never declared → nothing to measure.
     if (!Number.isFinite(point.depth) || point.depth <= 0) continue;
-    // A declared through hole is intentional, not a breakthrough.
-    if (point.throughHole === true) continue;
 
     const ownerPanel = panelById.get(point.panelId);
+
+    // ── Owner not among the declared panels. In Case 2 this is the gate's
+    //    mirror of the generator's `R_MEMBER_THICKNESS_UNDECLARED` sweep
+    //    refusal (generateDrillMap.ts ~:2666-2693): a bore that belongs to no
+    //    declared member cannot be adjudicated against anything, at any depth.
+    //    In CASE 1 there is nothing to contradict, so the point falls through
+    //    to the historical per-half reasons instead of being short-circuited.
+    if (!ownerPanel && geometryDeclared) {
+      issues.push(unadjudicable(
+        point,
+        'OWNER_PANEL_UNRESOLVED',
+        `Breakthrough not evaluated for ${point.id}: no geometry was supplied for owner panel ` +
+        `${point.panelId}.`,
+        `Bore ${point.id} (${point.purpose} Ø${point.diameter}, ${point.depth}mm) is owned by ` +
+        `panel '${point.panelId}', which is not among the declared panel geometry — the bore ` +
+        `cannot be adjudicated against any member, so it is refused (fail closed). Declare the ` +
+        `owner panel's geometry or withdraw the bore; do not shorten it.`,
+      ));
+      continue;
+    }
+
     const panelRole = point.connectedPanelRole ||
                       ownerPanel?.role ||
                       inferPanelRoleFromPoint(point);
@@ -1095,47 +1303,27 @@ export function ruleG11_PanelBreakthrough(
 
     const declaredThickness = ownerPanel?.computed?.realThickness ?? point.panelThickness;
 
-    // ── FACE half (unchanged): along the thickness axis the limiting extent
-    //    IS the declared thickness, so no panel geometry is needed. ─────────
+    // ── FACE half: along the thickness axis the limiting extent IS the
+    //    declared thickness, so no panel geometry is needed. ────────────────
     if (inferBoreTypeFromNormal(point.normal, panelRole) === 'FACE_BORE') {
       if (declaredThickness === undefined ||
           !Number.isFinite(declaredThickness) ||
           declaredThickness <= 0) {
-        issues.push({
-          id: issueId('I_G11_BREAKTHROUGH_NOT_EVALUATED', point.id),
-          severity: 'INFO',
-          code: 'I_G11_BREAKTHROUGH_NOT_EVALUATED',
-          message: `Breakthrough not evaluated for ${point.id}: owner panel ${point.panelId} declares no usable thickness.`,
-          drillPointIds: [point.id],
-          panelIds: [point.panelId],
-          context: { reason: 'OWNER_THICKNESS_UNDECLARED', measured: point.depth, panelRole },
-        });
+        issues.push(unadjudicable(
+          point,
+          'OWNER_THICKNESS_UNDECLARED',
+          `Breakthrough not evaluated for ${point.id}: owner panel ${point.panelId} declares no usable thickness.`,
+          `Bore ${point.id} (${point.purpose} Ø${point.diameter}, ${point.depth}mm) is owned by ` +
+          `panel ${point.panelId} (${panelRole}), which declares no usable thickness — the bore ` +
+          `cannot be adjudicated against any member, so it is refused (fail closed). Declare the ` +
+          `owner panel's thickness or withdraw the bore; do not shorten it.`,
+          { panelRole },
+        ));
         continue;
       }
 
-      if (point.depth >= declaredThickness) {
-        issues.push({
-          id: issueId('B_G11_PANEL_BREAKTHROUGH', point.id),
-          severity: 'BLOCKER',
-          code: 'B_G11_PANEL_BREAKTHROUGH',
-          message:
-            `Blind bore ${point.id} (${point.purpose} Ø${point.diameter}) needs ${point.depth}mm ` +
-            `but its owner panel ${point.panelId} (${panelRole}) is only ${declaredThickness}mm thick — ` +
-            `the bore breaks through the far face. Reducing the depth would invent a nonfunctional ` +
-            `fixing: resolve the fastener recipe instead.`,
-          drillPointIds: [point.id],
-          panelIds: [point.panelId],
-          corner: point.cornerType,
-          context: {
-            measured: point.depth,
-            expected: declaredThickness,
-            panelRole,
-            boreType: 'FACE_BORE',
-            purpose: point.purpose,
-            waivable: false,
-          },
-        });
-      }
+      const verdict = adjudicateDepth(point, panelRole, 'FACE_BORE', declaredThickness);
+      if (verdict) issues.push(verdict);
       continue;
     }
 
@@ -1159,52 +1347,23 @@ export function ruleG11_PanelBreakthrough(
 
     const extent = resolvePanelExtentAlongAxis(ownerPanel, axis, declaredThickness);
     if (extent === undefined) {
-      issues.push({
-        id: issueId('I_G11_BREAKTHROUGH_NOT_EVALUATED', point.id),
-        severity: 'INFO',
-        code: 'I_G11_BREAKTHROUGH_NOT_EVALUATED',
-        message:
-          `Breakthrough not evaluated for ${point.id}: owner panel ${point.panelId} (${panelRole}) ` +
-          `declares no usable span along ${AXIS_NAMES[axis]}, so this edge bore cannot be measured ` +
-          `against anything.`,
-        drillPointIds: [point.id],
-        panelIds: [point.panelId],
-        context: {
-          reason: 'OWNER_SPAN_UNRESOLVED',
-          measured: point.depth,
-          panelRole,
-          boreType: 'EDGE_BORE',
-          axis: AXIS_NAMES[axis],
-        },
-      });
+      issues.push(unadjudicable(
+        point,
+        'OWNER_SPAN_UNRESOLVED',
+        `Breakthrough not evaluated for ${point.id}: owner panel ${point.panelId} (${panelRole}) ` +
+        `declares no usable span along ${AXIS_NAMES[axis]}, so this edge bore cannot be measured ` +
+        `against anything.`,
+        `Edge bore ${point.id} (${point.purpose} Ø${point.diameter}, ${point.depth}mm) is owned by ` +
+        `panel ${point.panelId} (${panelRole}), which declares no usable span along ` +
+        `${AXIS_NAMES[axis]} — the bore cannot be adjudicated against any member, so it is refused ` +
+        `(fail closed). Declare the owner panel's geometry or withdraw the bore; do not shorten it.`,
+        { panelRole, boreType: 'EDGE_BORE', axis: AXIS_NAMES[axis] },
+      ));
       continue;
     }
 
-    if (point.depth >= extent) {
-      issues.push({
-        id: issueId('B_G11_PANEL_BREAKTHROUGH', point.id),
-        severity: 'BLOCKER',
-        code: 'B_G11_PANEL_BREAKTHROUGH',
-        message:
-          `Blind edge bore ${point.id} (${point.purpose} Ø${point.diameter}) needs ${point.depth}mm ` +
-          `along ${AXIS_NAMES[axis]}, but its owner panel ${point.panelId} (${panelRole}) only ` +
-          `extends ${extent}mm in that direction — the bore exits the panel. Depth was NOT reduced: ` +
-          `clamping it would invent a nonfunctional fixing. Resolve the fastener recipe or the ` +
-          `panel size instead.`,
-        drillPointIds: [point.id],
-        panelIds: [point.panelId],
-        corner: point.cornerType,
-        context: {
-          measured: point.depth,
-          expected: extent,
-          panelRole,
-          boreType: 'EDGE_BORE',
-          axis: AXIS_NAMES[axis],
-          purpose: point.purpose,
-          waivable: false,
-        },
-      });
-    }
+    const verdict = adjudicateDepth(point, panelRole, 'EDGE_BORE', extent, AXIS_NAMES[axis]);
+    if (verdict) issues.push(verdict);
   }
 
   return issues;
@@ -1335,6 +1494,9 @@ export interface G11V11Context {
  * @param panels - Panel information (optional)
  * @param policy - Validation policy (optional)
  * @param v11Context - Additional context for v1.1 rules (optional)
+ * @param breakthroughContext - G11.9 Case 1 vs Case 2 discriminator (optional;
+ *   see `G11BreakthroughContext`). Defaulted, so every existing caller keeps
+ *   the CASE 1 "bare points are only noted" behaviour unless it says otherwise.
  * @returns G11 validation result
  */
 export function runG11Rules(
@@ -1342,6 +1504,7 @@ export function runG11Rules(
   panels: G11Panel[] = [],
   policy: G11Policy = {},
   v11Context?: G11V11Context,
+  breakthroughContext: G11BreakthroughContext = {},
 ): G11Result {
   const allIssues: G11Issue[] = [];
 
@@ -1361,7 +1524,7 @@ export function runG11Rules(
   allIssues.push(...ruleG11_BoltCamAlignment(drillPoints, policy));
 
   // G11.9: Panel Breakthrough (ADR-005 MON-BS-001 conformance test)
-  allIssues.push(...ruleG11_PanelBreakthrough(drillPoints, panels));
+  allIssues.push(...ruleG11_PanelBreakthrough(drillPoints, panels, breakthroughContext));
 
   // v1.1 Rules (only when context is provided)
   if (v11Context) {
@@ -1507,7 +1670,15 @@ export function validateG11FromDrillMap(
   for (const panel of panels) panelById.set(panel.id, panel);
   const effectivePanels = [...panelById.values()];
 
-  const result = runG11Rules(allPoints, effectivePanels, policy);
+  // G11.9 CASE 2 discriminator. A DrillMap that lists panels CLAIMS to describe
+  // them, even where a listing is too incomplete to survive the loop above (no
+  // `dimensions` → no entry in `effectivePanels`). Reading it off `panels.length`
+  // alone would let deleting a map's declared geometry downgrade a real refusal
+  // to a note. Every point in `allPoints` came out of `drillMap.panels`, so this
+  // is a fact about the map, not an assumption about the caller.
+  const result = runG11Rules(allPoints, effectivePanels, policy, undefined, {
+    panelGeometryDeclared: (drillMap.panels ?? []).length > 0,
+  });
 
   // G11.9b (F-07): a refused joint leaves NO drill points behind, so the
   // point-level rules above can never see it. Without this, "the generator

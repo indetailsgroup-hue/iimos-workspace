@@ -151,6 +151,24 @@ export type G11IssueCode =
   | 'W_G11_EDGE_BAND_JOIN_WARNING'
   // G11.9 Panel Breakthrough (ADR-005 MON-BS-001 conformance test)
   | 'B_G11_PANEL_BREAKTHROUGH'
+  /**
+   * G11.9 — a bore DECLARED as a through hole travels measurably past the
+   * owner panel. This is not a breakthrough: the tool is meant to exit. What
+   * is undeclared is how far past the part it may travel, so the operation is
+   * refused rather than given an invented overtravel allowance. Mirrors the
+   * generator's `R_THROUGH_OVERTRAVEL_UNDECLARED`
+   * (generateDrillMap.ts `evaluateBlindBoreFeasibility`). Non-waivable.
+   */
+  | 'B_G11_THROUGH_OVERTRAVEL_UNDECLARED'
+  /**
+   * G11.9 — the drill map declares panels, but this bore's owner cannot be
+   * resolved from them, or the owner declares no usable geometry. The data
+   * contradicts itself, so the bore cannot be adjudicated against any member.
+   * Mirrors the generator's `R_MEMBER_THICKNESS_UNDECLARED`. Distinct from
+   * `I_G11_BREAKTHROUGH_NOT_EVALUATED`, which covers the honest case where no
+   * panel geometry was supplied at all. Non-waivable.
+   */
+  | 'B_G11_BREAKTHROUGH_UNADJUDICABLE'
   | 'I_G11_BREAKTHROUGH_NOT_EVALUATED'
   /**
    * G11.9b — the generator REFUSED to emit a joint's operations (F-07).

@@ -284,6 +284,211 @@ describe('G11.9 panel breakthrough: un-adjudicable input is surfaced, never sile
 });
 
 // ============================================
+// FAIL-CLOSED PARITY WITH THE GENERATOR (Gap A + Gap B)
+// ============================================
+//
+// The generator is the reference. `evaluateBlindBoreFeasibility`
+// (generateDrillMap.ts ~:484-530) and the universal sweep (~:2657-2712) refuse
+// two things this gate used to wave through:
+//
+//   Gap A — `throughHole === true`. The generator does NOT exempt it: a
+//     declared through hole whose depth runs measurably PAST the owner panel is
+//     refused with `R_THROUGH_OVERTRAVEL_UNDECLARED`, because nothing in this
+//     repo declares how far past the part the tool may travel. Note the
+//     generator uses `>` for the through case and `>=` for the blind case —
+//     that difference is deliberate and is asserted below.
+//
+//   Gap B — an owner panel that cannot be resolved. The generator refuses with
+//     `R_MEMBER_THICKNESS_UNDECLARED` ("the bore cannot be adjudicated against
+//     any member") and withdraws the whole joint. The gate used to emit INFO
+//     and still report PASS.
+//
+// THE SPLIT THAT MATTERS (do not collapse these two):
+//   Case 1 — no panel geometry is supplied AT ALL (a hand-assembled point array
+//     passed straight to the rule). Nothing is being contradicted; the caller
+//     simply did not supply geometry. Stays INFO.
+//   Case 2 — the input DOES declare panels, yet THIS bore's owner is not among
+//     them or declares no usable geometry. The data contradicts itself. The
+//     generator refuses; so must the gate.
+
+describe('G11.9 Gap A — a declared through hole is measured, not exempted', () => {
+  it('BLOCKS a FACE through hole that runs past the owner panel (overtravel, not breakthrough)', () => {
+    const issues = ruleG11_PanelBreakthrough(
+      [point({ id: 'through-over', purpose: 'OTHER', depth: 24, throughHole: true, connectedPanelRole: 'BACK' })],
+      [g11Panel({ id: 'panel-back', role: 'BACK', computed: { realThickness: 18 } })],
+    );
+
+    expect(issues.map((i) => i.code)).toEqual(['B_G11_THROUGH_OVERTRAVEL_UNDECLARED']);
+    expect(issues[0].severity).toBe('BLOCKER');
+    expect(issues[0].context?.reason).toBe('THROUGH_OVERTRAVEL_UNDECLARED');
+    expect(issues[0].context?.measured).toBe(24);
+    expect(issues[0].context?.expected).toBe(18);
+    expect(issues[0].context?.waivable).toBe(false);
+    // The physical ground is tool travel past the part, NOT "it exits the far
+    // face" — a through hole is MEANT to exit. Mirror the generator's intent.
+    expect(issues[0].message).toMatch(/overtravel/i);
+    expect(issues[0].message).not.toMatch(/breaks through the far face/);
+  });
+
+  it('BLOCKS an EDGE through hole that runs past the owner panel span', () => {
+    const issues = ruleG11_PanelBreakthrough(
+      [point({
+        id: 'through-edge', purpose: 'BOLT_ENTRY', diameter: 7.5, depth: 700,
+        throughHole: true, normal: [0, 0, 1], panelId: 'panel-left', connectedPanelRole: 'LEFT_SIDE',
+      })],
+      [g11Panel({ id: 'panel-left', role: 'LEFT_SIDE', computed: { realThickness: 18 } })],
+    );
+
+    expect(issues.map((i) => i.code)).toEqual(['B_G11_THROUGH_OVERTRAVEL_UNDECLARED']);
+    expect(issues[0].context?.reason).toBe('THROUGH_OVERTRAVEL_UNDECLARED');
+    expect(issues[0].context?.boreType).toBe('EDGE_BORE');
+    expect(issues[0].context?.axis).toBe('Z');
+    expect(issues[0].context?.expected).toBe(600);
+    expect(issues[0].message).toMatch(/overtravel/i);
+  });
+
+  it('does NOT block a through hole that fits — and keeps the generator\'s > vs >= split', () => {
+    // depth === extent: a BLIND bore is blocked here (>=), a declared THROUGH
+    // hole is not (>). generateDrillMap.ts:520 vs :527.
+    const through = ruleG11_PanelBreakthrough(
+      [point({ id: 'through-exact', purpose: 'OTHER', depth: 18, throughHole: true, connectedPanelRole: 'BACK' })],
+      [g11Panel({ id: 'panel-back', role: 'BACK', computed: { realThickness: 18 } })],
+    );
+    expect(through).toEqual([]);
+
+    const blind = ruleG11_PanelBreakthrough(
+      [point({ id: 'blind-exact', purpose: 'OTHER', depth: 18, connectedPanelRole: 'BACK' })],
+      [g11Panel({ id: 'panel-back', role: 'BACK', computed: { realThickness: 18 } })],
+    );
+    expect(blind.map((i) => i.code)).toEqual(['B_G11_PANEL_BREAKTHROUGH']);
+
+    // ...and comfortably inside is untouched on both halves.
+    expect(ruleG11_PanelBreakthrough(
+      [point({ id: 'through-short', purpose: 'OTHER', depth: 6, throughHole: true, connectedPanelRole: 'BACK' })],
+      [g11Panel({ id: 'panel-back', role: 'BACK', computed: { realThickness: 18 } })],
+    )).toEqual([]);
+    expect(ruleG11_PanelBreakthrough(
+      [point({
+        id: 'through-edge-ok', purpose: 'BOLT_ENTRY', diameter: 7.5, depth: 24, throughHole: true,
+        normal: [0, 0, 1], panelId: 'panel-left', connectedPanelRole: 'LEFT_SIDE',
+      })],
+      [g11Panel({ id: 'panel-left', role: 'LEFT_SIDE', computed: { realThickness: 18 } })],
+    )).toEqual([]);
+  });
+
+  it('through-hole overtravel reaches the gate through the full DrillMap path and FAILS it', () => {
+    const drillMap = drillMapWith([{
+      panelId: 'panel-back', role: 'BACK', thickness: 18,
+      points: [{ purpose: 'BOLT', depth: 9999, throughHole: true, normal: [0, 0, -1], connectedPanelRole: 'BACK' }],
+    }]);
+
+    const result = validateG11FromDrillMap(drillMap);
+    const blockers = result.issues.filter((i) => i.code === 'B_G11_THROUGH_OVERTRAVEL_UNDECLARED');
+
+    expect(blockers.length).toBe(1);
+    expect(blockers[0].context?.reason).toBe('THROUGH_OVERTRAVEL_UNDECLARED');
+    expect(result.status).toBe('FAIL');
+  });
+});
+
+describe('G11.9 Gap B — an owner the data contradicts is refused, not merely noted', () => {
+  it('BLOCKS a point whose panelId is absent from a map that DOES declare panels', () => {
+    const drillMap = drillMapWith([{
+      panelId: 'panel-left', role: 'LEFT_SIDE', thickness: 18,
+      points: [{
+        // Owned by a panel this map never declares — the generator refuses this
+        // outright (R_MEMBER_THICKNESS_UNDECLARED, generateDrillMap.ts ~:2668).
+        panelId: 'ghost-panel', purpose: 'BOLT_ENTRY', diameter: 7.5, depth: 9999,
+        normal: [0, 0, 1], connectedPanelRole: 'LEFT_SIDE',
+      }],
+    }]);
+
+    const result = validateG11FromDrillMap(drillMap);
+    const blockers = result.issues.filter((i) => i.code === 'B_G11_BREAKTHROUGH_UNADJUDICABLE');
+
+    expect(blockers.length).toBe(1);
+    expect(blockers[0].severity).toBe('BLOCKER');
+    expect(blockers[0].context?.reason).toBe('OWNER_PANEL_UNRESOLVED');
+    expect(blockers[0].context?.waivable).toBe(false);
+    expect(blockers[0].panelIds).toEqual(['ghost-panel']);
+    expect(result.status).toBe('FAIL');
+    // ...and it is NOT downgraded to a note.
+    expect(result.issues.filter((i) => i.code === 'I_G11_BREAKTHROUGH_NOT_EVALUATED')).toEqual([]);
+  });
+
+  it('BLOCKS when the declared owner panel carries no usable dimensions', () => {
+    const drillMap = drillMapWith([{
+      panelId: 'panel-back', role: 'BACK', thickness: 6,
+      points: [{ purpose: 'BOLT', depth: 17.5, normal: [0, 0, -1], connectedPanelRole: 'BACK' }],
+    }]);
+
+    // Non-vacuous: with the geometry present this is a REAL blocker.
+    expect(
+      validateG11FromDrillMap(drillMap).issues.filter((i) => i.code === 'B_G11_PANEL_BREAKTHROUGH').length,
+    ).toBe(1);
+
+    // Strip the geometry the map still claims to describe. Before this slice
+    // that turned a real blocker into ZERO blockers.
+    delete (drillMap.panels[0] as Partial<DrillMapPanel>).dimensions;
+
+    const result = validateG11FromDrillMap(drillMap);
+    const blockers = result.issues.filter((i) => i.code === 'B_G11_BREAKTHROUGH_UNADJUDICABLE');
+
+    expect(blockers.length).toBe(1);
+    expect(blockers[0].context?.reason).toBe('OWNER_PANEL_UNRESOLVED');
+    expect(result.status).toBe('FAIL');
+    expect(result.issues.filter((i) => i.code === 'I_G11_BREAKTHROUGH_NOT_EVALUATED')).toEqual([]);
+  });
+
+  it('BLOCKS an EDGE bore whose declared owner panel has no usable span', () => {
+    const issues = ruleG11_PanelBreakthrough(
+      [point({
+        id: 'entry-nospan', purpose: 'BOLT_ENTRY', diameter: 7.5, depth: 24,
+        normal: [0, 0, 1], panelId: 'panel-left', connectedPanelRole: 'LEFT_SIDE',
+      })],
+      // The map declares this panel, but its in-plane geometry is unusable.
+      [g11Panel({ id: 'panel-left', role: 'LEFT_SIDE', finishWidth: 0, computed: { realThickness: 18 } })],
+    );
+
+    expect(issues.map((i) => i.code)).toEqual(['B_G11_BREAKTHROUGH_UNADJUDICABLE']);
+    expect(issues[0].severity).toBe('BLOCKER');
+    expect(issues[0].context?.reason).toBe('OWNER_SPAN_UNRESOLVED');
+    expect(issues[0].context?.waivable).toBe(false);
+  });
+
+  it('CASE 1 PRESERVED — bare points with no panel geometry at all stay INFO', () => {
+    // A caller handed the rule bare points. Nothing is contradicted, so nothing
+    // is blocked. Many existing suites construct exactly this.
+    const faceIssues = ruleG11_PanelBreakthrough(
+      [point({ id: 'bare-face', purpose: 'BOLT', depth: 9999, connectedPanelRole: 'BACK' })],
+      [],
+    );
+    expect(faceIssues.map((i) => i.code)).toEqual(['I_G11_BREAKTHROUGH_NOT_EVALUATED']);
+    expect(faceIssues[0].severity).toBe('INFO');
+    expect(faceIssues[0].context?.reason).toBe('OWNER_THICKNESS_UNDECLARED');
+
+    const edgeIssues = ruleG11_PanelBreakthrough(
+      [point({
+        id: 'bare-edge', purpose: 'BOLT_ENTRY', diameter: 7.5, depth: 9999,
+        normal: [0, 0, 1], panelId: 'panel-left', connectedPanelRole: 'LEFT_SIDE',
+      })],
+      [],
+    );
+    expect(edgeIssues.map((i) => i.code)).toEqual(['I_G11_BREAKTHROUGH_NOT_EVALUATED']);
+    expect(edgeIssues[0].severity).toBe('INFO');
+    expect(edgeIssues[0].context?.reason).toBe('OWNER_SPAN_UNRESOLVED');
+
+    // ...and this rule contributes no blocker to the gate for that input.
+    const result = runG11Rules(
+      [point({ id: 'bare-face', purpose: 'BOLT', depth: 9999, connectedPanelRole: 'BACK' })],
+      [],
+    );
+    expect(result.issues.filter((i) => i.code === 'B_G11_PANEL_BREAKTHROUGH')).toEqual([]);
+    expect(result.summary.info).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ============================================
 // G11.9b — a REFUSED joint must not read as a clean pass
 // ============================================
 
@@ -593,6 +798,19 @@ describe('G11.9 EDGE: must not false-block any generated construction family', (
       );
       expect(edgeBores.length, `${name} must emit EDGE bores`).toBeGreaterThan(0);
 
+      // Non-vacuous #2 (fail-closed parity slice): every emitted point must be
+      // owned by a panel this map actually declares WITH dimensions. If that
+      // ever stops holding, the new OWNER_PANEL_UNRESOLVED blocker below is
+      // firing on real generator output and this guard must be read as a
+      // generator bug report, not tuned away.
+      const declared = new Map(drillMap.panels.map((p) => [p.panelId, p]));
+      const orphans = drillMap.panels.flatMap((panel) =>
+        panel.points
+          .filter((pt) => !declared.get(pt.panelId)?.dimensions)
+          .map((pt) => `${pt.id} → ${pt.panelId}`),
+      );
+      expect(orphans, `${name}: every emitted bore must have a declared owner panel`).toEqual([]);
+
       const result = validateG11FromDrillMap(drillMap);
 
       expect(
@@ -602,6 +820,14 @@ describe('G11.9 EDGE: must not false-block any generated construction family', (
       expect(
         result.issues.filter((i) => i.code === 'I_G11_BREAKTHROUGH_NOT_EVALUATED').map((i) => i.context?.reason),
         `${name}: every emitted bore must be adjudicated, not skipped`,
+      ).toEqual([]);
+      // And specifically: none of the fail-closed parity blockers may fire on a
+      // legally generated family.
+      expect(
+        result.issues
+          .filter((i) => i.code === 'B_G11_PANEL_BREAKTHROUGH')
+          .map((i) => `${i.drillPointIds?.[0]}:${i.context?.reason}`),
+        `${name}: no breakthrough/overtravel/unresolved-owner blocker may fire`,
       ).toEqual([]);
     });
   }
