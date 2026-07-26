@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>Global Exact-SKU Cabinet Connector Living Registry — Design Specification</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>Global Exact-SKU Cabinet Connector Living Registry — Design Specification</h1>
+<p><strong>Date:</strong> 26 July 2026 <strong>Status:</strong> Approved design; implementation not yet authorized <strong>Owners:</strong> MONOLITH Platform Owner, Component Master Governance, Manufacturing Engineering, Structural Qualification, Procurement Data Stewardship <strong>Consulted tenant:</strong> Daph is one consulted pilot/customer company and has no canonical platform authority <strong>Companion edition:</strong> <code>2026-07-26-global-exact-sku-connector-living-registry-design.th.md</code></p>
+<h2>1. Decision</h2>
+<p>MONOLITH will build a <strong>Global Exact-SKU Cabinet Connector Living Registry</strong> using an <strong>Evidence Graph + Deterministic Qualification Engine</strong> architecture.</p>
+<p>The registry will:</p>
+<ul>
+<li>continuously discover connector brands and products worldwide;</li>
+<li>preserve the exact commercial identity of every discovered orderable item;</li>
+<li>model the complete system BOM, including connector bodies, mating hardware, caps, jigs, cutters, drill bits, machine adapters and service parts;</li>
+<li>accept arbitrary cabinet width, depth and height inputs;</li>
+<li>qualify each joint against exact material, thickness, load, geometry, tooling and evidence constraints;</li>
+<li>publish transparent coverage rather than making an unbounded claim that the world market is complete;</li>
+<li>fail closed when identity, compatibility, manufacturing or structural evidence is insufficient;</li>
+<li>keep canonical product facts separate from tenant-specific commercial overlays.</li>
+</ul>
+<p>The initial release is a <strong>registry specification, ingestion system and verified first cohort</strong>, not a one-time static market spreadsheet and not an immediate production platform.</p>
+<h2>2. Why this design is required</h2>
+<p>The existing executive research identified useful connector-family coverage but explicitly described its market table as a family/model ledger rather than an all-SKU census. The approved requirement is materially deeper:</p>
+<blockquote><p>Every brand worldwide as a living registry; every model and exact product code; every compatible component and tool; every cabinet width, depth and height; every applicable cabinet material and actual thickness; and configuration-specific qualification evidence.</p></blockquote>
+<p>A static list cannot satisfy that requirement because:</p>
+<ul>
+<li>global product catalogs change;</li>
+<li>order codes, finishes, packs and availability differ by region;</li>
+<li>the same geometry can have several commercial identities;</li>
+<li>an OEM product family page does not prove every orderable SKU;</li>
+<li>connector suitability depends on both mating panels, not a single nominal thickness;</li>
+<li>cabinet height alone does not determine joint demand;</li>
+<li>strength evidence is configuration-specific;</li>
+<li>OEM content rights may permit factual indexing but prohibit redistribution of drawings or CAD;</li>
+<li>discontinued and superseded products must remain reproducible for service work.</li>
+</ul>
+<p>The design therefore treats completeness as a measured coverage contract over named sources, catalog editions, regions, product families and dates.</p>
+<h2>3. Approved scope</h2>
+<h3>3.1 Global brand scope</h3>
+<p>The registry is an open-ended global living registry. It must support:</p>
+<ul>
+<li>active OEM brands;</li>
+<li>regional brands;</li>
+<li>contract-manufactured and white-label products;</li>
+<li>acquired, merged, renamed and dormant brands;</li>
+<li>region-specific order codes;</li>
+<li>discontinued products required for repair or historical project reproduction;</li>
+<li>newly discovered brands whose relevance is still pending.</li>
+</ul>
+<p>“Every brand” means every brand discovered through the governed discovery process receives a recorded state and review date. It does not mean the market is treated as a closed or permanently complete set.</p>
+<h3>3.2 Complete System BOM</h3>
+<p>Coverage includes:</p>
+<ul>
+<li>connector body or housing;</li>
+<li>bolt, dowel, pin, anchor, sleeve and insert;</li>
+<li>screw and fastener;</li>
+<li>cap, cover and trim;</li>
+<li>adhesive or activation material when required;</li>
+<li>jig, template and gauge;</li>
+<li>drill bit, boring tool, router cutter and profiled cutter;</li>
+<li>spindle, collet, tool holder or machine adapter when product-specific;</li>
+<li>insertion, press, torque or activation tool;</li>
+<li>spare and replacement part;</li>
+<li>required consumable;</li>
+<li>compatible machine process and setup.</li>
+</ul>
+<p>Every relationship must carry type, direction, cardinality, conditions, evidence and lifecycle.</p>
+<h3>3.3 All cabinet substrates</h3>
+<p>The material model includes:</p>
+<ul>
+<li>solid wood;</li>
+<li>particleboard;</li>
+<li>MDF and HDF;</li>
+<li>plywood;</li>
+<li>blockboard;</li>
+<li>OSB;</li>
+<li>lightweight and honeycomb panels;</li>
+<li>compact laminate;</li>
+<li>bamboo panels;</li>
+<li>wood-plastic composites;</li>
+<li>aluminium and steel frames;</li>
+<li>thin fronts and other connector-relevant surface systems;</li>
+<li>future substrate classes without schema replacement.</li>
+</ul>
+<p>Qualification distinguishes core, grade, density, moisture, orientation, coating, nominal thickness, measured thickness and thickness tolerance.</p>
+<h3>3.4 Parametric cabinet scope</h3>
+<p>The engine accepts arbitrary cabinet W × D × H values within governed numeric precision. It covers standard and custom:</p>
+<ul>
+<li>base cabinets;</li>
+<li>wall cabinets;</li>
+<li>tall cabinets;</li>
+<li>wardrobes and closets;</li>
+<li>vanities;</li>
+<li>shelving and storage units;</li>
+<li>islands and peninsulas;</li>
+<li>freestanding, built-in, wall-mounted and mobile units;</li>
+<li>modular and transport-separated assemblies.</li>
+</ul>
+<p>Accepting an input does not imply approving it. Unsupported configurations return a refusal or insufficient-evidence verdict.</p>
+<h2>4. Non-goals</h2>
+<p>The first cohort will not:</p>
+<ul>
+<li>claim that every global brand or SKU has already been found;</li>
+<li>infer a product code from a family name;</li>
+<li>use marketplace listings as primary geometry evidence;</li>
+<li>infer structural performance from product tests alone;</li>
+<li>extrapolate a tested thickness or material without an approved rule;</li>
+<li>treat a distributor code as an OEM code;</li>
+<li>publish OEM drawings, CAD, photography or catalog text without rights;</li>
+<li>make Daph preferences canonical;</li>
+<li>authorize production from AI-extracted data without human review;</li>
+<li>replace physical testing with software tests;</li>
+<li>flatten historical or discontinued products into current replacements.</li>
+</ul>
+<h2>5. Authority and repository boundary</h2>
+<p>The governance/bootstrap root owns:</p>
+<ul>
+<li>ontology;</li>
+<li>evidence policy;</li>
+<li>canonical identity rules;</li>
+<li>registry releases;</li>
+<li>qualification governance;</li>
+<li>coverage reporting;</li>
+<li>tenant-overlay policy.</li>
+</ul>
+<p>The nested active MONOLITH product consumes pinned, versioned registry releases and maps them into runtime connector operations. It must not maintain an independent competing product truth.</p>
+<p>Daph and future tenants may own overlays such as:</p>
+<ul>
+<li>preferred supplier;</li>
+<li>contract price;</li>
+<li>local stock;</li>
+<li>approved substitution;</li>
+<li>lead time;</li>
+<li>tenant-specific procurement restriction.</li>
+</ul>
+<p>Tenants may propose evidence and mappings. They may not mutate global identity, OEM geometry, qualification evidence or canonical lifecycle.</p>
+<h2>6. Hybrid architecture</h2>
+<h3>6.1 OEM Evidence Vault</h3>
+<p>The vault stores immutable source snapshots and metadata:</p>
+<ul>
+<li>source URL and publisher;</li>
+<li>document title, edition and publication date;</li>
+<li>country, market and language;</li>
+<li>access timestamp;</li>
+<li>content hash;</li>
+<li>MIME type;</li>
+<li>extraction permission;</li>
+<li>redistribution and asset-rights constraints;</li>
+<li>superseding-source relationship;</li>
+<li>reviewer notes.</li>
+</ul>
+<p>The vault preserves evidence. It does not automatically make extracted claims canonical.</p>
+<h3>6.2 Vendor ingestion adapters</h3>
+<p>Each vendor adapter translates vendor-native structures into candidate records. Adapters may parse:</p>
+<ul>
+<li>OEM web catalogs;</li>
+<li>PDF catalogs and datasheets;</li>
+<li>installation manuals;</li>
+<li>CAD metadata;</li>
+<li>product APIs or feeds;</li>
+<li>authorized-distributor availability sources.</li>
+</ul>
+<p>Adapters produce <code>PENDING_CANDIDATE</code> records. They cannot publish <code>VERIFIED</code> facts.</p>
+<h3>6.3 Canonical Exact-SKU Registry</h3>
+<p>The canonical registry resolves:</p>
+<ul>
+<li>manufacturer and brand;</li>
+<li>family, series and model;</li>
+<li>OEM order code;</li>
+<li>GTIN, EAN, UPC or other public identifier;</li>
+<li>region and commercial offer;</li>
+<li>finish, colour, material, handedness and pack;</li>
+<li>revision and lifecycle;</li>
+<li>equivalence without identity collapse.</li>
+</ul>
+<p>One orderable commercial identity is one record. Shared geometry is linked, not merged.</p>
+<h3>6.4 Complete System BOM and Compatibility Graph</h3>
+<p>Typed graph edges include:</p>
+<ul>
+<li><code>REQUIRES</code>;</li>
+<li><code>OPTIONALLY_USES</code>;</li>
+<li><code>COMPATIBLE_WITH</code>;</li>
+<li><code>INCOMPATIBLE_WITH</code>;</li>
+<li><code>REPLACES</code>;</li>
+<li><code>SUPERSEDES</code>;</li>
+<li><code>REGION_VARIANT_OF</code>;</li>
+<li><code>GEOMETRY_VARIANT_OF</code>;</li>
+<li><code>TOOLED_BY</code>;</li>
+<li><code>MACHINED_BY</code>;</li>
+<li><code>INSTALLED_WITH</code>;</li>
+<li><code>QUALIFIED_WITH</code>;</li>
+<li><code>REQUIRES_MATERIAL_CONDITION</code>.</li>
+</ul>
+<p>Edges include quantity, panel role, region, version, conditional expression, evidence reference and validity interval.</p>
+<h3>6.5 Deterministic Qualification Engine</h3>
+<p>The engine reads:</p>
+<ul>
+<li>cabinet configuration;</li>
+<li>material instances;</li>
+<li>exact SKU and complete BOM candidates;</li>
+<li>geometry and machining constraints;</li>
+<li>structural qualification envelopes;</li>
+<li>available machine and tool capabilities;</li>
+<li>region and lifecycle state;</li>
+<li>governing release policy.</li>
+</ul>
+<p>It produces a deterministic verdict, trace and manufacturing proposal.</p>
+<h3>6.6 Coverage and Release Ledger</h3>
+<p>The ledger publishes:</p>
+<ul>
+<li>discovered brand denominator;</li>
+<li>expected family/model/SKU denominator by source edition;</li>
+<li>classified record counts;</li>
+<li>evidence completeness;</li>
+<li>source freshness;</li>
+<li>blocked sources;</li>
+<li>unresolved conflicts;</li>
+<li>qualification gaps;</li>
+<li>release version and hash.</li>
+</ul>
+<h2>7. Canonical data model</h2>
+<h3>7.1 Brand universe</h3>
+<p>Required fields:</p>
+<ul>
+<li>global brand ID;</li>
+<li>legal manufacturer;</li>
+<li>trading brand;</li>
+<li>parent company;</li>
+<li>origin and operating regions;</li>
+<li>official domains;</li>
+<li>trademarks and aliases;</li>
+<li>OEM, white-label, acquisition and rebrand relationships;</li>
+<li>discovery source and date;</li>
+<li>last reviewed date;</li>
+<li>relevance state.</li>
+</ul>
+<p>Allowed relevance states:</p>
+<ul>
+<li><code>DISCOVERED</code>;</li>
+<li><code>RELEVANCE_PENDING</code>;</li>
+<li><code>CONNECTOR_OEM_CONFIRMED</code>;</li>
+<li><code>NO_RELEVANT_PRODUCTS_FOUND</code>;</li>
+<li><code>SOURCE_ACCESS_BLOCKED</code>;</li>
+<li><code>DORMANT_OR_DEFUNCT</code>;</li>
+<li><code>ACQUIRED_OR_REBRANDED</code>.</li>
+</ul>
+<h3>7.2 Product and exact commercial identity</h3>
+<p>Required identity dimensions:</p>
+<ul>
+<li>manufacturer;</li>
+<li>brand;</li>
+<li>family;</li>
+<li>series;</li>
+<li>model;</li>
+<li>OEM order code;</li>
+<li>public barcode identifiers where available;</li>
+<li>commercial region;</li>
+<li>finish and colour;</li>
+<li>product material;</li>
+<li>handedness or orientation;</li>
+<li>pack quantity;</li>
+<li>unit of measure;</li>
+<li>revision;</li>
+<li>lifecycle state and dates.</li>
+</ul>
+<p>Different OEM order codes are separate commercial records even when their geometry matches. Pack, finish or region variants are separate when they change the orderable code.</p>
+<h3>7.3 Connector geometry</h3>
+<p>Geometry records include:</p>
+<ul>
+<li>connector class and joint semantics;</li>
+<li>body envelope;</li>
+<li>bore, slot, profile and pocket geometry;</li>
+<li>coordinate datum;</li>
+<li>drilling/routing direction;</li>
+<li>edge and end distances;</li>
+<li>minimum ligament;</li>
+<li>tolerances;</li>
+<li>assembly vector;</li>
+<li>tool-access volume;</li>
+<li>visible and concealed state;</li>
+<li>disassembly and retightening attributes.</li>
+</ul>
+<h3>7.4 Material instance</h3>
+<p>Material records distinguish:</p>
+<ul>
+<li>substrate class;</li>
+<li>exact material product when known;</li>
+<li>grade and governing standard;</li>
+<li>core construction;</li>
+<li>density and tolerance;</li>
+<li>moisture and conditioning;</li>
+<li>grain or layer orientation;</li>
+<li>nominal thickness;</li>
+<li>measured thickness;</li>
+<li>thickness tolerance;</li>
+<li>coating, laminate or facing layers;</li>
+<li>edge treatment.</li>
+</ul>
+<p>Panel A and Panel B always have independent material instances.</p>
+<h3>7.5 Tool and machine capability</h3>
+<p>Capability records include:</p>
+<ul>
+<li>process class;</li>
+<li>machine identity or capability class;</li>
+<li>spindle and axis limits;</li>
+<li>drill/cutter identity;</li>
+<li>diameter and cutting geometry;</li>
+<li>collet/tool-holder/adapter;</li>
+<li>feed, speed and depth rules when evidenced;</li>
+<li>insertion, press or torque requirements;</li>
+<li>jig and datum method;</li>
+<li>achievable tolerance;</li>
+<li>tool reach and access;</li>
+<li>inspection method.</li>
+</ul>
+<h3>7.6 Evidence record</h3>
+<p>Every verified field points to evidence containing:</p>
+<ul>
+<li>publisher and source identity;</li>
+<li>document/page/figure/table locator;</li>
+<li>region and language;</li>
+<li>publication and access date;</li>
+<li>content hash;</li>
+<li>extracted field;</li>
+<li>extraction method;</li>
+<li>reviewer and review date;</li>
+<li>confidence;</li>
+<li>rights state;</li>
+<li>contradiction and supersession links.</li>
+</ul>
+<h2>8. Independent verification dimensions</h2>
+<p>The design forbids a single undifferentiated <code>Verified</code> flag. Each SKU carries independent states for:</p>
+<ul>
+<li>identity verification;</li>
+<li>geometry verification;</li>
+<li>BOM compatibility verification;</li>
+<li>tooling and manufacturing verification;</li>
+<li>material/thickness applicability;</li>
+<li>structural configuration qualification;</li>
+<li>commercial orderability;</li>
+<li>field installation validation;</li>
+<li>lifecycle freshness;</li>
+<li>rights review.</li>
+</ul>
+<p>A SKU may therefore be identity-verified but structurally unqualified, or geometrically verified but commercially unorderable.</p>
+<h2>9. Thickness model</h2>
+<p>The engine accepts any measured thickness representable under the governed precision policy. Evidence is represented as:</p>
+<ul>
+<li>exact OEM-declared points;</li>
+<li>exact OEM-declared ranges;</li>
+<li>tested configuration points;</li>
+<li>statistically qualified ranges;</li>
+<li>approved interpolation rules;</li>
+<li>prohibited extrapolation zones;</li>
+<li>unknown zones.</li>
+</ul>
+<p>Rules:</p>
+<ul>
+<li>Panel A and Panel B thicknesses are evaluated separately;</li>
+<li>core thickness and facing thickness are not silently combined;</li>
+<li>a nominal thickness does not replace measured thickness where tolerances matter;</li>
+<li>passing 15 mm and 18 mm does not automatically qualify 16 mm;</li>
+<li>density, moisture and orientation constraints travel with the thickness envelope;</li>
+<li>unsupported points return <code>INSUFFICIENT_EVIDENCE</code> or <code>UNQUALIFIED</code>;</li>
+<li>no nearest-neighbour connector substitution is allowed for release.</li>
+</ul>
+<h2>10. Parametric Qualification Envelope</h2>
+<h3>10.1 Inputs</h3>
+<p>The engine receives:</p>
+<ul>
+<li>external and internal W × D × H;</li>
+<li>every panel and joint geometry;</li>
+<li>cabinet topology;</li>
+<li>shelves, dividers, rails, stretchers, back and plinth;</li>
+<li>exact material instances;</li>
+<li>dead, live, point, eccentric, racking and dynamic loads;</li>
+<li>door and drawer mass and eccentricity;</li>
+<li>wall/floor/mobile condition;</li>
+<li>wall substrate and anchors;</li>
+<li>environment and corrosion conditions;</li>
+<li>service and repeated-assembly requirement;</li>
+<li>factory machines and tools;</li>
+<li>installation access and sequence;</li>
+<li>region and compliance policy.</li>
+</ul>
+<h3>10.2 Decision pipeline</h3>
+<ol>
+<li>Normalize units, precision and tolerances.</li>
+<li>Generate the cabinet joint graph.</li>
+<li>Filter by lifecycle, region and orderability.</li>
+<li>Filter by Panel A and Panel B material/thickness.</li>
+<li>Resolve the complete BOM.</li>
+<li>Validate geometry, edge distance and collision.</li>
+<li>Validate tool access, machine capability and assembly sequence.</li>
+<li>Match exact structural qualification evidence.</li>
+<li>calculate connector count, spacing and position from qualified rules.</li>
+<li>Evaluate racking, overturning, wall attachment and anti-tip requirements.</li>
+<li>Emit the verdict, trace, BOM, machining proposal and inspection plan.</li>
+</ol>
+<h3>10.3 Tall and large cabinet behavior</h3>
+<p>Height is not used as a single proxy for demand. The engine evaluates:</p>
+<ul>
+<li>unsupported span;</li>
+<li>joint-line length;</li>
+<li>panel slenderness and bow risk;</li>
+<li>door/drawer eccentricity;</li>
+<li>center of gravity and overturning;</li>
+<li>back-panel contribution;</li>
+<li>fixed shelf and divider contribution;</li>
+<li>rail and stretcher contribution;</li>
+<li>wall-anchor capacity and position;</li>
+<li>transport and handling;</li>
+<li>module splitting;</li>
+<li>installation access.</li>
+</ul>
+<p>If increasing connector count is insufficient, the engine requires reinforcement, fixed structure, anchoring, module division or refusal.</p>
+<h3>10.4 Verdicts</h3>
+<ul>
+<li><code>QUALIFIED</code>;</li>
+<li><code>CONDITIONALLY_QUALIFIED</code>;</li>
+<li><code>UNQUALIFIED</code>;</li>
+<li><code>INSUFFICIENT_EVIDENCE</code>;</li>
+<li><code>DISCONTINUED_OR_UNORDERABLE</code>.</li>
+</ul>
+<p>Every verdict includes reason codes and evidence references.</p>
+<h3>10.5 Mandatory refusal gates</h3>
+<p>Release is refused when:</p>
+<ul>
+<li>exact identity is unresolved;</li>
+<li>a required mating part is unresolved;</li>
+<li>material or thickness is outside the qualified envelope;</li>
+<li>an unapproved extrapolation is required;</li>
+<li>BOM compatibility is incomplete;</li>
+<li>geometry collides or violates a governed distance;</li>
+<li>required machine or tool capability is unavailable;</li>
+<li>assembly access is impossible;</li>
+<li>wall substrate or anchor evidence is incomplete where required;</li>
+<li>lifecycle replacement has not been qualified;</li>
+<li>the evidence chain is incomplete;</li>
+<li>the result cannot be reproduced from a pinned registry version.</li>
+</ul>
+<h2>11. Ingestion and publication workflow</h2>
+<ol>
+<li>Discover a brand or new source.</li>
+<li>Register the brand and source denominator.</li>
+<li>Snapshot the source in the Evidence Vault.</li>
+<li>Hash and classify the source.</li>
+<li>Extract candidate products, SKUs, geometry and BOM.</li>
+<li>Validate schema and units.</li>
+<li>Resolve identity, duplicates, regional variants and rebrands.</li>
+<li>Validate compatibility edges.</li>
+<li>Review field-level citations.</li>
+<li>Separate geometry review from structural review.</li>
+<li>Review rights.</li>
+<li>Publish a signed/versioned registry release.</li>
+</ol>
+<p>AI extraction never promotes its own output beyond pending candidate state.</p>
+<h2>12. Change monitoring and lifecycle</h2>
+<p>The system monitors:</p>
+<ul>
+<li>OEM catalog indexes;</li>
+<li>source content hashes;</li>
+<li>document editions;</li>
+<li>new and removed order codes;</li>
+<li>geometry changes;</li>
+<li>installation-instruction changes;</li>
+<li>regional offer changes;</li>
+<li>discontinuation and replacement notices;</li>
+<li>authorized-distributor orderability.</li>
+</ul>
+<p>Commercial freshness is evaluated independently from geometry freshness.</p>
+<p>Historical records are tombstoned or superseded, never destructively replaced. A released project pins a registry version so its BOM and machining plan remain reproducible.</p>
+<h2>13. Conflict and error handling</h2>
+<p>Candidates enter quarantine when:</p>
+<ul>
+<li>units are ambiguous;</li>
+<li>inch and metric data conflict;</li>
+<li>OEM documents disagree;</li>
+<li>PDF and CAD geometry disagree;</li>
+<li>regional order codes collide;</li>
+<li>distributor and OEM identity disagree;</li>
+<li>a required mating part is absent from the candidate graph;</li>
+<li>pack or finish identity is ambiguous;</li>
+<li>source rights are unclear;</li>
+<li>a newer installation instruction changes a released constraint.</li>
+</ul>
+<p>Quarantine prevents manufacturing release and records owner, reason, evidence, opened date and resolution.</p>
+<h2>14. Coverage contract</h2>
+<p>Coverage is reported by:</p>
+<ul>
+<li>brand;</li>
+<li>legal manufacturer;</li>
+<li>region;</li>
+<li>catalog edition;</li>
+<li>product family;</li>
+<li>model;</li>
+<li>exact SKU;</li>
+<li>evidence dimension;</li>
+<li>lifecycle;</li>
+<li>review date.</li>
+</ul>
+<p>A release may state:</p>
+<blockquote><p>1,284 of 1,331 expected orderable SKUs classified across 42 confirmed OEMs and 18 regions, against the named source editions as of the release date.</p></blockquote>
+<p>It may not state “all global products complete” without a defined denominator.</p>
+<p>Every discovered item must be assigned one of:</p>
+<ul>
+<li><code>VERIFIED</code>;</li>
+<li><code>PENDING</code>;</li>
+<li><code>REGION_ONLY</code>;</li>
+<li><code>SUPERSEDED</code>;</li>
+<li><code>DISCONTINUED</code>;</li>
+<li><code>OUT_OF_SCOPE_WITH_REASON</code>;</li>
+<li><code>SOURCE_BLOCKED</code>.</li>
+</ul>
+<h2>15. Verified first cohort</h2>
+<p>The proposed first cohort is:</p>
+<ol>
+<li>Häfele;</li>
+<li>Hettich;</li>
+<li>Titus;</li>
+<li>Lamello;</li>
+<li>Italiana Ferramenta;</li>
+<li>OVVO;</li>
+<li>Lockdowel;</li>
+<li>Välinge Innovation / Threespine;</li>
+<li>KNAPP;</li>
+<li>Festool DOMINO;</li>
+<li>Hoffmann Machine Company;</li>
+<li>Blum, limited to its actual connector role rather than being generalized as a carcass connector supplier.</li>
+</ol>
+<p>The first denominator covers:</p>
+<ul>
+<li>OEM global/EU sources;</li>
+<li>United States regional sources;</li>
+<li>Thailand/ASEAN orderability;</li>
+<li>any other region with different geometry or order codes discovered during source review.</li>
+</ul>
+<p>Existing MONOLITH Minifix, Target J10, Rastex intent and dowel seeds are reconciled against this cohort. Existing implementation does not automatically outrank newer primary evidence.</p>
+<h2>16. Validation strategy</h2>
+<h3>16.1 Data and graph validation</h3>
+<ul>
+<li>schema and unit validation;</li>
+<li>required-field validation;</li>
+<li>duplicate identity detection;</li>
+<li>regional-code collision detection;</li>
+<li>dangling BOM edge detection;</li>
+<li>incompatible-edge contradiction detection;</li>
+<li>lifecycle graph validation;</li>
+<li>field-level citation enforcement;</li>
+<li>rights-state enforcement.</li>
+</ul>
+<h3>16.2 Qualification-engine validation</h3>
+<ul>
+<li>boundary tests at every min/max constraint;</li>
+<li>property tests across W × D × H and unit conversions;</li>
+<li>golden configurations for base, wall, tall, wardrobe and custom cabinets;</li>
+<li>collision and edge-distance cases;</li>
+<li>machine-capability negative cases;</li>
+<li>absent-tool and absent-mating-part negative cases;</li>
+<li>lifecycle and region negative cases;</li>
+<li>deterministic replay from pinned releases;</li>
+<li>mutation tests proving refusal gates fail closed.</li>
+</ul>
+<h3>16.3 Tenant-boundary validation</h3>
+<ul>
+<li>Daph overlays cannot mutate canonical facts;</li>
+<li>tenant prices and stock remain tenant-local;</li>
+<li>tenant substitutions require governed approval;</li>
+<li>deletion of a tenant overlay does not delete canonical or historical registry evidence.</li>
+</ul>
+<h3>16.4 Physical qualification</h3>
+<p>Where applicable, the physical matrix covers:</p>
+<ul>
+<li>static strength;</li>
+<li>cyclic durability;</li>
+<li>racking;</li>
+<li>pull-out and withdrawal;</li>
+<li>repeated assembly;</li>
+<li>transport and impact;</li>
+<li>environmental conditioning;</li>
+<li>misuse and repair;</li>
+<li>wall suspension and anti-tip.</li>
+</ul>
+<p>Each result records specimen material, actual thickness, density, moisture, connector lot, machining tolerance, torque or insertion state, sample size, statistical treatment and failure mode.</p>
+<p>Software tests do not substitute for these physical results.</p>
+<h2>17. First-cohort acceptance criteria</h2>
+<p>The first cohort is accepted only when:</p>
+<ul>
+<li>the named source denominator for all 12 brands is published;</li>
+<li>every discovered connector-relevant family, model and SKU is classified;</li>
+<li>every identity-verified SKU has primary OEM evidence;</li>
+<li>every verified field has a field-level source locator;</li>
+<li>released BOMs have no missing or dangling required parts;</li>
+<li>geometry and structural qualification states are independent;</li>
+<li>no qualification relies on unapproved extrapolation;</li>
+<li>unsupported configurations are deterministically refused;</li>
+<li>source freshness and blocked-source gaps are visible;</li>
+<li>registry releases are reproducible and hash-addressed;</li>
+<li>parent canonical identity and nested runtime mappings do not conflict;</li>
+<li>production release remains blocked until all applicable evidence gates pass.</li>
+</ul>
+<h2>18. First-cohort deliverables</h2>
+<p>Project-facing outputs must be provided in aligned Thai and English editions with standalone HTML companions.</p>
+<p>Machine-readable outputs will include logically separate datasets for:</p>
+<ul>
+<li>brands;</li>
+<li>sources;</li>
+<li>product families;</li>
+<li>models;</li>
+<li>exact SKUs;</li>
+<li>regional commercial offers;</li>
+<li>BOM edges;</li>
+<li>compatibility edges;</li>
+<li>geometries;</li>
+<li>material instances;</li>
+<li>tools and machines;</li>
+<li>qualification envelopes;</li>
+<li>evidence records;</li>
+<li>lifecycle events;</li>
+<li>coverage snapshots.</li>
+</ul>
+<p>Exact filenames and migration sequencing belong in the implementation plan, not this design.</p>
+<h2>19. Operational ownership</h2>
+<p>Required roles:</p>
+<ul>
+<li>Brand Discovery Steward;</li>
+<li>OEM Evidence Curator;</li>
+<li>Identity and SKU Reviewer;</li>
+<li>Manufacturing Geometry Reviewer;</li>
+<li>Structural Qualification Authority;</li>
+<li>Tooling and Machine Capability Owner;</li>
+<li>Rights and Licensing Reviewer;</li>
+<li>Procurement Data Steward;</li>
+<li>Registry Release Manager;</li>
+<li>Tenant Overlay Approver.</li>
+</ul>
+<p>No role may self-approve every stage of a safety-relevant record.</p>
+<h2>20. Success measures</h2>
+<p>The program measures:</p>
+<ul>
+<li>classified SKUs divided by expected SKUs for each declared denominator;</li>
+<li>percentage of verified fields with field-level primary evidence;</li>
+<li>percentage of released BOMs with complete compatible parts;</li>
+<li>percentage of qualified configurations with exact test evidence;</li>
+<li>stale source rate;</li>
+<li>unresolved conflict age;</li>
+<li>source-blocked coverage;</li>
+<li>deterministic replay rate;</li>
+<li>refusal-gate escape count;</li>
+<li>field defect and repair outcomes by exact configuration;</li>
+<li>time to incorporate an OEM catalog change;</li>
+<li>tenant-overlay isolation failures.</li>
+</ul>
+<p>The target user outcome is trust and repeatable value, not dependency through lock-in.</p>
+<h2>21. Implementation transition</h2>
+<p>After user review and approval of this written specification, the next step is a separate implementation plan. That plan must:</p>
+<ul>
+<li>reconcile existing parent and nested connector records before introducing a new authority;</li>
+<li>isolate the first cohort into bounded ingestion waves;</li>
+<li>preserve all current dirty-worktree changes;</li>
+<li>define migrations, schemas, tests and release gates;</li>
+<li>keep NOT-FOR-PRODUCTION controls active until evidence gates pass;</li>
+<li>avoid claiming global completeness at any intermediate release.</li>
+</ul>
+<h2>22. Approval record</h2>
+<p>The user approved:</p>
+<ul>
+<li>Global Living Registry;</li>
+<li>Complete System BOM;</li>
+<li>Parametric Qualification Envelope;</li>
+<li>all cabinet substrates;</li>
+<li>primary-source evidence hierarchy;</li>
+<li>registry specification + ingestion system + verified first cohort;</li>
+<li>Evidence Graph + Deterministic Qualification architecture in hybrid form;</li>
+<li>architecture and authority model;</li>
+<li>exact-SKU master schema and thickness rules;</li>
+<li>qualification engine and refusal gates;</li>
+<li>ingestion, lifecycle and transparent coverage design;</li>
+<li>first cohort, validation and acceptance criteria.</li>
+</ul>
+</main></body>
+</html>
