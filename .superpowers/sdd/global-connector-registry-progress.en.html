@@ -434,5 +434,64 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
 <li>No push or merge was performed.</li>
 <li>Task 6 is next and has not started.</li>
 </ul>
+<h2>Task 6 closeout — 27 July 2026</h2>
+<p><strong>Status:</strong> COMPLETE <strong>Task 6 base:</strong> <code>12af68acf9aa0add75cd329480911d14a85fe3b1</code> <strong>Implementation commit:</strong> <code>1a4971a59622517577dc2a6f8760165395f91f77</code> — <code>feat(registry): evaluate parametric cabinet configurations</code> <strong>First review-fix commit:</strong> <code>e6680415c68d0944d7cc6d2c90e32d2bb26f13d1</code> — <code>fix(registry): close parametric qualification gaps</code> <strong>Second review-fix and accepted HEAD:</strong> <code>6663cc9901b961defdb0b781228f701591b97df5</code> — <code>fix(registry): normalize conditional reason ordering</code> <strong>Current boundary:</strong> Task 7 is next and has not started. This closeout supersedes only the Task 5 current-boundary statement that recorded Task 6 as next or not started; all earlier Task 1–5 statements remain preserved as historical snapshots.</p>
+<h3>Exact tracked Task 6 scope</h3>
+<p>The combined three-commit range from the Task 6 base changes exactly two paths:</p>
+<div class="tablewrap"><table><thead><tr><th>Status</th><th>Path</th><th>Insertions</th><th>Deletions</th></tr></thead><tbody>
+<tr><td>Modified</td><td><code>packages/component-master/src/monolith_component_master/qualification.py</code></td><td align="right">842</td><td align="right">0</td></tr>
+<tr><td>Added</td><td><code>tests/component_master/registry/test_parametric_cabinets.py</code></td><td align="right">1,743</td><td align="right">0</td></tr>
+</tbody></table></div>
+<p>No owner governance-root, nested product-runtime, seed-data, verifier, export, or other product path was changed. No push, merge, rebase, or branch change was performed.</p>
+<h3>Exact immutable interfaces and configuration contract</h3>
+<ul>
+<li><code>SpacingAxis</code> has exactly <code>WIDTH</code>, <code>DEPTH</code>, and <code>HEIGHT</code>, with identical uppercase values.</li>
+<li>Frozen <code>CabinetConfiguration</code> has exactly <code>width_mm</code>, <code>depth_mm</code>, <code>height_mm</code>, <code>topology</code>, <code>joints</code>, <code>load_cases</code>, <code>mounting</code>, and <code>wall_substrate</code>.</li>
+<li>Frozen, evidence-bearing <code>CabinetPolicy</code> has exactly <code>policy_id</code>, <code>connector_sku_id</code>, <code>topology</code>, the inclusive minimum and maximum bounds for width, depth, and height, <code>spacing_axis</code>, <code>max_spacing_mm</code>, <code>min_connector_count</code>, <code>max_connector_count</code>, <code>required_machine_capabilities</code>, <code>reinforcement_requirement</code>, <code>anchor_requirement</code>, and <code>evidence_assertion_ids</code>.</li>
+<li>Frozen <code>ConnectorPlacement</code> has exactly <code>joint_index</code>, <code>connector_sku_id</code>, <code>policy_id</code>, <code>connector_count</code>, and <code>spacing_mm</code>. Frozen <code>CabinetEvaluation</code> has exactly <code>verdict</code>, <code>policy_ids</code>, <code>placements</code>, <code>reinforcement_requirements</code>, <code>anchor_requirements</code>, <code>reason_codes</code>, and <code>evidence_assertion_ids</code>.</li>
+<li><code>evaluate_cabinet</code> retains the three positional arguments <code>cabinet</code>, <code>registry</code>, and <code>machine_capabilities</code>; <code>qualification_envelopes=()</code> and <code>policies=()</code> are explicit keyword-only inputs. The legacy three-argument call remains valid and fails closed because evidence and policy are absent.</li>
+<li>Configuration dimensions accept arbitrary positive finite W × D × H values, including fractional values. Topology is exactly one of <code>base</code>, <code>wall</code>, <code>tall</code>, <code>wardrobe</code>, or <code>custom</code>. Joints and load cases must be nonempty, typed, defensively snapshotted immutable tuples.</li>
+<li>Mounting is exactly <code>FLOOR</code>, <code>WALL</code>, or <code>MOBILE</code>. <code>WALL</code> requires a nonblank wall substrate; <code>FLOOR</code> and <code>MOBILE</code> require <code>wall_substrate=None</code>. IDs and machine capabilities use the strict canonical identifier contract.</li>
+</ul>
+<h3>Exact evidence-bound evaluation semantics</h3>
+<ul>
+<li>Every connector is resolved by its exact SKU and model. SKU <code>VerificationDimension.LIFECYCLE</code> permits only <code>VERIFIED</code> or <code>REGION_ONLY</code>; <code>PENDING</code> returns insufficient evidence, while <code>DISCONTINUED</code> or <code>BLOCKED</code> is unavailable. Model lifecycle permits only <code>ACTIVE</code> or <code>REGION_ONLY</code>; all other model lifecycle states are unavailable.</li>
+<li>Every joint is qualified against the explicit Task 5 envelopes before policy selection. Each joint must then have exactly one unambiguous explicit policy matching its exact connector SKU, topology, and inclusive W × D × H bounds. Missing evidence or policy fails closed, and overlapping policies are ambiguous.</li>
+<li>Required machine capabilities are matched exactly. There is no global, built-in, guessed, inferred, nearest-match, or fabricated rule source, no exact-SKU substitution, and no partial manufacturing output on refusal.</li>
+<li>For the selected axis, <code>connector_count = max(min_connector_count, ceil(axis_length / max_spacing_mm) + 1)</code>. Accepted floats are governed by their canonical shortest decimal spelling and checked integer-ratio arithmetic, so the decimal boundary <code>0.918 / 0.102</code> is exactly nine while the immediately greater float is above nine; finite extreme ratios do not overflow.</li>
+<li>A concrete placement is emitted only with positive finite spacing, calculated as <code>axis_length / (connector_count - 1)</code>. An unrepresentable positive finite result refuses with <code>PARAMETRIC_ARITHMETIC_UNREPRESENTABLE</code> and no authorization.</li>
+<li>A count above <code>max_connector_count</code> refuses unless that exact evidence-bearing policy supplies a reinforcement or anchor requirement. In that allowed conditional case, the placement remains unresolved with both <code>connector_count=None</code> and <code>spacing_mm=None</code>; no machining value is guessed.</li>
+<li>Any selected reinforcement or anchor requirement keeps the evaluation <code>CONDITIONALLY_QUALIFIED</code> even when the count fits. Conditional reason categories are exact and canonical: reinforcement yields <code>REINFORCEMENT_REQUIRED</code>, anchor yields <code>ANCHOR_REQUIRED</code>, and both yield that two-code tuple in category order regardless of joint order.</li>
+<li>Tall cabinets receive no automatic anchor or reinforcement. Any refusal returns reasons but no policy IDs, placements, reinforcement requirements, anchor requirements, or evidence IDs.</li>
+</ul>
+<h3>Honest TDD and independent-review chronology</h3>
+<div class="tablewrap"><table><thead><tr><th>Stage</th><th>Verdict / result</th><th>Disposition</th></tr></thead><tbody>
+<tr><td>Initial RED</td><td>Expected <code>ImportError</code> because <code>evaluate_cabinet</code> did not exist</td><td><code>qualification.py</code> remained unchanged at the RED checkpoint.</td></tr>
+<tr><td>Initial implementation GREEN</td><td>Task 6 + Task 5 passed 88/88: 37 + 51; full discovery passed 452 tests</td><td>The implementation was not yet accepted.</td></tr>
+<tr><td>First independent review</td><td><code>NEEDS_FIXES</code></td><td>P1: SKU lifecycle was ignored. P1: raw-float arithmetic mishandled the <code>0.918 / 0.102</code> boundary and finite <code>1e308 / 1e-308</code> extremes. P2: contradictory conditional reason/requirement states were constructible.</td></tr>
+<tr><td>First review-fix RED</td><td>Lifecycle: 1/1 failure. Arithmetic: 4 failing methods exposed the decimal boundary, two overflow cases, and subnormal-zero spacing. Conditional shape: 1 method with 6 failing subtests.</td><td>Production code was unchanged for each RED reproduction.</td></tr>
+<tr><td>First review-fix GREEN</td><td>Task 6 + Task 5 passed 94/94: 43 + 51; regressions 104/104; verifier contracts 12/12; full discovery 458/458; clean-HEAD verifier 13/13</td><td>Closed the first review findings without claiming final acceptance.</td></tr>
+<tr><td>Independent re-review</td><td><code>NEEDS_FIXES</code></td><td>P2: anchor-first then reinforcement in a multi-joint cabinet produced noncanonical reason order and crashed both concrete and unresolved placement cases.</td></tr>
+<tr><td>Second review-fix RED and GREEN</td><td>RED: 2/2 failures. GREEN: 2/2 passed.</td><td>Canonical category reasons are derived after all requirements are aggregated, independent of joint order.</td></tr>
+<tr><td>Final implementation gates</td><td>Task 6 + Task 5 passed 96/96: 45 + 51; regressions 104/104; verifier contracts 12/12; full discovery 460/460</td><td>The clean-HEAD verifier reported schema <code>1.1.0</code>, PASS 13/13, dynamic 460, and governed cohorts exact at 20 + 7.</td></tr>
+<tr><td>Final independent rereview</td><td><code>ACCEPTED</code> — no findings</td><td>Eight focused reproductions passed, diff-check passed, and exact scope plus clean-tree checks passed.</td></tr>
+</tbody></table></div>
+<h3>Accepted evidence integrity and cleanup</h3>
+<p>These are the accepted implementation/fix results recorded by the Task 6 evidence; this docs-only ledger closeout did not rerun product tests.</p>
+<ul>
+<li>Accepted report: <code>.superpowers/sdd/task-6-parametric-report.md</code>; 12,859 bytes; SHA-256 <code>c11933ad60f634571b72edea67ca271a4524069eab47adbc177e9545aea0d747</code>.</li>
+<li>Accepted native full-index binary review package: <code>.superpowers/sdd/task-6-parametric-review-package.diff</code>; 91,796 bytes; SHA-256 <code>d16757f5843b572a9e7ebb75aa6d975cc35f25b127022586a72583e0ca17de0e</code>; it contains exactly the two Task 6 paths and reverse-applies cleanly at the accepted HEAD.</li>
+<li>Accepted clean-HEAD verifier summary before removal: 94,668 bytes; SHA-256 <code>731108a34fdb2e42e98e93fc4b10cb9701299be3add1fc548f3afa3a0b4ac30c</code>.</li>
+<li>The verifier summary was removed after capture. Accepted cleanup left zero cache directories and zero <code>.pyc</code> files, and the accepted implementation worktree was clean at <code>6663cc9901b961defdb0b781228f701591b97df5</code>.</li>
+</ul>
+<h3>Task 6 authority boundary</h3>
+<ul>
+<li>Task 6 establishes only evidence-bound parametric rule selection plus connector count and spacing.</li>
+<li>It is not full racking, overturning, center-of-gravity, FEA, physical/coupon/machine/first-article/field qualification, populated worldwide policies or evidence, ingestion, release authority, runtime integration, freeze/export authority, or production readiness.</li>
+<li>NOT-FOR-PRODUCTION remains active. Software evidence does not grant manufacturing, installation, operational, or production authority.</li>
+<li>Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.</li>
+<li>No push, merge, rebase, or branch change was performed.</li>
+<li>Task 7 is next and has not started.</li>
+</ul>
 </main></body>
 </html>
