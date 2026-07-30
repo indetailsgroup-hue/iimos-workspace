@@ -47,6 +47,7 @@ OWNER_BY_REASON = {
     "IDENTITY_SOURCE_CONFLICT": "Identity and SKU Reviewer",
     "OEM_DISTRIBUTOR_IDENTITY_CONFLICT": "Identity and SKU Reviewer",
     "PDF_CAD_GEOMETRY_CONFLICT": "Geometry and Units Reviewer",
+    "MATING_PART_SOURCE_CONFLICT": "BOM and Compatibility Reviewer",
     "REQUIRED_MATING_PART_MISSING": "BOM and Compatibility Reviewer",
 }
 
@@ -1623,6 +1624,38 @@ class SourceContradictionTests(unittest.TestCase):
                         owner_role="BOM and Compatibility Reviewer",
                     )
 
+    def test_inch_conversion_is_exact_beyond_decimal_context_precision(
+        self,
+    ) -> None:
+        """25.4 scaling must not round: the rule rests on exact equality."""
+
+        candidate = self.dimensional_candidate(
+            {"value": 10**30, "unit": "in"},
+            {"value": 10**30 + 1, "unit": "in"},
+        )
+
+        result = self.two_pdf_adapter().ingest(candidate)
+
+        self.assertEqual((), result.promoted)
+        self.assertIn("DIMENSION_SOURCE_CONFLICT", reason_codes(result))
+
+    def test_exact_unit_multiples_still_compare_equal(self) -> None:
+        for millimetres, inches in (
+            (25.4, 1),
+            (2.54, 0.1),
+            (254, 10),
+            (25400, 1000),
+        ):
+            with self.subTest(millimetres=millimetres, inches=inches):
+                candidate = self.dimensional_candidate(
+                    {"value": millimetres, "unit": "mm"},
+                    {"value": inches, "unit": "in"},
+                )
+
+                result = self.two_pdf_adapter().ingest(candidate)
+
+                self.assertEqual((candidate,), result.promoted)
+
     def test_ambiguous_unit_assertions_are_not_compared_as_contradictions(
         self,
     ) -> None:
@@ -1634,6 +1667,172 @@ class SourceContradictionTests(unittest.TestCase):
         result = self.two_pdf_adapter().ingest(candidate)
 
         self.assertEqual(("UNITS_AMBIGUOUS",), reason_codes(result))
+
+
+class MatingPartContradictionTests(unittest.TestCase):
+    """The contradiction rule reaches the documented mating-part field only."""
+
+    @staticmethod
+    def two_source_adapter() -> ReviewedAssertionAdapter:
+        return ReviewedAssertionAdapter(
+            (
+                make_context(
+                    "source:demo:oem:pdf",
+                    document_kind=DocumentKind.PDF.value,
+                ),
+                make_context(
+                    "source:demo:oem:cad",
+                    document_kind=DocumentKind.CAD.value,
+                ),
+            )
+        )
+
+    @staticmethod
+    def mating_candidate(
+        first_part: object,
+        second_part: object,
+    ) -> CandidateRecord:
+        return make_candidate(
+            (
+                make_assertion(
+                    "assertion:demo:compatibility:required",
+                    field_path="compatibility.requires_mating_part",
+                    value=True,
+                    source_id="source:demo:oem:pdf",
+                ),
+                make_assertion(
+                    "assertion:demo:compatibility:part-a",
+                    field_path="compatibility.exact_mating_part_id",
+                    value=first_part,
+                    source_id="source:demo:oem:pdf",
+                ),
+                make_assertion(
+                    "assertion:demo:compatibility:part-b",
+                    field_path="compatibility.exact_mating_part_id",
+                    value=second_part,
+                    source_id="source:demo:oem:cad",
+                ),
+            )
+        )
+
+    def test_contradicting_exact_mating_parts_quarantine(self) -> None:
+        result = self.two_source_adapter().ingest(
+            self.mating_candidate("sku:demo:mate:MP-1", "sku:demo:mate:MP-2")
+        )
+
+        self.assertEqual((), result.promoted)
+        self.assertEqual(
+            ("MATING_PART_SOURCE_CONFLICT",),
+            reason_codes(result),
+        )
+        self.assertEqual(
+            (
+                "assertion:demo:compatibility:part-a",
+                "assertion:demo:compatibility:part-b",
+            ),
+            result.quarantined[0].evidence_ids,
+        )
+        self.assertEqual(
+            "BOM and Compatibility Reviewer",
+            result.quarantined[0].owner_role,
+        )
+
+    def test_agreeing_exact_mating_parts_promote(self) -> None:
+        candidate = self.mating_candidate(
+            "sku:demo:mate:MP-1",
+            "sku:demo:mate:MP-1",
+        )
+
+        result = self.two_source_adapter().ingest(candidate)
+
+        self.assertEqual((candidate,), result.promoted)
+        self.assertEqual((), result.quarantined)
+
+    def test_mating_part_ids_are_compared_after_normalization(self) -> None:
+        candidate = self.mating_candidate(
+            "sku:demo:mate:MP-1",
+            "  sku:demo:mate:MP-1  ",
+        )
+
+        result = self.two_source_adapter().ingest(candidate)
+
+        self.assertEqual((candidate,), result.promoted)
+
+    def test_a_single_mating_part_source_is_never_a_contradiction(self) -> None:
+        candidate = make_candidate(
+            (
+                make_assertion(
+                    "assertion:demo:compatibility:required",
+                    field_path="compatibility.requires_mating_part",
+                    value=True,
+                    source_id="source:demo:oem:pdf",
+                ),
+                make_assertion(
+                    "assertion:demo:compatibility:part-a",
+                    field_path="compatibility.exact_mating_part_id",
+                    value="sku:demo:mate:MP-1",
+                    source_id="source:demo:oem:pdf",
+                ),
+            )
+        )
+
+        result = self.two_source_adapter().ingest(candidate)
+
+        self.assertEqual((candidate,), result.promoted)
+
+    def test_undocumented_field_contradictions_are_not_guessed(self) -> None:
+        """The brief forbids guessing conflicts from free text.
+
+        Only documented normalized conventions are compared: the dimensional
+        prefixes, ``identity.``, and the two ``compatibility.`` marker fields.
+        Every other field path must stay uncompared in this foundation.
+        """
+
+        for field_path in (
+            "material.core",
+            "notes.internal",
+            "packaging.carton_code",
+            "compatibility.freeform_remark",
+        ):
+            with self.subTest(field_path=field_path):
+                candidate = make_candidate(
+                    (
+                        make_assertion(
+                            "assertion:demo:free:a",
+                            field_path=field_path,
+                            value="X",
+                            source_id="source:demo:oem:pdf",
+                        ),
+                        make_assertion(
+                            "assertion:demo:free:b",
+                            field_path=field_path,
+                            value="Y",
+                            source_id="source:demo:oem:cad",
+                        ),
+                    )
+                )
+
+                result = self.two_source_adapter().ingest(candidate)
+
+                self.assertEqual((candidate,), result.promoted)
+                self.assertEqual((), result.quarantined)
+
+    def test_mating_conflict_code_maps_to_the_bom_owner(self) -> None:
+        record = QuarantineRecord(
+            candidate_id=CANDIDATE_ID,
+            reason_code="MATING_PART_SOURCE_CONFLICT",
+            evidence_ids=("assertion:demo:compatibility:part-a",),
+            owner_role="BOM and Compatibility Reviewer",
+        )
+
+        self.assertEqual("BOM and Compatibility Reviewer", record.owner_role)
+        with self.assertRaises(ValueError):
+            QuarantineRecord(
+                candidate_id=CANDIDATE_ID,
+                reason_code="MATING_PART_SOURCE_CONFLICT",
+                evidence_ids=("assertion:demo:compatibility:part-a",),
+                owner_role="Identity and SKU Reviewer",
+            )
 
 
 class MatingPartAndMultiReasonTests(unittest.TestCase):

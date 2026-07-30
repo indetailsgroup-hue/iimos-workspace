@@ -6,6 +6,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
+from fractions import Fraction
 
 from ..evidence import FieldAssertion
 from ..ingestion import (
@@ -107,6 +108,7 @@ _REASON_ORDER = (
     "IDENTITY_SOURCE_CONFLICT",
     "OEM_DISTRIBUTOR_IDENTITY_CONFLICT",
     "PDF_CAD_GEOMETRY_CONFLICT",
+    "MATING_PART_SOURCE_CONFLICT",
     "REQUIRED_MATING_PART_MISSING",
 )
 _DIMENSIONAL_PREFIXES = ("dimensions.", "geometry.")
@@ -116,15 +118,22 @@ _EXACT_MATING_PART_FIELD = "compatibility.exact_mating_part_id"
 
 def _dimension_parts(
     assertion: FieldAssertion,
-) -> tuple[str | None, Decimal | None]:
+) -> tuple[str | None, Fraction | None]:
     value = assertion.value
     if not isinstance(value, Mapping):
         return None, None
     unit = value.get("unit")
     if unit not in {"mm", "in"}:
         return None, None
-    number = Decimal(str(value["value"]))
-    millimetres = number if unit == "mm" else number * Decimal("25.4")
+    # Fraction, not Decimal, for the inch factor. Decimal multiplication is
+    # rounded to the active context precision -- 28 significant digits by
+    # default -- so `number * Decimal("25.4")` made 10**30 in and 10**30+1 in
+    # compare equal, a silent 28-digit tolerance. The contradiction codes rest
+    # on exact equality, so the mechanism has to be exact: Fraction is exact
+    # and unbounded, and Fraction(127, 5) is 25.4 with no representation error.
+    # `Decimal(str(...))` is already exact and context-free, so mm is unchanged.
+    number = Fraction(Decimal(str(value["value"])))
+    millimetres = number if unit == "mm" else number * Fraction(127, 5)
     return unit, millimetres
 
 
@@ -415,6 +424,28 @@ class ReviewedAssertionAdapter:
                     assertion.assertion_id
                     for assertion in required_markers
                 ),
+            )
+
+        # The owner-ordered contradiction rule reaches the one remaining
+        # documented convention that names an exact part: two sources naming
+        # different mating parts for one candidate are mutually exclusive, so
+        # promoting both would ship a candidate that cannot be assembled.
+        # Deliberately NOT generalized to arbitrary field paths. The brief says
+        # to use explicit documented normalized field conventions and not to
+        # guess conflicts from free text, so only the dimensional prefixes,
+        # `identity.` and these two `compatibility.` marker fields are compared.
+        if (
+            len(
+                {
+                    _normalized_scalar(assertion.value)
+                    for assertion in mating_ids
+                }
+            )
+            > 1
+        ):
+            add_reason(
+                "MATING_PART_SOURCE_CONFLICT",
+                (assertion.assertion_id for assertion in mating_ids),
             )
 
         if evidence_by_reason:

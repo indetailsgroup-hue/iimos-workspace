@@ -36,6 +36,10 @@ _QUARANTINE_OWNER_BY_REASON = {
     "IDENTITY_SOURCE_CONFLICT": "Identity and SKU Reviewer",
     "OEM_DISTRIBUTOR_IDENTITY_CONFLICT": "Identity and SKU Reviewer",
     "PDF_CAD_GEOMETRY_CONFLICT": "Geometry and Units Reviewer",
+    # Its own code rather than IDENTITY_SOURCE_CONFLICT: an exact mating part
+    # is not an identity of this candidate, it is a BOM/compatibility relation,
+    # so it belongs to the same reviewer as REQUIRED_MATING_PART_MISSING.
+    "MATING_PART_SOURCE_CONFLICT": "BOM and Compatibility Reviewer",
     "REQUIRED_MATING_PART_MISSING": "BOM and Compatibility Reviewer",
 }
 
