@@ -1,0 +1,112 @@
+# MONOLITH codex-skills — CI gate for the vendored book-to-skill runtime.
+#
+# Before this workflow existed, nothing ran tests/codex_skills. The suite was
+# written on two branches, merged, and enforced by nobody: claim-guardrails.yml
+# runs only the docs linters, tools/hooks/pre-commit runs only the docs linters,
+# and no hook was installed in .git/hooks at all. A gate that only fires when a
+# human remembers the command is not a gate.
+#
+# =====================================================================
+#  WHY windows-latest, AND WHY THAT IS NOT A PREFERENCE.
+#
+#  The governed tree is byte-pinned: tests/codex_skills/test_upstream_manifest.py
+#  records a SHA-256 for every path, and the deployed copy under
+#  ~/.codex/skills/book-to-skill is a copy of the WORKING TREE, not of the blob.
+#  The blobs are stored LF-only. `core.autocrlf` is local configuration, never
+#  committed, and it is false on a Linux runner — so on ubuntu the working tree
+#  comes out LF, every digest matches, and the `-text` pin that this whole
+#  arrangement depends on is never exercised. An ubuntu job would pass whether
+#  or not the pin exists.
+#
+#  This job therefore forces the converting environment a Windows developer
+#  actually has, and then PROVES the runner is converting before trusting the
+#  result. If that proof step ever fails, the suite below is vacuous and the job
+#  is supposed to go red rather than report a green that means nothing.
+# =====================================================================
+#
+# =====================================================================
+#  STATUS: UNVERIFIED.
+#
+#  Written, not observed. This workflow has never run, because the branch
+#  carrying it has not been pushed. Per the same rule claim-guardrails.yml
+#  states: a gate that has never been seen to fail has not been verified.
+#
+#  The first person to push MUST make it go red on purpose before describing it
+#  as working. Two cheap violations, either one is enough:
+#    1. delete tools/codex-skills/.gitattributes in a commit and push — expect
+#       the digest tests, both pin tests, and the ls-files test to fail;
+#    2. change one byte of tools/codex-skills/book-to-skill/scripts/extract.py
+#       and push — expect test_unpatched_upstream_bytes_... to fail.
+#  Confirm red, then revert. Until that has happened, this gate is written only.
+# =====================================================================
+#
+# Expected skips in CI, visible in the log because of `-ra` below. These are the
+# environment-dependent tests, and CI genuinely cannot supply the environment:
+#   * test_installation_evidence.py (2) — there is no personal Codex
+#     installation on a runner; BOOK_TO_SKILL_INSTALLED_DIR stays unset. This
+#     remains the one gate no automation covers; it is a local-only check.
+#   * test_security_scan.py::test_staged_skill_passes_scan_validator_... (1) —
+#     the Codex skill-creator validator is not installed on a runner.
+# A skip count other than 3 means the environment changed; read the reasons.
+#
+# claim-guardrails.yml is standard-library-only by design. This job cannot be:
+# the suite is pytest. The install is pinned and is the only dependency.
+
+name: codex-skills
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    name: vendored skill provenance + installer guards (Windows)
+    runs-on: windows-latest
+    steps:
+      # Set before checkout so the checkout itself converts, the way a Windows
+      # developer's clone does.
+      - name: Use a converting Git configuration
+        run: git config --global core.autocrlf true
+
+      - uses: actions/checkout@v4
+
+      # Belt and braces: re-materialise every tracked file from the index with
+      # filters applied, so the working tree state does not depend on what
+      # actions/checkout happens to do with core.autocrlf.
+      - name: Materialise the working tree the way a Windows clone would
+        shell: bash
+        run: |
+          git config core.autocrlf true
+          git checkout-index --all --force
+
+      - name: Prove this runner converts line endings
+        shell: bash
+        run: |
+          # An unpinned text file must come out CRLF. If it does not, this
+          # runner is not the environment the -text pin defends against, and
+          # every pin assertion below would pass without testing anything.
+          control=$(git ls-files --eol -- tests/codex_skills/test_upstream_manifest.py)
+          echo "control (unpinned): $control"
+          pinned=$(git ls-files --eol -- tools/codex-skills/book-to-skill/scripts/extract.py)
+          echo "pinned:             $pinned"
+          case "$control" in
+            *w/crlf*) ;;
+            *)
+              echo "::error::this runner is not converting line endings, so the -text pin cannot be tested here; the job is failing instead of reporting a meaningless pass"
+              exit 1
+              ;;
+          esac
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: install pytest
+        run: python -m pip install --disable-pip-version-check pytest==8.4.2
+
+      - name: codex-skills suite
+        run: python -m pytest tests/codex_skills -p no:cacheprovider -ra

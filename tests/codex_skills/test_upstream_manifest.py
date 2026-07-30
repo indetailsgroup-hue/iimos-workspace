@@ -164,11 +164,99 @@ def test_governed_tree_contains_no_symlinks() -> None:
     assert links == []
 
 
-def test_a_gitattributes_rule_pins_the_governed_tree() -> None:
-    """The pin must ship in the repository, not just exist on one machine.
+def pattern_to_regex(pattern: str) -> re.Pattern[str]:
+    """Translate the gitattributes glob subset this repository uses.
 
-    Checked without invoking Git so the rule is still asserted in an exported
-    tree; `test_git_reports_no_conversion_...` proves it is actually in force.
+    The trap this function exists to avoid: `*` and `?` never cross `/` in
+    gitattributes, but they do in `fnmatch`. Matching with `fnmatch` would
+    report that `book-to-skill/*.py` covers `book-to-skill/scripts/extract.py`,
+    so a rule matching *nothing* would read as full coverage — the exact false
+    pass found while reviewing the first version of this test.
+    """
+    # A pattern with no separator matches the basename at any depth.
+    prefix = "" if "/" in pattern.rstrip("/") else r"(?:.*/)?"
+    out: list[str] = []
+    index = 0
+    while index < len(pattern):
+        if pattern.startswith("/**", index) and index + 3 == len(pattern):
+            out.append(r"/.*")  # trailing `/**`: everything inside
+            index += 3
+        elif pattern.startswith("**/", index):
+            out.append(r"(?:[^/]+/)*")  # `**/`: zero or more directories
+            index += 3
+        elif pattern.startswith("**", index):
+            out.append(r".*")
+            index += 2
+        elif pattern[index] == "*":
+            out.append(r"[^/]*")
+            index += 1
+        elif pattern[index] == "?":
+            out.append(r"[^/]")
+            index += 1
+        else:
+            out.append(re.escape(pattern[index]))
+            index += 1
+    return re.compile(f"^{prefix}{''.join(out)}$")
+
+
+def attributes_in_force() -> dict[str, list[str]]:
+    """Governed path -> the attributes a checkout would apply to it.
+
+    Git reads `.gitattributes` from the repository root downwards, so a deeper
+    file overrides a shallower one; within one file the last matching line wins.
+    This models a later rule as *replacing* an earlier one rather than merging
+    attribute by attribute, which is exact for the single-rule pin in force and
+    errs toward failing on anything more complicated.
+    """
+    in_force: dict[str, list[str]] = {}
+    ordered = sorted(
+        (path for path in ATTRIBUTE_FILES if path.is_file()),
+        key=lambda path: len(path.parent.relative_to(ROOT).parts),
+    )
+    for attribute_file in ordered:
+        base = attribute_file.parent
+        for line in attribute_file.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            pattern, *attributes = stripped.split()
+            matcher = pattern_to_regex(pattern)
+            for relative in governed_tree():
+                try:
+                    candidate = (SKILL / relative).relative_to(base).as_posix()
+                except ValueError:  # attributes file outside the governed tree
+                    continue
+                if matcher.match(candidate):
+                    in_force[relative] = attributes
+    return in_force
+
+
+@pytest.mark.parametrize(
+    ("pattern", "path", "covered"),
+    (
+        ("book-to-skill/**", "book-to-skill/SKILL.md", True),
+        ("book-to-skill/**", "book-to-skill/scripts/extract.py", True),
+        ("book-to-skill/**/*.py", "book-to-skill/scripts/extract.py", True),
+        ("*.py", "book-to-skill/scripts/extract.py", True),
+        # The two cases fnmatch gets wrong, and the reason this matcher exists.
+        ("book-to-skill/*.py", "book-to-skill/scripts/extract.py", False),
+        ("book-to-skill/*", "book-to-skill/scripts/extract.py", False),
+    ),
+)
+def test_the_pattern_matcher_follows_gitattributes_not_fnmatch(
+    pattern: str, path: str, covered: bool
+) -> None:
+    assert bool(pattern_to_regex(pattern).match(path)) is covered
+
+
+def test_a_gitattributes_rule_pins_every_governed_file() -> None:
+    """The pin must ship in the repository, cover the whole tree, and be readable
+    without Git so an exported tree still asserts it.
+
+    Coverage is checked file by file rather than "a rule mentions this
+    directory": a rule that names the tree but matches none of its files is a
+    pin in name only. `test_git_reports_no_conversion_...` then proves the rule
+    is what a checkout actually applies.
     """
     shipped = [path for path in ATTRIBUTE_FILES if path.is_file()]
     assert shipped, (
@@ -176,29 +264,51 @@ def test_a_gitattributes_rule_pins_the_governed_tree() -> None:
         "will rewrite the pinned bytes and every digest above will fail"
     )
 
-    pinning_rules = []
-    for path in shipped:
-        base = path.parent.relative_to(ROOT).as_posix()
-        for line in path.read_text(encoding="utf-8").splitlines():
+    in_force = attributes_in_force()
+
+    unpinned = sorted(
+        relative for relative in governed_tree() if "-text" not in in_force.get(relative, [])
+    )
+    assert unpinned == [], (
+        "no shipped .gitattributes rule disables text conversion for these "
+        "governed files; a Windows checkout will rewrite them"
+    )
+
+    unprotected = sorted(
+        relative for relative in governed_tree() if "-whitespace" not in in_force.get(relative, [])
+    )
+    assert unprotected == [], (
+        "the pinned tree must also opt out of whitespace checking, or "
+        "`git apply --whitespace=fix` and whitespace hooks can rewrite bytes "
+        "we are not allowed to edit"
+    )
+
+
+def test_the_checkout_pin_is_declared_in_exactly_one_place() -> None:
+    """One source of truth, so an update cannot half-apply across two files."""
+    declaring = []
+    for attribute_file in (path for path in ATTRIBUTE_FILES if path.is_file()):
+        base = attribute_file.parent
+        for line in attribute_file.read_text(encoding="utf-8").splitlines():
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue
             pattern, *attributes = stripped.split()
-            covered = f"{base}/{pattern}" if base != "." else pattern
-            if covered.startswith(f"{SKILL_RELATIVE}/") and "-text" in attributes:
-                pinning_rules.append((path.relative_to(ROOT).as_posix(), attributes))
+            if "-text" not in attributes:
+                continue
+            matcher = pattern_to_regex(pattern)
+            for relative in governed_tree():
+                try:
+                    candidate = (SKILL / relative).relative_to(base).as_posix()
+                except ValueError:
+                    continue
+                if matcher.match(candidate):
+                    declaring.append(attribute_file.relative_to(ROOT).as_posix())
+                    break
 
-    assert pinning_rules, (
-        f"no shipped .gitattributes disables text conversion for {SKILL_RELATIVE}/**"
-    )
-    assert len(pinning_rules) == 1, (
-        f"the checkout pin is declared in more than one place: {pinning_rules}"
-    )
-    _, attributes = pinning_rules[0]
-    assert "-whitespace" in attributes, (
-        "the pinned tree must also opt out of whitespace checking, or "
-        "`git apply --whitespace=fix` and whitespace hooks can rewrite bytes "
-        "we are not allowed to edit"
+    # "Declared nowhere" is the previous test's failure, not this one's.
+    assert len(set(declaring)) <= 1, (
+        f"the checkout pin is declared in more than one place: {sorted(set(declaring))}"
     )
 
 
