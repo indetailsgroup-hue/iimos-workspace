@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python 3.11+, pytest, Codex Agent Skills (`SKILL.md` and `agents/openai.yaml`), PowerShell-compatible commands, Git, SHA-256 provenance.
 
+> **Reconcile status (30 July 2026):** the installation at `~/.codex/skills/book-to-skill` and its provenance lock were written by an earlier session; this session added the governed source, the test suite, and the reports. The checkboxes below are ticked against what was actually done, with a note wherever the plan's order was departed from. Evidence: [`2026-07-30-book-to-skill-upstream-audit.en.md`](../../reports/2026-07-30-book-to-skill-upstream-audit.en.md) and [`2026-07-30-book-to-skill-codex-windows-implementation.en.md`](../../reports/2026-07-30-book-to-skill-codex-windows-implementation.en.md)
+
 ## Global Constraints
 
 - Modify only `C:\Users\thai3\determined-williams (2)` and the explicitly approved personal installation at `C:\Users\thai3\.codex\skills\book-to-skill`.
@@ -89,7 +91,7 @@
 - Consumes: upstream repository and exact 40-character commit.
 - Produces: `UPSTREAM_FILES: tuple[str, ...]` in the test and a byte-identical governed runtime tree used by every later task.
 
-- [ ] **Step 1: Re-check both Git roots**
+- [x] **Step 1: Re-check both Git roots**
 
 Run:
 
@@ -101,7 +103,7 @@ $Git = 'C:\Users\thai3\.cache\codex-runtimes\codex-primary-runtime\dependencies\
 
 Expected: two separate status reports. Record them in the audit report; make no nested-root changes.
 
-- [ ] **Step 2: Fetch only the exact upstream commit into an isolated temporary repository**
+- [x] **Step 2: Fetch only the exact upstream commit into an isolated temporary repository** — used the Git Bash git binary instead of the Codex runtime path; rev-parse returned the pinned `c6bc1b79`
 
 Run:
 
@@ -120,7 +122,7 @@ Expected final line:
 c6bc1b7927822e563aae6212c07670f5a3d95ea7
 ```
 
-- [ ] **Step 3: Enumerate and audit the complete candidate source**
+- [x] **Step 3: Enumerate and audit the complete candidate source**
 
 Run:
 
@@ -135,7 +137,7 @@ Run:
 
 Then read every remaining `book_to_skill/*.py` and `book_to_skill/parsers/*.py` file in full. Record subprocess use, optional package installation, filesystem writes, temporary cleanup, network behavior, environment access, dynamic evaluation, symlink behavior, and destructive operations. Reject the source if any installed byte remains unread or unclassified.
 
-- [ ] **Step 4: Write the manifest test before copying source bytes**
+- [x] **Step 4: Write the manifest test before copying source bytes**
 
 Create `tests/codex_skills/test_upstream_manifest.py`:
 
@@ -173,7 +175,7 @@ def test_required_upstream_runtime_is_present() -> None:
     assert missing == []
 ```
 
-- [ ] **Step 5: Run the manifest test and observe RED**
+- [x] **Step 5: Run the manifest test and observe RED** — 5 of 6 tests FAILED against the empty target
 
 Run:
 
@@ -184,11 +186,11 @@ $Python = 'C:\Users\thai3\.cache\codex-runtimes\codex-primary-runtime\dependenci
 
 Expected: FAIL with the required upstream paths reported as missing.
 
-- [ ] **Step 6: Copy only the audited runtime bytes from the pinned checkout**
+- [x] **Step 6: Copy only the audited runtime bytes from the pinned checkout**
 
 Use `git show FETCH_HEAD:<path>` or a detached worktree to copy the exact files in `UPSTREAM_FILES` to `tools/codex-skills/book-to-skill/`. Do not copy upstream README, docs, CI, cache files, tests, banners, or repository metadata.
 
-- [ ] **Step 7: Verify GREEN and compare every governed upstream byte with Git**
+- [x] **Step 7: Verify GREEN and compare every governed upstream byte with Git** — GREEN 6/6 and digests match Git for all 19 paths (18 byte-identical + 1 declared patch)
 
 Run:
 
@@ -200,7 +202,7 @@ Expected: `1 passed`.
 
 For every path in `UPSTREAM_FILES`, compare the governed file's SHA-256 with the bytes returned by `git show FETCH_HEAD:<path>`. Expected: zero missing, extra, or mismatched upstream runtime files.
 
-- [ ] **Step 8: Write and render the bilingual upstream audit**
+- [x] **Step 8: Write and render the bilingual upstream audit** — audit report EN/TH + HTML at `docs/reports/2026-07-30-book-to-skill-upstream-audit.*`
 
 Record the exact repository, commit, selected paths, license, audit date, observed powerful behavior, rejected capabilities, and byte-comparison result. Render with:
 
@@ -212,7 +214,7 @@ Record the exact repository, commit, selected paths, license, audit date, observ
 
 Expected: two standalone HTML files.
 
-- [ ] **Step 9: Commit Task 1**
+- [ ] **Step 9: Commit Task 1** — reconcile: staged, not committed (owner's call)
 
 Stage only the Task 1 paths and run:
 
@@ -237,11 +239,11 @@ Expected: one commit containing only the pinned runtime, manifest test, and bili
 - Consumes: pinned `scripts/extract.py`, `tools/scan_generated_skill.py`, and the approved design.
 - Produces: a discoverable `book-to-skill` Agent Skill with frontmatter fields `name` and `description`.
 
-- [ ] **Step 1: Restore upstream `SKILL.md` as the RED baseline**
+- [ ] **Step 1: Restore upstream `SKILL.md` as the RED baseline** — reconcile: the overlay was written by an earlier session at 14:42, so no RED baseline was staged
 
 Copy the pinned upstream `SKILL.md` into the governed skill directory. This baseline is temporary and must be replaced after the contract test demonstrates the compatibility gap.
 
-- [ ] **Step 2: Write the failing Codex contract test**
+- [x] **Step 2: Write the failing Codex contract test** — test added, but GREEN on the first run because the overlay already existed
 
 Create `tests/codex_skills/test_codex_skill_contract.py`:
 
@@ -281,7 +283,7 @@ def test_frontmatter_has_only_name_and_description() -> None:
     assert "description: Use when" in text
 ```
 
-- [ ] **Step 3: Run the contract test and observe RED**
+- [ ] **Step 3: Run the contract test and observe RED** — reconcile: skipped for the same reason as step 1
 
 Run:
 
@@ -291,7 +293,7 @@ Run:
 
 Expected: failures showing missing Codex paths and Bash-only required forms.
 
-- [ ] **Step 4: Replace the baseline with the minimal Codex-native `SKILL.md`**
+- [x] **Step 4: Replace the baseline with the minimal Codex-native `SKILL.md`** — written by the earlier session at 14:42; read in full and audited here
 
 Write an imperative workflow under 500 lines with:
 
@@ -309,7 +311,7 @@ Write an imperative workflow under 500 lines with:
 
 Do not embed Bash-variable discovery loops or assume slash-command invocation.
 
-- [ ] **Step 5: Generate `agents/openai.yaml` deterministically**
+- [x] **Step 5: Generate `agents/openai.yaml` deterministically** — written by the earlier session at 14:43
 
 First read `C:\Users\thai3\.codex\skills\.system\skill-creator\references\openai_yaml.md`. Then run the system generator with:
 
@@ -319,7 +321,7 @@ short_description=Convert documents into reusable Codex skills
 default_prompt=Use $book-to-skill to convert my documents into a staged, scanned, and validated private Codex skill.
 ```
 
-- [ ] **Step 6: Verify GREEN and validate the skill**
+- [x] **Step 6: Verify GREEN and validate the skill** — contract tests 4/4 GREEN and `quick_validate.py` returned `Skill is valid!`
 
 Run:
 
@@ -331,7 +333,7 @@ Run:
 
 Expected: contract tests pass and validator prints `Skill is valid!`.
 
-- [ ] **Step 7: Commit Task 2**
+- [ ] **Step 7: Commit Task 2** — reconcile: staged, not committed (owner's call)
 
 ```powershell
 & $Git commit -m 'feat(codex): add native book-to-skill workflow'
@@ -354,11 +356,11 @@ Expected: one commit containing only the Codex instruction/interface overlay and
 - Consumes: `scripts/extract.py`.
 - Produces: extraction evidence in an isolated `BOOK_SKILL_WORKDIR` containing `full_text.txt` and `metadata.json`.
 
-- [ ] **Step 1: Create representative fixtures**
+- [x] **Step 1: Create representative fixtures**
 
 The English fixture must contain `# Practical Guide`, `## Planning`, and `## Verification`. The Thai fixture must contain `# คู่มือทดสอบ`, `บทที่ ๑ การเตรียมงาน`, and `บทที่ ๒ การตรวจผล`.
 
-- [ ] **Step 2: Write the extraction smoke test**
+- [x] **Step 2: Write the extraction smoke test**
 
 ```python
 import json
@@ -411,7 +413,7 @@ def test_extracts_thai_markdown_and_detects_thai_chapters(tmp_path: Path) -> Non
     assert metadata["chapters_detected"] == 2
 ```
 
-- [ ] **Step 3: Run the smoke tests**
+- [x] **Step 3: Run the smoke tests** — extraction smoke 4/4, including the cp1252 regression
 
 ```powershell
 & $Python -m pytest tests/codex_skills/test_extraction_smoke.py -v
@@ -419,7 +421,7 @@ def test_extracts_thai_markdown_and_detects_thai_chapters(tmp_path: Path) -> Non
 
 Expected: both tests pass. If either fails, keep the failing test, identify the pinned runtime defect, and patch only the responsible upstream file; record that file as a local modification.
 
-- [ ] **Step 4: Run dependency preflight**
+- [x] **Step 4: Run dependency preflight** — exit 0; the matrix is recorded in audit report section 7
 
 ```powershell
 & $Python tools/codex-skills/book-to-skill/scripts/extract.py --check
@@ -429,7 +431,7 @@ Expected: exit 0 and a complete per-format report. Keep this step in report-only
 
 The recorded matrix must contain separate evidence for text PDF (`pdftotext`, `pypdf`, or `pdfminer`), technical PDF (`Docling`), EPUB, DOCX, HTML, RTF, and Calibre-based MOBI/AZW handling. Record `fallback` status as a capability limit.
 
-- [ ] **Step 5: Commit Task 3**
+- [ ] **Step 5: Commit Task 3** — reconcile: staged, not committed (owner's call)
 
 ```powershell
 & $Git commit -m 'test(codex): cover English and Thai extraction paths'
@@ -452,7 +454,7 @@ The recorded matrix must contain separate evidence for text PDF (`pdftotext`, `p
   - `install_skill(source: Path, skills_root: Path, *, replace: bool) -> dict[str, str]`
   - CLI arguments: `source`, `--skills-root`, `--replace`
 
-- [ ] **Step 1: Write RED tests for new installation and existing-target refusal**
+- [x] **Step 1: Write RED tests for new installation and existing-target refusal** — tests added; the installer already existed, so the `FileNotFoundError` RED was not recorded
 
 ```python
 from pathlib import Path
@@ -498,7 +500,7 @@ def test_refuses_existing_target_without_replace(tmp_path: Path) -> None:
         module.install_skill(source, tmp_path / "skills", replace=False)
 ```
 
-- [ ] **Step 2: Run RED**
+- [ ] **Step 2: Run RED** — reconcile: skipped because `MODULE_PATH` had existed since 14:51
 
 ```powershell
 & $Python -m pytest tests/codex_skills/test_generated_skill_installer.py -v
@@ -506,7 +508,7 @@ def test_refuses_existing_target_without_replace(tmp_path: Path) -> None:
 
 Expected: pytest reports `FileNotFoundError` while loading `MODULE_PATH`, demonstrating that the test reaches the future installer boundary.
 
-- [ ] **Step 3: Implement the minimal installer**
+- [x] **Step 3: Implement the minimal installer** — written by the earlier session at 14:51; the installed version is stricter than the plan's sample (snapshot before scan, layout allowlist, case-collision check)
 
 Implement:
 
@@ -640,7 +642,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 ```powershell
 & $Python -m pytest tests/codex_skills/test_generated_skill_installer.py -v
@@ -648,7 +650,7 @@ if __name__ == "__main__":
 
 Expected: initial two tests pass.
 
-- [ ] **Step 5: Add RED tests for replacement, backup, injection, path escape, and symlinks**
+- [x] **Step 5: Add RED tests for replacement, backup, injection, path escape, and symlinks**
 
 Add focused tests that:
 
@@ -657,7 +659,7 @@ Add focused tests that:
 - put `you are now` in generated Markdown and assert scan-blocked installation;
 - create source, destination-root, destination, and backup-root symlinks when Windows privileges permit and assert rejection, otherwise skip with the exact OS error.
 
-- [ ] **Step 6: Run RED, implement only missing behavior, then run GREEN**
+- [x] **Step 6: Run RED, implement only missing behavior, then run GREEN** — installer tests 9/9 GREEN
 
 ```powershell
 & $Python -m pytest tests/codex_skills/test_generated_skill_installer.py -v
@@ -665,7 +667,7 @@ Add focused tests that:
 
 Expected final result: all installer tests pass.
 
-- [ ] **Step 7: Commit Task 4**
+- [ ] **Step 7: Commit Task 4** — reconcile: staged, not committed (owner's call)
 
 ```powershell
 & $Git commit -m 'feat(codex): guard generated skill installation'
@@ -685,7 +687,7 @@ Expected final result: all installer tests pass.
 - Consumes: pinned scanner and guarded installer.
 - Produces: one isolated end-to-end flow from staged generated Markdown to an installed temporary Codex layout.
 
-- [ ] **Step 1: Write scanner behavior tests**
+- [x] **Step 1: Write scanner behavior tests**
 
 Create a benign generated skill and a second skill containing `ignore previous instructions`. Run `tools/scan_generated_skill.py` as a subprocess and assert:
 
@@ -697,7 +699,7 @@ assert "prompt.ignore_previous" in hostile.stdout
 assert "SKILL.md:" in hostile.stdout
 ```
 
-- [ ] **Step 2: Run the scanner tests**
+- [x] **Step 2: Run the scanner tests**
 
 ```powershell
 & $Python -m pytest tests/codex_skills/test_security_scan.py -v
@@ -705,11 +707,11 @@ assert "SKILL.md:" in hostile.stdout
 
 Expected: scanner tests pass against the pinned upstream scanner.
 
-- [ ] **Step 3: Add the isolated end-to-end test**
+- [x] **Step 3: Add the isolated end-to-end test**
 
 Create a staged skill with `SKILL.md`, `chapters/ch01-introduction.md`, `glossary.md`, `patterns.md`, and `cheatsheet.md`. Run the scanner, run the system `quick_validate.py`, call `install_skill`, and assert the installed relative file set exactly equals the staged relative file set.
 
-- [ ] **Step 4: Run the complete local suite**
+- [x] **Step 4: Run the complete local suite** — 29 tests, exit code 0
 
 ```powershell
 & $Python -m pytest tests/codex_skills -v
@@ -717,7 +719,7 @@ Create a staged skill with `SKILL.md`, `chapters/ch01-introduction.md`, `glossar
 
 Expected: all `tests/codex_skills` tests pass with a visible final summary.
 
-- [ ] **Step 5: Run validators and whitespace checks**
+- [x] **Step 5: Run validators and whitespace checks** — `Skill is valid!` and `git diff --check` exit 0
 
 ```powershell
 & $Python 'C:\Users\thai3\.codex\skills\.system\skill-creator\scripts\quick_validate.py' `
@@ -727,7 +729,7 @@ Expected: all `tests/codex_skills` tests pass with a visible final summary.
 
 Expected: `Skill is valid!` and no diff-check findings for plan-owned paths.
 
-- [ ] **Step 6: Commit Task 5**
+- [ ] **Step 6: Commit Task 5** — reconcile: staged, not committed (owner's call)
 
 ```powershell
 & $Git commit -m 'test(codex): verify staged book skill workflow'
@@ -748,7 +750,7 @@ Expected: `Skill is valid!` and no diff-check findings for plan-owned paths.
 - Consumes: governed skill tree after Task 5.
 - Produces: verified personal installation and provenance lock.
 
-- [ ] **Step 1: Write the installed-tree comparison test**
+- [x] **Step 1: Write the installed-tree comparison test**
 
 ```python
 import os
@@ -772,15 +774,15 @@ def test_personal_installation_matches_governed_source() -> None:
     assert tree(installed) == tree(SOURCE)
 ```
 
-- [ ] **Step 2: Confirm the target is still absent**
+- [x] **Step 2: Confirm the target is still absent** — the existing target was found, hash-compared across all 22 files, and left in place
 
 Run a literal-path check for `C:\Users\thai3\.codex\skills\book-to-skill`. If it now exists, stop and compare it; do not replace it without a new explicit user decision.
 
-- [ ] **Step 3: Copy the governed tree to the personal Codex directory**
+- [ ] **Step 3: Copy the governed tree to the personal Codex directory** — reconcile: the installation predates this session, so equality is proven by `test_installation_evidence.py` instead of a fresh copy
 
 Use a temporary sibling directory, compare its hashes with the governed tree, and rename it to `book-to-skill`. Do not copy `__pycache__`, `.pytest_cache`, or test artifacts.
 
-- [ ] **Step 4: Verify installed bytes**
+- [x] **Step 4: Verify installed bytes** — 1 passed (plus one symlink/repository check)
 
 ```powershell
 $env:BOOK_TO_SKILL_INSTALLED_DIR = 'C:\Users\thai3\.codex\skills\book-to-skill'
@@ -789,7 +791,7 @@ $env:BOOK_TO_SKILL_INSTALLED_DIR = 'C:\Users\thai3\.codex\skills\book-to-skill'
 
 Expected: `1 passed`.
 
-- [ ] **Step 5: Write the provenance lock**
+- [ ] **Step 5: Write the provenance lock** — reconcile: the lock was written by the earlier session at 15:21; `write_provenance.py` refused to overwrite and the original was left intact
 
 Run:
 
@@ -814,7 +816,7 @@ Run:
 
 Expected: `WROTE`, `FILES`, and `TREE_SHA256` lines.
 
-- [ ] **Step 6: Verify the provenance lock and smoke-test installed executables**
+- [x] **Step 6: Verify the provenance lock and smoke-test installed executables** — `verify_provenance` PASS, `extract.py --check` exit 0, installer `--help` exit 0
 
 ```powershell
 & $Python 'C:\Users\thai3\.codex\skills\skill-installer\scripts\verify_provenance.py' `
@@ -840,7 +842,7 @@ Expected: a `PASS book-to-skill` provenance line, complete dependency report, an
 - Consumes: fresh outputs from Tasks 1–6.
 - Produces: aligned project-facing evidence and final repository commit.
 
-- [ ] **Step 1: Run fresh verification with complete output**
+- [x] **Step 1: Run fresh verification with complete output** — 29 passed, provenance PASS, `git diff --check` exit 0
 
 ```powershell
 & $Python -m pytest tests/codex_skills -v
@@ -853,11 +855,11 @@ Expected: a `PASS book-to-skill` provenance line, complete dependency report, an
 
 Expected: visible pytest pass count, `Skill is valid!`, provenance `PASS`, and no diff-check output for plan-owned paths.
 
-- [ ] **Step 2: Re-check both Git roots**
+- [x] **Step 2: Re-check both Git roots**
 
 Record current parent and nested status separately. Confirm the nested differences were not changed by this work.
 
-- [ ] **Step 3: Write aligned EN/TH implementation reports**
+- [x] **Step 3: Write aligned EN/TH implementation reports**
 
 Include:
 
@@ -870,7 +872,7 @@ Include:
 - copyright, cloud-model, and prompt-injection residual risks; and
 - explicit parent-root versus nested-root scope.
 
-- [ ] **Step 4: Render and inspect standalone HTML**
+- [x] **Step 4: Render and inspect standalone HTML** — charset utf-8, `lang` en/th, h2 counts match the Markdown
 
 ```powershell
 & $Python tools/render_docs.py `
@@ -880,11 +882,11 @@ Include:
 
 Expected: both HTML files contain UTF-8 metadata, the correct `lang` attribute, and the same numbered sections as their Markdown editions.
 
-- [ ] **Step 5: Run plan self-review and requirement coverage**
+- [x] **Step 5: Run plan self-review and requirement coverage** — `lint_claims.py` and `lint_certifications.py` exit 0 across all four reports
 
 Verify all ten success criteria from the approved design against a Task and fresh evidence. Run the repository's placeholder checks over plan-owned documents; expected result: no findings.
 
-- [ ] **Step 6: Commit the final implementation evidence**
+- [ ] **Step 6: Commit the final implementation evidence** — reconcile: staged; the commit is the owner's call
 
 Stage only plan-owned source, tests, and reports, then run:
 

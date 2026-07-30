@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python 3.11+, pytest, Codex Agent Skills (`SKILL.md` และ `agents/openai.yaml`), คำสั่งที่ใช้กับ PowerShell ได้, Git และ SHA-256 provenance
 
+> **สถานะ reconcile (30 กรกฎาคม 2026):** installation ที่ `~/.codex/skills/book-to-skill` และ provenance lock ของมันถูกเขียนโดย session ก่อนหน้า ส่วน session นี้เติม governed source, test suite และรายงานให้ครบ checkbox ด้านล่างถูกติ๊กตามสิ่งที่ทำจริง พร้อมหมายเหตุจุดที่ทำต่างจากลำดับในแผน หลักฐาน: [`2026-07-30-book-to-skill-upstream-audit.th.md`](../../reports/2026-07-30-book-to-skill-upstream-audit.th.md) และ [`2026-07-30-book-to-skill-codex-windows-implementation.th.md`](../../reports/2026-07-30-book-to-skill-codex-windows-implementation.th.md)
+
 ## ข้อกำหนดรวม
 
 - แก้เฉพาะ `C:\Users\thai3\determined-williams (2)` และ personal installation ที่อนุมัติชัดเจนที่ `C:\Users\thai3\.codex\skills\book-to-skill`
@@ -87,7 +89,7 @@
 - รับ: upstream repository และ exact 40-character commit
 - ส่งออก: `UPSTREAM_FILES: tuple[str, ...]` ใน test และ governed runtime tree แบบ byte-identical สำหรับ task ต่อไป
 
-- [ ] **ขั้น 1: ตรวจ Git root ทั้งสองอีกครั้ง**
+- [x] **ขั้น 1: ตรวจ Git root ทั้งสองอีกครั้ง**
 
 รัน:
 
@@ -99,7 +101,7 @@ $Git = 'C:\Users\thai3\.cache\codex-runtimes\codex-primary-runtime\dependencies\
 
 ผลที่คาด: status report สองชุด บันทึกลง audit report และไม่เปลี่ยน nested root
 
-- [ ] **ขั้น 2: Fetch เฉพาะ exact upstream commit ลง isolated temporary repository**
+- [x] **ขั้น 2: Fetch เฉพาะ exact upstream commit ลง isolated temporary repository** — ใช้ git ของ Git Bash แทน path ของ Codex runtime; rev-parse คืน `c6bc1b79` ตามที่ตรึงไว้
 
 รัน:
 
@@ -118,7 +120,7 @@ New-Item -ItemType Directory -LiteralPath $AuditRoot | Out-Null
 c6bc1b7927822e563aae6212c07670f5a3d95ea7
 ```
 
-- [ ] **ขั้น 3: Enumerate และ audit candidate source ทั้งหมด**
+- [x] **ขั้น 3: Enumerate และ audit candidate source ทั้งหมด**
 
 รัน:
 
@@ -133,7 +135,7 @@ c6bc1b7927822e563aae6212c07670f5a3d95ea7
 
 จากนั้นอ่านทุกไฟล์ `book_to_skill/*.py` และ `book_to_skill/parsers/*.py` ที่เหลือแบบเต็ม บันทึก subprocess, optional package installation, filesystem writes, temporary cleanup, network behavior, environment access, dynamic evaluation, symlink behavior และ destructive operations ปฏิเสธ source หากยังมี installed byte ที่ไม่ได้อ่านหรือจำแนก
 
-- [ ] **ขั้น 4: เขียน manifest test ก่อน copy source bytes**
+- [x] **ขั้น 4: เขียน manifest test ก่อน copy source bytes**
 
 สร้าง `tests/codex_skills/test_upstream_manifest.py`:
 
@@ -171,7 +173,7 @@ def test_required_upstream_runtime_is_present() -> None:
     assert missing == []
 ```
 
-- [ ] **ขั้น 5: รัน manifest test และเห็น RED**
+- [x] **ขั้น 5: รัน manifest test และเห็น RED** — 5 จาก 6 tests FAILED ตอน target ยังว่าง
 
 ```powershell
 $Python = 'C:\Users\thai3\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'
@@ -180,19 +182,19 @@ $Python = 'C:\Users\thai3\.cache\codex-runtimes\codex-primary-runtime\dependenci
 
 ผลที่คาด: FAIL พร้อมรายการ upstream paths ที่ยังไม่มี
 
-- [ ] **ขั้น 6: Copy เฉพาะ audited runtime bytes จาก pinned checkout**
+- [x] **ขั้น 6: Copy เฉพาะ audited runtime bytes จาก pinned checkout**
 
 ใช้ `git show FETCH_HEAD:<path>` หรือ detached worktree copy เฉพาะ path ใน `UPSTREAM_FILES` ไปยัง `tools/codex-skills/book-to-skill/` ห้าม copy upstream README, docs, CI, cache, tests, banners หรือ repository metadata
 
-- [ ] **ขั้น 7: ตรวจ GREEN และเปรียบเทียบทุก governed upstream byte กับ Git**
+- [x] **ขั้น 7: ตรวจ GREEN และเปรียบเทียบทุก governed upstream byte กับ Git** — GREEN 6/6 และ hash ตรงกับ Git ทั้ง 19 paths (18 ตรงทุกไบต์ + 1 patch ที่ประกาศไว้)
 
 รัน manifest test อีกครั้ง ผลที่คาด `1 passed` แล้วเปรียบเทียบ SHA-256 ของทุก path กับ byte จาก `git show` เกณฑ์ยอมรับคือครบ 19 paths และ hash ของทุกคู่เท่ากัน
 
-- [ ] **ขั้น 8: เขียนและ render bilingual upstream audit**
+- [x] **ขั้น 8: เขียนและ render bilingual upstream audit** — audit report EN/TH + HTML อยู่ที่ `docs/reports/2026-07-30-book-to-skill-upstream-audit.*`
 
 บันทึก repository, commit, selected paths, license, audit date, observed powerful behavior, rejected capabilities และ byte-comparison result จากนั้น render ด้วย `tools/render_docs.py`
 
-- [ ] **ขั้น 9: Commit Task 1**
+- [ ] **ขั้น 9: Commit Task 1** — reconcile: stage แล้ว ยังไม่ commit (เจ้าของงานตัดสิน)
 
 ```powershell
 & $Git commit -m 'chore(codex): vendor audited book-to-skill runtime'
@@ -215,9 +217,9 @@ $Python = 'C:\Users\thai3\.cache\codex-runtimes\codex-primary-runtime\dependenci
 - รับ: pinned extractor, scanner และ approved design
 - ส่งออก: `book-to-skill` Agent Skill ที่ค้นพบได้พร้อม frontmatter `name` และ `description`
 
-- [ ] **ขั้น 1: วาง upstream `SKILL.md` เป็น RED baseline ชั่วคราว**
+- [ ] **ขั้น 1: วาง upstream `SKILL.md` เป็น RED baseline ชั่วคราว** — reconcile: overlay ถูกเขียนโดย session ก่อนหน้าเมื่อ 14:42 จึงข้ามการวาง RED baseline
 
-- [ ] **ขั้น 2: เขียน failing Codex contract test**
+- [x] **ขั้น 2: เขียน failing Codex contract test** — test เพิ่มแล้ว แต่ GREEN ทันทีเพราะ overlay มีอยู่ก่อน
 
 สร้าง `tests/codex_skills/test_codex_skill_contract.py`:
 
@@ -257,7 +259,7 @@ def test_frontmatter_has_only_name_and_description() -> None:
     assert "description: Use when" in text
 ```
 
-- [ ] **ขั้น 3: รัน contract test และเห็น RED**
+- [ ] **ขั้น 3: รัน contract test และเห็น RED** — reconcile: ข้ามด้วยเหตุผลเดียวกับขั้น 1
 
 ```powershell
 & $Python -m pytest tests/codex_skills/test_codex_skill_contract.py -v
@@ -265,11 +267,11 @@ def test_frontmatter_has_only_name_and_description() -> None:
 
 ผลที่คาด: failures จาก Codex paths ที่ขาดและ required forms ที่ยังเป็น Bash-only
 
-- [ ] **ขั้น 4: แทน baseline ด้วย Codex-native `SKILL.md` ขั้นต่ำ**
+- [x] **ขั้น 4: แทน baseline ด้วย Codex-native `SKILL.md` ขั้นต่ำ** — session ก่อนหน้าเขียนไว้ 14:42; session นี้อ่านครบและ audit
 
 เขียน imperative workflow ไม่เกิน 500 บรรทัด ครอบคลุม literal-path validation, content type, dependency preflight, extraction, metadata report, explicit approval, staged generation, scanner/validator gates, guarded install, private copyright guidance และ processed/skipped reporting
 
-- [ ] **ขั้น 5: Generate `agents/openai.yaml` แบบ deterministic**
+- [x] **ขั้น 5: Generate `agents/openai.yaml` แบบ deterministic** — session ก่อนหน้าเขียนไว้ 14:43
 
 อ่าน `openai_yaml.md` ของ system skill ก่อน แล้วใช้:
 
@@ -279,11 +281,11 @@ short_description=Convert documents into reusable Codex skills
 default_prompt=Use $book-to-skill to convert my documents into a staged, scanned, and validated private Codex skill.
 ```
 
-- [ ] **ขั้น 6: ตรวจ GREEN และ validate skill**
+- [x] **ขั้น 6: ตรวจ GREEN และ validate skill** — contract tests 4/4 GREEN และ `quick_validate.py` คืน `Skill is valid!`
 
 รัน contract tests และ `quick_validate.py` ผลที่คาด: tests ผ่านและ `Skill is valid!`
 
-- [ ] **ขั้น 7: Commit Task 2**
+- [ ] **ขั้น 7: Commit Task 2** — reconcile: stage แล้ว ยังไม่ commit (เจ้าของงานตัดสิน)
 
 ```powershell
 & $Git commit -m 'feat(codex): add native book-to-skill workflow'
@@ -297,8 +299,8 @@ default_prompt=Use $book-to-skill to convert my documents into a staged, scanned
 
 **Interfaces:** รับ `scripts/extract.py`; ส่งออก extraction evidence ใน isolated `BOOK_SKILL_WORKDIR`
 
-- [ ] **ขั้น 1:** สร้าง English fixture ที่มี `# Practical Guide`, `## Planning`, `## Verification` และ Thai fixture ที่มี `# คู่มือทดสอบ`, `บทที่ ๑ การเตรียมงาน`, `บทที่ ๒ การตรวจผล`
-- [ ] **ขั้น 2:** เขียน subprocess smoke tests
+- [x] **ขั้น 1:** สร้าง English fixture ที่มี `# Practical Guide`, `## Planning`, `## Verification` และ Thai fixture ที่มี `# คู่มือทดสอบ`, `บทที่ ๑ การเตรียมงาน`, `บทที่ ๒ การตรวจผล`
+- [x] **ขั้น 2:** เขียน subprocess smoke tests
 
 ```python
 import json
@@ -350,9 +352,9 @@ def test_extracts_thai_markdown_and_detects_thai_chapters(tmp_path: Path) -> Non
     assert "บทที่ ๑ การเตรียมงาน" in text
     assert metadata["chapters_detected"] == 2
 ```
-- [ ] **ขั้น 3:** รัน `pytest tests/codex_skills/test_extraction_smoke.py -v` ผลที่คาด: tests สองรายการผ่าน หากล้มเหลวให้คง failing test แล้ว patch เฉพาะ upstream file ที่รับผิดชอบพร้อมบันทึก local modification
-- [ ] **ขั้น 4:** รัน `scripts/extract.py --check` ใน report-only mode ผลที่คาด: exit 0 และรายงาน format/dependency ครบ จัดสถานะ extractor แต่ละรายการเป็น `present`, `fallback` หรือ `required` Matrix ต้องแยกหลักฐาน text PDF (`pdftotext`, `pypdf` หรือ `pdfminer`), technical PDF (`Docling`), EPUB, DOCX, HTML, RTF และ MOBI/AZW ที่ใช้ Calibre และบันทึกสถานะ `fallback` เป็น capability limit
-- [ ] **ขั้น 5:** Commit ด้วย `test(codex): cover English and Thai extraction paths`
+- [x] **ขั้น 3:** รัน `pytest tests/codex_skills/test_extraction_smoke.py -v` ผลที่คาด: tests สองรายการผ่าน หากล้มเหลวให้คง failing test แล้ว patch เฉพาะ upstream file ที่รับผิดชอบพร้อมบันทึก local modification — extraction smoke 4/4 รวม regression ของ cp1252
+- [x] **ขั้น 4:** รัน `scripts/extract.py --check` ใน report-only mode ผลที่คาด: exit 0 และรายงาน format/dependency ครบ จัดสถานะ extractor แต่ละรายการเป็น `present`, `fallback` หรือ `required` Matrix ต้องแยกหลักฐาน text PDF (`pdftotext`, `pypdf` หรือ `pdfminer`), technical PDF (`Docling`), EPUB, DOCX, HTML, RTF และ MOBI/AZW ที่ใช้ Calibre และบันทึกสถานะ `fallback` เป็น capability limit — exit 0; matrix บันทึกใน audit report §7
+- [ ] **ขั้น 5:** Commit ด้วย `test(codex): cover English and Thai extraction paths` — reconcile: stage แล้ว ยังไม่ commit (เจ้าของงานตัดสิน)
 
 ---
 
@@ -367,7 +369,7 @@ def test_extracts_thai_markdown_and_detects_thai_chapters(tmp_path: Path) -> Non
 - `install_skill(source: Path, skills_root: Path, *, replace: bool) -> dict[str, str]`
 - CLI: `source`, `--skills-root`, `--replace`
 
-- [ ] **ขั้น 1:** เขียน RED tests สำหรับ new install จาก Thai path และการปฏิเสธ existing target
+- [x] **ขั้น 1:** เขียน RED tests สำหรับ new install จาก Thai path และการปฏิเสธ existing target — tests เพิ่มแล้ว; installer มีอยู่ก่อน จึงยังไม่ได้บันทึก `FileNotFoundError` RED
 
 ```python
 from pathlib import Path
@@ -413,8 +415,8 @@ def test_refuses_existing_target_without_replace(tmp_path: Path) -> None:
         module.install_skill(source, tmp_path / "skills", replace=False)
 ```
 
-- [ ] **ขั้น 2:** รัน installer tests ผลที่คาด: pytest รายงาน `FileNotFoundError` ขณะโหลด `MODULE_PATH` ซึ่งแสดงว่า test เข้าถึง future installer boundary
-- [ ] **ขั้น 3:** Implement minimal installer:
+- [ ] **ขั้น 2:** รัน installer tests ผลที่คาด: pytest รายงาน `FileNotFoundError` ขณะโหลด `MODULE_PATH` ซึ่งแสดงว่า test เข้าถึง future installer boundary — reconcile: ข้าม เพราะ `MODULE_PATH` มีอยู่แล้วตั้งแต่ 14:51
+- [x] **ขั้น 3:** Implement minimal installer: — session ก่อนหน้าเขียนไว้ 14:51; เวอร์ชันที่ติดตั้งแข็งกว่าโค้ดตัวอย่างในแผน (snapshot ก่อน scan, layout allowlist, case-collision check)
 
 ```python
 from __future__ import annotations
@@ -536,10 +538,10 @@ def main(argv: list[str] | None = None) -> int:
 if __name__ == "__main__":
     raise SystemExit(main())
 ```
-- [ ] **ขั้น 4:** รัน GREEN ผลที่คาด: initial tests ผ่าน
-- [ ] **ขั้น 5:** เพิ่ม RED tests สำหรับ explicit replacement พร้อม backup, `../escape`, prompt-injection-shaped content และ symlink
-- [ ] **ขั้น 6:** รัน RED, เพิ่มเฉพาะ behavior ที่ขาด แล้วรัน GREEN จน installer tests ผ่านทั้งหมด
-- [ ] **ขั้น 7:** Commit ด้วย `feat(codex): guard generated skill installation`
+- [x] **ขั้น 4:** รัน GREEN ผลที่คาด: initial tests ผ่าน
+- [x] **ขั้น 5:** เพิ่ม RED tests สำหรับ explicit replacement พร้อม backup, `../escape`, prompt-injection-shaped content และ symlink
+- [x] **ขั้น 6:** รัน RED, เพิ่มเฉพาะ behavior ที่ขาด แล้วรัน GREEN จน installer tests ผ่านทั้งหมด — installer tests 9/9 GREEN
+- [ ] **ขั้น 7:** Commit ด้วย `feat(codex): guard generated skill installation` — reconcile: stage แล้ว ยังไม่ commit (เจ้าของงานตัดสิน)
 
 ---
 
@@ -549,12 +551,12 @@ if __name__ == "__main__":
 
 **Interfaces:** รับ pinned scanner กับ guarded installer; ส่งออก isolated flow จาก staged Markdown ไป temporary Codex layout
 
-- [ ] **ขั้น 1:** เขียน scanner tests ให้ benign skill ได้ return code 0 และ skill ที่มี `ignore previous instructions` ได้ return code 1 พร้อม `prompt.ignore_previous` และ file/line
-- [ ] **ขั้น 2:** รัน scanner tests ผลที่คาด: ผ่านกับ pinned scanner
-- [ ] **ขั้น 3:** เพิ่ม end-to-end test ที่มี `SKILL.md`, chapter, glossary, patterns และ cheatsheet จากนั้น scan, validate, install และเปรียบเทียบ relative file set
-- [ ] **ขั้น 4:** รัน `pytest tests/codex_skills -v` ผลที่คาด: เห็น final summary และทุก test ผ่าน
-- [ ] **ขั้น 5:** รัน `quick_validate.py` และ `git diff --check`
-- [ ] **ขั้น 6:** Commit ด้วย `test(codex): verify staged book skill workflow`
+- [x] **ขั้น 1:** เขียน scanner tests ให้ benign skill ได้ return code 0 และ skill ที่มี `ignore previous instructions` ได้ return code 1 พร้อม `prompt.ignore_previous` และ file/line
+- [x] **ขั้น 2:** รัน scanner tests ผลที่คาด: ผ่านกับ pinned scanner
+- [x] **ขั้น 3:** เพิ่ม end-to-end test ที่มี `SKILL.md`, chapter, glossary, patterns และ cheatsheet จากนั้น scan, validate, install และเปรียบเทียบ relative file set
+- [x] **ขั้น 4:** รัน `pytest tests/codex_skills -v` ผลที่คาด: เห็น final summary และทุก test ผ่าน — 29 tests, exit code 0
+- [x] **ขั้น 5:** รัน `quick_validate.py` และ `git diff --check` — `Skill is valid!` และ `git diff --check` exit 0
+- [ ] **ขั้น 6:** Commit ด้วย `test(codex): verify staged book skill workflow` — reconcile: stage แล้ว ยังไม่ commit (เจ้าของงานตัดสิน)
 
 ---
 
@@ -564,7 +566,7 @@ if __name__ == "__main__":
 
 **Interfaces:** รับ governed skill tree; ส่งออก verified personal installation และ provenance lock
 
-- [ ] **ขั้น 1:** เขียน tree-hash comparison test
+- [x] **ขั้น 1:** เขียน tree-hash comparison test
 
 ```python
 import os
@@ -587,10 +589,10 @@ def test_personal_installation_matches_governed_source() -> None:
     installed = Path(os.environ["BOOK_TO_SKILL_INSTALLED_DIR"]).resolve(strict=True)
     assert tree(installed) == tree(SOURCE)
 ```
-- [ ] **ขั้น 2:** ตรวจ target `C:\Users\thai3\.codex\skills\book-to-skill` อีกครั้ง หากพบให้หยุดและ compare ห้ามแทนที่โดยไม่มี owner decision ใหม่
-- [ ] **ขั้น 3:** Copy governed tree ผ่าน temporary sibling, เปรียบเทียบ hashes แล้ว rename เป็น target โดยไม่ copy cache/test artifacts
-- [ ] **ขั้น 4:** ตั้ง `BOOK_TO_SKILL_INSTALLED_DIR` แล้วรัน installation evidence test ผลที่คาด `1 passed`
-- [ ] **ขั้น 5:** รัน `write_provenance.py`
+- [x] **ขั้น 2:** ตรวจ target `C:\Users\thai3\.codex\skills\book-to-skill` อีกครั้ง หากพบให้หยุดและ compare ห้ามแทนที่โดยไม่มี owner decision ใหม่ — พบ target เดิม เทียบ hash ครบ 22 ไฟล์ แล้วคงไว้ที่เดิม
+- [ ] **ขั้น 3:** Copy governed tree ผ่าน temporary sibling, เปรียบเทียบ hashes แล้ว rename เป็น target โดยไม่ copy cache/test artifacts — reconcile: installation มีอยู่ก่อน session นี้ จึงพิสูจน์ความเท่ากันด้วย `test_installation_evidence.py` แทนการ copy ใหม่
+- [x] **ขั้น 4:** ตั้ง `BOOK_TO_SKILL_INSTALLED_DIR` แล้วรัน installation evidence test ผลที่คาด `1 passed` — 1 passed (พร้อม test symlink/repository อีก 1 รายการ)
+- [ ] **ขั้น 5:** รัน `write_provenance.py` — reconcile: lock ถูกเขียนโดย session ก่อนหน้าเมื่อ 15:21; `write_provenance.py` ปฏิเสธการเขียนทับ และคงของเดิมไว้
 
 ```powershell
 & $Python 'C:\Users\thai3\.codex\skills\skill-installer\scripts\write_provenance.py' `
@@ -612,7 +614,7 @@ def test_personal_installation_matches_governed_source() -> None:
 ```
 
 ผลที่คาด: `WROTE`, `FILES`, `TREE_SHA256`
-- [ ] **ขั้น 6:** รัน `verify_provenance.py`, installed `extract.py --check` และ installer `--help` ผลที่คาด: provenance `PASS`, dependency report ครบ และ help output
+- [x] **ขั้น 6:** รัน `verify_provenance.py`, installed `extract.py --check` และ installer `--help` ผลที่คาด: provenance `PASS`, dependency report ครบ และ help output — `verify_provenance` PASS, `extract.py --check` exit 0, installer `--help` exit 0
 
 ---
 
@@ -622,12 +624,12 @@ def test_personal_installation_matches_governed_source() -> None:
 
 **Interfaces:** รับ fresh outputs จาก Task 1–6; ส่งออก aligned evidence และ final repository commit
 
-- [ ] **ขั้น 1:** รัน fresh full suite, validator, provenance verification และ diff check โดยต้องเห็น final summary ครบ
-- [ ] **ขั้น 2:** ตรวจ Git root ทั้งสองอีกครั้งและบันทึก parent/nested status แยกกัน ยืนยันจาก diff ว่างานนี้ไม่เปลี่ยน nested paths
-- [ ] **ขั้น 3:** เขียน aligned reports ที่มี exact source/commit, audited/modified file lists, installed/lock paths, detected extractors, command identities, final summaries, unverified cases และ residual risks
-- [ ] **ขั้น 4:** Render HTML และตรวจ UTF-8, `lang`, numbered sections และความตรงกับ Markdown
-- [ ] **ขั้น 5:** Map success criteria ทั้งสิบข้อกับ task และ fresh evidence แล้วรัน repository placeholder checks บน plan-owned documents ผลที่คาด: ไม่พบ finding
-- [ ] **ขั้น 6:** Stage เฉพาะ plan-owned paths และ commit ด้วย `docs(codex): record book-to-skill installation evidence`
+- [x] **ขั้น 1:** รัน fresh full suite, validator, provenance verification และ diff check โดยต้องเห็น final summary ครบ — 29 passed, provenance PASS, `git diff --check` exit 0
+- [x] **ขั้น 2:** ตรวจ Git root ทั้งสองอีกครั้งและบันทึก parent/nested status แยกกัน ยืนยันจาก diff ว่างานนี้ไม่เปลี่ยน nested paths
+- [x] **ขั้น 3:** เขียน aligned reports ที่มี exact source/commit, audited/modified file lists, installed/lock paths, detected extractors, command identities, final summaries, unverified cases และ residual risks
+- [x] **ขั้น 4:** Render HTML และตรวจ UTF-8, `lang`, numbered sections และความตรงกับ Markdown — charset utf-8, `lang` en/th, จำนวน h2 ตรงกับ Markdown
+- [x] **ขั้น 5:** Map success criteria ทั้งสิบข้อกับ task และ fresh evidence แล้วรัน repository placeholder checks บน plan-owned documents ผลที่คาด: ไม่พบ finding — `lint_claims.py` และ `lint_certifications.py` exit 0 บนรายงานทั้งสี่ฉบับ
+- [ ] **ขั้น 6:** Stage เฉพาะ plan-owned paths และ commit ด้วย `docs(codex): record book-to-skill installation evidence` — reconcile: stage แล้ว commit รอเจ้าของงาน
 
 ## Execution handoff
 
