@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>Book-to-Skill Codex/Windows Overlay Design</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>Book-to-Skill Codex/Windows Overlay Design</h1>
+<p><strong>Edition:</strong> English</p>
+<p><strong>Date:</strong> 30 July 2026</p>
+<p><strong>Status:</strong> Approved design awaiting written-spec review</p>
+<p><strong>Scope:</strong> Private Codex-native package for this Windows workstation</p>
+<h2>1. Decision and evidence boundary</h2>
+<p><strong>OWNER DECISION:</strong> Use a pinned-upstream-plus-Codex-overlay architecture.</p>
+<p><strong>VERIFIED FACT:</strong> The governance/bootstrap root is <code>C:\Users\thai3\determined-williams (2)</code>. The active product source is the separate dirty nested repository at <code>determined-williams\</code>. This work will modify only the parent governance root and the user's personal Codex skill directory. It will not modify, test, clean, stage, or commit the nested product repository.</p>
+<p><strong>VERIFIED FACT:</strong> No <code>book-to-skill</code> installation currently exists in the checked Codex, Claude, or cross-agent skill locations.</p>
+<p><strong>PINNED SOURCE DECISION:</strong> The upstream candidate is <code>https://github.com/virgiliojr94/book-to-skill</code> at commit <code>c6bc1b7927822e563aae6212c07670f5a3d95ea7</code>, MIT-licensed. Implementation must independently resolve and verify that exact commit before using any source bytes.</p>
+<h2>2. Goal</h2>
+<p>Deliver a private <code>book-to-skill</code> skill that Codex Desktop can discover and use on Windows to convert supported documents into structured, on-demand Codex skills. The installation must be reproducible, supply-chain-audited, designed to preserve existing skills, and verified with Thai and English fixtures.</p>
+<h2>3. Success criteria</h2>
+<p>The work is complete only when all of the following are true:</p>
+<ol>
+<li>Codex discovers the converter from <code>C:\Users\thai3\.codex\skills\book-to-skill</code>.</li>
+<li>The converter's <code>SKILL.md</code> provides its required execution path through Codex-native paths, Python, and PowerShell-compatible commands.</li>
+<li>Text-heavy PDF, EPUB, DOCX, TXT, Markdown, HTML, and RTF extraction follows the pinned upstream implementation when the relevant extractor is available.</li>
+<li>Technical PDF extraction can use Docling when installed; missing optional dependencies are reported and never installed without explicit user approval.</li>
+<li>Windows paths containing spaces and Thai characters are handled as literal paths.</li>
+<li>Generated skills are created in staging, scanned for prompt-injection-shaped content, validated, and only then installed.</li>
+<li>An existing destination skill is never silently overwritten. Replacement requires explicit approval and creates a recoverable backup.</li>
+<li>The installed converter tree matches a provenance lock containing the upstream commit, local overlay list, file hashes, aggregate tree hash, license, audit time, and risk notes.</li>
+<li>Contract, security, extraction, installation, and end-to-end smoke tests pass with complete output.</li>
+<li>English and Thai project documentation exists as aligned Markdown and standalone HTML.</li>
+</ol>
+<h2>4. Non-goals and limits</h2>
+<ul>
+<li>Do not publish a GitHub fork or open an upstream pull request in this scope.</li>
+<li>Do not change MONOLITH product runtime code.</li>
+<li>Do not guarantee that generated summaries reproduce a source with 100% accuracy.</li>
+<li>Do not treat image-only or damaged documents as successfully supported unless an installed extractor produces usable text.</li>
+<li>Do not redistribute generated skills derived from copyrighted third-party books.</li>
+<li>Do not send documents over a network from the extraction code. Model processing remains subject to the active AI provider's data handling terms.</li>
+</ul>
+<h2>5. Considered approaches</h2>
+<div class="tablewrap"><table><thead><tr><th>Approach</th><th>Advantages</th><th>Costs and risks</th><th>Decision</th></tr></thead><tbody>
+<tr><td>Pinned upstream plus Codex overlay</td><td>Retains mature extractors, makes local changes reviewable, supports deterministic updates</td><td>Requires a maintained overlay and re-audit for each update</td><td><strong>Selected</strong></td></tr>
+<tr><td>Clean-room rewrite</td><td>Full control of every component</td><td>Duplicates parsers, increases maintenance and regression risk</td><td>Rejected</td></tr>
+<tr><td>Thin wrapper around the PyPI CLI</td><td>Smallest change</td><td>Provides extraction only and omits the full skill-generation workflow</td><td>Rejected</td></tr>
+</tbody></table></div>
+<h2>6. Architecture</h2>
+<h3>6.1 Governed source</h3>
+<p>The parent root will contain the reviewable source at:</p>
+<pre><code class="language-text">tools/codex-skills/book-to-skill/
+├── SKILL.md
+├── agents/openai.yaml
+├── book_to_skill/                 # pinned upstream extraction runtime
+├── scripts/extract.py             # pinned upstream compatibility entrypoint
+├── scripts/install_generated_skill.py
+├── tools/scan_generated_skill.py  # pinned upstream advisory scanner
+└── LICENSE.md</code></pre>
+<p>Tests and fixtures will live outside the installed skill:</p>
+<pre><code class="language-text">tests/codex_skills/
+├── fixtures/
+│   ├── english-guide.md
+│   └── คู่มือ-ตัวอย่าง.md
+├── test_codex_skill_contract.py
+├── test_extraction_smoke.py
+├── test_generated_skill_installer.py
+└── test_security_scan.py</code></pre>
+<p>The skill contains only runtime instructions, interface metadata, executable resources, and the required upstream license. Design, implementation, and audit reports remain under <code>docs/</code>.</p>
+<h3>6.2 Overlay boundary</h3>
+<p>The upstream runtime files remain byte-identical to the pinned Git blobs unless a Windows defect is demonstrated by a failing test. Codex-specific behavior belongs in:</p>
+<ul>
+<li>the overlaid <code>SKILL.md</code>;</li>
+<li><code>agents/openai.yaml</code>; and</li>
+<li>the locally authored guarded installer for generated skills.</li>
+</ul>
+<p>Every added or modified path is recorded in provenance. Updating upstream is a new audit and is never performed from a moving branch.</p>
+<h3>6.3 Runtime workflow</h3>
+<ol>
+<li>Identify literal input files, the content type, the intended use, and the destination skill name.</li>
+<li>Run the bundled extractor preflight and report available and missing optional extractors.</li>
+<li>Extract into a unique Windows temporary directory without changing source documents.</li>
+<li>Report sources, approximate size, expected generated files, and material limitations.</li>
+<li>Obtain explicit approval before model-intensive generation or dependency installation.</li>
+<li>Generate <code>SKILL.md</code>, on-demand chapter files, glossary, patterns, and cheatsheet in a staging directory.</li>
+<li>Run the generated-skill scanner and Codex skill validator.</li>
+<li>If the scan or validation fails, stop and report file-and-line findings without installing.</li>
+<li>Install to <code>C:\Users\thai3\.codex\skills\&lt;slug&gt;</code> only after validation. Refuse an existing target unless the user explicitly approved replacement; make a backup before replacement.</li>
+<li>Remove only the unique temporary directory created by the current run.</li>
+</ol>
+<h2>7. Codex-native skill contract</h2>
+<p>The overlaid <code>SKILL.md</code> will:</p>
+<ul>
+<li>start its description with concrete Codex triggers such as converting PDF, EPUB, DOCX, Markdown, HTML, RTF, or document folders into reusable skills;</li>
+<li>use <code>C:\Users\thai3\.codex\skills</code> or resolved <code>$CODEX_HOME\skills</code> as the personal destination;</li>
+<li>instruct Codex to use its file and execution tools rather than assuming a slash-command host;</li>
+<li>use Python commands that work from PowerShell without Bash variables, <code>grep</code>, <code>sed</code>, <code>wc</code>, or <code>mkdir -p</code>;</li>
+<li>require literal, resolved paths and containment checks before copy, move, replacement, backup, or cleanup;</li>
+<li>require extraction evidence before claiming source coverage;</li>
+<li>require scan and validation evidence before loading or installing generated instructions;</li>
+<li>default generated third-party-book skills to private use; and</li>
+<li>keep detailed format and troubleshooting information in on-demand references or script help rather than bloating <code>SKILL.md</code>.</li>
+</ul>
+<h2>8. Safety and error handling</h2>
+<h3>8.1 Supply chain</h3>
+<p>Before installation, enumerate and audit every source file that will enter the skill. Reject symlinks, nested repositories, path traversal, case-colliding paths, unexpected binaries, obfuscation, dynamic evaluation, credential access, undeclared network access, and destructive behavior. Expected capabilities are local subprocess execution for document extractors and controlled filesystem writes for staged and installed skills.</p>
+<h3>8.2 Generated content</h3>
+<p>Treat document text as untrusted data. Remove invisible control characters using the pinned extractor behavior and scan generated Markdown for instruction overrides, model-control tags, widened tool authority, and exfiltration-shaped language. A scanner finding blocks installation pending human review.</p>
+<h3>8.3 Filesystem mutation</h3>
+<p>The generated-skill installer must resolve the source, destination root, target, and backup paths; reject symlinks; prove the target remains within the selected root; and refuse silent overwrite. Cleanup is limited to the unique work directory from the active run.</p>
+<h3>8.4 Partial failure</h3>
+<p>One unreadable source may be reported and skipped only when at least one other source succeeds. The final report must list processed and skipped sources separately. Zero usable sources is a hard failure. Missing optional extractors produce an actionable report, not an automatic installation.</p>
+<h2>9. Testing strategy</h2>
+<p>Implementation follows test-driven development:</p>
+<ol>
+<li><strong>RED — compatibility contract:</strong> Run contract checks against the pinned upstream <code>SKILL.md</code> and demonstrate that the required execution path is not expressed through Codex-native paths and PowerShell-compatible commands.</li>
+<li><strong>GREEN — Codex overlay:</strong> Add the smallest instruction and metadata overlay that satisfies the contract.</li>
+<li><strong>RED/GREEN — guarded installation:</strong> Write tests for new install, existing-target refusal, explicit replacement with backup, path escape, symlink rejection, spaces, and Thai names before implementing the installer.</li>
+<li><strong>Extraction smoke:</strong> Run the pinned extractor on English and Thai Markdown fixtures and verify source markers, Unicode preservation, metadata, and chapter detection.</li>
+<li><strong>Security scan:</strong> Verify benign generated Markdown passes and prompt-injection-shaped fixtures fail with stable rule and line output.</li>
+<li><strong>End-to-end staging smoke:</strong> Create a minimal generated sample skill, scan it, validate it, install it into an isolated temporary Codex home, and verify its bytes and discovery layout.</li>
+<li><strong>Installed-tree verification:</strong> Hash the personal installation and verify it against the provenance lock.</li>
+</ol>
+<p>The current thread policy does not authorize subagent dispatch, so forward-testing will use executable contract and end-to-end tests rather than independent agents. No completion claim may rely on truncated output or a prior test run.</p>
+<h2>10. Installation and provenance</h2>
+<p>The governed parent-root tree is the maintained source. The personal installation is a verified deployment copy, not the development source. Installation proceeds only after:</p>
+<ul>
+<li>exact upstream commit resolution;</li>
+<li>complete source audit;</li>
+<li>overlay diff review;</li>
+<li>test and validator success;</li>
+<li>installed-byte comparison; and</li>
+<li>provenance-lock creation at <code>C:\Users\thai3\.codex\skills\.provenance\book-to-skill.json</code>.</li>
+</ul>
+<p>The risk record will classify local process execution, filesystem writes, optional dependency installation, and document-parser risk without describing expected behavior as malicious.</p>
+<h2>11. Documentation</h2>
+<p>Project-facing design, plan, and implementation reports must be produced in English and Thai as Markdown and standalone HTML. The paired editions must describe the same decisions, evidence, limitations, commands, and verification results.</p>
+<h2>12. Acceptance boundary</h2>
+<p>Acceptance proves this private package works on the current Codex Desktop and Windows environment with the tested fixtures and detected dependencies. Broader operating-system compatibility, every possible document encoding, model-summary fidelity, cloud privacy, and public distribution remain outside the verified claim.</p>
+</main></body>
+</html>
