@@ -264,23 +264,55 @@ class QuarantineRecord:
         )
 
 
+def _snapshot_candidate(value: object, field_name: str) -> CandidateRecord:
+    """Rebuild a candidate from an exact instance of this library's own class.
+
+    ``isinstance`` is not enough. A subclass can override ``__getattribute__``
+    and answer one way while a rule inspects it, then another way once a
+    consumer reads the stored record, which would make the review-state,
+    brand, and mating-part checks bypassable one level up. Requiring exact type
+    identity and rebuilding gives the consumer a record this library
+    constructed and validated, decoupled from the caller's instance.
+    """
+
+    if type(value) is not CandidateRecord:
+        raise TypeError(f"{field_name} must be exactly a CandidateRecord")
+    return CandidateRecord(
+        candidate_id=value.candidate_id,
+        brand_id=value.brand_id,
+        entity_kind=value.entity_kind,
+        assertions=value.assertions,
+        extraction_method=value.extraction_method,
+    )
+
+
+def _snapshot_quarantine(value: object, field_name: str) -> QuarantineRecord:
+    """Rebuild a quarantine record, refusing subclasses. See above."""
+
+    if type(value) is not QuarantineRecord:
+        raise TypeError(f"{field_name} must be exactly a QuarantineRecord")
+    return QuarantineRecord(
+        candidate_id=value.candidate_id,
+        reason_code=value.reason_code,
+        evidence_ids=value.evidence_ids,
+        owner_role=value.owner_role,
+    )
+
+
 @dataclass(frozen=True)
 class IngestionResult:
     promoted: tuple[CandidateRecord, ...]
     quarantined: tuple[QuarantineRecord, ...]
 
     def __post_init__(self) -> None:
-        promoted = _snapshot_iterable(self.promoted, "promoted")
-        quarantined = _snapshot_iterable(self.quarantined, "quarantined")
-        if any(not isinstance(item, CandidateRecord) for item in promoted):
-            raise TypeError("promoted must contain only CandidateRecord records")
-        if any(
-            not isinstance(item, QuarantineRecord)
-            for item in quarantined
-        ):
-            raise TypeError(
-                "quarantined must contain only QuarantineRecord records"
-            )
+        promoted = tuple(
+            _snapshot_candidate(item, "promoted")
+            for item in _snapshot_iterable(self.promoted, "promoted")
+        )
+        quarantined = tuple(
+            _snapshot_quarantine(item, "quarantined")
+            for item in _snapshot_iterable(self.quarantined, "quarantined")
+        )
         if promoted and quarantined:
             raise ValueError("promoted and quarantined are mutually exclusive")
         if not promoted and not quarantined:

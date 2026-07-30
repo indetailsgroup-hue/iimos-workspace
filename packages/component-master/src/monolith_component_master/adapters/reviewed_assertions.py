@@ -14,6 +14,7 @@ from ..ingestion import (
     QuarantineRecord,
     _QUARANTINE_OWNER_BY_REASON,
     _require_canonical_id,
+    _snapshot_candidate,
     _snapshot_iterable,
 )
 
@@ -45,9 +46,17 @@ def _require_enum_value(
     field_name: str,
     enum_type: type[Enum],
 ) -> str:
-    # Exact str only: a subclass can override __eq__ and satisfy both this
-    # lookup and the later authority/rights comparisons while holding
-    # different text.
+    # These enums are exported in adapters.__all__, so a caller is meant to
+    # use their members. Normalize a member to its canonical value rather than
+    # refusing it, and return the normalized text so the field stores an exact
+    # primitive: these are str-subclass enums, and a str subclass could
+    # otherwise satisfy this lookup and the later authority/rights comparisons
+    # while holding different text.
+    if isinstance(value, enum_type):
+        normalized = enum_type(value).value
+        if type(normalized) is not str:
+            raise TypeError(f"{field_name} must be a string")
+        return normalized
     if type(value) is not str:
         raise TypeError(f"{field_name} must be a string")
     try:
@@ -69,21 +78,22 @@ class SourceContext:
 
     def __post_init__(self) -> None:
         _require_canonical_id(self.source_id, "source_id")
-        _require_enum_value(
-            self.authority,
-            "authority",
-            SourceAuthority,
-        )
-        _require_enum_value(
-            self.document_kind,
-            "document_kind",
-            DocumentKind,
-        )
-        _require_enum_value(
-            self.rights_state,
-            "rights_state",
-            RightsState,
-        )
+        # Store the normalized text, so an accepted enum member never survives
+        # as a str subclass inside the record.
+        for field_name, enum_type in (
+            ("authority", SourceAuthority),
+            ("document_kind", DocumentKind),
+            ("rights_state", RightsState),
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                _require_enum_value(
+                    getattr(self, field_name),
+                    field_name,
+                    enum_type,
+                ),
+            )
 
 
 _REASON_ORDER = (
@@ -140,7 +150,10 @@ class ReviewedAssertionAdapter:
         supplied = _snapshot_iterable(source_contexts, "source_contexts")
         snapshots: list[SourceContext] = []
         for context in supplied:
-            if not isinstance(context, SourceContext):
+            # Exact type plus rebuild, for the same reason as the record
+            # snapshots: a subclass could answer the rebuild honestly and a
+            # later authority/rights read differently.
+            if type(context) is not SourceContext:
                 raise TypeError(
                     "source_contexts must contain only SourceContext records"
                 )
@@ -161,8 +174,9 @@ class ReviewedAssertionAdapter:
         }
 
     def ingest(self, candidate: CandidateRecord) -> IngestionResult:
-        if not isinstance(candidate, CandidateRecord):
-            raise TypeError("candidate must be a CandidateRecord")
+        # Refuse subclasses and rebuild, so every rule below and the promoted
+        # record itself read one immutable record this library constructed.
+        candidate = _snapshot_candidate(candidate, "candidate")
 
         evidence_by_reason: dict[str, set[str]] = {}
 

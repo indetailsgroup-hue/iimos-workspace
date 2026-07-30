@@ -773,6 +773,185 @@ class ExoticSubclassRefusalTests(unittest.TestCase):
                     make_context(**overrides)
 
 
+class RecordSubstitutionRefusalTests(unittest.TestCase):
+    """A stored record must be one this library built, not a caller subclass."""
+
+    @staticmethod
+    def switching_candidate_class(budget: int) -> type:
+        clean = (make_assertion("assertion:demo:clean"),)
+        dirty = (
+            make_assertion("assertion:demo:dirty", review_state="PENDING"),
+        )
+
+        class SwitchingCandidate(CandidateRecord):
+            """Answers honestly while inspected, then swaps the assertions."""
+
+            _reads = 0
+
+            def __getattribute__(self, name: str) -> object:
+                if name == "assertions":
+                    seen = object.__getattribute__(self, "_reads")
+                    object.__setattr__(self, "_reads", seen + 1)
+                    return clean if seen < budget else dirty
+                return object.__getattribute__(self, name)
+
+        return SwitchingCandidate
+
+    def test_ingest_refuses_a_candidate_record_subclass(self) -> None:
+        hostile = self.switching_candidate_class(budget=10)(
+            candidate_id=CANDIDATE_ID,
+            brand_id=BRAND_ID,
+            entity_kind="CONNECTOR_ASSEMBLY",
+            assertions=(make_assertion("assertion:demo:clean"),),
+            extraction_method="HUMAN_REVIEWED",
+        )
+        self.assertIsInstance(hostile, CandidateRecord)
+
+        with self.assertRaises(TypeError):
+            ReviewedAssertionAdapter((make_context(),)).ingest(hostile)
+
+    def test_ingestion_result_refuses_a_candidate_record_subclass(self) -> None:
+        hostile = self.switching_candidate_class(budget=10_000)(
+            candidate_id=CANDIDATE_ID,
+            brand_id=BRAND_ID,
+            entity_kind="CONNECTOR_ASSEMBLY",
+            assertions=(make_assertion("assertion:demo:clean"),),
+            extraction_method="HUMAN_REVIEWED",
+        )
+
+        with self.assertRaises(TypeError):
+            IngestionResult(promoted=(hostile,), quarantined=())
+
+    def test_ingestion_result_refuses_a_quarantine_record_subclass(self) -> None:
+        class SwitchingQuarantine(QuarantineRecord):
+            """Honest reason_code while validated, another one afterwards."""
+
+            _reads = 0
+
+            def __getattribute__(self, name: str) -> object:
+                if name == "reason_code":
+                    seen = object.__getattribute__(self, "_reads")
+                    object.__setattr__(self, "_reads", seen + 1)
+                    if seen < 3:
+                        return "REVIEW_REQUIRED"
+                    return "TOTALLY_UNMAPPED_REASON"
+                return object.__getattribute__(self, name)
+
+        hostile = SwitchingQuarantine(
+            candidate_id=CANDIDATE_ID,
+            reason_code="REVIEW_REQUIRED",
+            evidence_ids=("assertion:demo:identity:sku",),
+            owner_role="OEM Evidence Curator",
+        )
+        self.assertIsInstance(hostile, QuarantineRecord)
+
+        with self.assertRaises(TypeError):
+            IngestionResult(promoted=(), quarantined=(hostile,))
+
+    def test_adapter_refuses_a_source_context_subclass(self) -> None:
+        class SneakyContext(SourceContext):
+            pass
+
+        with self.assertRaises(TypeError):
+            ReviewedAssertionAdapter(
+                (
+                    SneakyContext(
+                        source_id="source:demo:oem:web",
+                        authority=SourceAuthority.OEM.value,
+                        document_kind=DocumentKind.WEB.value,
+                        rights_state=(
+                            RightsState.FACTUAL_INDEXING_ALLOWED.value
+                        ),
+                    ),
+                )
+            )
+
+    def test_stored_records_are_rebuilt_not_the_caller_instance(self) -> None:
+        candidate = make_candidate()
+        quarantine = QuarantineRecord(
+            candidate_id=CANDIDATE_ID,
+            reason_code="REVIEW_REQUIRED",
+            evidence_ids=("assertion:demo:identity:sku",),
+            owner_role="OEM Evidence Curator",
+        )
+
+        promoted_result = ReviewedAssertionAdapter((make_context(),)).ingest(
+            candidate
+        )
+        quarantined_result = IngestionResult(
+            promoted=(),
+            quarantined=(quarantine,),
+        )
+
+        self.assertEqual((candidate,), promoted_result.promoted)
+        self.assertIsNot(candidate, promoted_result.promoted[0])
+        self.assertIs(type(promoted_result.promoted[0]), CandidateRecord)
+        self.assertEqual((quarantine,), quarantined_result.quarantined)
+        self.assertIsNot(quarantine, quarantined_result.quarantined[0])
+        self.assertIs(
+            type(quarantined_result.quarantined[0]),
+            QuarantineRecord,
+        )
+
+    def test_exported_enum_members_normalize_to_exact_strings(self) -> None:
+        context = SourceContext(
+            source_id="source:demo:oem:pdf",
+            authority=SourceAuthority.OEM,
+            document_kind=DocumentKind.PDF,
+            rights_state=RightsState.FACTUAL_INDEXING_ALLOWED,
+        )
+
+        for field_name, expected in (
+            ("authority", "OEM"),
+            ("document_kind", "PDF"),
+            ("rights_state", "FACTUAL_INDEXING_ALLOWED"),
+        ):
+            with self.subTest(field=field_name):
+                stored = getattr(context, field_name)
+                self.assertEqual(expected, stored)
+                self.assertIs(str, type(stored))
+
+    def test_enum_normalized_context_still_drives_conflict_rules(self) -> None:
+        candidate = make_candidate(
+            (
+                make_assertion(
+                    "assertion:demo:geometry:pdf",
+                    field_path="geometry.bore_diameter",
+                    value={"value": 10, "unit": "mm"},
+                    source_id="source:demo:oem:pdf",
+                ),
+                make_assertion(
+                    "assertion:demo:geometry:cad",
+                    field_path="geometry.bore_diameter",
+                    value={"value": 10.1, "unit": "mm"},
+                    source_id="source:demo:oem:cad",
+                ),
+            )
+        )
+
+        result = ReviewedAssertionAdapter(
+            (
+                SourceContext(
+                    source_id="source:demo:oem:pdf",
+                    authority=SourceAuthority.OEM,
+                    document_kind=DocumentKind.PDF,
+                    rights_state=RightsState.FACTUAL_INDEXING_ALLOWED,
+                ),
+                SourceContext(
+                    source_id="source:demo:oem:cad",
+                    authority=SourceAuthority.OEM,
+                    document_kind=DocumentKind.CAD,
+                    rights_state=RightsState.FACTUAL_INDEXING_ALLOWED,
+                ),
+            )
+        ).ingest(candidate)
+
+        self.assertEqual(
+            ("PDF_CAD_GEOMETRY_CONFLICT",),
+            reason_codes(result),
+        )
+
+
 class ReviewedIngestionTests(unittest.TestCase):
     def test_human_reviewed_verified_rights_cleared_candidate_promotes(self) -> None:
         candidate = make_candidate()
