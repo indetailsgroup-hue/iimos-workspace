@@ -1780,6 +1780,156 @@ class MatingPartContradictionTests(unittest.TestCase):
 
         self.assertEqual((candidate,), result.promoted)
 
+    @staticmethod
+    def marker_candidate(
+        first: object,
+        second: object,
+        *,
+        with_part: bool = True,
+    ) -> CandidateRecord:
+        assertions = [
+            make_assertion(
+                "assertion:demo:compatibility:marker-a",
+                field_path="compatibility.requires_mating_part",
+                value=first,
+                source_id="source:demo:oem:pdf",
+            ),
+            make_assertion(
+                "assertion:demo:compatibility:marker-b",
+                field_path="compatibility.requires_mating_part",
+                value=second,
+                source_id="source:demo:oem:cad",
+            ),
+        ]
+        if with_part:
+            assertions.append(
+                make_assertion(
+                    "assertion:demo:compatibility:part-a",
+                    field_path="compatibility.exact_mating_part_id",
+                    value="sku:demo:mate:MP-1",
+                    source_id="source:demo:oem:pdf",
+                )
+            )
+        return make_candidate(tuple(assertions))
+
+    def test_contradicting_mating_markers_quarantine(self) -> None:
+        result = self.two_source_adapter().ingest(
+            self.marker_candidate(True, False)
+        )
+
+        self.assertEqual((), result.promoted)
+        self.assertEqual(
+            ("MATING_PART_SOURCE_CONFLICT",),
+            reason_codes(result),
+        )
+        self.assertEqual(
+            (
+                "assertion:demo:compatibility:marker-a",
+                "assertion:demo:compatibility:marker-b",
+            ),
+            result.quarantined[0].evidence_ids,
+        )
+        self.assertEqual(
+            "BOM and Compatibility Reviewer",
+            result.quarantined[0].owner_role,
+        )
+
+    def test_agreeing_mating_markers_promote(self) -> None:
+        for first, second, with_part in (
+            (True, True, True),
+            (False, False, False),
+        ):
+            with self.subTest(first=first, second=second):
+                candidate = self.marker_candidate(
+                    first,
+                    second,
+                    with_part=with_part,
+                )
+
+                result = self.two_source_adapter().ingest(candidate)
+
+                self.assertEqual((candidate,), result.promoted)
+                self.assertEqual((), result.quarantined)
+
+    def test_marker_and_part_contradictions_share_one_record(self) -> None:
+        candidate = make_candidate(
+            (
+                make_assertion(
+                    "assertion:demo:compatibility:marker-a",
+                    field_path="compatibility.requires_mating_part",
+                    value=True,
+                    source_id="source:demo:oem:pdf",
+                ),
+                make_assertion(
+                    "assertion:demo:compatibility:marker-b",
+                    field_path="compatibility.requires_mating_part",
+                    value=False,
+                    source_id="source:demo:oem:cad",
+                ),
+                make_assertion(
+                    "assertion:demo:compatibility:part-a",
+                    field_path="compatibility.exact_mating_part_id",
+                    value="sku:demo:mate:MP-1",
+                    source_id="source:demo:oem:pdf",
+                ),
+                make_assertion(
+                    "assertion:demo:compatibility:part-b",
+                    field_path="compatibility.exact_mating_part_id",
+                    value="sku:demo:mate:MP-2",
+                    source_id="source:demo:oem:cad",
+                ),
+            )
+        )
+
+        result = self.two_source_adapter().ingest(candidate)
+
+        self.assertEqual(
+            ("MATING_PART_SOURCE_CONFLICT",),
+            reason_codes(result),
+        )
+        self.assertEqual(
+            (
+                "assertion:demo:compatibility:marker-a",
+                "assertion:demo:compatibility:marker-b",
+                "assertion:demo:compatibility:part-a",
+                "assertion:demo:compatibility:part-b",
+            ),
+            result.quarantined[0].evidence_ids,
+        )
+
+    def test_marker_contradiction_and_missing_part_co_fire_in_order(
+        self,
+    ) -> None:
+        """Both mating codes can now apply at once, deterministically ordered."""
+
+        result = self.two_source_adapter().ingest(
+            self.marker_candidate(True, False, with_part=False)
+        )
+
+        self.assertEqual((), result.promoted)
+        self.assertEqual(
+            ("MATING_PART_SOURCE_CONFLICT", "REQUIRED_MATING_PART_MISSING"),
+            reason_codes(result),
+        )
+        self.assertEqual(
+            (
+                "assertion:demo:compatibility:marker-a",
+                "assertion:demo:compatibility:marker-b",
+            ),
+            result.quarantined[0].evidence_ids,
+        )
+        self.assertEqual(
+            ("assertion:demo:compatibility:marker-a",),
+            result.quarantined[1].evidence_ids,
+        )
+        self.assertEqual(
+            (
+                "BOM and Compatibility Reviewer",
+                "BOM and Compatibility Reviewer",
+            ),
+            tuple(record.owner_role for record in result.quarantined),
+        )
+
     def test_undocumented_field_contradictions_are_not_guessed(self) -> None:
         """The brief forbids guessing conflicts from free text.
 

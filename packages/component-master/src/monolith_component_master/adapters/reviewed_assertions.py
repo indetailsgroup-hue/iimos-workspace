@@ -404,11 +404,15 @@ class ReviewedAssertionAdapter:
         # entity_kind literal: entity_kind is deliberately open in Task 7, so a
         # literal gate silently promotes every unlisted spelling. Entity kinds
         # that cannot need a mating part simply do not carry the marker.
-        required_markers = tuple(
+        marker_assertions = tuple(
             assertion
             for assertion in candidate.assertions
             if assertion.field_path == _MATING_REQUIRED_FIELD
-            and assertion.value is True
+        )
+        required_markers = tuple(
+            assertion
+            for assertion in marker_assertions
+            if assertion.value is True
         )
         mating_ids = tuple(
             assertion
@@ -426,27 +430,35 @@ class ReviewedAssertionAdapter:
                 ),
             )
 
-        # The owner-ordered contradiction rule reaches the one remaining
-        # documented convention that names an exact part: two sources naming
-        # different mating parts for one candidate are mutually exclusive, so
-        # promoting both would ship a candidate that cannot be assembled.
+        # The owner-ordered contradiction rule covers both documented
+        # mating-part fields: two sources naming different mating parts, and two
+        # sources disagreeing on whether a mating part is required at all. Both
+        # promote a self-contradictory record otherwise.
+        #
+        # One code for both, because they are one documented convention family
+        # answering to one desk, exactly as DIMENSION_SOURCE_CONFLICT covers
+        # same-unit and cross-unit dimensional disagreement alike. `add_reason`
+        # merges evidence, so a candidate whose marker and whose part ID both
+        # contradict yields a single record naming every disagreeing assertion.
+        #
         # Deliberately NOT generalized to arbitrary field paths. The brief says
         # to use explicit documented normalized field conventions and not to
         # guess conflicts from free text, so only the dimensional prefixes,
         # `identity.` and these two `compatibility.` marker fields are compared.
-        if (
-            len(
-                {
-                    _normalized_scalar(assertion.value)
-                    for assertion in mating_ids
-                }
-            )
-            > 1
-        ):
-            add_reason(
-                "MATING_PART_SOURCE_CONFLICT",
-                (assertion.assertion_id for assertion in mating_ids),
-            )
+        for contradicting in (marker_assertions, mating_ids):
+            if (
+                len(
+                    {
+                        _normalized_scalar(assertion.value)
+                        for assertion in contradicting
+                    }
+                )
+                > 1
+            ):
+                add_reason(
+                    "MATING_PART_SOURCE_CONFLICT",
+                    (assertion.assertion_id for assertion in contradicting),
+                )
 
         if evidence_by_reason:
             quarantined = tuple(
