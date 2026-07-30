@@ -13,7 +13,7 @@
 
 ## 1. สิ่งที่ session นี้ทำจริง
 
-แผนอธิบายการสร้างที่ทำตามลำดับ: vendor runtime ที่ audit แล้ว เขียน overlay เพิ่ม test แล้วจึง deploy และเขียน lock แต่บนเครื่องนี้ deployment มีอยู่แล้วตั้งแต่ session นี้เริ่ม — session Codex ก่อนหน้าเขียน personal installation และ provenance lock ไปแล้ว — ขณะที่ governance repository ยังไม่มี source, test หรือรายงานที่แผนเป็นเจ้าของแม้แต่ชิ้นเดียว
+แผนอธิบายการสร้างที่ทำตามลำดับ: vendor runtime ที่ audit แล้ว เขียน overlay เพิ่ม test แล้วจึง deploy และเขียน lock แต่บนเครื่องนี้ deployment มีอยู่แล้วตั้งแต่ session นี้เริ่ม — session Codex ก่อนหน้าเขียน personal installation และ provenance lock ไปแล้ว — ขณะที่ branch ที่ session นี้ทำงานอยู่คือ `guardrails/claim-linters` ยังว่างจาก source, test และรายงานที่แผนเป็นเจ้าของ (commit ของ session ก่อนหน้าอยู่บนอีก branch หนึ่ง ดู §1.3)
 
 Session นี้ปิดช่องว่างนั้น: ตรวจหา byte ของ commit ที่ตรึงไว้ขึ้นมาใหม่โดยอิสระ vendor เข้า repository เขียน test suite ตามที่แผนกำหนด และพิสูจน์ว่า tree ที่ Codex โหลดเท่ากับ tree ที่ repository กำกับอยู่ตอนนี้
 
@@ -32,6 +32,20 @@ Session นี้ปิดช่องว่างนั้น: ตรวจห�
 ### 1.2 การแก้คำกล่าวอ้างของ session นี้เอง 1 จุด
 
 ตารางสถานะตอนเปิด session ระบุว่ายังไม่มี provenance lock คุม converter ที่ติดตั้งไว้ ข้อนั้นผิด: lock ถูกเขียนไว้แล้วเมื่อ 15:21 ซึ่งเป็นเวลากว่าสี่ชั่วโมงก่อนการตรวจ และการ list `~/.codex/skills/.provenance/` ซ้ำแสดง `book-to-skill.json` เป็นรายการแรก แถวที่แก้แล้วอยู่ใน §4 ความผิดพลาดนี้ไม่ได้ทำให้ของเดิมถูกเขียนทับ เพราะ `write_provenance.py` ปฏิเสธ output path ที่มีอยู่แล้ว และการปฏิเสธนั้นคือสิ่งที่ทำให้ความผิดพลาดถูกเปิดออกมา
+
+### 1.3 Implementation คู่ขนานบนอีก branch
+
+Session ก่อนหน้า commit งานของตัวเองไว้แล้ว — บน `codex/book-to-skill-codex-windows` ซึ่ง checkout อยู่ที่ `C:\tmp\book-to-skill-codex-windows` branch นั้นกับ branch นี้ออกจาก commit ของแผนเดียวกันคือ `3ba3b8e5` แล้วแยกทางกัน branch นั้นมี skill tree 22 ไฟล์ชุดเดียวกัน มี `tests/codex_skills/` ของตัวเอง และมี report path สี่รายการเดียวกัน
+
+Skill tree ที่ vendor ไว้ทั้งสองฝั่งตรงกันทุกไบต์:
+
+```
+$ git diff --name-only HEAD codex/book-to-skill-codex-windows -- tools/codex-skills/book-to-skill
+$ echo $?
+0
+```
+
+การทำงานสองรอบที่เป็นอิสระต่อกันบน commit ที่ตรึงไว้ชุดเดียวกันได้ไฟล์ 22 รายการเหมือนกัน ซึ่งเป็นหลักฐานที่หนักแน่นกว่าการทำรอบเดียว จุดที่สอง branch ต่างกันคือ test suite: installer tests ของ branch นั้นยาวกว่ามาก ส่วน manifest test ของ branch นี้บันทึก digest ต่อ path และ patch ที่ประกาศไว้แทน และ `tools/codex-skills/.gitattributes` มีอยู่เฉพาะบน branch นี้ ดังนั้นความเสี่ยงเรื่อง line ending ใน §2.3 จึงยังเปิดอยู่บน branch นั้น การตัดสินว่า suite ฝั่งไหนจะอยู่ต่อ และจะรวมสอง branch หรือไม่ เป็นการตัดสินใจของเจ้าของงาน ไม่ใช่สิ่งที่การ reconcile นี้ปิดให้
 
 ## 2. ไฟล์ที่ session นี้สร้าง
 

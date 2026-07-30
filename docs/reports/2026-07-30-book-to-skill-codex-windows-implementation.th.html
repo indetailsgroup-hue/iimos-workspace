@@ -58,7 +58,7 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <blockquote><p><strong>กฎเรื่อง root:</strong> งานนี้ไม่ได้เขียน nested product repository <code>determined-williams\</code> worktree ของมันมีการเปลี่ยนแปลงที่ไม่เกี่ยวข้องกันค้างอยู่บน branch <code>fix/dxf-truth-chain</code> ทั้งก่อนและหลัง session นี้</p></blockquote>
 <hr>
 <h2>1. สิ่งที่ session นี้ทำจริง</h2>
-<p>แผนอธิบายการสร้างที่ทำตามลำดับ: vendor runtime ที่ audit แล้ว เขียน overlay เพิ่ม test แล้วจึง deploy และเขียน lock แต่บนเครื่องนี้ deployment มีอยู่แล้วตั้งแต่ session นี้เริ่ม — session Codex ก่อนหน้าเขียน personal installation และ provenance lock ไปแล้ว — ขณะที่ governance repository ยังไม่มี source, test หรือรายงานที่แผนเป็นเจ้าของแม้แต่ชิ้นเดียว</p>
+<p>แผนอธิบายการสร้างที่ทำตามลำดับ: vendor runtime ที่ audit แล้ว เขียน overlay เพิ่ม test แล้วจึง deploy และเขียน lock แต่บนเครื่องนี้ deployment มีอยู่แล้วตั้งแต่ session นี้เริ่ม — session Codex ก่อนหน้าเขียน personal installation และ provenance lock ไปแล้ว — ขณะที่ branch ที่ session นี้ทำงานอยู่คือ <code>guardrails/claim-linters</code> ยังว่างจาก source, test และรายงานที่แผนเป็นเจ้าของ (commit ของ session ก่อนหน้าอยู่บนอีก branch หนึ่ง ดู §1.3)</p>
 <p>Session นี้ปิดช่องว่างนั้น: ตรวจหา byte ของ commit ที่ตรึงไว้ขึ้นมาใหม่โดยอิสระ vendor เข้า repository เขียน test suite ตามที่แผนกำหนด และพิสูจน์ว่า tree ที่ Codex โหลดเท่ากับ tree ที่ repository กำกับอยู่ตอนนี้</p>
 <h3>1.1 ลำดับเวลาที่สังเกตได้ (เวลาท้องถิ่น 30 กรกฎาคม 2026)</h3>
 <div class="tablewrap"><table><thead><tr><th>เวลา</th><th>เหตุการณ์</th><th>ต้นทาง</th></tr></thead><tbody>
@@ -72,6 +72,13 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 </tbody></table></div>
 <h3>1.2 การแก้คำกล่าวอ้างของ session นี้เอง 1 จุด</h3>
 <p>ตารางสถานะตอนเปิด session ระบุว่ายังไม่มี provenance lock คุม converter ที่ติดตั้งไว้ ข้อนั้นผิด: lock ถูกเขียนไว้แล้วเมื่อ 15:21 ซึ่งเป็นเวลากว่าสี่ชั่วโมงก่อนการตรวจ และการ list <code>~/.codex/skills/.provenance/</code> ซ้ำแสดง <code>book-to-skill.json</code> เป็นรายการแรก แถวที่แก้แล้วอยู่ใน §4 ความผิดพลาดนี้ไม่ได้ทำให้ของเดิมถูกเขียนทับ เพราะ <code>write_provenance.py</code> ปฏิเสธ output path ที่มีอยู่แล้ว และการปฏิเสธนั้นคือสิ่งที่ทำให้ความผิดพลาดถูกเปิดออกมา</p>
+<h3>1.3 Implementation คู่ขนานบนอีก branch</h3>
+<p>Session ก่อนหน้า commit งานของตัวเองไว้แล้ว — บน <code>codex/book-to-skill-codex-windows</code> ซึ่ง checkout อยู่ที่ <code>C:\tmp\book-to-skill-codex-windows</code> branch นั้นกับ branch นี้ออกจาก commit ของแผนเดียวกันคือ <code>3ba3b8e5</code> แล้วแยกทางกัน branch นั้นมี skill tree 22 ไฟล์ชุดเดียวกัน มี <code>tests/codex_skills/</code> ของตัวเอง และมี report path สี่รายการเดียวกัน</p>
+<p>Skill tree ที่ vendor ไว้ทั้งสองฝั่งตรงกันทุกไบต์:</p>
+<pre><code>$ git diff --name-only HEAD codex/book-to-skill-codex-windows -- tools/codex-skills/book-to-skill
+$ echo $?
+0</code></pre>
+<p>การทำงานสองรอบที่เป็นอิสระต่อกันบน commit ที่ตรึงไว้ชุดเดียวกันได้ไฟล์ 22 รายการเหมือนกัน ซึ่งเป็นหลักฐานที่หนักแน่นกว่าการทำรอบเดียว จุดที่สอง branch ต่างกันคือ test suite: installer tests ของ branch นั้นยาวกว่ามาก ส่วน manifest test ของ branch นี้บันทึก digest ต่อ path และ patch ที่ประกาศไว้แทน และ <code>tools/codex-skills/.gitattributes</code> มีอยู่เฉพาะบน branch นี้ ดังนั้นความเสี่ยงเรื่อง line ending ใน §2.3 จึงยังเปิดอยู่บน branch นั้น การตัดสินว่า suite ฝั่งไหนจะอยู่ต่อ และจะรวมสอง branch หรือไม่ เป็นการตัดสินใจของเจ้าของงาน ไม่ใช่สิ่งที่การ reconcile นี้ปิดให้</p>
 <h2>2. ไฟล์ที่ session นี้สร้าง</h2>
 <h3>2.1 Governed skill source — <code>tools/codex-skills/book-to-skill/</code></h3>
 <p>22 ไฟล์: 19 upstream paths ที่ audit แล้ว (หนึ่งไฟล์มี Windows encoding patch ที่ประกาศไว้) บวก local overlay 3 ไฟล์</p>

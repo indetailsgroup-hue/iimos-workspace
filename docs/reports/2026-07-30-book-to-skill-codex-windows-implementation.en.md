@@ -13,7 +13,7 @@
 
 ## 1. What this session actually did
 
-The plan describes a build that runs in order: vendor the audited runtime, write the overlay, add tests, then deploy and lock. On this machine the deployment already existed when this session started — an earlier Codex session had written the personal installation and its provenance lock — while the governance repository carried none of the source, tests, or reports the plan owns.
+The plan describes a build that runs in order: vendor the audited runtime, write the overlay, add tests, then deploy and lock. On this machine the deployment already existed when this session started — an earlier Codex session had written the personal installation and its provenance lock — while the branch this session works on, `guardrails/claim-linters`, carried none of the source, tests, or reports the plan owns. (The earlier session's own commits live on a separate branch; see §1.3.)
 
 This session reconciled that split: it re-derived the pinned bytes independently, vendored them into the repository, wrote the test suite the plan specifies, and proved that the tree Codex loads equals the tree the repository now governs.
 
@@ -32,6 +32,20 @@ This session reconciled that split: it re-derived the pinned bytes independently
 ### 1.2 One correction to this session's own opening status report
 
 The opening status table stated that no provenance lock covered the installed converter. That was wrong: the lock had been written at 15:21, more than four hours before the check, and a re-listing of `~/.codex/skills/.provenance/` shows `book-to-skill.json` as its first entry. The corrected row is in §4. Nothing was overwritten as a result of the error — `write_provenance.py` refuses an existing output path, and that refusal is what surfaced the mistake.
+
+### 1.3 A parallel implementation on another branch
+
+The earlier session did commit its work — to `codex/book-to-skill-codex-windows`, checked out at `C:\tmp\book-to-skill-codex-windows`. That branch and this one both start from the plan commit `3ba3b8e5` and have since diverged. It carries the same 22-file skill tree, its own `tests/codex_skills/`, and the same four report paths.
+
+The two vendored skill trees agree byte for byte:
+
+```
+$ git diff --name-only HEAD codex/book-to-skill-codex-windows -- tools/codex-skills/book-to-skill
+$ echo $?
+0
+```
+
+Two independent passes over the same pinned commit produced the same 22 files, which is stronger evidence for the vendored bytes than either pass alone. The test suites are where the branches differ: that branch's installer tests are substantially longer, this branch's manifest test records per-path digests and the declared patch instead, and `tools/codex-skills/.gitattributes` exists only here — so the line-ending hazard described in §2.3 is still open on that branch. Which suite survives, and whether the two branches merge, is the owner's decision rather than something this reconciliation settled.
 
 ## 2. Files this session created
 
