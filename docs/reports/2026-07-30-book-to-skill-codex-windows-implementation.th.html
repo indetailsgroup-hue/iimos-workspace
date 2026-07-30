@@ -69,6 +69,7 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <tr><td>15:21</td><td>provenance lock <code>~/.codex/skills/.provenance/book-to-skill.json</code> (<code>auditedAt</code> <code>2026-07-30T08:21:20Z</code>)</td><td>session ก่อนหน้า</td></tr>
 <tr><td>19:17–19:42</td><td>governed source <code>tools/codex-skills/book-to-skill/</code>, <code>tests/codex_skills/</code>, การเทียบ byte, การทำซ้ำข้อบกพร่องที่ patch ไว้</td><td>session นี้</td></tr>
 <tr><td>19:47</td><td><code>verify_provenance.py</code> → <code>PASS</code></td><td>session นี้</td></tr>
+<tr><td>20:2x</td><td>patch ที่ประกาศไว้จุดที่สอง (<code>pdftotext -enc UTF-8</code>) พร้อม fixture และ regression test, sync deployment, เขียน provenance lock ใหม่</td><td>session นี้</td></tr>
 </tbody></table></div>
 <h3>1.2 การแก้คำกล่าวอ้างของ session นี้เอง 1 จุด</h3>
 <p>ตารางสถานะตอนเปิด session ระบุว่ายังไม่มี provenance lock คุม converter ที่ติดตั้งไว้ ข้อนั้นผิด: lock ถูกเขียนไว้แล้วเมื่อ 15:21 ซึ่งเป็นเวลากว่าสี่ชั่วโมงก่อนการตรวจ และการ list <code>~/.codex/skills/.provenance/</code> ซ้ำแสดง <code>book-to-skill.json</code> เป็นรายการแรก แถวที่แก้แล้วอยู่ใน §4 ความผิดพลาดนี้ไม่ได้ทำให้ของเดิมถูกเขียนทับ เพราะ <code>write_provenance.py</code> ปฏิเสธ output path ที่มีอยู่แล้ว และการปฏิเสธนั้นคือสิ่งที่ทำให้ความผิดพลาดถูกเปิดออกมา</p>
@@ -81,9 +82,9 @@ $ echo $?
 <p>การทำงานสองรอบที่เป็นอิสระต่อกันบน commit ที่ตรึงไว้ชุดเดียวกันได้ไฟล์ 22 รายการเหมือนกัน ซึ่งเป็นหลักฐานที่หนักแน่นกว่าการทำรอบเดียว จุดที่สอง branch ต่างกันคือ test suite: installer tests ของ branch นั้นยาวกว่ามาก ส่วน manifest test ของ branch นี้บันทึก digest ต่อ path และ patch ที่ประกาศไว้แทน และ <code>tools/codex-skills/.gitattributes</code> มีอยู่เฉพาะบน branch นี้ ดังนั้นความเสี่ยงเรื่อง line ending ใน §2.3 จึงยังเปิดอยู่บน branch นั้น การตัดสินว่า suite ฝั่งไหนจะอยู่ต่อ และจะรวมสอง branch หรือไม่ เป็นการตัดสินใจของเจ้าของงาน ไม่ใช่สิ่งที่การ reconcile นี้ปิดให้</p>
 <h2>2. ไฟล์ที่ session นี้สร้าง</h2>
 <h3>2.1 Governed skill source — <code>tools/codex-skills/book-to-skill/</code></h3>
-<p>22 ไฟล์: 19 upstream paths ที่ audit แล้ว (หนึ่งไฟล์มี Windows encoding patch ที่ประกาศไว้) บวก local overlay 3 ไฟล์</p>
+<p>22 ไฟล์: 19 upstream paths ที่ audit แล้ว (สองไฟล์มี patch ที่ประกาศไว้) บวก local overlay 3 ไฟล์</p>
 <div class="tablewrap"><table><thead><tr><th>Path</th><th>ต้นทาง</th></tr></thead><tbody>
-<tr><td><code>book_to_skill/</code> (17 ไฟล์)</td><td>upstream ที่ตรึงไว้ <code>c6bc1b79</code>; <code>utils.py</code> มี patch ที่ประกาศไว้</td></tr>
+<tr><td><code>book_to_skill/</code> (17 ไฟล์)</td><td>upstream ที่ตรึงไว้ <code>c6bc1b79</code>; <code>utils.py</code> และ <code>parsers/pdf.py</code> มี patch ที่ประกาศไว้</td></tr>
 <tr><td><code>scripts/extract.py</code></td><td>upstream ที่ตรึงไว้</td></tr>
 <tr><td><code>tools/scan_generated_skill.py</code></td><td>upstream ที่ตรึงไว้</td></tr>
 <tr><td><code>LICENSE.md</code></td><td>upstream ที่ตรึงไว้ (MIT)</td></tr>
@@ -93,13 +94,13 @@ $ echo $?
 </tbody></table></div>
 <h3>2.2 Tests — <code>tests/codex_skills/</code></h3>
 <div class="tablewrap"><table><thead><tr><th>ไฟล์</th><th>สิ่งที่ตรึงไว้</th></tr></thead><tbody>
-<tr><td><code>test_upstream_manifest.py</code></td><td>digest ต่อ path เทียบกับ commit ที่ตรึงไว้, patch ที่ประกาศไว้จุดเดียว (digest ทั้งสองฝั่ง), ชุดไฟล์ที่แน่นอนของ skill tree, การปฏิเสธ symbolic link</td></tr>
+<tr><td><code>test_upstream_manifest.py</code></td><td>digest ต่อ path เทียบกับ commit ที่ตรึงไว้, patch ที่ประกาศไว้ทั้งสองจุด (digest ทั้งฝั่ง upstream และในเครื่อง), ชุดไฟล์ที่แน่นอนของ skill tree, การปฏิเสธ symbolic link</td></tr>
 <tr><td><code>test_codex_skill_contract.py</code></td><td>ข้อความ workflow แบบ Codex/PowerShell-native, frontmatter จำกัดที่ <code>name</code> + <code>description</code>, ลำดับ gate (แนะนำ scanner ก่อน installer), field ของ UI metadata</td></tr>
-<tr><td><code>test_extraction_smoke.py</code></td><td>การ extract จาก path ที่มีช่องว่าง, การ extract จาก path ภาษาไทยพร้อมการตรวจพบบทภาษาไทย, regression ของ cp1252, <code>--check</code> ที่รายงานครบทุก format</td></tr>
+<tr><td><code>test_extraction_smoke.py</code></td><td>การ extract จาก path ที่มีช่องว่าง, การ extract จาก path ภาษาไทยพร้อมการตรวจพบบทภาษาไทย, regression ของ cp1252, regression ของ pdftotext กับอักขระ non-ASCII, <code>--check</code> ที่รายงานครบทุก format</td></tr>
 <tr><td><code>test_generated_skill_installer.py</code></td><td>การติดตั้งใหม่, การปฏิเสธ target ที่มีอยู่, การแทนที่แบบชัดเจนพร้อม backup ที่กู้คืนได้, การปฏิเสธชื่อที่อาจหลุดออกนอก root, การปฏิเสธ path ที่ไม่คาดหมายใน staging, เนื้อหา injection ที่ scanner บล็อก, การเก็บกวาด snapshot หลังการปฏิเสธ, การปฏิเสธ symbolic link, exit code ของ CLI</td></tr>
 <tr><td><code>test_security_scan.py</code></td><td>scanner exit code 0/1/2 พร้อม rule id และหมายเลขบรรทัด และ staged skill ที่เดินผ่าน scan → Codex validator → guarded install พร้อมการเทียบ byte</td></tr>
 <tr><td><code>test_installation_evidence.py</code></td><td>personal installation เท่ากับ governed source เทียบ tree-hash ต่อ tree-hash</td></tr>
-<tr><td><code>fixtures/english-guide.md</code>, <code>fixtures/คู่มือ-ตัวอย่าง.md</code></td><td>input สองไฟล์สำหรับการ extract</td></tr>
+<tr><td><code>fixtures/english-guide.md</code>, <code>fixtures/คู่มือ-ตัวอย่าง.md</code>, <code>fixtures/non-ascii-winansi.pdf</code></td><td>input สามไฟล์สำหรับการ extract</td></tr>
 </tbody></table></div>
 <h3>2.3 การ์ดเรื่อง line ending ที่แผนยังไม่ได้คาดไว้</h3>
 <p>การ stage vendored tree เปิดข้อบกพร่องที่จะทำให้การตรึง byte พังตั้งแต่การ clone ครั้งถัดไป blob ที่ตรึงไว้เป็น CRLF และมี 3 บรรทัดใน <code>book_to_skill/utils.py</code> ที่ไม่ใช่ ดังนั้น tree นี้จึง normalize ทางใดทางหนึ่งอย่างปลอดภัยไม่ได้ repository นี้ตั้ง <code>core.autocrlf=true</code> และยังไม่เคยมี <code>.gitattributes</code> Git จึงเก็บสำเนาที่ normalize เป็น LF และจะคืน CRLF ตอน checkout:</p>
@@ -123,52 +124,53 @@ $ python -m pytest tests/codex_skills -v --basetemp="&lt;scratch&gt;/pytest-tmp"
 platform win32 -- Python 3.14.2, pytest-8.4.2, pluggy-1.6.0
 rootdir: C:\Users\thai3\determined-williams (2)
 configfile: pyproject.toml
-collected 29 items
-... 29 PASSED ...
-============================== 29 passed in 1.73s ==============================
+collected 30 items
+... 30 PASSED ...
+============================== 30 passed in 2.43s ==============================
 EXIT=0</code></pre>
 <p>การรันนี้ทำงานครบ 29 จาก 29 รายการ (skipped = 0): Codex validator ถูกพบที่ <code>~/.codex/skills/.system/skill-creator/scripts/quick_validate.py</code>, บัญชีผู้ใช้นี้สร้าง symbolic link ได้ และมีการส่ง <code>BOOK_TO_SKILL_INSTALLED_DIR</code> เข้าไป ดังนั้น test แบบมีเงื่อนไขทั้งสามรายการจึงทำงานจริง</p>
 <p>Red ก่อน green ถูกบันทึกไว้สำหรับสองคำกล่าวอ้างที่ test ผ่านอาจว่างเปล่าได้ถ้าไม่ทำ</p>
 <div class="tablewrap"><table><thead><tr><th>Test</th><th>ความล้มเหลวที่บันทึกไว้ก่อนแก้</th></tr></thead><tbody>
 <tr><td><code>test_upstream_manifest.py</code> (5 จาก 6 tests)</td><td>รันตอน target directory ยังว่าง ก่อนการ vendor</td></tr>
 <tr><td><code>test_thai_metadata_survives_a_non_utf8_locale</code></td><td>รันกับ <code>utils.py</code> ของ upstream ที่ตรึงไว้; <code>UnicodeEncodeError: 'charmap' codec</code> ที่ <code>utils.py:686</code>, returncode 1</td></tr>
+<tr><td><code>test_pdftotext_path_preserves_non_ascii_characters</code></td><td>รันกับ <code>parsers/pdf.py</code> ของ upstream ที่ตรึงไว้; ข้อความที่ถอดได้กลายเป็น <code>H\ufffdfele Minifix\ufffd</code>, <code>Drill hole \ufffd 15 mm</code></td></tr>
 </tbody></table></div>
 <h2>4. Provenance และความเท่ากันของ deployment</h2>
 <div class="tablewrap"><table><thead><tr><th>หัวข้อ</th><th>ค่า</th></tr></thead><tbody>
 <tr><td>Path ของ lock</td><td><code>C:\Users\thai3\.codex\skills\.provenance\book-to-skill.json</code></td></tr>
-<tr><td><code>auditedAt</code></td><td><code>2026-07-30T08:21:20.191044Z</code></td></tr>
+<tr><td><code>auditedAt</code></td><td>เขียนใหม่เมื่อ 30 กรกฎาคม 2026 หลัง patch ที่สอง; lock แรกบันทึก <code>2026-07-30T08:21:20.191044Z</code></td></tr>
 <tr><td>Revision</td><td><code>c6bc1b7927822e563aae6212c07670f5a3d95ea7</code></td></tr>
 <tr><td>License</td><td>MIT</td></tr>
 <tr><td>จำนวนไฟล์ที่บันทึก</td><td>22</td></tr>
-<tr><td><code>treeSha256</code></td><td><code>0abcf03b633fb8edf36180f11047aa24720e151c642fa84168d30bf7e3cc8b34</code></td></tr>
-<tr><td>Local modification ที่บันทึก</td><td>4 รายการ (overlay 3 ไฟล์ และ patch ของ <code>utils.py</code>)</td></tr>
-<tr><td>Risk note ที่บันทึก</td><td>4 รายการ (process, filesystem-write, network เมื่อได้อนุมัติ, destructive replacement)</td></tr>
+<tr><td><code>treeSha256</code></td><td><code>c1a55b520642d9a83bb8a09dc4da18ed58c3abf976bbf2a6758dee8008b06d63</code> (ก่อน patch ที่สองคือ <code>0abcf03b…</code>)</td></tr>
+<tr><td>Local modification ที่บันทึก</td><td>5 รายการ (overlay 3 ไฟล์ และ patch ที่ประกาศไว้ทั้งสอง พร้อม upstream digest ที่แต่ละจุดต่างออกไป)</td></tr>
+<tr><td>Risk note ที่บันทึก</td><td>5 รายการ (process, filesystem-write, network เมื่อได้อนุมัติ, destructive replacement, การเปิดรับของ parser)</td></tr>
 </tbody></table></div>
 <pre><code>$ python ~/.codex/skills/skill-installer/scripts/verify_provenance.py \
     'C:\Users\thai3\.codex\skills\.provenance\book-to-skill.json'
-PASS book-to-skill files=22 tree=0abcf03b633fb8edf36180f11047aa24720e151c642fa84168d30bf7e3cc8b34
+PASS book-to-skill files=22 tree=c1a55b520642d9a83bb8a09dc4da18ed58c3abf976bbf2a6758dee8008b06d63
 EXIT=0</code></pre>
 <p>ข้อเท็จจริงสองข้อที่เป็นอิสระต่อกันประกอบกันแล้วในตอนนี้: lock ตรงกับ installed tree (<code>verify_provenance.py</code>) และ installed tree ตรงกับ governed source (<code>test_personal_installation_matches_governed_source</code>) lock ถูกเขียนก่อนที่ test ใดจะเกิดขึ้น ดังนั้นบรรทัดสรุปของมัน — "Pinned upstream runtime audited; Codex/Windows overlay reviewed and tested" — ล้ำหน้าหลักฐานของตัวเองในเวลานั้น และ test suite ใน §3 คือสิ่งที่ตอนนี้ยืนอยู่หลังคำว่า "tested"</p>
-<p>Lock ถูกคงไว้ตามที่ session ก่อนหน้าเขียนไว้ทุกตัวอักษร ถ้อยคำของมันแคบกว่ารายงานนี้อยู่จุดหนึ่ง คือบันทึก patch ของ <code>utils.py</code> โดยยังไม่ระบุ upstream digest ที่มันต่างออกไป digest นั้นถูกตรึงไว้ใน <code>tests/codex_skills/test_upstream_manifest.py</code> แทน ซึ่งเป็นจุดที่การอัปเดต upstream ในอนาคตต้องเผชิญกับมัน</p>
+<p>Lock ของ session ก่อนหน้าถูกคงไว้ทุกตัวอักษร จนกระทั่ง patch ที่ประกาศไว้จุดที่สองเปลี่ยน byte ของ installation แล้ว <code>test_personal_installation_matches_governed_source</code> กลายเป็นแดง ซึ่งคือการ์ดทำงานตามที่ออกแบบไว้ จากนั้น lock จึงถูกเขียนใหม่ด้วย <code>--replace</code> และตอนนี้บันทึก patch ทั้งสองจุดพร้อม upstream digest ที่แต่ละจุดต่างออกไป ซึ่งเป็นข้อมูลที่ lock ฉบับแรกยังไม่ได้บันทึก</p>
 <h2>5. จุดที่ทำต่างจากแผน</h2>
 <div class="tablewrap"><table><thead><tr><th>ขั้นในแผน</th><th>สิ่งที่ทำแทน</th><th>เหตุผล</th></tr></thead><tbody>
 <tr><td>รัน test ด้วย interpreter ของ Codex runtime (<code>…\codex-primary-runtime\dependencies\python\python.exe</code>)</td><td>รันด้วย system interpreter Python 3.14.2</td><td>pytest ยังไม่ได้ติดตั้งใน Codex runtime และการติดตั้งเพิ่มถือเป็นการเปลี่ยน dependency ที่ยังไม่ได้รับอนุมัติ ส่วน system interpreter มี pytest 8.4.2 อยู่แล้ว และ locale codec ของมันคือ cp1252 ซึ่งเป็นเงื่อนไขเดียวกับที่ regression test ต้องใช้</td></tr>
 <tr><td>ใช้ temporary directory ค่าเริ่มต้นของ pytest</td><td>ส่ง <code>--basetemp</code> ไปที่ scratch directory ของ session</td><td>sandbox ปฏิเสธการเข้าถึง <code>%LOCALAPPDATA%\Temp\pytest-of-thai3</code> ซึ่งทำให้ collection ตายก่อนที่ test ใดจะได้รัน</td></tr>
 <tr><td>ลำดับ Task 1–5 (test → source → deploy)</td><td>source และ test ถูกเขียนหลัง deployment ที่มีอยู่ก่อนแล้ว</td><td>เป็นการ reconcile การติดตั้งที่มีอยู่เดิม โดยยังบันทึก red ก่อน green ให้ทั้งสองคำกล่าวอ้างใน §3</td></tr>
-<tr><td>Task 6 ขั้น 5 — เขียน provenance lock</td><td>ตรวจ lock ที่มีอยู่แล้วและคงไว้ที่เดิม</td><td>lock มีอยู่แล้วและเนื้อหาตรงกัน การเขียนทับบันทึก audit ของอีก session จะทำลายหลักฐานโดยไม่ได้อะไรกลับมา</td></tr>
+<tr><td>Task 6 ขั้น 5 — เขียน provenance lock</td><td>ตรวจ lock ที่มีอยู่แล้วและคงไว้ที่เดิม จากนั้นเขียนใหม่หลัง patch ที่สอง</td><td>ตอนที่ byte ยังตรงกัน การเขียนทับบันทึก audit ของอีก session จะทำลายหลักฐานโดยไม่ได้อะไรกลับมา แต่เมื่อ <code>parsers/pdf.py</code> เปลี่ยน digest ที่บันทึกไว้ก็ล้าสมัย การเขียนใหม่จึงเป็นทางเลือกเดียวที่ตรงความจริง</td></tr>
 <tr><td>Commit ทุก task</td><td>ยังไม่ commit staged เฉพาะ path ที่เกี่ยวข้อง</td><td>การ commit เป็นการตัดสินใจของเจ้าของงาน</td></tr>
 </tbody></table></div>
 <h2>6. เกณฑ์สำเร็จจากแบบออกแบบ</h2>
 <div class="tablewrap"><table><thead><tr><th>ข้อ</th><th>เกณฑ์</th><th>สถานะ</th></tr></thead><tbody>
 <tr><td>1</td><td>Codex ค้นพบ converter จาก <code>~/.codex/skills/book-to-skill</code></td><td>layout ครบ — 22 ไฟล์เข้าที่พร้อม frontmatter ของ <code>SKILL.md</code> และ <code>agents/openai.yaml</code>; การค้นพบภายใน Codex UI ยังไม่ได้ทดลองจาก session นี้</td></tr>
 <tr><td>2</td><td><code>SKILL.md</code> ให้ Codex-native paths และคำสั่งที่ใช้กับ PowerShell ได้</td><td>ครอบคลุมด้วย <code>test_codex_skill_contract.py</code> (4 tests)</td></tr>
-<tr><td>3</td><td>การ extract PDF/EPUB/DOCX/TXT/Markdown/HTML/RTF ใช้ implementation ที่ตรึงไว้</td><td>ครอบคลุมบางส่วน — Markdown ถูกรันครบวงจรทั้งสองภาษา ส่วน format อื่นถูก audit ในระดับ source เท่านั้น</td></tr>
+<tr><td>3</td><td>การ extract PDF/EPUB/DOCX/TXT/Markdown/HTML/RTF ใช้ implementation ที่ตรึงไว้</td><td>ครอบคลุมบางส่วน — Markdown ทั้งสองภาษา และ PDF (fixture 699 ไบต์ กับแคตตาล็อก Häfele 17 หน้า) ถูกรันครบวงจร ส่วน EPUB, DOCX, RTF และ MOBI ถูก audit ในระดับ source เท่านั้น</td></tr>
 <tr><td>4</td><td>Technical PDF ใช้ Docling เมื่อมีการติดตั้ง และ optional dependency ที่ยังไม่ติดตั้งต้องถูกรายงาน ไม่ติดตั้งอัตโนมัติ</td><td>ครอบคลุมครึ่งที่เป็นการรายงาน (<code>--check</code>, exit 0, Docling แสดงเป็น fallback); เส้นทาง Docling เองยังไม่ถูกรัน เพราะ package ยังไม่ติดตั้ง</td></tr>
 <tr><td>5</td><td>Path บน Windows ที่มีช่องว่างและอักษรไทยถูกจัดการเป็น literal path</td><td>ครอบคลุมด้วย extraction test 3 รายการ และ installer test เส้นทางภาษาไทย</td></tr>
 <tr><td>6</td><td>Generated skill ต้องผ่าน staging, scan และ validate ก่อนติดตั้ง</td><td>ครอบคลุมด้วย <code>test_security_scan.py</code> รวมถึง Codex validator ที่คืน <code>Skill is valid!</code></td></tr>
 <tr><td>7</td><td>ห้ามเขียนทับเงียบ การแทนที่ต้องได้รับอนุมัติและเหลือ backup ที่กู้คืนได้</td><td>ครอบคลุมด้วย installer test 2 รายการ ส่วนตัวการอนุมัติเองเป็น instruction ใน workflow ไม่ใช่ประตูในโค้ด</td></tr>
 <tr><td>8</td><td>Converter ที่ติดตั้งต้องตรงกับ provenance lock</td><td>ครอบคลุมแล้ว — <code>PASS</code>, 22 ไฟล์, tree <code>0abcf03b…</code></td></tr>
-<tr><td>9</td><td>Contract, security, extraction, installation และ end-to-end tests ต้องผ่านพร้อม output ครบ</td><td>ครอบคลุมแล้ว — 29 tests, exit code 0, summary อยู่ใน §3</td></tr>
+<tr><td>9</td><td>Contract, security, extraction, installation และ end-to-end tests ต้องผ่านพร้อม output ครบ</td><td>ครอบคลุมแล้ว — 30 tests, exit code 0, summary อยู่ใน §3</td></tr>
 <tr><td>10</td><td>เอกสารภาษาอังกฤษและไทย ทั้ง Markdown และ standalone HTML</td><td>ส่งมอบแล้ว — รายงานฉบับนี้ รายงาน audit และคู่ภาษา/คู่ HTML ของทั้งสอง</td></tr>
 </tbody></table></div>
 <h2>7. สถานะ repository</h2>
@@ -187,7 +189,7 @@ $ git -C determined-williams status --short --branch    # nested product root
 <h2>8. สิ่งที่ยังไม่ได้พิสูจน์</h2>
 <ul>
 <li><strong>การค้นพบและการใช้งานจริงผ่าน Codex UI</strong> — skill directory มีรูปร่างถูกต้องและผ่าน validator แต่ยังไม่มีใครรันการแปลงจริงผ่าน Codex Desktop บนเครื่องนี้</li>
-<li><strong>Format ที่ไม่ใช่ Markdown</strong> — เส้นทาง PDF, EPUB, DOCX, RTF และ MOBI ถูกอ่านและตรึง hash ไว้ ยังไม่ถูกรันกับเอกสารจริง</li>
+<li><strong>Format นอกเหนือจาก Markdown และ PDF</strong> — เส้นทาง EPUB, DOCX, RTF และ MOBI ถูกอ่านและตรึง hash ไว้ ยังไม่ถูกรันกับเอกสารจริง ส่วนเส้นทาง PDF ถูกรันกับแคตตาล็อกจริง 17 หน้าแล้วเฉพาะสาย <code>pdftotext</code> ขณะที่ <code>pypdf</code> และ <code>pdfminer</code> ยังเป็นทางถอยที่ test ชุดนี้ยังไม่ได้ขับ</li>
 <li><strong>เส้นทาง Docling และ Calibre</strong> — ทั้งสองยังไม่ติดตั้ง ดังนั้น <code>--mode technical</code> และการแปลง MOBI/AZW จึงยังไม่ได้ทดสอบที่นี่</li>
 <li><strong>ความเที่ยงตรงของ generated skill</strong> — การที่ skill ที่ generate ออกมาแทนหนังสือต้นทางได้ตรงเพียงใดเป็นคุณสมบัติของโมเดลที่ทำสรุป และ test ใน suite นี้ยังไม่วัดสิ่งนั้น</li>
 <li><strong>ความพอร์ตข้ามเครื่อง</strong> — ผลทุกข้อข้างต้นเกิดบน Windows 11 กับ Python 3.14.2 และ locale codec cp1252</li>

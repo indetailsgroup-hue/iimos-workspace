@@ -49,7 +49,7 @@ Upstream ที่ commit นั้นมี tracked paths 49 รายการ
 
 ทุก governed path ถูก hash จาก blob ของ commit ที่ตรึงไว้ (`git show FETCH_HEAD:<path>`) และจาก installed tree จากนั้น hash จาก vendored tree อีกครั้งหลัง copy
 
-**18 จาก 19 governed paths มี byte ตรงกับ commit ที่ตรึงไว้ทุกไบต์** เหลือ 1 path ที่มีความต่างซึ่งประกาศไว้แล้ว 1 จุด
+**17 จาก 19 governed paths มี byte ตรงกับ commit ที่ตรึงไว้ทุกไบต์** เหลือ 2 paths ที่มีความต่างซึ่งประกาศไว้แล้ว และแต่ละจุดถูกตรึงด้วย regression test ของตัวเอง (§5)
 
 | Path | SHA-256 (commit ที่ตรึงไว้) | ผล |
 |---|---|---|
@@ -67,7 +67,7 @@ Upstream ที่ commit นั้นมี tracked paths 49 รายการ
 | `book_to_skill/parsers/docx.py` | `15741ae148c50a01…` | ตรงกัน |
 | `book_to_skill/parsers/epub.py` | `d0a2d1e3aae5b8f2…` | ตรงกัน |
 | `book_to_skill/parsers/html.py` | `86ebb15647b2b8ae…` | ตรงกัน |
-| `book_to_skill/parsers/pdf.py` | `857e90f9d20b1da1…` | ตรงกัน |
+| `book_to_skill/parsers/pdf.py` | `857e90f9d20b1da1…` | **patch ที่ประกาศไว้** — sha256 ในเครื่อง `f9d15459e4e0dd01…` |
 | `book_to_skill/parsers/rtf.py` | `12837a5ded9bf0c7…` | ตรงกัน |
 | `book_to_skill/parsers/text.py` | `d355f499d3184f2b…` | ตรงกัน |
 | `scripts/extract.py` | `541ed846d5aa5d5f…` | ตรงกัน |
@@ -75,9 +75,9 @@ Upstream ที่ commit นั้นมี tracked paths 49 รายการ
 
 Digest เต็มของทั้ง 19 paths บันทึกไว้ใน [`tests/codex_skills/test_upstream_manifest.py`](../../tests/codex_skills/test_upstream_manifest.py) ซึ่งจะ fail เมื่อ upstream byte เปลี่ยนโดยยังไม่ประกาศ เมื่อมีไฟล์ที่ยังไม่ประกาศอยู่ใน skill tree และเมื่อมี symbolic link อยู่ที่ใดก็ตามใน tree นั้น
 
-## 5. Patch จุดเดียวที่ประกาศไว้
+## 5. Patch สองจุดที่ประกาศไว้
 
-### 5.1 ตัวการเปลี่ยนแปลง
+### 5.1 Patch 1 — `book_to_skill/utils.py`: ตัวการเปลี่ยนแปลง
 
 ```diff
 --- book_to_skill/utils.py   (commit ที่ตรึงไว้ c6bc1b79)
@@ -121,9 +121,34 @@ returncode=1
 
 หลังจากนั้นไฟล์ที่ patch แล้วถูกวางกลับและตรวจ digest ซ้ำ (`368ef866089300bd…`) รูปแบบความล้มเหลวสำคัญเท่ากับตัวแก้: extraction สำเร็จ ผู้ใช้เห็น output ความคืบหน้า แล้ว run ตายที่การเขียนไฟล์สุดท้าย ดังนั้นผู้เรียกที่ตรวจเฉพาะ `full_text.txt` จะสรุปว่าการแปลงสำเร็จ
 
-### 5.4 ข้อผูกพันถาวร
+### 5.4 ข้อผูกพันถาวรของ patch ทั้งสอง
 
-Patch นี้ถูกบันทึกใน 3 ที่ซึ่งการอัปเดต upstream ในอนาคตต้องผ่าน: `PATCHED_FILES` ใน manifest test (พร้อม digest ทั้งสองฝั่ง), regression test ที่อ้างถึงข้างต้น และรายการ `localModifications` ใน provenance lock หาก upstream commit ภายหลังแก้การเรียกจุดเดียวกันนี้ `test_every_patch_is_declared_and_still_differs_from_upstream` จะ fail และบังคับให้ถอด patch ออก แทนที่จะแบกมันต่อไปแบบเงียบ ๆ
+แต่ละ patch ถูกบันทึกใน 3 ที่ซึ่งการอัปเดต upstream ในอนาคตต้องผ่าน: `PATCHED_FILES` ใน manifest test (พร้อม digest ทั้งสองฝั่ง), regression test ที่อ้างถึงข้างต้น และรายการ `localModifications` ใน provenance lock หาก upstream commit ภายหลังแก้การเรียกจุดเดียวกันนี้ `test_every_patch_is_declared_and_still_differs_from_upstream` จะ fail และบังคับให้ถอด patch ออก แทนที่จะแบกมันต่อไปแบบเงียบ ๆ
+
+
+### 5.5 Patch 2 — `book_to_skill/parsers/pdf.py`: encoding ขาออกของ pdftotext
+
+พบเมื่อ 30 กรกฎาคม 2026 ระหว่างแปลงแคตตาล็อกฮาร์ดแวร์ Häfele หลังจากเผยแพร่ audit ฉบับนี้รอบแรกแล้ว
+
+```diff
+--- book_to_skill/parsers/pdf.py   (commit ที่ตรึงไว้ c6bc1b79)
++++ book_to_skill/parsers/pdf.py   (vendored + installed)
+@@ -14,7 +14,7 @@
+-            ["pdftotext", "-layout", pdf_path, "-"],
++            ["pdftotext", "-enc", "UTF-8", "-layout", pdf_path, "-"],
+```
+
+`pdftotext` เขียนออกเป็น Latin-1 ถ้าไม่สั่ง `-enc` ขณะที่ฝั่งผู้เรียก decode stdout เป็น UTF-8 ด้วย `errors="replace"` ทุกไบต์นอก ASCII จึงมาถึงในรูป U+FFFD ภายใต้ exit code 0 และ `full_text.txt` ที่ดูเหมือนครบ วัดจากแคตตาล็อก Häfele 17 หน้า:
+
+| ตัวถอด | `Häfele` | `Ø` | U+FFFD |
+|---|---|---|---|
+| `pdftotext` ก่อน patch | 0 | 0 | 221 |
+| `pdftotext` หลัง patch | 48 | 15 | 0 |
+| `pypdf` ลำดับถัดไปในสาย | 48 | 15 | 0 |
+
+ความเสียหายแปรผันตามสัดส่วนอักขระที่ไม่ใช่ ASCII: แคตตาล็อกภาษาเยอรมันหรือสแกนดิเนเวียเสียเครื่องหมายกำกับเสียงและเสีย `Ø` ทุกตัวที่นำหน้าเส้นผ่านศูนย์กลางรูเจาะ ส่วนเอกสารภาษาไทยเสียข้อความแทบทั้งฉบับ และเพราะ `pdftotext` เป็นตัวแรกที่สายการถอดเรียกเสมอเมื่อเครื่องมี poppler องค์ประกอบถัดจากนั้นจึงไม่เคยเห็นข้อความที่สมบูรณ์เลย
+
+`tests/codex_skills/fixtures/non-ascii-winansi.pdf` เป็น PDF แบบ WinAnsi ขนาด 699 ไบต์ที่เขียนขึ้นเอง ทำให้ `test_pdftotext_path_preserves_non_ascii_characters` ทำซ้ำความล้มเหลวได้โดยไม่ต้องใช้เอกสารของบุคคลภายนอก และ test นี้ยังตรวจด้วยว่าเส้นทางที่ถูกใช้จริงคือ pdftotext จึงผ่านด้วยการตกไปใช้ `pypdf` ไม่ได้
 
 ## 6. บัญชีความสามารถของ runtime ที่ vendor มา
 

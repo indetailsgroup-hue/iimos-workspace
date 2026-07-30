@@ -85,7 +85,7 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 </tbody></table></div>
 <h2>4. ผลการเปรียบเทียบ byte</h2>
 <p>ทุก governed path ถูก hash จาก blob ของ commit ที่ตรึงไว้ (<code>git show FETCH_HEAD:&lt;path&gt;</code>) และจาก installed tree จากนั้น hash จาก vendored tree อีกครั้งหลัง copy</p>
-<p><strong>18 จาก 19 governed paths มี byte ตรงกับ commit ที่ตรึงไว้ทุกไบต์</strong> เหลือ 1 path ที่มีความต่างซึ่งประกาศไว้แล้ว 1 จุด</p>
+<p><strong>17 จาก 19 governed paths มี byte ตรงกับ commit ที่ตรึงไว้ทุกไบต์</strong> เหลือ 2 paths ที่มีความต่างซึ่งประกาศไว้แล้ว และแต่ละจุดถูกตรึงด้วย regression test ของตัวเอง (§5)</p>
 <div class="tablewrap"><table><thead><tr><th>Path</th><th>SHA-256 (commit ที่ตรึงไว้)</th><th>ผล</th></tr></thead><tbody>
 <tr><td><code>LICENSE.md</code></td><td><code>be9b04bccfb4bdab…</code></td><td>ตรงกัน</td></tr>
 <tr><td><code>book_to_skill/__init__.py</code></td><td><code>9d18b99b2c417557…</code></td><td>ตรงกัน</td></tr>
@@ -101,15 +101,15 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <tr><td><code>book_to_skill/parsers/docx.py</code></td><td><code>15741ae148c50a01…</code></td><td>ตรงกัน</td></tr>
 <tr><td><code>book_to_skill/parsers/epub.py</code></td><td><code>d0a2d1e3aae5b8f2…</code></td><td>ตรงกัน</td></tr>
 <tr><td><code>book_to_skill/parsers/html.py</code></td><td><code>86ebb15647b2b8ae…</code></td><td>ตรงกัน</td></tr>
-<tr><td><code>book_to_skill/parsers/pdf.py</code></td><td><code>857e90f9d20b1da1…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/parsers/pdf.py</code></td><td><code>857e90f9d20b1da1…</code></td><td><strong>patch ที่ประกาศไว้</strong> — sha256 ในเครื่อง <code>f9d15459e4e0dd01…</code></td></tr>
 <tr><td><code>book_to_skill/parsers/rtf.py</code></td><td><code>12837a5ded9bf0c7…</code></td><td>ตรงกัน</td></tr>
 <tr><td><code>book_to_skill/parsers/text.py</code></td><td><code>d355f499d3184f2b…</code></td><td>ตรงกัน</td></tr>
 <tr><td><code>scripts/extract.py</code></td><td><code>541ed846d5aa5d5f…</code></td><td>ตรงกัน</td></tr>
 <tr><td><code>tools/scan_generated_skill.py</code></td><td><code>1c075d1de29e4c15…</code></td><td>ตรงกัน</td></tr>
 </tbody></table></div>
 <p>Digest เต็มของทั้ง 19 paths บันทึกไว้ใน <a href="../../tests/codex_skills/test_upstream_manifest.py"><code>tests/codex_skills/test_upstream_manifest.py</code></a> ซึ่งจะ fail เมื่อ upstream byte เปลี่ยนโดยยังไม่ประกาศ เมื่อมีไฟล์ที่ยังไม่ประกาศอยู่ใน skill tree และเมื่อมี symbolic link อยู่ที่ใดก็ตามใน tree นั้น</p>
-<h2>5. Patch จุดเดียวที่ประกาศไว้</h2>
-<h3>5.1 ตัวการเปลี่ยนแปลง</h3>
+<h2>5. Patch สองจุดที่ประกาศไว้</h2>
+<h3>5.1 Patch 1 — <code>book_to_skill/utils.py</code>: ตัวการเปลี่ยนแปลง</h3>
 <pre><code class="language-diff">--- book_to_skill/utils.py   (commit ที่ตรึงไว้ c6bc1b79)
 +++ book_to_skill/utils.py   (vendored + installed)
 @@ -683,7 +683,10 @@
@@ -137,8 +137,23 @@ UnicodeEncodeError: 'charmap' codec can't encode characters in position 205-210:
 returncode=1
 ============================== 1 failed in 0.41s ==============================</code></pre>
 <p>หลังจากนั้นไฟล์ที่ patch แล้วถูกวางกลับและตรวจ digest ซ้ำ (<code>368ef866089300bd…</code>) รูปแบบความล้มเหลวสำคัญเท่ากับตัวแก้: extraction สำเร็จ ผู้ใช้เห็น output ความคืบหน้า แล้ว run ตายที่การเขียนไฟล์สุดท้าย ดังนั้นผู้เรียกที่ตรวจเฉพาะ <code>full_text.txt</code> จะสรุปว่าการแปลงสำเร็จ</p>
-<h3>5.4 ข้อผูกพันถาวร</h3>
-<p>Patch นี้ถูกบันทึกใน 3 ที่ซึ่งการอัปเดต upstream ในอนาคตต้องผ่าน: <code>PATCHED_FILES</code> ใน manifest test (พร้อม digest ทั้งสองฝั่ง), regression test ที่อ้างถึงข้างต้น และรายการ <code>localModifications</code> ใน provenance lock หาก upstream commit ภายหลังแก้การเรียกจุดเดียวกันนี้ <code>test_every_patch_is_declared_and_still_differs_from_upstream</code> จะ fail และบังคับให้ถอด patch ออก แทนที่จะแบกมันต่อไปแบบเงียบ ๆ</p>
+<h3>5.4 ข้อผูกพันถาวรของ patch ทั้งสอง</h3>
+<p>แต่ละ patch ถูกบันทึกใน 3 ที่ซึ่งการอัปเดต upstream ในอนาคตต้องผ่าน: <code>PATCHED_FILES</code> ใน manifest test (พร้อม digest ทั้งสองฝั่ง), regression test ที่อ้างถึงข้างต้น และรายการ <code>localModifications</code> ใน provenance lock หาก upstream commit ภายหลังแก้การเรียกจุดเดียวกันนี้ <code>test_every_patch_is_declared_and_still_differs_from_upstream</code> จะ fail และบังคับให้ถอด patch ออก แทนที่จะแบกมันต่อไปแบบเงียบ ๆ</p>
+<h3>5.5 Patch 2 — <code>book_to_skill/parsers/pdf.py</code>: encoding ขาออกของ pdftotext</h3>
+<p>พบเมื่อ 30 กรกฎาคม 2026 ระหว่างแปลงแคตตาล็อกฮาร์ดแวร์ Häfele หลังจากเผยแพร่ audit ฉบับนี้รอบแรกแล้ว</p>
+<pre><code class="language-diff">--- book_to_skill/parsers/pdf.py   (commit ที่ตรึงไว้ c6bc1b79)
++++ book_to_skill/parsers/pdf.py   (vendored + installed)
+@@ -14,7 +14,7 @@
+-            ["pdftotext", "-layout", pdf_path, "-"],
++            ["pdftotext", "-enc", "UTF-8", "-layout", pdf_path, "-"],</code></pre>
+<p><code>pdftotext</code> เขียนออกเป็น Latin-1 ถ้าไม่สั่ง <code>-enc</code> ขณะที่ฝั่งผู้เรียก decode stdout เป็น UTF-8 ด้วย <code>errors="replace"</code> ทุกไบต์นอก ASCII จึงมาถึงในรูป U+FFFD ภายใต้ exit code 0 และ <code>full_text.txt</code> ที่ดูเหมือนครบ วัดจากแคตตาล็อก Häfele 17 หน้า:</p>
+<div class="tablewrap"><table><thead><tr><th>ตัวถอด</th><th><code>Häfele</code></th><th><code>Ø</code></th><th>U+FFFD</th></tr></thead><tbody>
+<tr><td><code>pdftotext</code> ก่อน patch</td><td>0</td><td>0</td><td>221</td></tr>
+<tr><td><code>pdftotext</code> หลัง patch</td><td>48</td><td>15</td><td>0</td></tr>
+<tr><td><code>pypdf</code> ลำดับถัดไปในสาย</td><td>48</td><td>15</td><td>0</td></tr>
+</tbody></table></div>
+<p>ความเสียหายแปรผันตามสัดส่วนอักขระที่ไม่ใช่ ASCII: แคตตาล็อกภาษาเยอรมันหรือสแกนดิเนเวียเสียเครื่องหมายกำกับเสียงและเสีย <code>Ø</code> ทุกตัวที่นำหน้าเส้นผ่านศูนย์กลางรูเจาะ ส่วนเอกสารภาษาไทยเสียข้อความแทบทั้งฉบับ และเพราะ <code>pdftotext</code> เป็นตัวแรกที่สายการถอดเรียกเสมอเมื่อเครื่องมี poppler องค์ประกอบถัดจากนั้นจึงไม่เคยเห็นข้อความที่สมบูรณ์เลย</p>
+<p><code>tests/codex_skills/fixtures/non-ascii-winansi.pdf</code> เป็น PDF แบบ WinAnsi ขนาด 699 ไบต์ที่เขียนขึ้นเอง ทำให้ <code>test_pdftotext_path_preserves_non_ascii_characters</code> ทำซ้ำความล้มเหลวได้โดยไม่ต้องใช้เอกสารของบุคคลภายนอก และ test นี้ยังตรวจด้วยว่าเส้นทางที่ถูกใช้จริงคือ pdftotext จึงผ่านด้วยการตกไปใช้ <code>pypdf</code> ไม่ได้</p>
 <h2>6. บัญชีความสามารถของ runtime ที่ vendor มา</h2>
 <p>ไฟล์ <code>.py</code> ที่ governed ทุกไฟล์ถูกอ่านเต็ม (2,121 บรรทัด ใน 19 paths) ความสามารถด้านล่างคือสิ่งที่ audit พบ และทุกข้อเป็นสิ่งที่คาดหมายได้สำหรับ document converter ที่ต้องเรียก extractor ภายนอกและเขียน skill directory</p>
 <h3>6.1 การใช้ subprocess — 4 จุดเรียก</h3>

@@ -85,7 +85,7 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 </tbody></table></div>
 <h2>4. Byte comparison result</h2>
 <p>Each governed path was hashed from the pinned blob (<code>git show FETCH_HEAD:&lt;path&gt;</code>) and from the installed tree, then from the vendored tree after copying.</p>
-<p><strong>18 of the 19 governed paths are byte-identical to the pinned commit.</strong> One path carries a single declared deviation.</p>
+<p><strong>17 of the 19 governed paths are byte-identical to the pinned commit.</strong> Two paths carry declared deviations, each pinned by its own regression test (§5).</p>
 <div class="tablewrap"><table><thead><tr><th>Path</th><th>SHA-256 (pinned commit)</th><th>Result</th></tr></thead><tbody>
 <tr><td><code>LICENSE.md</code></td><td><code>be9b04bccfb4bdab…</code></td><td>identical</td></tr>
 <tr><td><code>book_to_skill/__init__.py</code></td><td><code>9d18b99b2c417557…</code></td><td>identical</td></tr>
@@ -101,15 +101,15 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <tr><td><code>book_to_skill/parsers/docx.py</code></td><td><code>15741ae148c50a01…</code></td><td>identical</td></tr>
 <tr><td><code>book_to_skill/parsers/epub.py</code></td><td><code>d0a2d1e3aae5b8f2…</code></td><td>identical</td></tr>
 <tr><td><code>book_to_skill/parsers/html.py</code></td><td><code>86ebb15647b2b8ae…</code></td><td>identical</td></tr>
-<tr><td><code>book_to_skill/parsers/pdf.py</code></td><td><code>857e90f9d20b1da1…</code></td><td>identical</td></tr>
+<tr><td><code>book_to_skill/parsers/pdf.py</code></td><td><code>857e90f9d20b1da1…</code></td><td><strong>declared patch</strong> — local sha256 <code>f9d15459e4e0dd01…</code></td></tr>
 <tr><td><code>book_to_skill/parsers/rtf.py</code></td><td><code>12837a5ded9bf0c7…</code></td><td>identical</td></tr>
 <tr><td><code>book_to_skill/parsers/text.py</code></td><td><code>d355f499d3184f2b…</code></td><td>identical</td></tr>
 <tr><td><code>scripts/extract.py</code></td><td><code>541ed846d5aa5d5f…</code></td><td>identical</td></tr>
 <tr><td><code>tools/scan_generated_skill.py</code></td><td><code>1c075d1de29e4c15…</code></td><td>identical</td></tr>
 </tbody></table></div>
 <p>Full digests for all 19 paths are recorded in <a href="../../tests/codex_skills/test_upstream_manifest.py"><code>tests/codex_skills/test_upstream_manifest.py</code></a>, which fails on any undeclared change to upstream bytes, on any undeclared file inside the skill tree, and on a symbolic link anywhere in it.</p>
-<h2>5. The one declared patch</h2>
-<h3>5.1 The change</h3>
+<h2>5. The two declared patches</h2>
+<h3>5.1 Patch 1 — <code>book_to_skill/utils.py</code>: the change</h3>
 <pre><code class="language-diff">--- book_to_skill/utils.py   (pinned commit c6bc1b79)
 +++ book_to_skill/utils.py   (vendored + installed)
 @@ -683,7 +683,10 @@
@@ -137,8 +137,23 @@ UnicodeEncodeError: 'charmap' codec can't encode characters in position 205-210:
 returncode=1
 ============================== 1 failed in 0.41s ==============================</code></pre>
 <p>The patched file was then restored and its digest re-checked (<code>368ef866089300bd…</code>). The failure mode matters as much as the fix: extraction succeeds, the user sees progress output, and the run aborts at the last write — so a caller that only inspects <code>full_text.txt</code> would conclude the conversion worked.</p>
-<h3>5.4 Standing constraint</h3>
-<p>The patch is recorded in three places that a future upstream bump has to pass through: <code>PATCHED_FILES</code> in the manifest test (with both digests), the regression test named above, and the <code>localModifications</code> list in the provenance lock. If a later upstream commit fixes the same call, <code>test_every_patch_is_declared_and_still_differs_from_upstream</code> fails and forces the patch to be dropped rather than silently carried forward.</p>
+<h3>5.4 Standing constraint for both patches</h3>
+<p>Each patch is recorded in three places that a future upstream bump has to pass through: <code>PATCHED_FILES</code> in the manifest test (with both digests), the regression test named above, and the <code>localModifications</code> list in the provenance lock. If a later upstream commit fixes the same call, <code>test_every_patch_is_declared_and_still_differs_from_upstream</code> fails and forces the patch to be dropped rather than silently carried forward.</p>
+<h3>5.5 Patch 2 — <code>book_to_skill/parsers/pdf.py</code>: pdftotext output encoding</h3>
+<p>Found on 30 July 2026 while converting a Häfele hardware catalogue, after this audit was first published.</p>
+<pre><code class="language-diff">--- book_to_skill/parsers/pdf.py   (pinned commit c6bc1b79)
++++ book_to_skill/parsers/pdf.py   (vendored + installed)
+@@ -14,7 +14,7 @@
+-            ["pdftotext", "-layout", pdf_path, "-"],
++            ["pdftotext", "-enc", "UTF-8", "-layout", pdf_path, "-"],</code></pre>
+<p><code>pdftotext</code> writes Latin-1 unless <code>-enc</code> says otherwise, while the caller decodes its stdout as UTF-8 with <code>errors="replace"</code>. Every byte outside ASCII therefore arrived as U+FFFD, under exit code 0 and a full-looking <code>full_text.txt</code>. Measured on a 17-page Häfele catalogue:</p>
+<div class="tablewrap"><table><thead><tr><th>Extractor</th><th><code>Häfele</code></th><th><code>Ø</code></th><th>U+FFFD</th></tr></thead><tbody>
+<tr><td><code>pdftotext</code>, unpatched</td><td>0</td><td>0</td><td>221</td></tr>
+<tr><td><code>pdftotext</code>, patched</td><td>48</td><td>15</td><td>0</td></tr>
+<tr><td><code>pypdf</code>, the next link in the chain</td><td>48</td><td>15</td><td>0</td></tr>
+</tbody></table></div>
+<p>The damage scales with how little of a document is ASCII: a German or Scandinavian catalogue loses its diacritics and every <code>Ø</code> in front of a drill-hole diameter, and a Thai document loses effectively all of its text. Because <code>pdftotext</code> is the first extractor the chain tries whenever poppler is installed, nothing downstream ever sees the intact text.</p>
+<p><code>tests/codex_skills/fixtures/non-ascii-winansi.pdf</code> is a 699-byte hand-authored WinAnsi PDF, so <code>test_pdftotext_path_preserves_non_ascii_characters</code> reproduces the failure without any third-party document. The test also asserts that the pdftotext path was the one exercised, so it cannot pass by falling through to <code>pypdf</code>.</p>
 <h2>6. Capability inventory of the vendored runtime</h2>
 <p>Every governed <code>.py</code> file was read in full (2,121 lines across 19 paths). The capabilities below are what the audit found; each is expected for a document converter that must call external extractors and write a skill directory.</p>
 <h3>6.1 Subprocess use — 4 call sites</h3>

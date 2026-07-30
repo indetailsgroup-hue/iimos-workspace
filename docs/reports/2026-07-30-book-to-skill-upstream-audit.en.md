@@ -49,7 +49,7 @@ Upstream ships 49 tracked paths at that commit. Nineteen are governed runtime an
 
 Each governed path was hashed from the pinned blob (`git show FETCH_HEAD:<path>`) and from the installed tree, then from the vendored tree after copying.
 
-**18 of the 19 governed paths are byte-identical to the pinned commit.** One path carries a single declared deviation.
+**17 of the 19 governed paths are byte-identical to the pinned commit.** Two paths carry declared deviations, each pinned by its own regression test (§5).
 
 | Path | SHA-256 (pinned commit) | Result |
 |---|---|---|
@@ -67,7 +67,7 @@ Each governed path was hashed from the pinned blob (`git show FETCH_HEAD:<path>`
 | `book_to_skill/parsers/docx.py` | `15741ae148c50a01…` | identical |
 | `book_to_skill/parsers/epub.py` | `d0a2d1e3aae5b8f2…` | identical |
 | `book_to_skill/parsers/html.py` | `86ebb15647b2b8ae…` | identical |
-| `book_to_skill/parsers/pdf.py` | `857e90f9d20b1da1…` | identical |
+| `book_to_skill/parsers/pdf.py` | `857e90f9d20b1da1…` | **declared patch** — local sha256 `f9d15459e4e0dd01…` |
 | `book_to_skill/parsers/rtf.py` | `12837a5ded9bf0c7…` | identical |
 | `book_to_skill/parsers/text.py` | `d355f499d3184f2b…` | identical |
 | `scripts/extract.py` | `541ed846d5aa5d5f…` | identical |
@@ -75,9 +75,9 @@ Each governed path was hashed from the pinned blob (`git show FETCH_HEAD:<path>`
 
 Full digests for all 19 paths are recorded in [`tests/codex_skills/test_upstream_manifest.py`](../../tests/codex_skills/test_upstream_manifest.py), which fails on any undeclared change to upstream bytes, on any undeclared file inside the skill tree, and on a symbolic link anywhere in it.
 
-## 5. The one declared patch
+## 5. The two declared patches
 
-### 5.1 The change
+### 5.1 Patch 1 — `book_to_skill/utils.py`: the change
 
 ```diff
 --- book_to_skill/utils.py   (pinned commit c6bc1b79)
@@ -121,9 +121,34 @@ returncode=1
 
 The patched file was then restored and its digest re-checked (`368ef866089300bd…`). The failure mode matters as much as the fix: extraction succeeds, the user sees progress output, and the run aborts at the last write — so a caller that only inspects `full_text.txt` would conclude the conversion worked.
 
-### 5.4 Standing constraint
+### 5.4 Standing constraint for both patches
 
-The patch is recorded in three places that a future upstream bump has to pass through: `PATCHED_FILES` in the manifest test (with both digests), the regression test named above, and the `localModifications` list in the provenance lock. If a later upstream commit fixes the same call, `test_every_patch_is_declared_and_still_differs_from_upstream` fails and forces the patch to be dropped rather than silently carried forward.
+Each patch is recorded in three places that a future upstream bump has to pass through: `PATCHED_FILES` in the manifest test (with both digests), the regression test named above, and the `localModifications` list in the provenance lock. If a later upstream commit fixes the same call, `test_every_patch_is_declared_and_still_differs_from_upstream` fails and forces the patch to be dropped rather than silently carried forward.
+
+
+### 5.5 Patch 2 — `book_to_skill/parsers/pdf.py`: pdftotext output encoding
+
+Found on 30 July 2026 while converting a Häfele hardware catalogue, after this audit was first published.
+
+```diff
+--- book_to_skill/parsers/pdf.py   (pinned commit c6bc1b79)
++++ book_to_skill/parsers/pdf.py   (vendored + installed)
+@@ -14,7 +14,7 @@
+-            ["pdftotext", "-layout", pdf_path, "-"],
++            ["pdftotext", "-enc", "UTF-8", "-layout", pdf_path, "-"],
+```
+
+`pdftotext` writes Latin-1 unless `-enc` says otherwise, while the caller decodes its stdout as UTF-8 with `errors="replace"`. Every byte outside ASCII therefore arrived as U+FFFD, under exit code 0 and a full-looking `full_text.txt`. Measured on a 17-page Häfele catalogue:
+
+| Extractor | `Häfele` | `Ø` | U+FFFD |
+|---|---|---|---|
+| `pdftotext`, unpatched | 0 | 0 | 221 |
+| `pdftotext`, patched | 48 | 15 | 0 |
+| `pypdf`, the next link in the chain | 48 | 15 | 0 |
+
+The damage scales with how little of a document is ASCII: a German or Scandinavian catalogue loses its diacritics and every `Ø` in front of a drill-hole diameter, and a Thai document loses effectively all of its text. Because `pdftotext` is the first extractor the chain tries whenever poppler is installed, nothing downstream ever sees the intact text.
+
+`tests/codex_skills/fixtures/non-ascii-winansi.pdf` is a 699-byte hand-authored WinAnsi PDF, so `test_pdftotext_path_preserves_non_ascii_characters` reproduces the failure without any third-party document. The test also asserts that the pdftotext path was the one exercised, so it cannot pass by falling through to `pypdf`.
 
 ## 6. Capability inventory of the vendored runtime
 

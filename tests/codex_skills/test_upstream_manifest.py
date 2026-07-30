@@ -5,9 +5,11 @@ mixture of three kinds of bytes:
 
 * pinned upstream runtime, which must stay byte-identical to the commit named
   below so that an update is a fresh audit rather than a silent drift;
-* one declared patch, recorded here with both the upstream and the local hash,
-  because a Windows defect made the unpatched byte unusable (see
-  `test_extraction_smoke.py::test_thai_metadata_survives_a_non_utf8_locale`);
+* two declared patches, each recorded here with both the upstream and the
+  local hash, because the unpatched bytes lose data on this host — one aborts
+  extraction under a cp1252 locale, the other silently replaces every non-ASCII
+  character with U+FFFD (see `test_extraction_smoke.py`, the two tests named in
+  `PATCHED_FILES`);
 * the local Codex overlay, which is ours to change freely.
 
 Recording the hashes in the test rather than in prose is what makes the
@@ -80,6 +82,12 @@ PATCHED_FILES = {
         "368ef866089300bda103387095d4be985dff4774ad66bf649897caf8aeeeb26e",
         'pass encoding="utf-8" when writing metadata.json so a non-UTF-8 '
         "Windows locale cannot abort extraction of Thai documents",
+    ),
+    "book_to_skill/parsers/pdf.py": (
+        "f9d15459e4e0dd01aacf6ce8dcb7224b6ca0074faf6b5d536234bcd3a3d9aa44",
+        "pass -enc UTF-8 to pdftotext; its default output encoding is Latin-1 "
+        "and the caller decodes as UTF-8 with errors=replace, so every non-ASCII "
+        "character silently became U+FFFD",
     ),
 }
 

@@ -9,19 +9,26 @@ upstream suite:
   `write_text` without an explicit encoding raises UnicodeEncodeError the
   moment a document contains non-Latin text.
 
-The second property is the whole justification for the one declared patch to
-`book_to_skill/utils.py` — see `test_upstream_manifest.PATCHED_FILES`. The
-regression test below pins the *unpatched* upstream line as a real failure so
-the patch can never be quietly reverted during an upstream update.
+A third property was found while converting a Häfele hardware catalogue: the
+`pdftotext` branch asked poppler for its default encoding, which is Latin-1, and
+decoded the result as UTF-8 with errors="replace".
+
+Those last two properties are the justification for the two declared patches in
+`test_upstream_manifest.PATCHED_FILES`. The regression tests below pin the
+*unpatched* upstream lines as real failures, so neither patch can be quietly
+reverted during an upstream update.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "tools" / "codex-skills" / "book-to-skill"
@@ -122,6 +129,35 @@ def test_thai_metadata_survives_a_non_utf8_locale(tmp_path: Path) -> None:
     assert "คู่มือ-ตัวอย่าง.md".encode("utf-8") in raw
     metadata = json.loads(raw.decode("utf-8"))
     assert metadata["filename"] == "คู่มือ-ตัวอย่าง.md"
+
+
+@pytest.mark.skipif(shutil.which("pdftotext") is None, reason="pdftotext is not on PATH")
+def test_pdftotext_path_preserves_non_ascii_characters(tmp_path: Path) -> None:
+    """The second declared patch, expressed as a failing-without-it test.
+
+    `pdftotext` writes Latin-1 unless told otherwise, while the caller decodes
+    its stdout as UTF-8 with errors="replace". Every byte outside ASCII therefore
+    arrives as U+FFFD: a Häfele hardware catalogue loses the vendor's own name
+    and every Ø in front of a drill-hole diameter, and a Thai document loses all
+    of its text — silently, with exit code 0 and a full-looking `full_text.txt`.
+
+    The fixture is a 699-byte WinAnsi PDF, so the failure needs no third-party
+    document to reproduce.
+    """
+    source = tmp_path / "vendor sample.pdf"
+    source.write_bytes((FIXTURES / "non-ascii-winansi.pdf").read_bytes())
+
+    workdir = tmp_path / "work pdf"
+    result = run_extract(source, workdir)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    text, metadata = extracted(workdir)
+    assert "pdftotext" in metadata["extraction_method"], (
+        "this test only means something when the pdftotext path is the one exercised"
+    )
+    assert "�" not in text
+    for expected in ("Häfele", "Minifix®", "Ø 15 mm", "größer"):
+        assert expected in text
 
 
 def test_dependency_check_reports_every_format_without_installing() -> None:

@@ -1,0 +1,4 @@
+# non-ascii-winansi.pdf carries WinAnsi bytes on purpose: it is the fixture that
+# reproduces pdftotext's Latin-1 default output. Any end-of-line rewriting would
+# corrupt the stream and shift the xref offsets, so the file is frozen as binary.
+*.pdf -text
