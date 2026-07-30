@@ -1,0 +1,25 @@
+# Registry data and release artifacts are byte-exact by contract.
+#
+# Every release payload is hashed and its SHA-256 is published in the manifest,
+# and `coverage-snapshot.json` is a committed measurement whose digest must be
+# reproducible by anyone who clones this repository. Git for Windows ships with
+# `core.autocrlf=true` in its system config, which rewrites LF to CRLF on
+# checkout — that would change the byte length and the digest of these files on
+# a fresh clone while leaving them untouched here, so a reader could not confirm
+# a published digest against the file they received.
+#
+# Marking these paths as not-text disables all end-of-line conversion for them,
+# in both directions, regardless of the cloner's `core.autocrlf` setting.
+#
+# Scope is deliberately this directory only. The wider repository already holds
+# files that Git has converted to CRLF in working trees, and they are documents
+# and workflows where the conversion is harmless; changing their treatment now
+# would produce a large diff unrelated to registry integrity.
+#
+# The reader itself is end-of-line independent — `coverage.discover_registry_root`
+# produces the same release payload from a CRLF root as from an LF root, verified
+# in review — so this file protects the byte identity of the committed artifact,
+# not the correctness of the release it describes.
+
+*.jsonl -text
+*.json  -text
