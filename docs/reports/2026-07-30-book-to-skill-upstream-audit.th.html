@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>รายงาน Audit ต้นทาง Book-to-Skill — Commit ที่ตรึงไว้ c6bc1b79</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>รายงาน Audit ต้นทาง Book-to-Skill — Commit ที่ตรึงไว้ <code>c6bc1b79</code></h1>
+<p><strong>ฉบับภาษา:</strong> ไทย <strong>วันที่ audit:</strong> 30 กรกฎาคม 2026 เขตเวลา Asia/Bangkok (UTC+7) <strong>แบบออกแบบที่กำกับ:</strong> <a href="../superpowers/specs/2026-07-30-book-to-skill-codex-windows-design.th.html"><code>docs/superpowers/specs/2026-07-30-book-to-skill-codex-windows-design.th.md</code></a> <strong>แผน implementation:</strong> <a href="../superpowers/plans/2026-07-30-book-to-skill-codex-windows-implementation.th.html"><code>docs/superpowers/plans/2026-07-30-book-to-skill-codex-windows-implementation.th.md</code></a> <strong>รายงานคู่กัน:</strong> <a href="2026-07-30-book-to-skill-codex-windows-implementation.th.html"><code>2026-07-30-book-to-skill-codex-windows-implementation.th.md</code></a> <strong>ขอบเขต:</strong> 19 upstream runtime paths ที่ vendor เข้า <code>tools/codex-skills/book-to-skill/</code> ใน parent governance root และ personal deployment ที่ <code>C:\Users\thai3\.codex\skills\book-to-skill</code></p>
+<blockquote><p><strong>กฎเรื่อง root:</strong> ทุกข้อความในรายงานนี้ใช้กับ parent governance root <code>C:\Users\thai3\determined-williams (2)</code> และ personal Codex skills directory ของผู้ใช้ ส่วน nested product repository <code>determined-williams\</code> ทั้งไม่ถูกอ่านเพื่อ audit นี้และไม่ถูกเขียนโดย audit นี้</p></blockquote>
+<hr>
+<h2>1. เหตุผลที่ต้องมี audit นี้</h2>
+<p>Converter ถูกติดตั้งลง personal Codex skills directory ก่อนที่ governed source, test หรือ byte comparison จะเกิดขึ้นใน repository ดังนั้นการติดตั้งนั้นทำงานอยู่บนคำกล่าวอ้างที่ยังไม่ได้ตรวจ คือคำกล่าวอ้างว่า byte ที่ใช้งานอยู่คือ byte ของ commit ที่ design ตรึงไว้ audit นี้ปิดคำกล่าวอ้างนั้นด้วยการ refetch commit ที่ตรึงไว้ลง repository แยก แล้วเปรียบเทียบ governed byte ทุกไฟล์</p>
+<h2>2. อัตลักษณ์ของต้นทางที่ตรึงไว้</h2>
+<div class="tablewrap"><table><thead><tr><th>หัวข้อ</th><th>ค่า</th></tr></thead><tbody>
+<tr><td>Repository</td><td><code>https://github.com/virgiliojr94/book-to-skill</code></td></tr>
+<tr><td>Commit</td><td><code>c6bc1b7927822e563aae6212c07670f5a3d95ea7</code></td></tr>
+<tr><td>หัวเรื่อง commit</td><td><code>ci: bump the github-actions group with 2 updates (#80)</code></td></tr>
+<tr><td>ผู้เขียน / วันที่ commit</td><td><code>dependabot[bot]</code> — จันทร์ 27 ก.ค. 2026 18:42:26 -0400</td></tr>
+<tr><td>License</td><td>MIT (<code>LICENSE.md</code>, sha256 <code>be9b04bc…</code>)</td></tr>
+<tr><td>วิธี fetch</td><td><code>git fetch --depth 1 origin &lt;commit&gt;</code> ลง repository ชั่วคราวที่อยู่นอก root ทั้งสอง</td></tr>
+</tbody></table></div>
+<p>Commit ถูก resolve ด้วยอัตลักษณ์ ไม่ใช่ด้วย branch: <code>git rev-parse FETCH_HEAD</code> คืนค่า 40 ตัวอักษรเดียวกับที่ design ตรึงไว้ จึงยืนยันได้ว่า moving reference ไม่ได้เข้ามามีส่วนใน audit นี้</p>
+<h2>3. การเลือก path</h2>
+<p>Upstream ที่ commit นั้นมี tracked paths 49 รายการ ในจำนวนนั้น 19 รายการคือ governed runtime และ license byte ส่วนที่เหลือเป็นองค์ประกอบระดับโปรเจกต์ที่ personal skill installation ไม่มีเหตุผลต้องพามาด้วย</p>
+<div class="tablewrap"><table><thead><tr><th>กลุ่ม</th><th>Paths</th><th>ผลตัดสิน</th></tr></thead><tbody>
+<tr><td>Extraction runtime</td><td><code>book_to_skill/</code> (17 ไฟล์ รวม <code>parsers/</code>)</td><td>vendor</td></tr>
+<tr><td>Entrypoint</td><td><code>scripts/extract.py</code></td><td>vendor</td></tr>
+<tr><td>Advisory scanner</td><td><code>tools/scan_generated_skill.py</code></td><td>vendor</td></tr>
+<tr><td>License</td><td><code>LICENSE.md</code></td><td>vendor</td></tr>
+<tr><td>Instruction ของ upstream</td><td><code>SKILL.md</code></td><td>แทนด้วย Codex overlay</td></tr>
+<tr><td>องค์ประกอบระดับโปรเจกต์</td><td><code>README.md</code>, <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code>, <code>SECURITY.md</code>, <code>BACKERS.md</code>, <code>mkdocs.yml</code>, <code>pyproject.toml</code>, <code>docs/</code>, <code>.github/</code></td><td>ตัดออก</td></tr>
+<tr><td>Test suite ของ upstream</td><td><code>tests/</code> (4 ไฟล์)</td><td>ตัดออก — repository นี้ใช้ suite ของตัวเองใต้ <code>tests/codex_skills/</code></td></tr>
+<tr><td>Tools อื่น</td><td><code>tools/discovery_tax.py</code>, <code>tools/validate_skill.py</code></td><td>ตัดออก — ใช้ Codex validator แทน</td></tr>
+<tr><td>Build residue</td><td><code>scripts/__pycache__/extract.cpython-313.pyc</code></td><td>ตัดออก — compiled artifact ไม่ควรอยู่ใน tree ที่ audit แล้ว</td></tr>
+<tr><td>Banner asset</td><td><code>scripts/banner.txt</code></td><td>ตัดออก — ดู §6.4</td></tr>
+</tbody></table></div>
+<h2>4. ผลการเปรียบเทียบ byte</h2>
+<p>ทุก governed path ถูก hash จาก blob ของ commit ที่ตรึงไว้ (<code>git show FETCH_HEAD:&lt;path&gt;</code>) และจาก installed tree จากนั้น hash จาก vendored tree อีกครั้งหลัง copy</p>
+<p><strong>18 จาก 19 governed paths มี byte ตรงกับ commit ที่ตรึงไว้ทุกไบต์</strong> เหลือ 1 path ที่มีความต่างซึ่งประกาศไว้แล้ว 1 จุด</p>
+<div class="tablewrap"><table><thead><tr><th>Path</th><th>SHA-256 (commit ที่ตรึงไว้)</th><th>ผล</th></tr></thead><tbody>
+<tr><td><code>LICENSE.md</code></td><td><code>be9b04bccfb4bdab…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/__init__.py</code></td><td><code>9d18b99b2c417557…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/__main__.py</code></td><td><code>2207592e7bad6433…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/cli.py</code></td><td><code>936285510c1dfa25…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/config.py</code></td><td><code>99ff3fd1cb86d77b…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/dependencies.py</code></td><td><code>119b3c9635d8b83a…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/exceptions.py</code></td><td><code>bf9417993e577cea…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/sanitize.py</code></td><td><code>d26f20c01af1b6e8…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/utils.py</code></td><td><code>4b9236d8c074510e…</code></td><td><strong>patch ที่ประกาศไว้</strong> — sha256 ในเครื่อง <code>368ef866089300bd…</code></td></tr>
+<tr><td><code>book_to_skill/parsers/__init__.py</code></td><td><code>a8f740712820f872…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/parsers/calibre.py</code></td><td><code>d9e23513e9dadc78…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/parsers/docx.py</code></td><td><code>15741ae148c50a01…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/parsers/epub.py</code></td><td><code>d0a2d1e3aae5b8f2…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/parsers/html.py</code></td><td><code>86ebb15647b2b8ae…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/parsers/pdf.py</code></td><td><code>857e90f9d20b1da1…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/parsers/rtf.py</code></td><td><code>12837a5ded9bf0c7…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>book_to_skill/parsers/text.py</code></td><td><code>d355f499d3184f2b…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>scripts/extract.py</code></td><td><code>541ed846d5aa5d5f…</code></td><td>ตรงกัน</td></tr>
+<tr><td><code>tools/scan_generated_skill.py</code></td><td><code>1c075d1de29e4c15…</code></td><td>ตรงกัน</td></tr>
+</tbody></table></div>
+<p>Digest เต็มของทั้ง 19 paths บันทึกไว้ใน <a href="../../tests/codex_skills/test_upstream_manifest.py"><code>tests/codex_skills/test_upstream_manifest.py</code></a> ซึ่งจะ fail เมื่อ upstream byte เปลี่ยนโดยยังไม่ประกาศ เมื่อมีไฟล์ที่ยังไม่ประกาศอยู่ใน skill tree และเมื่อมี symbolic link อยู่ที่ใดก็ตามใน tree นั้น</p>
+<h2>5. Patch จุดเดียวที่ประกาศไว้</h2>
+<h3>5.1 ตัวการเปลี่ยนแปลง</h3>
+<pre><code class="language-diff">--- book_to_skill/utils.py   (commit ที่ตรึงไว้ c6bc1b79)
++++ book_to_skill/utils.py   (vendored + installed)
+@@ -683,7 +683,10 @@
+-    OUTPUT_META.write_text(json.dumps(metadata, indent=2, ensure_ascii=False))
++    OUTPUT_META.write_text(
++        json.dumps(metadata, indent=2, ensure_ascii=False),
++        encoding="utf-8",
++    )</code></pre>
+<h3>5.2 เหตุผลที่ byte เดิมใช้งานบนเครื่องนี้ไม่ได้</h3>
+<p><code>metadata.json</code> ฝังชื่อไฟล์ต้นทางตามตัวอักษรจริงและ serialize ด้วย <code>ensure_ascii=False</code> เมื่อไม่ระบุ encoding <code>Path.write_text</code> จะ encode ด้วย locale codec ของ process ซึ่งบนเครื่องนี้คือ cp1252:</p>
+<pre><code>$ python -c "import sys,locale; print(locale.getpreferredencoding(False), sys.flags.utf8_mode)"
+cp1252 0</code></pre>
+<p>การเขียน text ที่อยู่เหนือขึ้นไปหนึ่งบรรทัด (<code>OUTPUT_TEXT.write_text(consolidated_text, encoding="utf-8")</code>) มี argument นี้อยู่แล้วใน upstream ดังนั้นความต่างนี้จึงเป็นการเรียกที่ไม่สอดคล้องกันหนึ่งจุด ไม่ใช่ความต่างเชิงออกแบบ</p>
+<h3>5.3 การทำซ้ำที่บันทึกไว้ ไม่ใช่แค่กล่าวอ้าง</h3>
+<p>Byte ของ commit ที่ตรึงไว้ถูกวางกลับทับไฟล์ที่ vendor แล้วรัน regression test ใหม่ ผลคือ extraction ทำงานจบ แล้ว process ตายตอนเขียน metadata:</p>
+<pre><code>$ python -m pytest tests/codex_skills/test_extraction_smoke.py::test_thai_metadata_survives_a_non_utf8_locale -v
+tests/codex_skills/test_extraction_smoke.py::test_thai_metadata_survives_a_non_utf8_locale FAILED [100%]
+
+  File "...\tools\codex-skills\book-to-skill\book_to_skill\utils.py", line 686, in main
+    OUTPUT_META.write_text(json.dumps(metadata, indent=2, ensure_ascii=False))
+  File "...\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 205-210: character maps to &lt;undefined&gt;
+
+returncode=1
+============================== 1 failed in 0.41s ==============================</code></pre>
+<p>หลังจากนั้นไฟล์ที่ patch แล้วถูกวางกลับและตรวจ digest ซ้ำ (<code>368ef866089300bd…</code>) รูปแบบความล้มเหลวสำคัญเท่ากับตัวแก้: extraction สำเร็จ ผู้ใช้เห็น output ความคืบหน้า แล้ว run ตายที่การเขียนไฟล์สุดท้าย ดังนั้นผู้เรียกที่ตรวจเฉพาะ <code>full_text.txt</code> จะสรุปว่าการแปลงสำเร็จ</p>
+<h3>5.4 ข้อผูกพันถาวร</h3>
+<p>Patch นี้ถูกบันทึกใน 3 ที่ซึ่งการอัปเดต upstream ในอนาคตต้องผ่าน: <code>PATCHED_FILES</code> ใน manifest test (พร้อม digest ทั้งสองฝั่ง), regression test ที่อ้างถึงข้างต้น และรายการ <code>localModifications</code> ใน provenance lock หาก upstream commit ภายหลังแก้การเรียกจุดเดียวกันนี้ <code>test_every_patch_is_declared_and_still_differs_from_upstream</code> จะ fail และบังคับให้ถอด patch ออก แทนที่จะแบกมันต่อไปแบบเงียบ ๆ</p>
+<h2>6. บัญชีความสามารถของ runtime ที่ vendor มา</h2>
+<p>ไฟล์ <code>.py</code> ที่ governed ทุกไฟล์ถูกอ่านเต็ม (2,121 บรรทัด ใน 19 paths) ความสามารถด้านล่างคือสิ่งที่ audit พบ และทุกข้อเป็นสิ่งที่คาดหมายได้สำหรับ document converter ที่ต้องเรียก extractor ภายนอกและเขียน skill directory</p>
+<h3>6.1 การใช้ subprocess — 4 จุดเรียก</h3>
+<div class="tablewrap"><table><thead><tr><th>จุด</th><th>คำสั่ง</th><th>หมายเหตุ</th></tr></thead><tbody>
+<tr><td><code>book_to_skill/dependencies.py:89</code></td><td><code>sys.executable -m pip install …</code></td><td>คุมด้วย <code>BOOK_SKILL_INSTALL_MISSING</code> (ค่าเริ่มต้น <code>ask</code>); Codex workflow ตรึง <code>--install-missing no</code></td></tr>
+<tr><td><code>book_to_skill/parsers/pdf.py:14,87</code></td><td><code>pdftotext</code> (poppler)</td><td>argument array ไม่ผ่าน shell</td></tr>
+<tr><td><code>book_to_skill/parsers/calibre.py:16</code></td><td><code>ebook-convert</code> (Calibre)</td><td>argument array ไม่ผ่าน shell</td></tr>
+<tr><td><code>scripts/install_generated_skill.py:97</code></td><td><code>sys.executable tools/scan_generated_skill.py &lt;snapshot&gt;</code></td><td>timeout 30 วินาที, <code>check=False</code></td></tr>
+</tbody></table></div>
+<p>จุดเรียกทั้งหมดสร้าง argument array และการค้นหา <code>shell=True</code> บน governed paths ได้ผล 0 รายการ ดังนั้นชื่อไฟล์เอกสารจึงกลายเป็น shell syntax ไม่ได้</p>
+<h3>6.2 การเขียนไฟล์</h3>
+<div class="tablewrap"><table><thead><tr><th>จุด</th><th>เป้าหมาย</th></tr></thead><tbody>
+<tr><td><code>book_to_skill/config.py</code></td><td>work directory จาก <code>BOOK_SKILL_WORKDIR</code> หรือ system temporary directory เป็นค่าสำรอง</td></tr>
+<tr><td><code>book_to_skill/utils.py</code></td><td><code>full_text.txt</code> และ <code>metadata.json</code> ภายใน work directory นั้น</td></tr>
+<tr><td><code>scripts/install_generated_skill.py</code></td><td>snapshot ชื่อไม่ซ้ำภายใน skills root ที่เลือก แล้ว <code>replace</code> แบบ atomic ไปที่ target โดยย้าย tree เดิมไปเก็บใต้ <code>.backups/</code></td></tr>
+</tbody></table></div>
+<p>ระยะการทำลายของ installer ถูกจำกัดไว้ที่ snapshot ที่ตัวมันสร้างเอง: <code>shutil.rmtree</code> ถูกเรียกกับ path นั้นเท่านั้น อยู่ภายใน failure handler และจะ rollback backup กลับเมื่อ target ลงเอยว่างเปล่า</p>
+<h3>6.3 ผลการค้นหาความสามารถที่จะเปลี่ยนโปรไฟล์ความเสี่ยง</h3>
+<p>การค้นหาความสามารถบน 19 governed paths ได้จำนวนดังนี้</p>
+<div class="tablewrap"><table><thead><tr><th>ความสามารถที่ค้นหา</th><th>Pattern</th><th>จำนวนที่พบ</th></tr></thead><tbody>
+<tr><td>Network egress</td><td><code>requests</code>, <code>urllib</code>, <code>httpx</code>, <code>socket</code></td><td>0</td></tr>
+<tr><td>Dynamic evaluation</td><td><code>eval(</code>, <code>exec(</code>, <code>compile(</code>, <code>__import__</code></td><td>0</td></tr>
+<tr><td>Deserialization</td><td><code>pickle</code>, <code>yaml.load</code></td><td>0</td></tr>
+<tr><td>การเข้าถึง credential หรือ key</td><td>การอ่าน <code>os.environ</code> นอกเหนือจากตัวแปร <code>BOOK_SKILL_*</code> สองตัว</td><td>0</td></tr>
+<tr><td>การตั้ง permission หรือสร้าง link</td><td><code>chmod</code>, <code>symlink(</code></td><td>0</td></tr>
+</tbody></table></div>
+<p>ความสามารถเดียวใน tree ที่ใกล้เคียงกับเครือข่ายคือการเรียก pip ใน §6.1 ซึ่งจะเข้าถึง package index หลังได้รับอนุมัติชัดเจนเท่านั้น และถูกปิดด้วย flag ค่าเริ่มต้นของ workflow</p>
+<h3>6.4 Asset ของ upstream หนึ่งรายการที่ตัดออกอย่างตั้งใจ</h3>
+<p><code>scripts/banner.txt</code> บรรจุงาน art สำหรับ attribution ของ upstream ที่ <code>print_banner()</code> เขียนไปที่ stderr ไฟล์นี้ถูกตัดออกจาก vendored tree ส่วน <code>print_banner()</code> ห่อการอ่านไว้ใน <code>try/except Exception</code> แล้วทำงานต่อ ดังนั้นการตัดออกมีต้นทุนเท่ากับ banner เชิงตกแต่งหนึ่งชิ้นเท่านั้น การให้เครดิตยังคงอยู่ผ่าน <code>LICENSE.md</code> ที่ vendor มาโดยไม่แก้ไข และผ่านรายงานฉบับนี้</p>
+<h2>7. เมทริกซ์ dependency ของ extractor บนเครื่องนี้</h2>
+<p>บันทึกจาก <code>scripts/extract.py --check</code> exit code 0:</p>
+<pre><code>  PDF (text-heavy)
+      ✓ python: pypdf
+      ✗ python: pdfminer.six
+      ✓ system: pdftotext (poppler-utils)
+      → ready — any one of pdftotext / pypdf / pdfminer is enough
+  PDF (technical: tables, code, formulas)
+      ✗ python: docling
+      → fallback available (install for best quality)
+  EPUB      ✗ ebooklib, ✗ beautifulsoup4  → stdlib zipfile fallback
+  DOCX      ✗ python-docx                 → stdlib ZIP/XML fallback
+  HTML      ✗ beautifulsoup4              → stdlib html.parser fallback
+  RTF       ✗ striprtf                    → regex cleanup fallback
+  MOBI / AZW / AZW3
+      ✗ system: ebook-convert (Calibre)
+      → MISSING — required, no fallback</code></pre>
+<div class="tablewrap"><table><thead><tr><th>Format</th><th>สถานะ ณ 30 กรกฎาคม 2026</th></tr></thead><tbody>
+<tr><td>PDF (text)</td><td>พร้อมใช้ — ติดตั้ง <code>pdftotext</code> และ <code>pypdf</code> แล้วทั้งคู่</td></tr>
+<tr><td>PDF (technical)</td><td>ได้เฉพาะ fallback — Docling ยังไม่ติดตั้ง ดังนั้น <code>--mode technical</code> จะถอยไปใช้สาย text และเนื้อหาที่อ่อนไหวต่อ layout จะเสียโครงสร้าง</td></tr>
+<tr><td>EPUB, DOCX, HTML, RTF</td><td>ได้เฉพาะ fallback — stdlib parser รับงานไปก่อนจนกว่าจะติดตั้ง optional package</td></tr>
+<tr><td>Markdown, TXT, RST, AsciiDoc</td><td>พร้อมใช้ — stdlib</td></tr>
+<tr><td>MOBI, AZW, AZW3</td><td>ยังใช้งานบนเครื่องนี้ไม่ได้ — <code>--check</code> รายงาน Calibre <code>ebook-convert</code> เป็น <code>MISSING — required, no fallback</code> (ดู output ใน §7)</td></tr>
+</tbody></table></div>
+<p>ระหว่าง audit นี้ยังไม่มีการติดตั้ง package ใด</p>
+<h2>8. บันทึกความเสี่ยง</h2>
+<div class="tablewrap"><table><thead><tr><th>ประเภท</th><th>การประเมิน</th></tr></thead><tbody>
+<tr><td>การรัน process ในเครื่อง</td><td>คาดหมายได้ 4 จุดเรียก ทุกจุดเป็น argument array และไม่ผ่าน shell</td></tr>
+<tr><td>การเปลี่ยนแปลง filesystem</td><td>คาดหมายได้และมีขอบเขต การเขียนลงที่ work directory, staging snapshot หรือ skill target ที่อนุมัติชัดเจนพร้อม backup ที่กู้คืนได้</td></tr>
+<tr><td>การติดตั้ง optional dependency</td><td>คาดหมายได้ และมีประตูสองชั้น: ค่าเริ่มต้น <code>ask</code> ของ environment variable และ <code>--install-missing no</code> ของ workflow</td></tr>
+<tr><td>การเปิดรับของ document parser</td><td>เป็นธรรมชาติของงาน parser ประมวลผล input ที่ไม่น่าเชื่อถือ เอกสารที่ผิดรูปทำให้ parser พังได้ ซึ่ง extractor จะรายงานเป็น source ที่ถูกข้าม</td></tr>
+<tr><td>Injection จากเนื้อหาที่ generate</td><td>ลดความเสี่ยงได้ แต่ยังไม่หมด scanner จับรูปแบบ injection ที่รู้จัก การเรียบเรียงแบบใหม่ผ่านมันไปได้ ด้วยเหตุนี้การติดตั้งจึงยังอยู่หลังการอนุมัติของมนุษย์</td></tr>
+<tr><td>Supply-chain drift</td><td>คุมด้วย manifest test และ provenance lock การอัปเดต upstream ต้องทำ audit ใหม่ ไม่ใช่ merge</td></tr>
+</tbody></table></div>
+<h2>9. สิ่งที่ audit นี้ยังไม่ได้พิสูจน์</h2>
+<ul>
+<li>ไม่พูดถึง upstream commit อื่นนอกจาก <code>c6bc1b79</code> และไม่พูดถึง release ในอนาคตของโปรเจกต์</li>
+<li>ไม่รับรอง <em>พฤติกรรม</em> ของ parser กับเอกสารนอกเหนือจาก fixture Markdown สองไฟล์ที่ test suite ใช้ ส่วนเส้นทาง PDF, EPUB, DOCX, RTF และ MOBI ถูกอ่านในฐานะ source ไม่ได้ถูกรันกับไฟล์จริงของ format เหล่านั้น</li>
+<li>ไม่ประเมินคุณภาพหรือความเที่ยงตรงของ skill ที่ generate ออกมา ซึ่งขึ้นกับโมเดลที่ทำสรุป ไม่ใช่ขึ้นกับ byte ชุดนี้</li>
+<li>ไม่ครอบคลุม nested product repository เครื่องอื่น หรือการเผยแพร่ generated skill ในช่องทางใด</li>
+</ul>
+</main></body>
+</html>

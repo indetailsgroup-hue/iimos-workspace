@@ -1,0 +1,4 @@
+interface:
+  display_name: "Book to Skill"
+  short_description: "Convert documents into reusable Codex skills"
+  default_prompt: "Use $book-to-skill to convert my documents into a staged, scanned, and validated private Codex skill."
