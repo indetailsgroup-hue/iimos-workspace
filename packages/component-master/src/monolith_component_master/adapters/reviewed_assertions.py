@@ -102,7 +102,9 @@ _REASON_ORDER = (
     "SOURCE_CONTEXT_MISSING",
     "RIGHTS_UNCERTAIN",
     "UNITS_AMBIGUOUS",
+    "DIMENSION_SOURCE_CONFLICT",
     "UNIT_CONFLICT",
+    "IDENTITY_SOURCE_CONFLICT",
     "OEM_DISTRIBUTOR_IDENTITY_CONFLICT",
     "PDF_CAD_GEOMETRY_CONFLICT",
     "REQUIRED_MATING_PART_MISSING",
@@ -236,6 +238,24 @@ class ReviewedAssertionAdapter:
             add_reason("UNITS_AMBIGUOUS", ambiguous_units)
 
         for field_assertions in _group_by_field(dimensional).values():
+            # Owner-ordered rule: for one dimensional field, any two sources
+            # whose converted magnitudes differ contradict each other and must
+            # not promote silently. Exact decimal equality with no tolerance --
+            # a "close enough" threshold would be an engineering number with no
+            # provenance, which is the failure mode this registry exists to
+            # prevent. Ambiguous units are excluded: they have no comparable
+            # magnitude and already raise UNITS_AMBIGUOUS.
+            measured = tuple(
+                (assertion, _dimension_parts(assertion)[1])
+                for assertion in field_assertions
+                if _dimension_parts(assertion)[0] is not None
+            )
+            if len({magnitude for _assertion, magnitude in measured}) > 1:
+                add_reason(
+                    "DIMENSION_SOURCE_CONFLICT",
+                    (assertion.assertion_id for assertion, _ in measured),
+                )
+
             metric = [
                 assertion
                 for assertion in field_assertions
@@ -266,6 +286,28 @@ class ReviewedAssertionAdapter:
             if assertion.field_path.startswith("identity.")
         )
         for field_assertions in _group_by_field(identity_assertions).values():
+            # Same owner-ordered rule for identity: two sources asserting
+            # different normalized scalars for one identity field contradict
+            # each other, whatever their authorities. Compared without regard
+            # to source context, because the contradiction exists regardless of
+            # who published it.
+            if (
+                len(
+                    {
+                        _normalized_scalar(assertion.value)
+                        for assertion in field_assertions
+                    }
+                )
+                > 1
+            ):
+                add_reason(
+                    "IDENTITY_SOURCE_CONFLICT",
+                    (
+                        assertion.assertion_id
+                        for assertion in field_assertions
+                    ),
+                )
+
             oem = [
                 assertion
                 for assertion in field_assertions
@@ -303,10 +345,13 @@ class ReviewedAssertionAdapter:
                     ),
                 )
 
+        # Both dimensional prefixes, not geometry.* alone: a PDF and a CAD
+        # source disagreeing under dimensions.* is the same disease, and every
+        # other rule in this module already treats the two prefixes alike.
         geometry_assertions = tuple(
             assertion
             for assertion in candidate.assertions
-            if assertion.field_path.startswith("geometry.")
+            if assertion.field_path.startswith(_DIMENSIONAL_PREFIXES)
             and _dimension_parts(assertion)[0] is not None
         )
         for field_assertions in _group_by_field(geometry_assertions).values():

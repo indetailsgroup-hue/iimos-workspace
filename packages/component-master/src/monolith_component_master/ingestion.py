@@ -26,7 +26,14 @@ _QUARANTINE_OWNER_BY_REASON = {
     "SOURCE_CONTEXT_MISSING": "OEM Evidence Curator",
     "RIGHTS_UNCERTAIN": "Rights and Licensing Reviewer",
     "UNITS_AMBIGUOUS": "Geometry and Units Reviewer",
+    # Two sources stating different values for one field. Owner-ordered scope
+    # addition: a contradiction between sources must never promote silently.
+    # These are general contradiction codes; UNIT_CONFLICT,
+    # PDF_CAD_GEOMETRY_CONFLICT and OEM_DISTRIBUTOR_IDENTITY_CONFLICT remain
+    # narrower refinements naming which pairing disagreed.
+    "DIMENSION_SOURCE_CONFLICT": "Geometry and Units Reviewer",
     "UNIT_CONFLICT": "Geometry and Units Reviewer",
+    "IDENTITY_SOURCE_CONFLICT": "Identity and SKU Reviewer",
     "OEM_DISTRIBUTOR_IDENTITY_CONFLICT": "Identity and SKU Reviewer",
     "PDF_CAD_GEOMETRY_CONFLICT": "Geometry and Units Reviewer",
     "REQUIRED_MATING_PART_MISSING": "BOM and Compatibility Reviewer",

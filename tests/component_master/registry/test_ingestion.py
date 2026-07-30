@@ -42,7 +42,9 @@ OWNER_BY_REASON = {
     "SOURCE_CONTEXT_MISSING": "OEM Evidence Curator",
     "RIGHTS_UNCERTAIN": "Rights and Licensing Reviewer",
     "UNITS_AMBIGUOUS": "Geometry and Units Reviewer",
+    "DIMENSION_SOURCE_CONFLICT": "Geometry and Units Reviewer",
     "UNIT_CONFLICT": "Geometry and Units Reviewer",
+    "IDENTITY_SOURCE_CONFLICT": "Identity and SKU Reviewer",
     "OEM_DISTRIBUTOR_IDENTITY_CONFLICT": "Identity and SKU Reviewer",
     "PDF_CAD_GEOMETRY_CONFLICT": "Geometry and Units Reviewer",
     "REQUIRED_MATING_PART_MISSING": "BOM and Compatibility Reviewer",
@@ -947,7 +949,7 @@ class RecordSubstitutionRefusalTests(unittest.TestCase):
         ).ingest(candidate)
 
         self.assertEqual(
-            ("PDF_CAD_GEOMETRY_CONFLICT",),
+            ("DIMENSION_SOURCE_CONFLICT", "PDF_CAD_GEOMETRY_CONFLICT"),
             reason_codes(result),
         )
 
@@ -1142,7 +1144,10 @@ class UnitConflictTests(unittest.TestCase):
         result = adapter.ingest(candidate)
 
         self.assertEqual((), result.promoted)
-        self.assertEqual(("UNIT_CONFLICT",), reason_codes(result))
+        self.assertEqual(
+            ("DIMENSION_SOURCE_CONFLICT", "UNIT_CONFLICT"),
+            reason_codes(result),
+        )
         self.assertEqual(
             (
                 "assertion:demo:dimension:in",
@@ -1260,7 +1265,7 @@ class AuthorityAndDocumentConflictTests(unittest.TestCase):
         ).ingest(candidate)
 
         self.assertEqual(
-            ("OEM_DISTRIBUTOR_IDENTITY_CONFLICT",),
+            ("IDENTITY_SOURCE_CONFLICT", "OEM_DISTRIBUTOR_IDENTITY_CONFLICT"),
             reason_codes(result),
         )
         self.assertEqual(
@@ -1331,7 +1336,7 @@ class AuthorityAndDocumentConflictTests(unittest.TestCase):
         ).ingest(candidate)
 
         self.assertEqual(
-            ("PDF_CAD_GEOMETRY_CONFLICT",),
+            ("DIMENSION_SOURCE_CONFLICT", "PDF_CAD_GEOMETRY_CONFLICT"),
             reason_codes(result),
         )
         self.assertEqual(
@@ -1341,6 +1346,294 @@ class AuthorityAndDocumentConflictTests(unittest.TestCase):
             ),
             result.quarantined[0].evidence_ids,
         )
+
+
+class SourceContradictionTests(unittest.TestCase):
+    """Owner ruling: two sources contradicting each other is never silent."""
+
+    @staticmethod
+    def dimensional_candidate(
+        first: object,
+        second: object,
+        *,
+        field_path: str = "geometry.width",
+        first_source: str = "source:demo:oem:pdf",
+        second_source: str = "source:demo:oem:pdf2",
+    ) -> CandidateRecord:
+        return make_candidate(
+            (
+                make_assertion(
+                    "assertion:demo:dimension:first",
+                    field_path=field_path,
+                    value=first,
+                    source_id=first_source,
+                ),
+                make_assertion(
+                    "assertion:demo:dimension:second",
+                    field_path=field_path,
+                    value=second,
+                    source_id=second_source,
+                ),
+            )
+        )
+
+    @staticmethod
+    def two_pdf_adapter() -> ReviewedAssertionAdapter:
+        return ReviewedAssertionAdapter(
+            (
+                make_context(
+                    "source:demo:oem:pdf",
+                    document_kind=DocumentKind.PDF.value,
+                ),
+                make_context(
+                    "source:demo:oem:pdf2",
+                    document_kind=DocumentKind.PDF.value,
+                ),
+            )
+        )
+
+    def test_same_unit_dimensional_contradiction_quarantines(self) -> None:
+        candidate = self.dimensional_candidate(
+            {"value": 10, "unit": "mm"},
+            {"value": 999, "unit": "mm"},
+        )
+
+        result = self.two_pdf_adapter().ingest(candidate)
+
+        self.assertEqual((), result.promoted)
+        self.assertIn("DIMENSION_SOURCE_CONFLICT", reason_codes(result))
+        record = next(
+            item
+            for item in result.quarantined
+            if item.reason_code == "DIMENSION_SOURCE_CONFLICT"
+        )
+        self.assertEqual(
+            (
+                "assertion:demo:dimension:first",
+                "assertion:demo:dimension:second",
+            ),
+            record.evidence_ids,
+        )
+        self.assertEqual("Geometry and Units Reviewer", record.owner_role)
+
+    def test_agreeing_same_unit_sources_still_promote(self) -> None:
+        for first, second in (
+            ({"value": 10, "unit": "mm"}, {"value": 10, "unit": "mm"}),
+            ({"value": 10, "unit": "mm"}, {"value": 10.0, "unit": "mm"}),
+            ({"value": 25.4, "unit": "mm"}, {"value": 1, "unit": "in"}),
+            ({"value": 2.54, "unit": "mm"}, {"value": 0.1, "unit": "in"}),
+        ):
+            with self.subTest(first=first, second=second):
+                candidate = self.dimensional_candidate(first, second)
+
+                result = self.two_pdf_adapter().ingest(candidate)
+
+                self.assertEqual((candidate,), result.promoted)
+                self.assertEqual((), result.quarantined)
+
+    def test_no_tolerance_is_applied_to_dimensional_equality(self) -> None:
+        candidate = self.dimensional_candidate(
+            {"value": 0.3, "unit": "mm"},
+            {"value": 0.30000000000000004, "unit": "mm"},
+        )
+
+        result = self.two_pdf_adapter().ingest(candidate)
+
+        self.assertEqual((), result.promoted)
+        self.assertIn("DIMENSION_SOURCE_CONFLICT", reason_codes(result))
+
+    def test_pdf_cad_contradiction_is_detected_under_dimensions_prefix(
+        self,
+    ) -> None:
+        candidate = self.dimensional_candidate(
+            {"value": 18, "unit": "mm"},
+            {"value": 19, "unit": "mm"},
+            field_path="dimensions.panel_thickness",
+            first_source="source:demo:oem:pdf",
+            second_source="source:demo:oem:cad",
+        )
+
+        result = ReviewedAssertionAdapter(
+            (
+                make_context(
+                    "source:demo:oem:pdf",
+                    document_kind=DocumentKind.PDF.value,
+                ),
+                make_context(
+                    "source:demo:oem:cad",
+                    document_kind=DocumentKind.CAD.value,
+                ),
+            )
+        ).ingest(candidate)
+
+        self.assertEqual((), result.promoted)
+        self.assertEqual(
+            ("DIMENSION_SOURCE_CONFLICT", "PDF_CAD_GEOMETRY_CONFLICT"),
+            reason_codes(result),
+        )
+
+    @staticmethod
+    def identity_candidate(
+        first_value: object,
+        second_value: object,
+        *,
+        first_source: str,
+        second_source: str,
+    ) -> CandidateRecord:
+        return make_candidate(
+            (
+                make_assertion(
+                    "assertion:demo:identity:first",
+                    value=first_value,
+                    source_id=first_source,
+                ),
+                make_assertion(
+                    "assertion:demo:identity:second",
+                    value=second_value,
+                    source_id=second_source,
+                ),
+            )
+        )
+
+    def test_oem_versus_other_identity_contradiction_quarantines(self) -> None:
+        candidate = self.identity_candidate(
+            "DEMO-001",
+            "DEMO-999",
+            first_source="source:demo:oem:web",
+            second_source="source:demo:other:web",
+        )
+
+        result = ReviewedAssertionAdapter(
+            (
+                make_context(),
+                make_context(
+                    "source:demo:other:web",
+                    authority=SourceAuthority.OTHER.value,
+                ),
+            )
+        ).ingest(candidate)
+
+        self.assertEqual((), result.promoted)
+        self.assertIn("IDENTITY_SOURCE_CONFLICT", reason_codes(result))
+        record = next(
+            item
+            for item in result.quarantined
+            if item.reason_code == "IDENTITY_SOURCE_CONFLICT"
+        )
+        self.assertEqual("Identity and SKU Reviewer", record.owner_role)
+        self.assertEqual(
+            (
+                "assertion:demo:identity:first",
+                "assertion:demo:identity:second",
+            ),
+            record.evidence_ids,
+        )
+
+    def test_same_authority_identity_contradiction_quarantines(self) -> None:
+        candidate = self.identity_candidate(
+            "DEMO-001",
+            "DEMO-999",
+            first_source="source:demo:oem:pdf",
+            second_source="source:demo:oem:pdf2",
+        )
+
+        result = self.two_pdf_adapter().ingest(candidate)
+
+        self.assertEqual((), result.promoted)
+        self.assertEqual(("IDENTITY_SOURCE_CONFLICT",), reason_codes(result))
+
+    def test_distributor_versus_other_identity_contradiction_quarantines(
+        self,
+    ) -> None:
+        candidate = self.identity_candidate(
+            "DEMO-001",
+            "DEMO-999",
+            first_source="source:demo:distributor:api",
+            second_source="source:demo:other:web",
+        )
+
+        result = ReviewedAssertionAdapter(
+            (
+                make_context(
+                    "source:demo:distributor:api",
+                    authority=SourceAuthority.AUTHORIZED_DISTRIBUTOR.value,
+                ),
+                make_context(
+                    "source:demo:other:web",
+                    authority=SourceAuthority.OTHER.value,
+                ),
+            )
+        ).ingest(candidate)
+
+        self.assertEqual((), result.promoted)
+        self.assertIn("IDENTITY_SOURCE_CONFLICT", reason_codes(result))
+
+    def test_agreeing_identity_sources_still_promote(self) -> None:
+        candidate = self.identity_candidate(
+            "DEMO-001",
+            "DEMO-001",
+            first_source="source:demo:oem:pdf",
+            second_source="source:demo:oem:pdf2",
+        )
+
+        result = self.two_pdf_adapter().ingest(candidate)
+
+        self.assertEqual((candidate,), result.promoted)
+
+    def test_different_identity_fields_are_never_compared(self) -> None:
+        candidate = make_candidate(
+            (
+                make_assertion(
+                    "assertion:demo:identity:sku",
+                    field_path="identity.exact_sku",
+                    value="DEMO-001",
+                    source_id="source:demo:oem:pdf",
+                ),
+                make_assertion(
+                    "assertion:demo:identity:finish",
+                    field_path="identity.finish_code",
+                    value="NI",
+                    source_id="source:demo:oem:pdf2",
+                ),
+            )
+        )
+
+        result = self.two_pdf_adapter().ingest(candidate)
+
+        self.assertEqual((candidate,), result.promoted)
+
+    def test_new_reason_codes_map_to_consistent_owner_roles(self) -> None:
+        for reason_code, owner_role in (
+            ("DIMENSION_SOURCE_CONFLICT", "Geometry and Units Reviewer"),
+            ("IDENTITY_SOURCE_CONFLICT", "Identity and SKU Reviewer"),
+        ):
+            with self.subTest(reason_code=reason_code):
+                record = QuarantineRecord(
+                    candidate_id=CANDIDATE_ID,
+                    reason_code=reason_code,
+                    evidence_ids=("assertion:demo:identity:sku",),
+                    owner_role=owner_role,
+                )
+                self.assertEqual(owner_role, record.owner_role)
+                with self.assertRaises(ValueError):
+                    QuarantineRecord(
+                        candidate_id=CANDIDATE_ID,
+                        reason_code=reason_code,
+                        evidence_ids=("assertion:demo:identity:sku",),
+                        owner_role="BOM and Compatibility Reviewer",
+                    )
+
+    def test_ambiguous_unit_assertions_are_not_compared_as_contradictions(
+        self,
+    ) -> None:
+        candidate = self.dimensional_candidate(
+            {"value": 10, "unit": "mm"},
+            {"value": 2.54, "unit": "cm"},
+        )
+
+        result = self.two_pdf_adapter().ingest(candidate)
+
+        self.assertEqual(("UNITS_AMBIGUOUS",), reason_codes(result))
 
 
 class MatingPartAndMultiReasonTests(unittest.TestCase):
