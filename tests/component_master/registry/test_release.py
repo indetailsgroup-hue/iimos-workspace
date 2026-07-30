@@ -30,6 +30,9 @@ sys.path.insert(0, str(PACKAGE_SOURCE))
 
 from monolith_component_master.coverage import (  # noqa: E402
     CLASSIFICATION_STATES,
+    EVIDENCE_GATE_REASONS,
+    GATE_REASONS_DEMONSTRATED_ONLY_BY_DIRECT_GATE_CALL,
+    GATE_REASONS_DEMONSTRATED_THROUGH_DISCOVERY,
     BlockedSource,
     CoverageItem,
     CoverageSnapshot,
@@ -612,6 +615,35 @@ class SupportingRecordTests(unittest.TestCase):
                 state="PROBABLY_FINE",
             )
 
+    def test_missing_assertion_finding_must_carry_a_blank_assertion_id(
+        self,
+    ) -> None:
+        """The converse, not only blank implies MISSING_ASSERTION.
+
+        Without it one finding lands in the by-item exemption set through its
+        reason and in the by-assertion exemption set through its ID, covering
+        both refusal shapes at once. The stated separation must be enforced by
+        the type, not assumed by the reader.
+        """
+
+        with self.assertRaises(ValueError) as caught:
+            EvidenceGateFinding(
+                item_id=ITEM_ID,
+                assertion_id=ASSERTION_ID,
+                reason="MISSING_ASSERTION",
+            )
+        self.assertIn("blank", str(caught.exception))
+
+    def test_every_other_reason_requires_a_canonical_assertion_id(self) -> None:
+        for reason in EVIDENCE_GATE_REASONS:
+            if reason == "MISSING_ASSERTION":
+                continue
+            with self.subTest(reason=reason):
+                with self.assertRaises(ValueError):
+                    EvidenceGateFinding(
+                        item_id=ITEM_ID, assertion_id="", reason=reason
+                    )
+
     def test_evidence_gate_finding_requires_known_reason(self) -> None:
         finding = EvidenceGateFinding(
             item_id=ITEM_ID,
@@ -1156,6 +1188,148 @@ class CoverageSnapshotTests(unittest.TestCase):
         self.assertEqual(forward.items, reverse.items)
 
 
+class GateReasonReachabilityTests(TemporaryRootTestCase):
+    """Derive the reachability table instead of hand-maintaining it.
+
+    Two waves running, the comment above `EVIDENCE_GATE_REASONS` has been
+    wrong, both times because it was a hand-written claim about behaviour
+    sitting next to the behaviour. This drives every reason and asserts which
+    surface produced it, so the table cannot drift from the code again.
+
+    What this can and cannot establish: membership in a demonstrated set is
+    measured here. **Absence is not a proof of impossibility** — it means no
+    case in this test produced that reason on that surface.
+    """
+
+    def reasons_from_discovery(self) -> set[str]:
+        observed: set[str] = set()
+
+        def measure(name: str, build: object) -> None:
+            root = self.workspace / f"reach-{name}"
+            builder = build(RootBuilder(root))  # type: ignore[operator]
+            snapshot = build_snapshot(builder.root)
+            observed.update(
+                finding.reason for finding in snapshot.evidence_gate_findings
+            )
+
+        verified_assertion = {
+            "assertion_id": ASSERTION_ID,
+            "entity_id": ITEM_ID,
+            "field_path": "identity.exact_sku",
+            "value": "ITEM-1",
+            "source_id": SOURCE_ID,
+            "locator": "page 24",
+            "reviewer": "reviewer:demo",
+            "review_state": "VERIFIED",
+        }
+        measure("no-source", lambda b: b.with_items([item_line()]))
+        measure(
+            "blocked",
+            lambda b: b.with_items([item_line()]).with_sources(
+                [source_line(content_path=None, blocked_reason="PAYWALLED")]
+            ),
+        )
+        measure(
+            "unreadable",
+            lambda b: b.with_items([item_line()]).with_sources(
+                [source_line()]
+            ),
+        )
+        measure(
+            "mismatch",
+            lambda b: b.with_items([item_line()])
+            .with_sources([source_line()])
+            .with_cached_source(content=b"different bytes"),
+        )
+        measure(
+            "no-assertion",
+            lambda b: b.with_items([item_line(assertions=[])])
+            .with_sources([source_line()])
+            .with_cached_source(),
+        )
+        measure(
+            "pending",
+            lambda b: b.with_items(
+                [
+                    item_line(
+                        assertions=[
+                            {**verified_assertion, "review_state": "PENDING"}
+                        ]
+                    )
+                ]
+            )
+            .with_sources([source_line()])
+            .with_cached_source(),
+        )
+        return observed
+
+    def reasons_from_direct_gate_calls(self) -> set[str]:
+        observed: set[str] = set()
+
+        empty = EvidenceVault()
+        observed.update(
+            finding.reason
+            for finding in evaluate_evidence_gate(
+                (coverage_item(),), empty, {}
+            )
+        )
+
+        exotic_vault = EvidenceVault()
+        exotic_vault.register(source_snapshot(), SOURCE_CONTENT)
+        exotic_vault.register(
+            field_assertion(field_path="commercial.note", value=Decimal("1.5"))
+        )
+        observed.update(
+            finding.reason
+            for finding in evaluate_evidence_gate(
+                (
+                    coverage_item(
+                        assertions=(
+                            field_assertion(field_path="commercial.note"),
+                        )
+                    ),
+                ),
+                exotic_vault,
+                {SOURCE_ID: SOURCE_CONTENT},
+            )
+        )
+
+        divergent_vault, stored = loaded_vault()
+        observed.update(
+            finding.reason
+            for finding in evaluate_evidence_gate(
+                (coverage_item(assertions=(field_assertion(locator="page 99"),)),),
+                divergent_vault,
+                stored,
+            )
+        )
+        return observed
+
+    def test_the_discovery_reachable_set_is_exactly_as_declared(self) -> None:
+        self.assertEqual(
+            set(GATE_REASONS_DEMONSTRATED_THROUGH_DISCOVERY),
+            self.reasons_from_discovery(),
+        )
+
+    def test_the_remaining_reasons_are_demonstrated_by_a_direct_call(
+        self,
+    ) -> None:
+        remaining = set(EVIDENCE_GATE_REASONS) - set(
+            GATE_REASONS_DEMONSTRATED_THROUGH_DISCOVERY
+        )
+        self.assertEqual(
+            set(GATE_REASONS_DEMONSTRATED_ONLY_BY_DIRECT_GATE_CALL), remaining
+        )
+        self.assertTrue(remaining.issubset(self.reasons_from_direct_gate_calls()))
+
+    def test_every_declared_reason_is_demonstrated_somewhere(self) -> None:
+        demonstrated = (
+            self.reasons_from_discovery()
+            | self.reasons_from_direct_gate_calls()
+        )
+        self.assertEqual(set(EVIDENCE_GATE_REASONS), demonstrated)
+
+
 # ---------------------------------------------------------------------------
 # 8 (continued). The backing invariant enforced by the snapshot itself
 # ---------------------------------------------------------------------------
@@ -1347,6 +1521,89 @@ class SnapshotBackingInvariantTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             self.snapshot(items=(item,))
+
+    def pending_backed_item(self) -> CoverageItem:
+        return coverage_item(
+            assertions=(field_assertion(review_state="PENDING"),)
+        )
+
+    def test_a_pending_assertion_cannot_back_a_verified_claim(self) -> None:
+        """An assertion nobody has reviewed is not backing.
+
+        `evaluate_evidence_gate` already refuses this shape as
+        `ASSERTION_NOT_VERIFIED`. Two enforcement points in one module must not
+        answer the same question differently, and `review_state` is an
+        attribute of the assertions this floor already iterates.
+        """
+
+        with self.assertRaises(ValueError) as caught:
+            self.snapshot(
+                items=(self.pending_backed_item(),),
+                source_denominator=registered_denominator(),
+            )
+        self.assertIn(ITEM_ID, str(caught.exception))
+        self.assertIn("PENDING", str(caught.exception))
+
+    def test_the_floor_and_the_gate_agree_on_review_state(self) -> None:
+        item = self.pending_backed_item()
+        vault = EvidenceVault()
+        vault.register(source_snapshot(), SOURCE_CONTENT)
+        vault.register(field_assertion(review_state="PENDING"))
+        findings = evaluate_evidence_gate(
+            (item,),
+            vault,
+            {SOURCE_ID: SOURCE_CONTENT},
+            source_denominator=registered_denominator(),
+        )
+        self.assertEqual(
+            ("ASSERTION_NOT_VERIFIED",),
+            tuple(finding.reason for finding in findings),
+        )
+        # The gate refuses it, so the floor must refuse it too when no finding
+        # records that refusal.
+        with self.assertRaises(ValueError):
+            self.snapshot(
+                items=(item,),
+                source_denominator=registered_denominator(),
+            )
+
+    def test_a_finding_records_the_pending_refusal_and_permits_it(self) -> None:
+        snapshot = self.snapshot(
+            items=(self.pending_backed_item(),),
+            source_denominator=registered_denominator(),
+            findings=(
+                EvidenceGateFinding(
+                    item_id=ITEM_ID,
+                    assertion_id=ASSERTION_ID,
+                    reason="ASSERTION_NOT_VERIFIED",
+                ),
+            ),
+        )
+        self.assertEqual(0, snapshot.verified_item_count.count)
+        self.assertEqual(1, snapshot.unbacked_verified_item_count.count)
+
+    def test_a_pending_assertion_is_refused_even_with_every_source_registered(
+        self,
+    ) -> None:
+        """The stated limit was about digests. This one is about state."""
+
+        item = coverage_item(
+            assertions=(
+                field_assertion(assertion_id="assertion:demo:ok"),
+                field_assertion(
+                    assertion_id="assertion:demo:pending",
+                    field_path="commercial.note",
+                    review_state="PENDING",
+                ),
+            )
+        )
+        with self.assertRaises(ValueError) as caught:
+            self.snapshot(
+                items=(item,),
+                source_denominator=registered_denominator(),
+            )
+        self.assertIn("assertion:demo:pending", str(caught.exception))
+        self.assertNotIn("assertion:demo:ok", str(caught.exception))
 
     def test_a_record_claiming_nothing_verified_needs_no_backing(self) -> None:
         item = CoverageItem(
@@ -1983,6 +2240,43 @@ class DiscoveryTests(TemporaryRootTestCase):
                 self.assertEqual(1, len(reasons))
                 observed.add(reasons[0])
         self.assertEqual(4, len(observed))
+
+    def test_pending_assertion_is_reachable_through_discovery(self) -> None:
+        """Corrects a hand-written table entry that claimed otherwise."""
+
+        builder = self.populated_root()
+        builder.with_items(
+            [
+                item_line(
+                    assertions=[
+                        {
+                            "assertion_id": ASSERTION_ID,
+                            "entity_id": ITEM_ID,
+                            "field_path": "identity.exact_sku",
+                            "value": "ITEM-1",
+                            "source_id": SOURCE_ID,
+                            "locator": "page 24",
+                            "reviewer": "reviewer:demo",
+                            "review_state": "PENDING",
+                        }
+                    ]
+                )
+            ]
+        )
+        snapshot = build_snapshot(self.root)
+        self.assertEqual(
+            ("ASSERTION_NOT_VERIFIED",),
+            tuple(f.reason for f in snapshot.evidence_gate_findings),
+        )
+        self.assertEqual(0, snapshot.verified_item_count.count)
+
+    def test_missing_assertion_is_reachable_through_discovery(self) -> None:
+        self.populated_root().with_items([item_line(assertions=[])])
+        snapshot = build_snapshot(self.root)
+        self.assertEqual(
+            ("MISSING_ASSERTION",),
+            tuple(f.reason for f in snapshot.evidence_gate_findings),
+        )
 
     def test_snapshot_over_a_populated_root_passes_the_gate(self) -> None:
         self.populated_root()

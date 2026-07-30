@@ -41,6 +41,11 @@ unmeasured file would be silence, and silence is not a classification. An
 ``evidence-manifest.jsonl`` anywhere other than the root is refused as
 ambiguous rather than guessed at.
 
+One recorded boundary of that recursion: ``Path.rglob`` does not follow
+directory symlinks on this Python, so item files reachable only through a
+symlinked subdirectory would go unmeasured. That case is unexplored, not
+handled.
+
 All five seed files in ``data/component-master/registry/v1`` are zero-record
 today, so this contract reinterprets no existing data.
 """
@@ -107,21 +112,12 @@ SOURCE_DENOMINATOR_STATES: tuple[str, ...] = ("BLOCKED", "REGISTERED")
 # Closed allowlist of reasons a claim of VERIFIED could not be traced back to a
 # registered source with a verified hash.
 #
-# Reachability is stated here rather than implied, because a code that should
-# fire and cannot is information the next task needs. Through
-# ``discover_registry_root`` -> ``build_snapshot``:
-#
-# - reachable: MISSING_ASSERTION, SOURCE_NOT_REGISTERED,
-#   SOURCE_BLOCKED_IN_MANIFEST, SOURCE_BYTES_UNAVAILABLE, SOURCE_HASH_MISMATCH,
-#   ASSERTION_NOT_REGISTERED.
-# - not reachable through discovery, reachable when the gate is called directly
-#   with a vault the caller populated: ASSERTION_NOT_VERIFIED,
-#   ASSERTION_VALUE_NOT_CANONICALIZABLE, ASSERTION_DOES_NOT_MATCH_VAULT.
-#   Discovery builds the vault from the same lines it builds the items from, and
-#   ``CoverageItem`` refuses a non-canonicalizable value at construction, so
-#   discovery cannot produce a divergence between the two. The codes are kept
-#   because the gate is a public entry point that other callers may reach with a
-#   vault this module did not build.
+# Which surface can produce which reason is **derived, not asserted here**. The
+# two tuples below are checked by
+# ``tests.component_master.registry.test_release.GateReasonReachabilityTests``,
+# which drives every reason and asserts which surface produced it. An earlier
+# hand-maintained version of this comment was wrong twice; the derivation
+# exists so it cannot drift from the code again.
 EVIDENCE_GATE_REASONS: tuple[str, ...] = (
     "ASSERTION_DOES_NOT_MATCH_VAULT",
     "ASSERTION_NOT_REGISTERED",
@@ -132,6 +128,31 @@ EVIDENCE_GATE_REASONS: tuple[str, ...] = (
     "SOURCE_BYTES_UNAVAILABLE",
     "SOURCE_HASH_MISMATCH",
     "SOURCE_NOT_REGISTERED",
+)
+
+# Derived by GateReasonReachabilityTests, which constructs a registry root or a
+# gate call for each entry and collects the reason it produced.
+#
+# Read these as **demonstrated** sets, not as possibility sets. Membership is
+# measured. Absence is not a proof of impossibility: it means no case in that
+# test produced the reason on that surface. In particular
+# ``ASSERTION_NOT_REGISTERED`` is listed as direct-call-only because no
+# discovery case has produced it — the denominator branch runs first, so
+# reaching the vault lookup needs a REGISTERED source, and with one registered
+# ``EvidenceVault.register`` refuses only a duplicate ``assertion_id``, which
+# discovery refuses earlier. That is a reasoned argument, not a proof.
+GATE_REASONS_DEMONSTRATED_THROUGH_DISCOVERY: tuple[str, ...] = (
+    "ASSERTION_NOT_VERIFIED",
+    "MISSING_ASSERTION",
+    "SOURCE_BLOCKED_IN_MANIFEST",
+    "SOURCE_BYTES_UNAVAILABLE",
+    "SOURCE_HASH_MISMATCH",
+    "SOURCE_NOT_REGISTERED",
+)
+GATE_REASONS_DEMONSTRATED_ONLY_BY_DIRECT_GATE_CALL: tuple[str, ...] = (
+    "ASSERTION_DOES_NOT_MATCH_VAULT",
+    "ASSERTION_NOT_REGISTERED",
+    "ASSERTION_VALUE_NOT_CANONICALIZABLE",
 )
 
 # A blocked source states why it is blocked. Mapping it here keeps the gate
@@ -342,12 +363,18 @@ class EvidenceGateFinding:
         _require_canonical_id(self.item_id, "item_id")
         _require_member(self.reason, "reason", EVIDENCE_GATE_REASONS)
         assertion_id = _require_text(self.assertion_id, "assertion_id")
-        if assertion_id.strip():
+        # Both directions, because the backing floor keys its two exemption
+        # sets on these fields. Without the converse, one finding would land in
+        # the by-item set through its reason and in the by-assertion set
+        # through its ID, covering both refusal shapes at once.
+        if self.reason == "MISSING_ASSERTION":
+            if assertion_id.strip():
+                raise ValueError(
+                    "MISSING_ASSERTION must carry a blank assertion_id: it "
+                    "names an item that has no assertion to name"
+                )
+        else:
             _require_canonical_id(assertion_id, "assertion_id")
-        elif self.reason != "MISSING_ASSERTION":
-            raise ValueError(
-                "assertion_id may be blank only for MISSING_ASSERTION"
-            )
 
     def as_payload(self) -> Mapping[str, object]:
         return MappingProxyType(
@@ -625,21 +652,36 @@ def _require_backed_verified_claims(
     measured source denominator, so it enforces the floor itself and an
     unbacked claim cannot reach a release through any caller.
 
-    Two shapes are refused: a record claiming VERIFIED with no assertion at
-    all, and a record whose assertion names a source the denominator does not
-    hold in a ``REGISTERED`` state.
+    Three shapes are refused: a record claiming VERIFIED with no assertion at
+    all; a record carrying an assertion that is not itself ``VERIFIED``; and a
+    record whose assertion names a source the denominator does not hold in a
+    ``REGISTERED`` state. Each mirrors a refusal
+    :func:`evaluate_evidence_gate` already makes, so the two enforcement points
+    in this module answer the same question the same way.
 
     The exemption is deliberately narrow. A finding permits a claim only when
-    it names **that** item, and for the assertion shape only when it also names
-    **that** assertion. A ``MISSING_ASSERTION`` finding carries a blank
-    assertion ID and therefore exempts only the zero-assertion shape, never a
-    ghost source on a record that does have assertions.
+    it names **that** item, and for the per-assertion shapes only when it also
+    names **that** assertion. ``EvidenceGateFinding`` enforces that a
+    ``MISSING_ASSERTION`` finding carries a blank assertion ID and that every
+    other reason carries a canonical one, so a single finding cannot land in
+    both exemption sets and cover both shapes at once.
 
-    What this floor cannot do: it holds no source bytes, so it cannot re-verify
-    a digest. A caller who hand-builds a denominator entry claiming
-    ``REGISTERED`` for a source that was never read will pass this floor. Full
-    verification is :func:`evaluate_evidence_gate`, which re-hashes through
-    :func:`~monolith_component_master.evidence.verify_source_hash`.
+    Stated limits, none of which this floor can close on its own:
+
+    - It holds no source bytes, so it cannot re-verify a digest. A caller who
+      hand-builds a denominator entry claiming ``REGISTERED`` for a source that
+      was never read will pass it. Full verification is
+      :func:`evaluate_evidence_gate`, which re-hashes through
+      :func:`~monolith_component_master.evidence.verify_source_hash`.
+    - It does not cross-check ``blocked_sources`` against
+      ``source_denominator``: a hand-built denominator claiming ``REGISTERED``
+      for a source the blocked list also names is accepted. Unreachable through
+      :func:`discover_registry_root`, where a blocked source is always written
+      with state ``BLOCKED``.
+    - ``CoverageItem`` carries no mapping from an assertion to the dimension it
+      backs, so "every assertion of a record claiming VERIFIED must itself be
+      VERIFIED" is as fine-grained as this contract can express. A future task
+      that wants per-dimension backing must add that mapping first.
     """
 
     registered = frozenset(
@@ -669,9 +711,20 @@ def _require_backed_verified_claims(
                 )
             continue
         for assertion in item.assertions:
-            if assertion.source_id in registered:
-                continue
             if (item.item_id, assertion.assertion_id) in exempt_assertions:
+                continue
+            # An assertion nobody has reviewed is not backing. The gate already
+            # refuses this shape as ASSERTION_NOT_VERIFIED, and two enforcement
+            # points in one module must not answer the same question
+            # differently. Unlike the digest, `review_state` is an attribute of
+            # the assertions this floor is already iterating.
+            if assertion.review_state != "VERIFIED":
+                unbacked.append(
+                    f"{item.item_id} assertion {assertion.assertion_id} is "
+                    f"{assertion.review_state}, not VERIFIED"
+                )
+                continue
+            if assertion.source_id in registered:
                 continue
             unbacked.append(
                 f"{item.item_id} assertion {assertion.assertion_id} names "
