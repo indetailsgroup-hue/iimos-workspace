@@ -27,11 +27,41 @@ Documented local input contract for a registry root
 carrying ``content_path`` (a path relative to the root holding the exact stored
 bytes) and ``blocked_reason`` (free text naming why the source is unavailable).
 
+Two further filenames are **denominator input, not coverage items**, and are
+recognized **at the registry root only**: ``brand-universe.jsonl`` and
+``source-denominator.jsonl`` (:data:`DENOMINATOR_INPUT_FILENAMES`). They are
+matched by exact filename, never by pattern — a pattern such as
+``*-denominator.jsonl`` would silently swallow files that do not exist yet.
+Either name in a subdirectory is refused as ambiguous, exactly as a nested
+``evidence-manifest.jsonl`` is. Neither contributes to
+``discovered_item_count``.
+
+``source-denominator.jsonl`` declares sources whose bytes this reader does not
+hold. Each nonblank line holds exactly ``source_id``, ``sha256``, ``state`` and
+``blocked_reason``; it becomes one :class:`SourceDenominatorEntry` and one
+matching :class:`BlockedSource`. ``state`` must be ``BLOCKED``: this reader
+cannot re-hash a source it never read, and
+:attr:`CoverageSnapshot.coverage_statement` publishes a ``REGISTERED`` source
+as "readable and hash-verified". A source whose bytes belong in a release is
+declared in ``evidence-manifest.jsonl`` with a ``content_path``. Any other
+field, any missing field, any other state, and any source ID already named by
+the manifest are each refused with the file and line.
+
+``brand-universe.jsonl`` is recognized so it is never read as item data, and a
+zero-record file contributes nothing. A **nonblank** row is refused: this
+package holds no brand record type to validate one against and
+:class:`CoverageSnapshot` has no field to carry one, so an accepted row could
+only be discarded — and discarding is silence. Defining that row schema, and
+the field that would carry it, is Task 9's decision, not a shape this reader
+guesses.
+
 Every other ``*.jsonl`` file under the root, **at any depth**, is a
 coverage-item file. Each nonblank line is an object with ``item_id``,
 ``classification``, ``dimension_states`` and ``assertions`` — the last being
 :class:`~monolith_component_master.evidence.FieldAssertion` objects in the same
-shape Task 7's ingestion CLI already reads.
+shape Task 7's ingestion CLI already reads. An unrecognized ``*.jsonl``
+therefore still fails loudly, at the root and at any depth; nothing is skipped
+silently.
 
 Discovery recurses. There is exactly one excluded directory, ``_source-cache``,
 which holds the stored source bytes ``content_path`` points at and is declared
@@ -101,6 +131,30 @@ SOURCE_MANIFEST_FILENAME = "evidence-manifest.jsonl"
 # Declared in data/component-master/registry/v1/.gitignore as `/_source-cache/`.
 SOURCE_CACHE_DIRNAME = "_source-cache"
 SNAPSHOT_SCHEMA = "monolith.connector-registry.coverage-snapshot/1"
+
+BRAND_UNIVERSE_FILENAME = "brand-universe.jsonl"
+SOURCE_DENOMINATOR_FILENAME = "source-denominator.jsonl"
+
+# Denominator input, not coverage items. Exact filenames, never a pattern: a
+# pattern would exempt files that do not exist yet, and an unrecognized
+# `.jsonl` must keep failing loudly rather than vanishing. Recognized at the
+# registry root only — the same rule that refuses a nested manifest.
+DENOMINATOR_INPUT_FILENAMES: tuple[str, ...] = (
+    BRAND_UNIVERSE_FILENAME,
+    SOURCE_DENOMINATOR_FILENAME,
+)
+
+# The complete row contract for `source-denominator.jsonl`. `blocked_reason` is
+# reused verbatim from `evidence-manifest.jsonl`, where it already names why a
+# source is unavailable; the other three are exactly SourceDenominatorEntry.
+DECLARED_DENOMINATOR_REQUIRED_FIELDS: tuple[str, ...] = (
+    "sha256",
+    "source_id",
+    "state",
+)
+DECLARED_DENOMINATOR_FIELDS: tuple[str, ...] = tuple(
+    sorted(DECLARED_DENOMINATOR_REQUIRED_FIELDS + ("blocked_reason",))
+)
 
 UNCLASSIFIED_REASONS: tuple[str, ...] = (
     "CLASSIFICATION_ABSENT",
@@ -1183,6 +1237,116 @@ def _discover_sources(
     )
 
 
+def _read_declared_denominator(
+    path: Path,
+    relative: str,
+    seen_sources: set[str],
+) -> tuple[tuple[BlockedSource, ...], tuple[SourceDenominatorEntry, ...]]:
+    """Read ``source-denominator.jsonl`` into denominator input.
+
+    Every refusal names the file, the line, and the exact field or value that
+    is wrong, because the alternative is guessing a shape Task 9 has not
+    agreed. Nothing here is inferred from a filename pattern or defaulted.
+    """
+
+    blocked: list[BlockedSource] = []
+    denominator: list[SourceDenominatorEntry] = []
+    for line_number, payload in _read_jsonl(path, relative):
+        origin = f"{relative}:{line_number}"
+        unknown = sorted(set(payload) - set(DECLARED_DENOMINATOR_FIELDS))
+        if unknown:
+            raise ValueError(
+                f"{origin}: unrecognized field(s) "
+                + ", ".join(unknown)
+                + "; a declared denominator row holds exactly "
+                + ", ".join(DECLARED_DENOMINATOR_FIELDS)
+                + ". Extending that row schema is Task 9's decision, not a "
+                "shape this reader guesses."
+            )
+        missing = sorted(
+            name
+            for name in DECLARED_DENOMINATOR_REQUIRED_FIELDS
+            if name not in payload
+        )
+        if missing:
+            raise ValueError(
+                f"{origin}: missing required field(s) "
+                + ", ".join(missing)
+                + "; a declared denominator row must state "
+                + ", ".join(DECLARED_DENOMINATOR_REQUIRED_FIELDS)
+            )
+
+        try:
+            state = _require_member(
+                payload["state"], "state", SOURCE_DENOMINATOR_STATES
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"{origin}: {error}") from error
+        if state != "BLOCKED":
+            raise ValueError(
+                f"{origin}: state REGISTERED cannot be declared in "
+                f"{SOURCE_DENOMINATOR_FILENAME}. This reader holds no bytes "
+                "for a source declared here, so it cannot re-verify the "
+                "digest, and the coverage statement publishes REGISTERED as "
+                "\"readable and hash-verified\". Declare such a source in "
+                f"{SOURCE_MANIFEST_FILENAME} with a content_path instead."
+            )
+        reason = payload.get("blocked_reason")
+        if reason is None:
+            raise ValueError(
+                f"{origin}: a BLOCKED source must state blocked_reason. A "
+                "source that could not be read is a visible gap, never an "
+                "absence."
+            )
+
+        try:
+            entry = SourceDenominatorEntry(
+                source_id=payload["source_id"],
+                sha256=payload["sha256"],
+                state=state,
+            )
+            record = BlockedSource(
+                source_id=payload["source_id"], reason=reason
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"{origin}: {error}") from error
+
+        if entry.source_id in seen_sources:
+            raise ValueError(
+                f"{origin}: duplicate source_id {entry.source_id}"
+            )
+        seen_sources.add(entry.source_id)
+        denominator.append(entry)
+        blocked.append(record)
+    return tuple(blocked), tuple(denominator)
+
+
+def _refuse_undefined_brand_records(path: Path, relative: str) -> None:
+    """Recognize ``brand-universe.jsonl``; refuse a row with no schema.
+
+    The file is recognized so it is never misread as item data, and a
+    zero-record file contributes nothing. A nonblank row is refused rather
+    than accepted-and-discarded: this package holds no brand record type to
+    validate one against, and :class:`CoverageSnapshot` has no field to carry
+    one, so accepting a row could only drop it — and a dropped record is the
+    silence this module exists to refuse.
+    """
+
+    records = _read_jsonl(path, relative)
+    if not records:
+        return
+    line_number = records[0][0]
+    raise ValueError(
+        f"{relative}:{line_number}: {BRAND_UNIVERSE_FILENAME} is recognized "
+        "as denominator input, but no row schema for it is defined. This "
+        "package holds no brand record type to validate a row against and "
+        "CoverageSnapshot has no field to carry one, so an accepted row "
+        "could only be discarded. Task 9 must define the brand-universe row "
+        "schema and the field that carries it. A zero-record file is read "
+        "and contributes nothing."
+    )
+
+
 def _build_assertions(
     payload: Mapping[str, object],
     origin: str,
@@ -1217,6 +1381,7 @@ def discover_registry_root(root: object) -> DiscoveryResult:
 
     manifest_path = root_path / SOURCE_MANIFEST_FILENAME
     item_files: list[tuple[str, Path]] = []
+    denominator_files: list[tuple[str, Path]] = []
     for path in root_path.rglob("*.jsonl"):
         relative = path.relative_to(root_path).as_posix()
         if path == manifest_path:
@@ -1231,8 +1396,35 @@ def discover_registry_root(root: object) -> DiscoveryResult:
                 f"{relative}: a source manifest is only recognized at the "
                 "registry root; a nested one is ambiguous"
             )
+        if path.name in DENOMINATOR_INPUT_FILENAMES:
+            # Exact filename, and location is part of the contract: at the
+            # root `relative` is the bare filename. A nested copy is refused,
+            # not exempted, so the allowlist cannot be used to hide a file.
+            if relative != path.name:
+                raise ValueError(
+                    f"{relative}: {path.name} is only recognized at the "
+                    "registry root; a nested one is ambiguous"
+                )
+            denominator_files.append((relative, path))
+            continue
         item_files.append((relative, path))
     item_files.sort(key=lambda entry: entry[0])
+    denominator_files.sort(key=lambda entry: entry[0])
+
+    # Denominator input, read after the manifest so a source cannot be named
+    # twice, and never counted toward `discovered_item_count`.
+    declared_blocked: list[BlockedSource] = []
+    declared_denominator: list[SourceDenominatorEntry] = []
+    seen_sources = {entry.source_id for entry in denominator}
+    for relative, path in denominator_files:
+        if relative == BRAND_UNIVERSE_FILENAME:
+            _refuse_undefined_brand_records(path, relative)
+            continue
+        extra_blocked, extra_entries = _read_declared_denominator(
+            path, relative, seen_sources
+        )
+        declared_blocked.extend(extra_blocked)
+        declared_denominator.extend(extra_entries)
 
     for relative, path in item_files:
         for line_number, payload in _read_jsonl(path, relative):
@@ -1302,8 +1494,8 @@ def discover_registry_root(root: object) -> DiscoveryResult:
     return DiscoveryResult(
         items=tuple(items),
         unclassified=tuple(unclassified),
-        blocked_sources=blocked,
-        source_denominator=denominator,
+        blocked_sources=blocked + tuple(declared_blocked),
+        source_denominator=denominator + tuple(declared_denominator),
         vault=vault,
         source_bytes=stored,
     )

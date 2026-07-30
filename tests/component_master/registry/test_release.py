@@ -28,6 +28,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PACKAGE_SOURCE = REPOSITORY_ROOT / "packages" / "component-master" / "src"
 sys.path.insert(0, str(PACKAGE_SOURCE))
 
+from monolith_component_master import coverage as coverage_module  # noqa: E402
 from monolith_component_master.coverage import (  # noqa: E402
     CLASSIFICATION_STATES,
     EVIDENCE_GATE_REASONS,
@@ -227,6 +228,40 @@ def source_line(
         record["content_path"] = content_path
     if blocked_reason is not None:
         record["blocked_reason"] = blocked_reason
+    return record
+
+
+# Denominator input files Task 9 creates in the registry root. Pinned as
+# literals here rather than imported, so a test failure names the filename that
+# broke rather than collapsing the whole module into one import error.
+BRAND_UNIVERSE_FILENAME = "brand-universe.jsonl"
+SOURCE_DENOMINATOR_FILENAME = "source-denominator.jsonl"
+DECLARED_SOURCE_ID = "source:demo:declared"
+DECLARED_SOURCE_SHA256 = hashlib.sha256(b"declared, never fetched").hexdigest()
+DECLARED_BLOCKED_REASON = "SOURCE_NOT_YET_FETCHED"
+
+
+def denominator_line(
+    *,
+    source_id: str = DECLARED_SOURCE_ID,
+    sha256: str = DECLARED_SOURCE_SHA256,
+    state: str | None = "BLOCKED",
+    blocked_reason: str | None = DECLARED_BLOCKED_REASON,
+    drop: tuple[str, ...] = (),
+    extra: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    record: dict[str, object] = {
+        "source_id": source_id,
+        "sha256": sha256,
+    }
+    if state is not None:
+        record["state"] = state
+    if blocked_reason is not None:
+        record["blocked_reason"] = blocked_reason
+    for name in drop:
+        record.pop(name, None)
+    if extra is not None:
+        record.update(extra)
     return record
 
 
@@ -1909,6 +1944,39 @@ class SeparateProcessReplayTests(TemporaryRootTestCase):
             second_manifest["source_denominator_sha256"],
         )
 
+    def test_a_root_carrying_denominator_files_replays_identically(
+        self,
+    ) -> None:
+        self.populated_root()
+        (self.root / "brand-universe.jsonl").write_bytes(b"\n")
+        write_jsonl(
+            self.root / "source-denominator.jsonl", [denominator_line()]
+        )
+        first_dir = self.workspace / "denominator-1"
+        second_dir = self.workspace / "denominator-2"
+        first_dir.mkdir()
+        second_dir.mkdir()
+
+        first = self.run_build(first_dir)
+        second = self.run_build(second_dir)
+        self.assertEqual(0, first.returncode, first.stderr)
+        self.assertEqual(0, second.returncode, second.stderr)
+
+        first_bytes = (first_dir / "registry.json").read_bytes()
+        second_bytes = (second_dir / "registry.json").read_bytes()
+        self.assertEqual(first_bytes, second_bytes)
+        self.assertIn(DECLARED_SOURCE_ID.encode("utf-8"), first_bytes)
+
+        digest = hashlib.sha256(first_bytes).hexdigest()
+        first_manifest = json.loads(first.stdout)
+        second_manifest = json.loads(second.stdout)
+        self.assertEqual(digest, first_manifest["payload_sha256"])
+        self.assertEqual(digest, second_manifest["payload_sha256"])
+        self.assertEqual(
+            first_manifest["source_denominator_sha256"],
+            second_manifest["source_denominator_sha256"],
+        )
+
     def test_separate_processes_agree_on_the_empty_registry_digest(self) -> None:
         self.seed_root()
         first_dir = self.workspace / "empty-1"
@@ -2303,11 +2371,356 @@ class DiscoveryTests(TemporaryRootTestCase):
 
 
 # ---------------------------------------------------------------------------
+# Denominator input files at the registry root
+# ---------------------------------------------------------------------------
+
+
+class DenominatorInputFileTests(TemporaryRootTestCase):
+    """Task 9 creates two files in the registry root that are not item files.
+
+    They are recognized by **explicit filename**, at the **registry root only**.
+    Every other ``.jsonl`` keeps failing loudly exactly as before: a pattern, or
+    a silent skip, would swallow files that do not exist yet.
+    """
+
+    NEAR_MISS_JSONL_NAMES = (
+        "Brand-Universe.jsonl",
+        "brand-universe-v2.jsonl",
+        "source_denominator.jsonl",
+    )
+
+    def with_denominator(
+        self,
+        rows: list[dict[str, object]],
+        *,
+        root: Path | None = None,
+    ) -> Path:
+        target = self.root if root is None else root
+        write_jsonl(target / SOURCE_DENOMINATOR_FILENAME, rows)
+        return target
+
+    # -- the allowlist itself ---------------------------------------------
+
+    def test_the_allowlist_is_exactly_two_explicit_filenames(self) -> None:
+        self.assertEqual(
+            (BRAND_UNIVERSE_FILENAME, SOURCE_DENOMINATOR_FILENAME),
+            coverage_module.DENOMINATOR_INPUT_FILENAMES,
+        )
+
+    # -- 1. read as denominator input, never as coverage items -------------
+
+    def test_root_denominator_files_are_denominator_input(self) -> None:
+        self.seed_root()
+        (self.root / BRAND_UNIVERSE_FILENAME).write_bytes(b"\n")
+        self.with_denominator([denominator_line()])
+        snapshot = build_snapshot(self.root)
+        self.assertEqual(0, snapshot.discovered_item_count)
+        self.assertEqual((), snapshot.items)
+        self.assertEqual((), snapshot.unclassified)
+        self.assertEqual(
+            (
+                SourceDenominatorEntry(
+                    source_id=DECLARED_SOURCE_ID,
+                    sha256=DECLARED_SOURCE_SHA256,
+                    state="BLOCKED",
+                ),
+            ),
+            snapshot.source_denominator,
+        )
+        self.assertEqual(
+            (
+                BlockedSource(
+                    source_id=DECLARED_SOURCE_ID,
+                    reason=DECLARED_BLOCKED_REASON,
+                ),
+            ),
+            snapshot.blocked_sources,
+        )
+
+    def test_denominator_rows_never_count_as_discovered_items(self) -> None:
+        self.populated_root()
+        (self.root / BRAND_UNIVERSE_FILENAME).write_bytes(b"\n")
+        self.with_denominator([denominator_line()])
+        snapshot = build_snapshot(self.root)
+        self.assertEqual(1, snapshot.discovered_item_count)
+        self.assertEqual(1, snapshot.classified_item_count.count)
+        self.assertEqual(1, snapshot.classified_item_count.denominator)
+        self.assertEqual(2, len(snapshot.source_denominator))
+        self.assertEqual(1, snapshot.registered_source_count.count)
+        self.assertEqual(2, snapshot.registered_source_count.denominator)
+        self.assertEqual(1, snapshot.blocked_source_count.count)
+        self.assertEqual(2, snapshot.blocked_source_count.denominator)
+        self.assertNotIn(
+            DECLARED_SOURCE_ID, [item.item_id for item in snapshot.items]
+        )
+
+    def test_a_zero_record_brand_universe_file_contributes_nothing(
+        self,
+    ) -> None:
+        self.seed_root()
+        (self.root / BRAND_UNIVERSE_FILENAME).write_bytes(b"\n")
+        result = discover_registry_root(self.root)
+        self.assertEqual((), result.items)
+        self.assertEqual((), result.unclassified)
+        self.assertEqual((), result.source_denominator)
+        self.assertEqual((), result.blocked_sources)
+
+    # -- 2/3. an unrecognized `.jsonl` still fails loudly -------------------
+
+    def test_an_unrecognized_root_jsonl_still_fails_loudly(self) -> None:
+        self.seed_root()
+        write_jsonl(self.root / "mystery.jsonl", [denominator_line()])
+        with self.assertRaises(ValueError) as caught:
+            discover_registry_root(self.root)
+        message = str(caught.exception)
+        self.assertIn("mystery.jsonl:1", message)
+        self.assertIn("item_id", message)
+
+    def test_an_unrecognized_nested_jsonl_still_fails_loudly(self) -> None:
+        self.seed_root()
+        nested = self.root / "vendors"
+        nested.mkdir()
+        write_jsonl(nested / "mystery.jsonl", [denominator_line()])
+        with self.assertRaises(ValueError) as caught:
+            discover_registry_root(self.root)
+        message = str(caught.exception)
+        self.assertIn("vendors/mystery.jsonl:1", message)
+        self.assertIn("item_id", message)
+
+    # -- 4. near-miss names ------------------------------------------------
+
+    def test_a_near_miss_jsonl_name_is_not_allowlisted(self) -> None:
+        for name in self.NEAR_MISS_JSONL_NAMES:
+            with self.subTest(name=name):
+                root = self.workspace / f"near-{name}"
+                RootBuilder(root)
+                write_jsonl(root / name, [denominator_line()])
+                with self.assertRaises(ValueError) as caught:
+                    discover_registry_root(root)
+                message = str(caught.exception)
+                self.assertIn(f"{name}:1", message)
+                self.assertIn("item_id", message)
+
+    def test_a_json_near_miss_is_outside_the_readers_input_glob(self) -> None:
+        """`brand-universe.json` is not `.jsonl`.
+
+        The reader's input glob has always been ``*.jsonl``; the root also
+        holds a published ``coverage-snapshot.json`` output. So a ``.json``
+        near miss is never read at all — it is not denominator input, and it
+        does not fail. Stated here rather than implied.
+        """
+
+        self.seed_root()
+        write_jsonl(self.root / "brand-universe.json", [denominator_line()])
+        snapshot = build_snapshot(self.root)
+        self.assertEqual((), snapshot.source_denominator)
+        self.assertEqual((), snapshot.blocked_sources)
+        self.assertEqual(0, snapshot.discovered_item_count)
+
+    # -- 5. location is part of the contract -------------------------------
+
+    def test_an_allowlisted_name_in_a_subdirectory_fails_loudly(self) -> None:
+        for name in (BRAND_UNIVERSE_FILENAME, SOURCE_DENOMINATOR_FILENAME):
+            with self.subTest(name=name):
+                root = self.workspace / f"nested-{name}"
+                RootBuilder(root)
+                nested = root / "vendors"
+                nested.mkdir()
+                write_jsonl(nested / name, [denominator_line()])
+                with self.assertRaises(ValueError) as caught:
+                    discover_registry_root(root)
+                message = str(caught.exception)
+                self.assertIn(f"vendors/{name}", message)
+                self.assertIn("registry root", message)
+
+    # -- what the source denominator file accepts and refuses --------------
+
+    def assert_row_refused(
+        self,
+        row: dict[str, object],
+        *expected_fragments: str,
+        tag: str = "row",
+    ) -> str:
+        root = self.workspace / f"refuse-{tag}"
+        RootBuilder(root)
+        write_jsonl(root / SOURCE_DENOMINATOR_FILENAME, [row])
+        with self.assertRaises(ValueError) as caught:
+            discover_registry_root(root)
+        message = str(caught.exception)
+        self.assertIn(f"{SOURCE_DENOMINATOR_FILENAME}:1", message)
+        for fragment in expected_fragments:
+            self.assertIn(fragment, message)
+        return message
+
+    def test_a_row_missing_a_required_field_names_the_field(self) -> None:
+        for field in ("sha256", "source_id", "state"):
+            with self.subTest(field=field):
+                self.assert_row_refused(
+                    denominator_line(drop=(field,)), field, tag=field
+                )
+
+    def test_a_row_carrying_an_unknown_field_names_the_field(self) -> None:
+        self.assert_row_refused(
+            denominator_line(
+                extra={"publisher": "Häfele", "rights_state": "UNKNOWN"}
+            ),
+            "publisher",
+            "rights_state",
+        )
+
+    def test_an_unrecognized_state_names_the_permitted_set(self) -> None:
+        for state in ("DISCOVERED", "DORMANT_OR_DEFUNCT", "REVIEWED"):
+            with self.subTest(state=state):
+                self.assert_row_refused(
+                    denominator_line(state=state),
+                    "BLOCKED",
+                    "REGISTERED",
+                    tag=state,
+                )
+
+    def test_registered_cannot_be_declared_from_a_file(self) -> None:
+        """This reader holds no bytes for a file-declared source.
+
+        `coverage_statement` publishes a REGISTERED source as "readable and
+        hash-verified". Accepting that word from a file nobody hashed would
+        make the published sentence false.
+        """
+
+        self.assert_row_refused(
+            denominator_line(state="REGISTERED", blocked_reason=None),
+            "REGISTERED",
+            "evidence-manifest.jsonl",
+        )
+
+    def test_a_blocked_row_must_name_why_it_is_blocked(self) -> None:
+        self.assert_row_refused(
+            denominator_line(blocked_reason=None), "blocked_reason"
+        )
+
+    def test_a_source_declared_twice_is_refused(self) -> None:
+        self.seed_root()
+        self.with_denominator([denominator_line(), denominator_line()])
+        with self.assertRaises(ValueError) as caught:
+            discover_registry_root(self.root)
+        self.assertIn(DECLARED_SOURCE_ID, str(caught.exception))
+
+    def test_a_source_already_in_the_manifest_cannot_be_redeclared(
+        self,
+    ) -> None:
+        self.populated_root()
+        self.with_denominator([denominator_line(source_id=SOURCE_ID)])
+        with self.assertRaises(ValueError) as caught:
+            discover_registry_root(self.root)
+        self.assertIn(SOURCE_ID, str(caught.exception))
+
+    def test_a_declared_blocked_source_is_visible_at_the_gate(self) -> None:
+        """A record asserting against a declared-but-unfetched source cannot
+
+        be counted as verified, and the refusal names the source.
+        """
+
+        self.seed_root()
+        write_jsonl(
+            self.root / "materials.jsonl",
+            [
+                item_line(
+                    assertions=[
+                        {
+                            "assertion_id": ASSERTION_ID,
+                            "entity_id": ITEM_ID,
+                            "field_path": "identity.exact_sku",
+                            "value": "ITEM-1",
+                            "source_id": DECLARED_SOURCE_ID,
+                            "locator": "page 24",
+                            "reviewer": "reviewer:demo",
+                            "review_state": "VERIFIED",
+                        }
+                    ]
+                )
+            ],
+        )
+        self.with_denominator([denominator_line()])
+        snapshot = build_snapshot(self.root)
+        self.assertEqual(1, snapshot.discovered_item_count)
+        self.assertEqual(0, snapshot.verified_item_count.count)
+        self.assertEqual((ITEM_ID,), snapshot.unbacked_item_ids)
+
+    # -- brand universe: recognized, but no row schema exists yet ----------
+
+    def test_a_nonblank_brand_row_is_refused_naming_what_is_missing(
+        self,
+    ) -> None:
+        self.seed_root()
+        write_jsonl(
+            self.root / BRAND_UNIVERSE_FILENAME,
+            [{"brand_id": "brand:hafele", "name": "Häfele"}],
+        )
+        with self.assertRaises(ValueError) as caught:
+            discover_registry_root(self.root)
+        message = str(caught.exception)
+        self.assertIn(f"{BRAND_UNIVERSE_FILENAME}:1", message)
+        self.assertIn("Task 9", message)
+
+    # -- 6. determinism ----------------------------------------------------
+
+    def build_payload_bytes(
+        self, rows: list[dict[str, object]], tag: str
+    ) -> bytes:
+        root = self.workspace / f"order-{tag}"
+        RootBuilder(root)
+        write_jsonl(root / SOURCE_DENOMINATOR_FILENAME, rows)
+        return build_release(
+            root=root, version="0.1.0", created_at_utc=CREATED_AT
+        ).payload_bytes
+
+    def test_denominator_row_order_does_not_change_output_bytes(self) -> None:
+        first = denominator_line(source_id="source:demo:alpha")
+        second = denominator_line(
+            source_id="source:demo:beta",
+            sha256=hashlib.sha256(b"beta").hexdigest(),
+            blocked_reason="DORMANT_OR_DEFUNCT",
+        )
+        forward = self.build_payload_bytes([first, second], "forward")
+        reverse = self.build_payload_bytes([second, first], "reverse")
+        self.assertEqual(forward, reverse)
+        self.assertEqual(
+            hashlib.sha256(forward).hexdigest(),
+            hashlib.sha256(reverse).hexdigest(),
+        )
+
+
+# ---------------------------------------------------------------------------
 # 1. Empty registry over the live repository root
 # ---------------------------------------------------------------------------
 
 
 class LiveEmptyRegistryTests(unittest.TestCase):
+    # Measured from this repository's own committed registry root. Content
+    # derived, not environment derived: it is the SHA-256 of the canonical
+    # payload bytes over `data/component-master/registry/v1`, which is also
+    # the committed `coverage-snapshot.json` byte for byte.
+    EMPTY_ROOT_PAYLOAD_SHA256 = (
+        "f957bb48d5be2c3f4a80998cd47e429b0a9ae3ae833f1685ef81bbee0c89df4e"
+    )
+    EMPTY_ROOT_PAYLOAD_BYTE_COUNT = 4428
+
+    def test_the_empty_root_payload_digest_is_unchanged(self) -> None:
+        release = build_release(
+            root=LIVE_REGISTRY_ROOT,
+            version="0.1.0",
+            created_at_utc=CREATED_AT,
+        )
+        self.assertEqual(
+            self.EMPTY_ROOT_PAYLOAD_BYTE_COUNT, len(release.payload_bytes)
+        )
+        self.assertEqual(
+            self.EMPTY_ROOT_PAYLOAD_SHA256, release.payload_sha256
+        )
+        self.assertEqual(
+            self.EMPTY_ROOT_PAYLOAD_SHA256,
+            hashlib.sha256(release.payload_bytes).hexdigest(),
+        )
+
     def test_every_seed_is_a_zero_record_file(self) -> None:
         """The registry holds nothing; the seeds are a bare line terminator.
 
