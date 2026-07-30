@@ -438,7 +438,7 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
 <p><strong>สถานะ:</strong> COMPLETE <strong>Base ของงานที่ 6:</strong> <code>12af68acf9aa0add75cd329480911d14a85fe3b1</code> <strong>Implementation commit:</strong> <code>1a4971a59622517577dc2a6f8760165395f91f77</code> — <code>feat(registry): evaluate parametric cabinet configurations</code> <strong>Review-fix commit แรก:</strong> <code>e6680415c68d0944d7cc6d2c90e32d2bb26f13d1</code> — <code>fix(registry): close parametric qualification gaps</code> <strong>Review-fix commit ที่สองและ accepted HEAD:</strong> <code>6663cc9901b961defdb0b781228f701591b97df5</code> — <code>fix(registry): normalize conditional reason ordering</code> <strong>ขอบเขตปัจจุบัน:</strong> งานที่ 7 เป็นงานถัดไปและยังไม่ได้เริ่ม การปิดงานนี้แทนที่เฉพาะข้อความขอบเขตปัจจุบันของงานที่ 5 ที่บันทึกว่างานที่ 6 เป็นงานถัดไปหรือยังไม่ได้เริ่ม โดยยังรักษาข้อความงานที่ 1–5 ก่อนหน้านี้ทั้งหมดไว้เป็น snapshot ทางประวัติศาสตร์</p>
 <h3>ขอบเขต tracked ของงานที่ 6 แบบ exact</h3>
 <p>ช่วงรวมสาม commit จาก base ของงานที่ 6 เปลี่ยน exactly สองพาธ:</p>
-<div class="tablewrap"><table><thead><tr><th>สถานะ</th><th>พาธ</th><th>เพิ่มบรรทัด</th><th>ลบบรรทัด</th></tr></thead><tbody>
+<div class="tablewrap"><table><thead><tr><th>สถานะ</th><th>พาธ</th><th align="right">เพิ่มบรรทัด</th><th align="right">ลบบรรทัด</th></tr></thead><tbody>
 <tr><td>แก้ไข</td><td><code>packages/component-master/src/monolith_component_master/qualification.py</code></td><td align="right">842</td><td align="right">0</td></tr>
 <tr><td>เพิ่ม</td><td><code>tests/component_master/registry/test_parametric_cabinets.py</code></td><td align="right">1,743</td><td align="right">0</td></tr>
 </tbody></table></div>
@@ -492,6 +492,91 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
 <li>Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data</li>
 <li>ไม่ได้ push, merge, rebase หรือเปลี่ยน branch</li>
 <li>งานที่ 7 เป็นงานถัดไปและยังไม่ได้เริ่ม</li>
+</ul>
+<h2>การปิดงานที่ 7 — 30 กรกฎาคม 2026</h2>
+<p><strong>สถานะ:</strong> COMPLETE <strong>Base ของงานที่ 7:</strong> <code>addadab0093e3de05c3af31c01248fd2da596ff1</code> <strong>Implementation commit:</strong> <code>1be54922f04709fffd3f629318f043750d806330</code> — <code>feat(registry): quarantine unreviewed connector evidence</code> <strong>Fix wave 1:</strong> <code>dec823a66c877318b8ca9482513d67545e5d4cac</code> — <code>fix(registry): fail closed on non-primitive values and marker gating</code> <strong>Fix wave 3:</strong> <code>798164f7d689551f99315c8b4bfaef099d1290b0</code> — <code>fix(registry): rebuild stored records from exact library types</code> <strong>Fix wave 4 (สั่งโดยเจ้าของระบบ):</strong> <code>33b252cc180b2001faebf42d44089b526258a17b</code> — <code>feat(registry): quarantine contradicting sources, never promote silently</code> <strong>Fix wave 5:</strong> <code>8c90d52eb6b07348b77d056714dab507bd63ca9d</code> — <code>fix(registry): close mating-part contradictions and exact inch conversion</code> <strong>Fix wave 6 และ accepted HEAD:</strong> <code>db48529201f25e4d4afe8d1816b12748524f8f32</code> — <code>fix(registry): quarantine contradicting mating-part markers</code> <strong>ขอบเขตปัจจุบัน:</strong> งานที่ 8 เป็นงานถัดไป ยังไม่ได้เริ่ม และยังไม่มี brief การปิดงานนี้แทนที่เฉพาะข้อความขอบเขตปัจจุบันของงานที่ 6 ที่บันทึกว่างานที่ 7 เป็นงานถัดไปหรือยังไม่ได้เริ่ม โดยยังรักษาข้อความงานที่ 1–6 ก่อนหน้านี้ทั้งหมดไว้เป็น snapshot ทางประวัติศาสตร์</p>
+<h3>ขอบเขต tracked ของงานที่ 7 แบบ exact</h3>
+<p>ช่วงรวมหก commit จาก base ของงานที่ 7 เปลี่ยน exactly ห้าพาธที่ brief อนุมัติไว้และไม่มีพาธอื่น คำสั่ง <code>git diff --name-only addadab0..db485292</code> คืนค่า exactly ห้ารายการนี้:</p>
+<div class="tablewrap"><table><thead><tr><th>สถานะ</th><th>พาธ</th><th align="right">เพิ่มบรรทัด</th><th align="right">ลบบรรทัด</th></tr></thead><tbody>
+<tr><td>เพิ่ม</td><td><code>packages/component-master/src/monolith_component_master/ingestion.py</code></td><td align="right">349</td><td align="right">0</td></tr>
+<tr><td>เพิ่ม</td><td><code>packages/component-master/src/monolith_component_master/adapters/__init__.py</code></td><td align="right">17</td><td align="right">0</td></tr>
+<tr><td>เพิ่ม</td><td><code>packages/component-master/src/monolith_component_master/adapters/reviewed_assertions.py</code></td><td align="right">476</td><td align="right">0</td></tr>
+<tr><td>เพิ่ม</td><td><code>tools/connector_registry/ingest_reviewed.py</code></td><td align="right">280</td><td align="right">0</td></tr>
+<tr><td>เพิ่ม</td><td><code>tests/component_master/registry/test_ingestion.py</code></td><td align="right">2,593</td><td align="right">0</td></tr>
+</tbody></table></div>
+<p>รวมเพิ่ม 3,715 บรรทัดและลบศูนย์บรรทัด ไม่มีการเปลี่ยนพาธใน owner governance root, nested product runtime, seed data, verifier, export หรือพาธผลิตภัณฑ์อื่น และไม่ได้ push, merge, rebase หรือเปลี่ยน branch</p>
+<h3>Contract ของ ingestion และ quarantine แบบ exact</h3>
+<ul>
+<li>Record ทั้งสามตามแผนคงรูปฟิลด์แบบ exact <code>CandidateRecord</code> แบบ frozen มี <code>candidate_id</code>, <code>brand_id</code>, <code>entity_kind</code>, <code>assertions</code>, <code>extraction_method</code> <code>QuarantineRecord</code> แบบ frozen มี <code>candidate_id</code>, <code>reason_code</code>, <code>evidence_ids</code>, <code>owner_role</code> <code>IngestionResult</code> แบบ frozen มี <code>promoted</code> และ <code>quarantined</code> ซึ่งไม่สามารถเกิดร่วมกันได้และอธิบาย candidate เพียงหนึ่งรายการ</li>
+<li><code>ReviewedAssertionAdapter.ingest(candidate)</code> คืนผลลัพธ์ immutable หนึ่งรายการ และไม่เคยแก้ candidate, assertion, review state, registry, release หรือไฟล์ candidate จะ promote ได้เฉพาะเมื่อผ่านการตรวจทุกข้อ</li>
+<li>ชุดชนิดค่าของ assertion ที่ยอมรับคือ exactly ชนิดที่ contract JSON/JSONL ตามเอกสารแสดงได้: <code>None</code>, <code>bool</code>, <code>int</code>, <code>float</code> ที่มีค่าจำกัด, <code>str</code>, object ที่มี key เป็น <code>str</code> แบบ exact และ array ส่วน container จะถูกสร้างใหม่เป็นรูป immutable และ scalar ยอมรับตามชนิด exact เท่านั้น ค่าประเภท <code>Decimal</code>, <code>bytes</code>, <code>bytearray</code>, <code>memoryview</code>, <code>complex</code>, set, float ที่ไม่มีค่าจำกัด, key ของ mapping ที่ไม่ใช่ <code>str</code> และ subclass ของ <code>int</code>/<code>float</code>/<code>str</code> ทุกชนิด ถูกปฏิเสธที่ขั้นสร้างวัตถุ</li>
+<li>ค่าถูก snapshot ก่อน validate ดังนั้นทุกกฎตรวจค่าเดียวกับที่ record เก็บจริง ฟิลด์ข้อความต้องเป็น <code>str</code> แบบ exact และ <code>CandidateRecord</code>, <code>QuarantineRecord</code>, <code>SourceContext</code> ต้องเป็นชนิดตรงตัวและถูกสร้างใหม่ ดังนั้น subclass ของผู้เรียกไม่สามารถสลับสถานะหลังการตรวจได้</li>
+<li>Collection ที่ไม่มีลำดับถูกปฏิเสธทุกจุดที่ลำดับ record ที่เก็บไว้ปรากฏใน output ส่วน input ที่มีลำดับจะคงลำดับเดิมแบบ exact</li>
+<li>ความขัดแย้งถูกตรวจเฉพาะบน convention ที่ทำเอกสารไว้แล้ว: prefix <code>dimensions.</code> และ <code>geometry.</code>, prefix <code>identity.</code> และฟิลด์ marker <code>compatibility.</code> ทั้งสองรายการ พาธฟิลด์อื่นทั้งหมดตั้งใจไม่เปรียบเทียบ เพราะ brief ห้ามเดาความขัดแย้งจาก free text</li>
+<li>การเปรียบเทียบเชิงมิติใช้ arithmetic แบบ rational ที่ exact ค่าขนาดเป็น <code>Fraction</code> และตัวคูณนิ้วคือ <code>Fraction(127, 5)</code> ซึ่งเท่ากับ 25.4 พอดี ไม่มี tolerance ที่จุดใดเลย</li>
+<li>Reason code ทั้งสิบสองรายการ map ไปยัง owner role แบบ deterministic โดย <code>_REASON_ORDER</code> และ <code>_QUARANTINE_OWNER_BY_REASON</code> เป็นเซตเท่ากันและไม่มีรายการซ้ำ และเหตุผลที่เกิดพร้อมกันจะออกเป็น record ที่ dedup แล้วหนึ่งรายการต่อเหตุผลตามลำดับคงที่</li>
+<li>CLI ตรวจ <code>--brand</code> ว่าเป็น canonical ID ในตัวเอง เขียน promoted JSONL และ quarantine JSONL แยกกัน และไม่มีการเข้าถึงเครือข่าย, แก้ review state, เขียน registry, แก้ release หรือให้อำนาจ manufacturing</li>
+</ul>
+<h3>ที่มาของแต่ละ wave — งานไหนมาจากไหน</h3>
+<p>ความแตกต่างข้อนี้สำคัญกว่าตัวเลข สี่ wave มาจาก finding ของ independent review หนึ่ง wave มาจากคำสั่งเจ้าของระบบ และหนึ่ง wave แก้เฉพาะความถูกต้องของรายงาน</p>
+<div class="tablewrap"><table><thead><tr><th>Wave</th><th>Commit</th><th>ที่มา</th><th>สิ่งที่ปิด</th></tr></thead><tbody>
+<tr><td>1</td><td><code>dec823a6</code></td><td>Review P1/P2</td><td>ค่าถูกเก็บแบบอ้างอิง ซึ่งยกระดับเป็นการลอด promotion: ค่าที่ <code>str()</code> โกหกทำให้ข้ออ้าง 999 นิ้ว promote พร้อมข้ออ้าง 25.4 มม. โดยไม่เกิด <code>UNIT_CONFLICT</code> และกฎ mating part ผูกกับ literal <code>entity_kind</code> ที่ hardcode ไว้ค่าเดียว ทำให้การสะกดแบบอื่นทั้งหมด promote เงียบ ๆ</td></tr>
+<tr><td>3</td><td><code>798164f7</code></td><td>Review P2/P3</td><td>วินัยชนิด exact ปิดที่ระดับใบแต่เปิดที่ระดับ record: <code>ingest()</code> และ <code>IngestionResult</code> ตรวจ record ด้วย <code>isinstance</code> เท่านั้น ทำให้ subclass สลับสถานะหลังการตรวจได้ และมี regression ของ enum ที่ wave 1 ทำให้เกิดบน public surface ของงานนี้เอง</td></tr>
+<tr><td>4</td><td><code>33b252cc</code></td><td><strong>สั่งโดยเจ้าของระบบ — ไม่ใช่ finding จาก review</strong></td><td>เป็นการเพิ่มขอบเขตด้วยอำนาจเจ้าของระบบ เหนือรายการความขัดแย้งแบบปิดของ brief เจ้าของระบบตัดสินว่าสองแหล่งที่ขัดแย้งกันต้องไม่ promote เงียบ ๆ ปิดกรณีความขัดแย้งเชิงมิติในหน่วยเดียวกัน, PDF เทียบ CAD ใต้ <code>dimensions.*</code> และความไม่ตรงกันของ identity ระหว่างสองแหล่งใด ๆ</td></tr>
+<tr><td>5</td><td><code>8c90d52e</code></td><td>Review P2/P3</td><td>ความขัดแย้งของรหัส mating part ยัง promote candidate ที่ถือชิ้นส่วนสองชิ้นที่ใช้ร่วมกันไม่ได้ และคำกล่าว "exact decimal equality ไม่มี tolerance" เป็นเท็จเหนือ 10^28 นิ้ว เพราะการแปลงหน่วยปัดเศษภายใต้ decimal context ปริยายที่ 28 หลักนัยสำคัญ</td></tr>
+<tr><td>6</td><td><code>db485292</code></td><td>คำสั่งเจ้าของระบบ ซึ่ง orchestrator วินิจฉัยว่าครอบคลุมอยู่แล้ว</td><td>สองแหล่งที่ไม่ตรงกันเรื่อง <code>compatibility.requires_mating_part</code> promote record ที่ขัดแย้งในตัวเอง บันทึกเป็นการครอบคลุมของคำตัดสินเจ้าของระบบที่มีอยู่ ไม่ใช่ดุลพินิจใหม่ของผู้พัฒนา เพราะคำตัดสินนั้นพูดถึงความขัดแย้ง ไม่ใช่พูดถึงว่าฟิลด์ไหนเป็นตัวถือ</td></tr>
+<tr><td>7</td><td>ไม่มี</td><td>แก้ความถูกต้องของรายงานเท่านั้น</td><td>ไม่มีการเปลี่ยน source แก้ข้อความรายงานที่ค้างเก่าหรือขัดแย้งกันเองสามรายการ</td></tr>
+</tbody></table></div>
+<p>ข้อจำกัดที่เจ้าของระบบกำหนดกับ wave 4 ถูกรักษาไว้อย่างชัดเจน: ใช้ความเท่ากันแบบ exact decimal โดยไม่คิด tolerance ขึ้นเอง เพราะ threshold ใด ๆ จะเป็นตัวเลขวิศวกรรมที่ไม่มีแหล่งอ้างอิง ผลที่ยอมรับแล้วคือค่าคลาดจาก float จะเข้า quarantine — <code>0.3</code> เทียบ <code>0.30000000000000004</code> เป็นความขัดแย้ง และข้อมูลแคตตาล็อกสองหน่วยจะเข้า quarantine บ่อยกว่าเดิม เพราะ <code>mm</code> และ <code>in</code> ตรงกันแบบ exact เฉพาะเมื่อค่ามิลลิเมตรเป็นพหุคูณของ 25.4 พอดี</p>
+<h3>ลำดับ TDD และ independent review ตามจริง</h3>
+<div class="tablewrap"><table><thead><tr><th>ขั้น</th><th>คำตัดสิน / ผล</th><th>การจัดการ</th></tr></thead><tbody>
+<tr><td>RED เริ่มต้น</td><td>ได้ <code>ModuleNotFoundError</code> ตามที่คาดเพราะยังไม่มี <code>monolith_component_master.adapters</code></td><td>พาธ production ทั้งสี่รายการยังไม่มีอยู่ที่ RED checkpoint</td></tr>
+<tr><td>GREEN ของ implementation</td><td>Module ของงานที่ 7 ผ่าน 43/43</td><td>Commit เป็น <code>1be54922</code> และยังไม่ได้รับการยอมรับ</td></tr>
+<tr><td>Independent review แรก</td><td><code>NEEDS_FIXES</code></td><td>P1 การลอด promotion จากค่าที่เก็บแบบอ้างอิง; P2 gate <code>entity_kind</code> ที่ hardcode; รวมถึงการรัดกุม <code>--brand</code> และ collection ที่ไม่มีลำดับ</td></tr>
+<tr><td>RED และ GREEN ของ wave 1</td><td>RED: ล้มเหลว 45 รายการใน 11 methods; GREEN: 61/61</td><td>ผู้พัฒนาปิดข้อบกพร่องประเภทเดียวกันบนฟิลด์ข้อความโดยไม่ถูกสั่ง และผู้ตรวจยืนยันภายหลังว่าการขยายนั้นอยู่ในขอบเขต</td></tr>
+<tr><td>Independent review ที่สอง</td><td><code>NEEDS_FIXES</code></td><td>P2 การสลับ record ผ่าน <code>__getattribute__</code>; P3 regression ของ enum บน public surface</td></tr>
+<tr><td>RED และ GREEN ของ wave 3</td><td>RED: ล้มเหลว 5 รายการและ error 2 รายการใน 7 methods; GREEN: 68/68</td><td>Record ต้องเป็นชนิดตรงตัวและถูกสร้างใหม่</td></tr>
+<tr><td>คำตัดสินเจ้าของระบบ</td><td>เป็นการเพิ่มขอบเขต ไม่ใช่ finding จาก review</td><td>Wave 4 ทำตามคำตัดสิน census แสดงว่า promoted ลดจาก 21 เป็น 14 จาก 30 family ซึ่งเท่ากับความขัดแย้งเงียบเจ็ดรายการพอดี</td></tr>
+<tr><td>Independent review ที่สาม</td><td><code>NEEDS_FIXES</code></td><td>P2 ความขัดแย้งของรหัส mating part; P3 การแปลงนิ้วที่ไม่ exact ซึ่งขัดกับคำกล่าวในรายงานเอง</td></tr>
+<tr><td>RED และ GREEN ของ wave 5</td><td>RED: ล้มเหลว 2 รายการและ error 2 รายการ; GREEN: 87/87</td><td>แก้ที่กลไก ไม่ได้ลดทอนคำกล่าว</td></tr>
+<tr><td>Independent review ที่สี่</td><td><code>NEEDS_FIXES</code></td><td>6A ความขัดแย้งของ marker; 6B ตาราง provenance ที่ถือ byte count ของ wave ก่อนหน้า; 6C ข้อความรายงานที่เป็นเท็จสองรายการ</td></tr>
+<tr><td>RED และ GREEN ของ wave 6</td><td>RED: ล้มเหลว 3 รายการ; GREEN: 91/91</td><td>Provenance สร้างจาก <code>git cat-file</code> พร้อมการอ่านกลับอัตโนมัติ ไม่ใช่พิมพ์ซ้ำ</td></tr>
+<tr><td>Independent review ที่ห้า</td><td><code>NEEDS_FIXES</code> — เฉพาะรายงาน</td><td>ตัวเลขค้างเก่าสองรายการ ผู้พัฒนาพบและแก้รายการที่สามซึ่งผู้ตรวจไม่ได้ชี้</td></tr>
+<tr><td>Wave 7</td><td>แก้ความถูกต้องของรายงานเท่านั้น ไม่เปลี่ยน source</td><td>พาธที่อนุมัติทั้งห้ารายการมี hash ตรงกับ blob ที่ <code>db485292</code></td></tr>
+<tr><td>Independent review สุดท้าย</td><td><code>ACCEPTED</code> — ไม่มี finding</td><td>ตรวจสดแล้ว: 91 / 281 / 12 / 551, verifier 13/13, ทุกแถว provenance เทียบ <code>git cat-file</code>, package ทั้งสองตรงกันระดับไบต์และ reverse apply ผ่าน และ census 52 family ให้ <code>quarantine → promote = 0</code></td></tr>
+</tbody></table></div>
+<h3>การตรวจสอบที่เป็นปัจจุบันที่ accepted HEAD</h3>
+<ul>
+<li>Module ของงานที่ 7 <code>91/91</code>; registry directory <code>281/281</code>; verifier contracts <code>12/12</code>; full dynamic discovery <code>551/551</code>; ทั้งหมด exit <code>0</code> และ <code>OK</code></li>
+<li>Clean-HEAD verifier: schema <code>1.1.0</code>, PASS, checks <code>13/13</code>, failed <code>0</code>, embedded dynamic full suite <code>551</code>, governed Component Master <code>20/20</code>, governed identity-tenancy <code>7/7</code>, compile exit <code>0</code></li>
+<li>Cleanup เหลือ cache directory ศูนย์รายการและไฟล์ <code>.pyc</code> ศูนย์รายการ และ worktree สะอาดที่ <code>db48529201f25e4d4afe8d1816b12748524f8f32</code></li>
+</ul>
+<h3>ความสมบูรณ์และ cleanup ของหลักฐานที่ยอมรับแล้ว</h3>
+<ul>
+<li>รายงานที่ยอมรับแล้ว: <code>.superpowers/sdd/task-7-ingestion-report.md</code>; 34,481 ไบต์; SHA-256 <code>e1669b85343ac32085f2a984950dab1e32bcc8a72a90fb208a235bda55c975f8</code></li>
+<li>Native full-index binary review package ที่ยอมรับแล้ว: <code>.superpowers/sdd/task-7-ingestion-review-package.diff</code>; 141,447 ไบต์; SHA-256 <code>37529a0a1df5429bec2de27fc19bd9c79ce8edf7e4fb19ae8d087b898547f407</code>; มี exactly ห้าพาธของงานที่ 7 และ reverse apply ผ่านที่ accepted HEAD</li>
+<li>Delta re-review package ที่ยอมรับแล้ว: <code>.superpowers/sdd/task-7-ingestion-rereview-package.diff</code>; 9,599 ไบต์; SHA-256 <code>24a15d58d80647c2388a16d87e94c5ecda32308778393567a465989bdcba4d8e</code>; ครอบคลุมช่วง <code>8c90d52e..db485292</code> และ reverse apply ผ่าน</li>
+<li>Clean-HEAD verifier summary ก่อนลบ: 112,218 ไบต์; SHA-256 <code>3ebf1d5b47dfd4f8d34d45b97809d5dbdb6c87546d27313b720083087815976f</code> Verifier summary ถูกลบหลังบันทึกหลักฐาน</li>
+</ul>
+<h3>ข้อจำกัดที่บันทึกไว้</h3>
+<p>รายการเหล่านี้บันทึกไว้โดยไม่ลดทอน เพราะแต่ละข้อกำหนดขอบเขตว่าหลักฐานของงานที่ 7 รองรับอะไรได้</p>
+<ul>
+<li>RED ถูกสังเกตด้วยตาตรงเฉพาะกับ module ของงานที่ 7 ในทุก wave ใน wave 1 ตัวเลข RED ของ registry directory, verifier contract และ full discovery ถูกสร้างขึ้นภายหลังในสำเนาชั่วคราวที่ไม่มี <code>.git</code> ซึ่งทำให้ test ที่ใช้ <code>git check-ignore</code> สองรายการล้มเหลวด้วยเหตุที่ไม่เกี่ยวกับการเปลี่ยนแปลง การสร้างใหม่นั้นถูกตัดสินว่าใช้เป็นหลักฐานไม่ได้ และบันทึกไว้ว่าไม่มีค่าเป็นหลักฐาน ไม่ได้ตกแต่งให้ดูดี</li>
+<li>Digest สองรายการในรายงานงานที่ 7 ขึ้นกับสภาพแวดล้อมและไม่พอร์ตข้ามเครื่อง: embedded full-suite output และ verifier summary มีเวลาต่อรอบและพาธแบบเต็มอยู่ภายใน เครื่องสามเครื่องให้ขนาด verifier summary สามค่า — 102,873, 111,439 และ 112,218 ไบต์ ข้อเท็จจริงที่พอร์ตได้คือจำนวน check และคำตัดสิน PASS ไม่ใช่ขนาดไบต์หรือ digest</li>
+<li>Guard ที่ derive ตัวเลขเพื่อพิสูจน์ว่าตัวเลขสถานะปัจจุบันในรายงานตรงกับการรันจริง เป็นสคริปต์ชั่วคราวใน scratchpad ไม่มีสิ่งใดใน repository รันซ้ำให้ ดังนั้นมันคุ้มครองเฉพาะรายงานฉบับที่ถูกรันเทียบ ไม่ใช่ฉบับถัดไป ผู้ตรวจอิสระปฏิเสธการอ้างผลของมันว่าตรวจแล้วอย่างถูกต้อง เพราะสคริปต์อยู่นอก repository ที่เขามองเห็น</li>
+<li>Family ใน census สร้างขึ้นด้วยมือ ไม่ได้สุ่มจากข้อมูลผู้ผลิตจริง จึงกำหนดขอบเขตของกฎเทียบกับรูปแบบที่คิดขึ้น ไม่ใช่เทียบกับหน้างาน</li>
+<li>ทั้ง <code>:13</code> และหัวข้อของส่วน fix wave ใช้ถ้อยคำ "review-driven fix waves" ขณะที่ wave 4 มาจากคำสั่งเจ้าของระบบ คำอธิบายแยกความต่างอยู่ใต้หัวข้อโดยตรง แต่ถ้อยคำนั้นเองไม่แม่นยำ และถูกระบุไว้ที่นี่เพื่อให้บันทึกพูดให้ชัดตั้งแต่ครั้งแรก</li>
+<li>รายการค้างที่ยังเปิดอยู่และยังไม่มีผู้รับผิดชอบจนกว่าแผนจะระบุ: การผูก <code>EvidenceVault</code>/source hash กับ <code>review_state</code>; การกระทบยอด rights ระหว่าง <code>SourceContext</code> กับ <code>SourceSnapshot</code>; การเปรียบเทียบข้าม prefix ระหว่าง <code>geometry.*</code> กับ <code>dimensions.*</code> ซึ่งต้องมีคำตัดสินเรื่องการตั้งชื่อฟิลด์ที่งานที่ 7 ไม่ได้เป็นเจ้าของ; การชนกันของ order code ระดับภูมิภาค; ความกำกวมของ pack/finish; per-entity ID namespacing; และการหลุดของ <code>except</code> ใน CLI ที่ <code>AttributeError</code> และ <code>RecursionError</code> ทำให้ exit <code>1</code> พร้อม traceback เปล่า แทน exit <code>2</code> พร้อมเหตุผล ซึ่งยังคง fail closed และไม่เขียนไฟล์ใด</li>
+</ul>
+<h3>ขอบเขตอำนาจของงานที่ 7</h3>
+<ul>
+<li>งานที่ 7 สร้างเฉพาะรากฐานของ reviewed ingestion และ quarantine แบบ fail closed</li>
+<li><strong>Registry ไม่มี SKU จริงเลยแม้แต่รายการเดียว</strong> งานที่ 7 ไม่ได้ใส่ข้อมูล registry ใด ๆ</li>
+<li>งานนี้ไม่ใช่ registry ทั่วโลกที่มีข้อมูลแล้ว, release signing, network monitoring, workflow แก้ไขเคสความขัดแย้ง, runtime integration, freeze/export authority, การ qualify เชิงโครงสร้างหรือทางกายภาพ, production readiness หรือ manufacturing readiness</li>
+<li>NOT-FOR-PRODUCTION ยังคงทำงานอยู่ หลักฐาน software ไม่ได้ให้อำนาจด้าน manufacturing, installation, operational หรือ production</li>
+<li>Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data</li>
+<li>ไม่ได้ push, merge, rebase หรือเปลี่ยน branch</li>
+<li>งานที่ 8 เป็นงานถัดไป ยังไม่ได้เริ่ม และยังไม่มี brief</li>
 </ul>
 </main></body>
 </html>

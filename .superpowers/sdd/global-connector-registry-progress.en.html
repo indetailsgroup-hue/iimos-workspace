@@ -438,7 +438,7 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
 <p><strong>Status:</strong> COMPLETE <strong>Task 6 base:</strong> <code>12af68acf9aa0add75cd329480911d14a85fe3b1</code> <strong>Implementation commit:</strong> <code>1a4971a59622517577dc2a6f8760165395f91f77</code> — <code>feat(registry): evaluate parametric cabinet configurations</code> <strong>First review-fix commit:</strong> <code>e6680415c68d0944d7cc6d2c90e32d2bb26f13d1</code> — <code>fix(registry): close parametric qualification gaps</code> <strong>Second review-fix and accepted HEAD:</strong> <code>6663cc9901b961defdb0b781228f701591b97df5</code> — <code>fix(registry): normalize conditional reason ordering</code> <strong>Current boundary:</strong> Task 7 is next and has not started. This closeout supersedes only the Task 5 current-boundary statement that recorded Task 6 as next or not started; all earlier Task 1–5 statements remain preserved as historical snapshots.</p>
 <h3>Exact tracked Task 6 scope</h3>
 <p>The combined three-commit range from the Task 6 base changes exactly two paths:</p>
-<div class="tablewrap"><table><thead><tr><th>Status</th><th>Path</th><th>Insertions</th><th>Deletions</th></tr></thead><tbody>
+<div class="tablewrap"><table><thead><tr><th>Status</th><th>Path</th><th align="right">Insertions</th><th align="right">Deletions</th></tr></thead><tbody>
 <tr><td>Modified</td><td><code>packages/component-master/src/monolith_component_master/qualification.py</code></td><td align="right">842</td><td align="right">0</td></tr>
 <tr><td>Added</td><td><code>tests/component_master/registry/test_parametric_cabinets.py</code></td><td align="right">1,743</td><td align="right">0</td></tr>
 </tbody></table></div>
@@ -492,6 +492,91 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
 <li>Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.</li>
 <li>No push, merge, rebase, or branch change was performed.</li>
 <li>Task 7 is next and has not started.</li>
+</ul>
+<h2>Task 7 closeout — 30 July 2026</h2>
+<p><strong>Status:</strong> COMPLETE <strong>Task 7 base:</strong> <code>addadab0093e3de05c3af31c01248fd2da596ff1</code> <strong>Implementation commit:</strong> <code>1be54922f04709fffd3f629318f043750d806330</code> — <code>feat(registry): quarantine unreviewed connector evidence</code> <strong>Fix wave 1:</strong> <code>dec823a66c877318b8ca9482513d67545e5d4cac</code> — <code>fix(registry): fail closed on non-primitive values and marker gating</code> <strong>Fix wave 3:</strong> <code>798164f7d689551f99315c8b4bfaef099d1290b0</code> — <code>fix(registry): rebuild stored records from exact library types</code> <strong>Fix wave 4 (owner-ordered):</strong> <code>33b252cc180b2001faebf42d44089b526258a17b</code> — <code>feat(registry): quarantine contradicting sources, never promote silently</code> <strong>Fix wave 5:</strong> <code>8c90d52eb6b07348b77d056714dab507bd63ca9d</code> — <code>fix(registry): close mating-part contradictions and exact inch conversion</code> <strong>Fix wave 6 and accepted HEAD:</strong> <code>db48529201f25e4d4afe8d1816b12748524f8f32</code> — <code>fix(registry): quarantine contradicting mating-part markers</code> <strong>Current boundary:</strong> Task 8 is next, has not started, and has no brief yet. This closeout supersedes only the Task 6 current-boundary statement that recorded Task 7 as next or not started; all earlier Task 1–6 statements remain preserved as historical snapshots.</p>
+<h3>Exact tracked Task 7 scope</h3>
+<p>The combined six-commit range from the Task 7 base changes exactly the five brief-approved paths and nothing else. <code>git diff --name-only addadab0..db485292</code> returns exactly these five entries:</p>
+<div class="tablewrap"><table><thead><tr><th>Status</th><th>Path</th><th align="right">Insertions</th><th align="right">Deletions</th></tr></thead><tbody>
+<tr><td>Added</td><td><code>packages/component-master/src/monolith_component_master/ingestion.py</code></td><td align="right">349</td><td align="right">0</td></tr>
+<tr><td>Added</td><td><code>packages/component-master/src/monolith_component_master/adapters/__init__.py</code></td><td align="right">17</td><td align="right">0</td></tr>
+<tr><td>Added</td><td><code>packages/component-master/src/monolith_component_master/adapters/reviewed_assertions.py</code></td><td align="right">476</td><td align="right">0</td></tr>
+<tr><td>Added</td><td><code>tools/connector_registry/ingest_reviewed.py</code></td><td align="right">280</td><td align="right">0</td></tr>
+<tr><td>Added</td><td><code>tests/component_master/registry/test_ingestion.py</code></td><td align="right">2,593</td><td align="right">0</td></tr>
+</tbody></table></div>
+<p>Total 3,715 insertions and zero deletions. No owner governance-root, nested product-runtime, seed-data, verifier, export, or other product path was changed. No push, merge, rebase, or branch change was performed.</p>
+<h3>Exact ingestion and quarantine contract</h3>
+<ul>
+<li>The three plan records keep their exact field shapes. Frozen <code>CandidateRecord</code> has <code>candidate_id</code>, <code>brand_id</code>, <code>entity_kind</code>, <code>assertions</code>, <code>extraction_method</code>. Frozen <code>QuarantineRecord</code> has <code>candidate_id</code>, <code>reason_code</code>, <code>evidence_ids</code>, <code>owner_role</code>. Frozen <code>IngestionResult</code> has <code>promoted</code> and <code>quarantined</code>, which are mutually exclusive and describe exactly one candidate.</li>
+<li><code>ReviewedAssertionAdapter.ingest(candidate)</code> returns one immutable result and never mutates a candidate, assertion, review state, registry, release, or file. A candidate promotes only when every check passes.</li>
+<li>The admitted assertion-value set is exactly what the documented JSON/JSONL contract can represent: <code>None</code>, <code>bool</code>, <code>int</code>, finite <code>float</code>, <code>str</code>, object with exact-<code>str</code> keys, and array. Containers are rebuilt into immutable equivalents; scalars are admitted by exact type only. <code>Decimal</code>, <code>bytes</code>, <code>bytearray</code>, <code>memoryview</code>, <code>complex</code>, sets, non-finite floats, non-<code>str</code> mapping keys, and every <code>int</code>/<code>float</code>/<code>str</code> subclass are refused at construction.</li>
+<li>Values are snapshotted before validation, so every rule inspects the exact value the record stores. Text fields require an exact <code>str</code>, and <code>CandidateRecord</code>, <code>QuarantineRecord</code>, and <code>SourceContext</code> require exact type identity and are rebuilt, so a caller subclass can never substitute state after inspection.</li>
+<li>Unordered collections are refused wherever stored record order is observable output. Ordered input keeps its exact input order.</li>
+<li>Contradictions are detected only on documented normalized conventions: the <code>dimensions.</code> and <code>geometry.</code> prefixes, the <code>identity.</code> prefix, and both named <code>compatibility.</code> marker fields. Every other field path is deliberately uncompared, because the brief forbids guessing conflicts from free text.</li>
+<li>Dimensional comparison uses exact rational arithmetic: the magnitude is a <code>Fraction</code> and the inch factor is <code>Fraction(127, 5)</code>, which is exactly 25.4. There is no tolerance anywhere.</li>
+<li>The twelve reason codes map deterministically to owner roles, <code>_REASON_ORDER</code> and <code>_QUARANTINE_OWNER_BY_REASON</code> are set-equal with no duplicates, and simultaneous reasons emit one deduplicated record each in fixed order.</li>
+<li>The CLI validates <code>--brand</code> as a canonical ID in its own right, writes separate promoted and quarantine JSONL, and performs no network access, review-state mutation, registry write, release mutation, or manufacturing authorization.</li>
+</ul>
+<h3>Wave provenance — which change came from where</h3>
+<p>This distinction matters more than the counts. Four waves answered independent review findings; one was an owner ruling; one was report accuracy only.</p>
+<div class="tablewrap"><table><thead><tr><th>Wave</th><th>Commit</th><th>Origin</th><th>What it closed</th></tr></thead><tbody>
+<tr><td>1</td><td><code>dec823a6</code></td><td>Review P1/P2</td><td>Values were stored by reference, escalating to a promotion bypass: a value whose <code>str()</code> lied let a 999-inch claim promote alongside a 25.4 mm one with no <code>UNIT_CONFLICT</code>. The mating-part rule was gated on one hardcoded <code>entity_kind</code> literal, so every other spelling promoted silently.</td></tr>
+<tr><td>3</td><td><code>798164f7</code></td><td>Review P2/P3</td><td>The exact-type discipline was closed at the leaf and open at the record: <code>ingest()</code> and <code>IngestionResult</code> only <code>isinstance</code>-checked the records, so a subclass could substitute state after inspection. Plus an enum regression wave 1 introduced on this task's own exported surface.</td></tr>
+<tr><td>4</td><td><code>33b252cc</code></td><td><strong>OWNER-ORDERED — not a review finding</strong></td><td>Scope addition by owner authority over the brief's closed conflict list. The owner ruled that two sources contradicting each other must never promote silently. Closed same-unit dimensional contradiction, PDF-versus-CAD under <code>dimensions.*</code>, and identity disagreement across any two sources.</td></tr>
+<tr><td>5</td><td><code>8c90d52e</code></td><td>Review P2/P3</td><td>Mating-part ID contradictions still promoted a candidate carrying two mutually exclusive parts. Separately, "exact decimal equality, no tolerance" was false above 10^28 inches, because the conversion rounded under the default decimal context at 28 significant digits.</td></tr>
+<tr><td>6</td><td><code>db485292</code></td><td>Owner ruling, judged by the orchestrator to already cover it</td><td>Two sources disagreeing on <code>compatibility.requires_mating_part</code> promoted a self-contradictory record. Recorded as coverage of the standing owner ruling rather than fresh implementer discretion, because that ruling was about contradiction, not about which field carries it.</td></tr>
+<tr><td>7</td><td>none</td><td>Report accuracy only</td><td>No source change. Three stale or self-contradicting report statements corrected.</td></tr>
+</tbody></table></div>
+<p>The owner constraint on wave 4 was explicit and is preserved: exact decimal equality with no invented tolerance, because a threshold would be an engineering number with no provenance. Its accepted consequence is that float artefacts quarantine — <code>0.3</code> versus <code>0.30000000000000004</code> is a contradiction, and dual-unit catalogue data quarantines more often than before, since <code>mm</code> and <code>in</code> agree exactly only when the millimetre value is an exact multiple of 25.4.</p>
+<h3>Honest TDD and independent-review chronology</h3>
+<div class="tablewrap"><table><thead><tr><th>Stage</th><th>Verdict / result</th><th>Disposition</th></tr></thead><tbody>
+<tr><td>Initial RED</td><td>Expected <code>ModuleNotFoundError</code> because <code>monolith_component_master.adapters</code> did not exist</td><td>All four production paths were absent at the RED checkpoint.</td></tr>
+<tr><td>Implementation GREEN</td><td>Task 7 module 43/43</td><td>Committed as <code>1be54922</code>; not yet accepted.</td></tr>
+<tr><td>First independent review</td><td><code>NEEDS_FIXES</code></td><td>P1 value-by-reference promotion bypass; P2 hardcoded <code>entity_kind</code> gate; plus <code>--brand</code> and unordered-collection hardenings.</td></tr>
+<tr><td>Wave 1 RED and GREEN</td><td>RED: 45 failures across 11 methods. GREEN: 61/61</td><td>Implementer also closed the same defect class on text fields unprompted; the reviewer later confirmed that widening was in scope.</td></tr>
+<tr><td>Second independent review</td><td><code>NEEDS_FIXES</code></td><td>P2 record substitution via <code>__getattribute__</code>; P3 enum regression on the exported surface.</td></tr>
+<tr><td>Wave 3 RED and GREEN</td><td>RED: 5 failures and 2 errors across 7 methods. GREEN: 68/68</td><td>Records now require exact type identity and are rebuilt.</td></tr>
+<tr><td>Owner ruling</td><td>Scope addition, not a review finding</td><td>Wave 4 implemented the ruling; census showed promoted falling 21 to 14 across 30 families, which is exactly the seven silent contradictions.</td></tr>
+<tr><td>Third independent review</td><td><code>NEEDS_FIXES</code></td><td>P2 mating-part ID contradictions; P3 non-exact inch conversion contradicting the report's own claim.</td></tr>
+<tr><td>Wave 5 RED and GREEN</td><td>RED: 2 failures and 2 errors. GREEN: 87/87</td><td>The mechanism was fixed rather than the claim weakened.</td></tr>
+<tr><td>Fourth independent review</td><td><code>NEEDS_FIXES</code></td><td>6A marker contradictions; 6B a provenance table carrying the previous wave's byte counts; 6C two false report statements.</td></tr>
+<tr><td>Wave 6 RED and GREEN</td><td>RED: 3 failures. GREEN: 91/91</td><td>Provenance is now generated from <code>git cat-file</code> with automated read-back rather than retyped.</td></tr>
+<tr><td>Fifth independent review</td><td><code>NEEDS_FIXES</code> — report only</td><td>Two stale figures. The implementer found and fixed a third the reviewer had not flagged.</td></tr>
+<tr><td>Wave 7</td><td>Report accuracy only, no source change</td><td>All five approved paths hashed identical to their <code>db485292</code> blobs.</td></tr>
+<tr><td>Final independent review</td><td><code>ACCEPTED</code> — no findings</td><td>Verified live: 91 / 281 / 12 / 551, verifier 13/13, all provenance rows against <code>git cat-file</code>, both packages byte-identical and reverse-applying, and a 52-family census giving <code>quarantine → promote = 0</code>.</td></tr>
+</tbody></table></div>
+<h3>Verification current at accepted HEAD</h3>
+<ul>
+<li>Task 7 module <code>91/91</code>; registry directory <code>281/281</code>; verifier contracts <code>12/12</code>; full dynamic discovery <code>551/551</code>; all exit <code>0</code> and <code>OK</code>.</li>
+<li>Clean-HEAD verifier: schema <code>1.1.0</code>, PASS, checks <code>13/13</code>, failed <code>0</code>, embedded dynamic full suite <code>551</code>, governed Component Master <code>20/20</code>, governed identity-tenancy <code>7/7</code>, compile exit <code>0</code>.</li>
+<li>Cleanup left zero cache directories and zero <code>.pyc</code> files, and the worktree was clean at <code>db48529201f25e4d4afe8d1816b12748524f8f32</code>.</li>
+</ul>
+<h3>Accepted evidence integrity and cleanup</h3>
+<ul>
+<li>Accepted report: <code>.superpowers/sdd/task-7-ingestion-report.md</code>; 34,481 bytes; SHA-256 <code>e1669b85343ac32085f2a984950dab1e32bcc8a72a90fb208a235bda55c975f8</code>.</li>
+<li>Accepted native full-index binary review package: <code>.superpowers/sdd/task-7-ingestion-review-package.diff</code>; 141,447 bytes; SHA-256 <code>37529a0a1df5429bec2de27fc19bd9c79ce8edf7e4fb19ae8d087b898547f407</code>; it contains exactly the five Task 7 paths and reverse-applies cleanly at the accepted HEAD.</li>
+<li>Accepted delta re-review package: <code>.superpowers/sdd/task-7-ingestion-rereview-package.diff</code>; 9,599 bytes; SHA-256 <code>24a15d58d80647c2388a16d87e94c5ecda32308778393567a465989bdcba4d8e</code>; it covers <code>8c90d52e..db485292</code> and reverse-applies cleanly.</li>
+<li>Clean-HEAD verifier summary before removal: 112,218 bytes; SHA-256 <code>3ebf1d5b47dfd4f8d34d45b97809d5dbdb6c87546d27313b720083087815976f</code>. The verifier summary was removed after capture.</li>
+</ul>
+<h3>Stated limitations</h3>
+<p>These are recorded without softening, because each one bounds what the Task 7 evidence can support.</p>
+<ul>
+<li>RED was observed first-hand on the Task 7 module only, in every wave. In wave 1 the registry-directory, verifier-contract, and full-discovery RED figures were reconstructed afterwards in a throwaway copy that had no <code>.git</code>, which made two <code>git check-ignore</code> tests fail for reasons unrelated to the change. That reconstruction was ruled inadmissible and is recorded as worthless evidence, not dressed up.</li>
+<li>Two digests in the Task 7 report are environment-derived and not portable: the embedded full-suite output and the verifier summary contain per-run timings and absolute paths. Three different machines produced three different verifier-summary sizes — 102,873, 111,439, and 112,218 bytes. The portable facts are the check counts and the pass verdict, not the byte size or digest.</li>
+<li>The figure-derivation guard that proves the report's current-state numbers match live runs is a scratchpad throwaway. Nothing in the repository reruns it, so it protects the report edition it was run against and not the next one. An independent reviewer correctly refused to repeat its result as verified, because it sat outside the repository he could see.</li>
+<li>The census families are constructed by hand, not sampled from real vendor data. They bound the rules against imagined shapes, not against the field.</li>
+<li><code>:13</code> and the fix-wave section heading both use the phrase "review-driven fix waves" while wave 4 was owner-ordered. The disambiguation sits directly beneath the heading, but the phrase itself is imprecise and is named here so the record says it cleanly the first time.</li>
+<li>Carry-forward, still open and owned by nobody unless the plan names them: <code>EvidenceVault</code>/source-hash binding to <code>review_state</code>; <code>SourceContext</code> versus <code>SourceSnapshot</code> rights reconciliation; <code>geometry.*</code> versus <code>dimensions.*</code> cross-prefix comparison, which needs a field-naming ruling Task 7 does not own; regional order-code collision; pack/finish ambiguity; per-entity ID namespacing; and the CLI <code>except</code> escape, where <code>AttributeError</code> and <code>RecursionError</code> exit <code>1</code> with a bare traceback instead of exit <code>2</code> with a reason, still fail-closed with no files written.</li>
+</ul>
+<h3>Task 7 authority boundary</h3>
+<ul>
+<li>Task 7 establishes only a reviewed-ingestion and fail-closed quarantine foundation.</li>
+<li><strong>The registry contains zero real SKUs.</strong> Task 7 populates no registry data whatsoever.</li>
+<li>It is not a populated worldwide registry, release signing, network monitoring, conflict case-resolution workflow, runtime integration, freeze/export authority, structural or physical qualification, production readiness, or manufacturing readiness.</li>
+<li>NOT-FOR-PRODUCTION remains active. Software evidence does not grant manufacturing, installation, operational, or production authority.</li>
+<li>Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.</li>
+<li>No push, merge, rebase, or branch change was performed.</li>
+<li>Task 8 is next, has not started, and has no brief yet.</li>
 </ul>
 </main></body>
 </html>
