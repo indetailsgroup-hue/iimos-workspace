@@ -45,7 +45,10 @@ def _require_enum_value(
     field_name: str,
     enum_type: type[Enum],
 ) -> str:
-    if not isinstance(value, str):
+    # Exact str only: a subclass can override __eq__ and satisfy both this
+    # lookup and the later authority/rights comparisons while holding
+    # different text.
+    if type(value) is not str:
         raise TypeError(f"{field_name} must be a string")
     try:
         enum_type(value)
@@ -329,28 +332,31 @@ class ReviewedAssertionAdapter:
                     ),
                 )
 
-        if candidate.entity_kind == "CONNECTOR_ASSEMBLY":
-            required_markers = tuple(
-                assertion
-                for assertion in candidate.assertions
-                if assertion.field_path == _MATING_REQUIRED_FIELD
-                and assertion.value is True
+        # The requirement follows the normalized marker, never a hardcoded
+        # entity_kind literal: entity_kind is deliberately open in Task 7, so a
+        # literal gate silently promotes every unlisted spelling. Entity kinds
+        # that cannot need a mating part simply do not carry the marker.
+        required_markers = tuple(
+            assertion
+            for assertion in candidate.assertions
+            if assertion.field_path == _MATING_REQUIRED_FIELD
+            and assertion.value is True
+        )
+        mating_ids = tuple(
+            assertion
+            for assertion in candidate.assertions
+            if assertion.field_path == _EXACT_MATING_PART_FIELD
+            and isinstance(assertion.value, str)
+            and assertion.value.strip()
+        )
+        if required_markers and not mating_ids:
+            add_reason(
+                "REQUIRED_MATING_PART_MISSING",
+                (
+                    assertion.assertion_id
+                    for assertion in required_markers
+                ),
             )
-            mating_ids = tuple(
-                assertion
-                for assertion in candidate.assertions
-                if assertion.field_path == _EXACT_MATING_PART_FIELD
-                and isinstance(assertion.value, str)
-                and assertion.value.strip()
-            )
-            if required_markers and not mating_ids:
-                add_reason(
-                    "REQUIRED_MATING_PART_MISSING",
-                    (
-                        assertion.assertion_id
-                        for assertion in required_markers
-                    ),
-                )
 
         if evidence_by_reason:
             quarantined = tuple(

@@ -35,6 +35,7 @@ from monolith_component_master.evidence import FieldAssertion  # noqa: E402
 from monolith_component_master.ingestion import (  # noqa: E402
     CandidateRecord,
     QuarantineRecord,
+    _require_canonical_id,
 )
 
 
@@ -227,6 +228,10 @@ def main(argv: list[str] | None = None) -> int:
     quarantine_path = arguments.quarantine.resolve()
 
     try:
+        # Validate the flag itself, not only each candidate: with zero
+        # candidates no per-candidate comparison runs, so an uncanonical brand
+        # would otherwise write two unattributed output files and exit zero.
+        _require_canonical_id(arguments.brand, "--brand")
         if promoted_path == quarantine_path:
             raise ValueError("--out and --quarantine must be different paths")
         collisions = tuple(

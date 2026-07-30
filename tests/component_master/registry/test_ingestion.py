@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import FrozenInstanceError, fields
+from decimal import Decimal
 import json
 from pathlib import Path
 import subprocess
@@ -104,6 +106,58 @@ def make_context(
 
 def reason_codes(result: IngestionResult) -> tuple[str, ...]:
     return tuple(record.reason_code for record in result.quarantined)
+
+
+ADMITTED_LEAF_TYPES = frozenset({type(None), bool, int, float, str})
+
+
+class Tamperable:
+    """A caller-owned mutable object that must never be stored by reference."""
+
+    def __init__(self, marker: str) -> None:
+        self.marker = marker
+
+    def __repr__(self) -> str:
+        return f"Tamperable({self.marker!r})"
+
+
+class LyingInteger(int):
+    """An int subclass whose text form disagrees with its true magnitude."""
+
+    def __str__(self) -> str:
+        return "1"
+
+    __repr__ = __str__
+
+
+class LyingText(str):
+    """A str subclass whose comparisons disagree with its own stored text."""
+
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    def __ne__(self, other: object) -> bool:
+        return False
+
+    def __hash__(self) -> int:
+        return hash(str(self))
+
+
+def leaf_types(value: object) -> frozenset[type]:
+    """Collect the concrete types of every key and leaf inside a snapshot."""
+
+    if isinstance(value, Mapping):
+        found: set[type] = set()
+        for key, item in value.items():
+            found.add(type(key))
+            found |= leaf_types(item)
+        return frozenset(found)
+    if isinstance(value, tuple):
+        collected: set[type] = set()
+        for item in value:
+            collected |= leaf_types(item)
+        return frozenset(collected)
+    return frozenset({type(value)})
 
 
 class RecordContractTests(unittest.TestCase):
@@ -423,6 +477,300 @@ class ConstructionValidationTests(unittest.TestCase):
                 evidence_ids=("assertion:bad id",),
                 owner_role="OEM Evidence Curator",
             )
+
+
+class ValueSnapshotContractTests(unittest.TestCase):
+    """The stored value must be an immutable primitive, never a caller reference."""
+
+    @staticmethod
+    def unvalidated_field_candidate(value: object) -> CandidateRecord:
+        """Build a candidate on a field path no conflict validator inspects."""
+
+        return make_candidate(
+            (
+                make_assertion(
+                    "assertion:demo:notes:internal",
+                    field_path="notes.internal",
+                    value=value,
+                ),
+            )
+        )
+
+    def test_candidate_refuses_values_outside_the_primitive_json_contract(
+        self,
+    ) -> None:
+        for value, error_type in (
+            (Tamperable("BEFORE"), TypeError),
+            (LyingInteger(999), TypeError),
+            (Decimal("25.4"), TypeError),
+            (b"25.4", TypeError),
+            (bytearray(b"25.4"), TypeError),
+            ({25.4, 1.0}, TypeError),
+            (frozenset({25.4}), TypeError),
+            (complex(1, 2), TypeError),
+            ({1: "non-string key"}, TypeError),
+            ([{"nested": Tamperable("BEFORE")}], TypeError),
+            (("ok", {"nested": [LyingInteger(2)]}), TypeError),
+            (float("nan"), ValueError),
+            (float("inf"), ValueError),
+            (float("-inf"), ValueError),
+        ):
+            with self.subTest(value=value):
+                with self.assertRaises(error_type):
+                    self.unvalidated_field_candidate(value)
+
+    def test_candidate_admits_exactly_the_documented_primitive_value_types(
+        self,
+    ) -> None:
+        for value in (
+            None,
+            True,
+            18,
+            18.0,
+            "MINIFIX",
+            {"value": 25.4, "unit": "mm"},
+            ["a", "b"],
+            ("a", "b"),
+            {"rows": [{"depth": 18, "tags": ["a"], "flag": None}]},
+        ):
+            with self.subTest(value=value):
+                candidate = self.unvalidated_field_candidate(value)
+                stored = candidate.assertions[0].value
+
+                self.assertLessEqual(leaf_types(stored), ADMITTED_LEAF_TYPES)
+
+    def test_nested_container_values_cannot_be_tampered_after_construction(
+        self,
+    ) -> None:
+        inner_row = {"depth": 18, "tags": ["mm"]}
+        raw_value = {"rows": [inner_row]}
+
+        candidate = self.unvalidated_field_candidate(raw_value)
+        stored = candidate.assertions[0].value
+        raw_value["rows"].append({"depth": 999})
+        inner_row["depth"] = 999
+        inner_row["tags"].append("TAMPERED")
+
+        self.assertEqual(1, len(stored["rows"]))
+        self.assertEqual(18, stored["rows"][0]["depth"])
+        self.assertEqual(("mm",), stored["rows"][0]["tags"])
+        with self.assertRaises(TypeError):
+            stored["rows"] = ()
+        with self.assertRaises(TypeError):
+            stored["rows"][0]["depth"] = 999
+
+    def test_a_caller_object_can_never_be_promoted_by_reference(self) -> None:
+        tamperable = Tamperable("BEFORE")
+
+        with self.assertRaises(TypeError):
+            ReviewedAssertionAdapter((make_context(),)).ingest(
+                self.unvalidated_field_candidate(tamperable)
+            )
+
+    def test_numeric_subclass_cannot_bypass_unit_conflict_detection(self) -> None:
+        liar = LyingInteger(999)
+        self.assertEqual("1", str(liar))
+        self.assertEqual(
+            Decimal("25374.6"),
+            Decimal(int(liar)) * Decimal("25.4"),
+        )
+
+        with self.assertRaises(TypeError):
+            make_candidate(
+                (
+                    make_assertion(
+                        "assertion:demo:geometry:mm",
+                        field_path="geometry.width",
+                        value={"value": 25.4, "unit": "mm"},
+                    ),
+                    make_assertion(
+                        "assertion:demo:geometry:in",
+                        field_path="geometry.width",
+                        value={"value": liar, "unit": "in"},
+                        source_id="source:demo:other:api",
+                    ),
+                )
+            )
+
+    def test_stored_values_are_the_values_the_conflict_rules_compare(self) -> None:
+        candidate = make_candidate(
+            (
+                make_assertion(
+                    "assertion:demo:dimension:mm",
+                    field_path="dimensions.panel_thickness",
+                    value={"value": 25.4, "unit": "mm"},
+                ),
+                make_assertion(
+                    "assertion:demo:dimension:in",
+                    field_path="dimensions.panel_thickness",
+                    value={"value": 1, "unit": "in"},
+                    source_id="source:demo:other:api",
+                ),
+            )
+        )
+
+        result = ReviewedAssertionAdapter(
+            (
+                make_context(),
+                make_context(
+                    "source:demo:other:api",
+                    authority=SourceAuthority.OTHER.value,
+                    document_kind=DocumentKind.API.value,
+                ),
+            )
+        ).ingest(candidate)
+
+        self.assertEqual((candidate,), result.promoted)
+        for assertion in result.promoted[0].assertions:
+            with self.subTest(assertion_id=assertion.assertion_id):
+                self.assertLessEqual(
+                    leaf_types(assertion.value),
+                    ADMITTED_LEAF_TYPES,
+                )
+        self.assertEqual(
+            (Decimal("25.4"), Decimal("1")),
+            tuple(
+                Decimal(str(assertion.value["value"]))
+                for assertion in result.promoted[0].assertions
+            ),
+        )
+
+    def test_unordered_collections_are_refused_wherever_order_is_observable(
+        self,
+    ) -> None:
+        first = make_assertion("assertion:demo:identity:a", value="A")
+        second = make_assertion(
+            "assertion:demo:identity:b",
+            field_path="identity.finish_code",
+            value="B",
+        )
+
+        with self.assertRaises(TypeError):
+            make_candidate({first, second})
+        with self.assertRaises(TypeError):
+            make_candidate(frozenset((first, second)))
+        with self.assertRaises(TypeError):
+            QuarantineRecord(
+                candidate_id=CANDIDATE_ID,
+                reason_code="REVIEW_REQUIRED",
+                evidence_ids={"assertion:demo:identity:a"},
+                owner_role="OEM Evidence Curator",
+            )
+        with self.assertRaises(TypeError):
+            IngestionResult(promoted={make_candidate()}, quarantined=())
+        with self.assertRaises(TypeError):
+            ReviewedAssertionAdapter({make_context()})
+
+    def test_ordered_assertion_input_keeps_its_exact_input_order(self) -> None:
+        first = make_assertion("assertion:demo:identity:a", value="A")
+        second = make_assertion(
+            "assertion:demo:identity:b",
+            field_path="identity.finish_code",
+            value="B",
+        )
+
+        self.assertEqual(
+            ("assertion:demo:identity:b", "assertion:demo:identity:a"),
+            tuple(
+                assertion.assertion_id
+                for assertion in make_candidate([second, first]).assertions
+            ),
+        )
+
+
+class ExoticSubclassRefusalTests(unittest.TestCase):
+    """Text fields are compared, so a lying subclass must never be stored."""
+
+    @staticmethod
+    def assertion_with(**overrides: object) -> FieldAssertion:
+        arguments: dict[str, object] = {
+            "assertion_id": "assertion:demo:identity:sku",
+            "entity_id": CANDIDATE_ID,
+            "field_path": "identity.exact_sku",
+            "value": "DEMO-001",
+            "source_id": "source:demo:oem:web",
+            "locator": "page 1, row DEMO-001",
+            "reviewer": "reviewer:registry",
+            "review_state": "VERIFIED",
+        }
+        arguments.update(overrides)
+        return FieldAssertion(**arguments)
+
+    def test_the_lying_subclass_really_does_defeat_plain_comparison(self) -> None:
+        impostor = LyingText("brand:impostor")
+
+        self.assertEqual("brand:impostor", str(impostor))
+        self.assertEqual(impostor, BRAND_ID)
+        self.assertFalse(impostor != BRAND_ID)
+
+    def test_candidate_text_fields_refuse_lying_string_subclasses(self) -> None:
+        for field_name in (
+            "candidate_id",
+            "brand_id",
+            "entity_kind",
+            "extraction_method",
+        ):
+            with self.subTest(field=field_name):
+                with self.assertRaises(TypeError):
+                    make_candidate(
+                        **{field_name: LyingText("brand:impostor")}
+                    )
+
+    def test_assertion_text_fields_refuse_lying_string_subclasses(self) -> None:
+        for overrides in (
+            {"assertion_id": LyingText("assertion:demo:impostor")},
+            {"entity_id": LyingText("candidate:demo:impostor")},
+            {"field_path": LyingText("identity.exact_sku")},
+            {"source_id": LyingText("source:demo:impostor")},
+            {"locator": LyingText("page 1")},
+            {"reviewer": LyingText("reviewer:registry")},
+        ):
+            with self.subTest(field=tuple(overrides)[0]):
+                with self.assertRaises(TypeError):
+                    make_candidate((self.assertion_with(**overrides),))
+
+    def test_pending_assertion_cannot_be_promoted_by_a_lying_review_state(
+        self,
+    ) -> None:
+        pending = self.assertion_with(review_state=LyingText("PENDING"))
+        self.assertEqual("PENDING", str(pending.review_state))
+        self.assertFalse(pending.review_state != "VERIFIED")
+
+        with self.assertRaises(TypeError):
+            make_candidate((pending,))
+
+    def test_quarantine_text_fields_refuse_lying_string_subclasses(self) -> None:
+        for overrides in (
+            {"candidate_id": LyingText(CANDIDATE_ID)},
+            {"reason_code": LyingText("REVIEW_REQUIRED")},
+            {"owner_role": LyingText("Wrong Reviewer")},
+            {"evidence_ids": (LyingText("assertion:demo:identity:sku"),)},
+        ):
+            with self.subTest(field=tuple(overrides)[0]):
+                arguments: dict[str, object] = {
+                    "candidate_id": CANDIDATE_ID,
+                    "reason_code": "REVIEW_REQUIRED",
+                    "evidence_ids": ("assertion:demo:identity:sku",),
+                    "owner_role": "OEM Evidence Curator",
+                }
+                arguments.update(overrides)
+                with self.assertRaises(TypeError):
+                    QuarantineRecord(**arguments)
+
+    def test_source_context_fields_refuse_lying_string_subclasses(self) -> None:
+        for overrides in (
+            {"source_id": LyingText("source:demo:impostor")},
+            {"authority": LyingText(SourceAuthority.OEM.value)},
+            {"document_kind": LyingText(DocumentKind.WEB.value)},
+            {
+                "rights_state": LyingText(
+                    RightsState.FACTUAL_INDEXING_ALLOWED.value
+                )
+            },
+        ):
+            with self.subTest(field=tuple(overrides)[0]):
+                with self.assertRaises(TypeError):
+                    make_context(**overrides)
 
 
 class ReviewedIngestionTests(unittest.TestCase):
@@ -866,16 +1214,107 @@ class MatingPartAndMultiReasonTests(unittest.TestCase):
         )
 
     def test_mating_part_is_not_required_for_unrelated_entity_kinds(self) -> None:
-        candidate = make_candidate(
+        unrelated_without_marker = make_candidate(
             entity_kind="CABINET_MATERIAL",
             assertions=(
                 make_assertion(),
             ),
         )
+        connector_without_marker = make_candidate()
+        marker_explicitly_false = make_candidate(
+            (
+                make_assertion(
+                    "assertion:demo:compatibility:not-required",
+                    field_path="compatibility.requires_mating_part",
+                    value=False,
+                ),
+            ),
+            entity_kind="CABINET_MATERIAL",
+        )
 
-        result = ReviewedAssertionAdapter((make_context(),)).ingest(candidate)
+        for candidate in (
+            unrelated_without_marker,
+            connector_without_marker,
+            marker_explicitly_false,
+        ):
+            with self.subTest(
+                entity_kind=candidate.entity_kind,
+                field_paths=tuple(
+                    assertion.field_path for assertion in candidate.assertions
+                ),
+            ):
+                result = ReviewedAssertionAdapter((make_context(),)).ingest(
+                    candidate
+                )
 
-        self.assertEqual((candidate,), result.promoted)
+                self.assertEqual((candidate,), result.promoted)
+                self.assertEqual((), result.quarantined)
+
+    def test_mating_part_requirement_follows_the_marker_not_the_entity_kind(
+        self,
+    ) -> None:
+        for entity_kind in (
+            "CONNECTOR_ASSEMBLY",
+            "connector_assembly",
+            "CONNECTOR_ASSEMBLY_MINIFIX",
+            "FUTURE_CONNECTOR_FAMILY",
+            "CABINET_MATERIAL",
+        ):
+            with self.subTest(entity_kind=entity_kind):
+                result = ReviewedAssertionAdapter((make_context(),)).ingest(
+                    make_candidate(
+                        (
+                            make_assertion(
+                                "assertion:demo:compatibility:required",
+                                field_path="compatibility.requires_mating_part",
+                                value=True,
+                            ),
+                        ),
+                        entity_kind=entity_kind,
+                    )
+                )
+
+                self.assertEqual((), result.promoted)
+                self.assertEqual(
+                    ("REQUIRED_MATING_PART_MISSING",),
+                    reason_codes(result),
+                )
+                self.assertEqual(
+                    ("assertion:demo:compatibility:required",),
+                    result.quarantined[0].evidence_ids,
+                )
+                self.assertEqual(
+                    "BOM and Compatibility Reviewer",
+                    result.quarantined[0].owner_role,
+                )
+
+    def test_satisfied_marker_promotes_for_any_entity_kind(self) -> None:
+        for entity_kind in (
+            "connector_assembly",
+            "CONNECTOR_ASSEMBLY_MINIFIX",
+        ):
+            with self.subTest(entity_kind=entity_kind):
+                candidate = make_candidate(
+                    (
+                        make_assertion(
+                            "assertion:demo:compatibility:required",
+                            field_path="compatibility.requires_mating_part",
+                            value=True,
+                        ),
+                        make_assertion(
+                            "assertion:demo:compatibility:exact-part",
+                            field_path="compatibility.exact_mating_part_id",
+                            value="sku:demo:mating-part:EU",
+                        ),
+                    ),
+                    entity_kind=entity_kind,
+                )
+
+                result = ReviewedAssertionAdapter((make_context(),)).ingest(
+                    candidate
+                )
+
+                self.assertEqual((candidate,), result.promoted)
 
     def test_all_simultaneous_reasons_are_deduplicated_and_ordered(
         self,
@@ -1107,6 +1546,70 @@ class CliContractTests(unittest.TestCase):
                 },
                 {path.name for path in root.iterdir()},
             )
+
+    def test_brand_flag_must_be_canonical_before_any_output_is_written(
+        self,
+    ) -> None:
+        for brand in ("hafele", " ", "brand:", "brand id:x", "Brand:demo"):
+            with self.subTest(brand=brand):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    root = Path(temporary_directory)
+                    manifest = root / "sources.json"
+                    assertions = root / "candidates.jsonl"
+                    promoted = root / "promoted.jsonl"
+                    quarantine = root / "quarantine.jsonl"
+                    manifest.write_text("[]", encoding="utf-8")
+                    assertions.write_text("", encoding="utf-8")
+
+                    result = self.run_cli(
+                        "--brand",
+                        brand,
+                        "--source-manifest",
+                        manifest,
+                        "--assertions",
+                        assertions,
+                        "--out",
+                        promoted,
+                        "--quarantine",
+                        quarantine,
+                    )
+
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertFalse(promoted.exists())
+                    self.assertFalse(quarantine.exists())
+                    self.assertEqual(
+                        {"candidates.jsonl", "sources.json"},
+                        {path.name for path in root.iterdir()},
+                    )
+
+    def test_canonical_brand_with_zero_candidates_writes_two_empty_outputs(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            manifest = root / "sources.json"
+            assertions = root / "candidates.jsonl"
+            promoted = root / "promoted.jsonl"
+            quarantine = root / "quarantine.jsonl"
+            manifest.write_text("[]", encoding="utf-8")
+            assertions.write_text("", encoding="utf-8")
+
+            result = self.run_cli(
+                "--brand",
+                BRAND_ID,
+                "--source-manifest",
+                manifest,
+                "--assertions",
+                assertions,
+                "--out",
+                promoted,
+                "--quarantine",
+                quarantine,
+            )
+
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual("", promoted.read_text(encoding="utf-8"))
+            self.assertEqual("", quarantine.read_text(encoding="utf-8"))
 
     def test_brand_mismatch_or_malformed_input_creates_no_outputs(self) -> None:
         for case in ("brand", "malformed"):
