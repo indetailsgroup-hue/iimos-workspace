@@ -28,6 +28,10 @@ SKILL = ROOT / "tools" / "codex-skills" / "book-to-skill"
 EXTRACT = SKILL / "scripts" / "extract.py"
 FIXTURES = Path(__file__).parent / "fixtures"
 
+# The extractor shells out to optional third-party backends. A missing or wedged
+# backend must fail the run, not hang the suite behind a pipe that never closes.
+SUBPROCESS_TIMEOUT = 30
+
 
 def run_extract(
     source: Path,
@@ -57,6 +61,7 @@ def run_extract(
         encoding="utf-8",
         capture_output=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT,
     )
 
 
@@ -132,6 +137,7 @@ def test_dependency_check_reports_every_format_without_installing() -> None:
         encoding="utf-8",
         capture_output=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     report = result.stdout + result.stderr

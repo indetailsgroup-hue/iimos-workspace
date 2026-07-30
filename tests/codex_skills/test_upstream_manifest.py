@@ -14,15 +14,36 @@ Recording the hashes in the test rather than in prose is what makes the
 distinction enforceable offline: an undeclared edit to upstream bytes, or an
 extra file appearing inside the skill, fails here instead of being discovered
 during the next upstream merge.
+
+The digests are only meaningful if a checkout reproduces the audited bytes. This
+repository sets `core.autocrlf=true` and the pinned blobs are LF-only, so
+without a `-text` attribute Git rewrites every one of them to CRLF on checkout
+and all nineteen recorded digests stop matching at once. The last two tests pin
+that attribute directly, so the failure names its cause instead of appearing as
+nineteen simultaneous "drifted" hashes.
 """
 
 from __future__ import annotations
 
+import re
+import shutil
+import subprocess
 from hashlib import sha256
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "tools" / "codex-skills" / "book-to-skill"
+SKILL_RELATIVE = SKILL.relative_to(ROOT).as_posix()
+
+# Every .gitattributes that could carry the checkout pin, nearest-first. Git
+# resolves the deepest matching file last, so a rule here also wins over any
+# future repository-wide `* text=auto` line at the root.
+ATTRIBUTE_FILES = (
+    ROOT / "tools" / "codex-skills" / ".gitattributes",
+    ROOT / ".gitattributes",
+)
 
 UPSTREAM_REPOSITORY = "https://github.com/virgiliojr94/book-to-skill"
 UPSTREAM_COMMIT = "c6bc1b7927822e563aae6212c07670f5a3d95ea7"
@@ -141,3 +162,85 @@ def test_governed_tree_contains_no_symlinks() -> None:
         path.relative_to(SKILL).as_posix() for path in SKILL.rglob("*") if path.is_symlink()
     ]
     assert links == []
+
+
+def test_a_gitattributes_rule_pins_the_governed_tree() -> None:
+    """The pin must ship in the repository, not just exist on one machine.
+
+    Checked without invoking Git so the rule is still asserted in an exported
+    tree; `test_git_reports_no_conversion_...` proves it is actually in force.
+    """
+    shipped = [path for path in ATTRIBUTE_FILES if path.is_file()]
+    assert shipped, (
+        "no .gitattributes ships with the governed tree; a Windows checkout "
+        "will rewrite the pinned bytes and every digest above will fail"
+    )
+
+    pinning_rules = []
+    for path in shipped:
+        base = path.parent.relative_to(ROOT).as_posix()
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            pattern, *attributes = stripped.split()
+            covered = f"{base}/{pattern}" if base != "." else pattern
+            if covered.startswith(f"{SKILL_RELATIVE}/") and "-text" in attributes:
+                pinning_rules.append((path.relative_to(ROOT).as_posix(), attributes))
+
+    assert pinning_rules, (
+        f"no shipped .gitattributes disables text conversion for {SKILL_RELATIVE}/**"
+    )
+    assert len(pinning_rules) == 1, (
+        f"the checkout pin is declared in more than one place: {pinning_rules}"
+    )
+    _, attributes = pinning_rules[0]
+    assert "-whitespace" in attributes, (
+        "the pinned tree must also opt out of whitespace checking, or "
+        "`git apply --whitespace=fix` and whitespace hooks can rewrite bytes "
+        "we are not allowed to edit"
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("git") is None or not (ROOT / ".git").exists(),
+    reason="needs a Git checkout to report the attributes actually in force",
+)
+def test_git_reports_no_conversion_for_any_governed_file() -> None:
+    """`i/` is the stored blob's line ending, `w/` the working tree's.
+
+    Any governed file where the two differ was rewritten on checkout, and its
+    recorded SHA-256 no longer describes the bytes on disk. Deleting the
+    attributes file from the working tree does not relax this: Git reads
+    attributes from the index during checkout, so the pin has to be removed from
+    a commit before it stops applying.
+    """
+    result = subprocess.run(
+        ["git", "ls-files", "--eol", "--", SKILL_RELATIVE],
+        cwd=ROOT,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    line_re = re.compile(r"^i/(?P<index>\S+)\s+w/(?P<worktree>\S+)\s+attr/(?P<attr>\S*)\s*\t(?P<path>.+)$")
+    reported = {}
+    for line in result.stdout.splitlines():
+        match = line_re.match(line)
+        assert match is not None, f"unparsed `git ls-files --eol` line: {line!r}"
+        reported[match.group("path")] = match.groupdict()
+
+    assert set(reported) == {f"{SKILL_RELATIVE}/{relative}" for relative in governed_tree()}
+
+    converted = {
+        path: (fields["index"], fields["worktree"])
+        for path, fields in reported.items()
+        if fields["index"] != fields["worktree"]
+    }
+    assert converted == {}, "checkout conversion rewrote pinned bytes"
+
+    unpinned = sorted(path for path, fields in reported.items() if "-text" not in fields["attr"])
+    assert unpinned == []
