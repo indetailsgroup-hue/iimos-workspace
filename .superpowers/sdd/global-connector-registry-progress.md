@@ -603,7 +603,7 @@ Total 3,715 insertions and zero deletions. No owner governance-root, nested prod
 
 ### Wave provenance — which change came from where
 
-This distinction matters more than the counts. Four waves answered independent review findings; one was an owner ruling; one was report accuracy only.
+This distinction matters more than the counts, and it has two separate axes that must not be collapsed. By **what surfaced the work**: waves 1, 3, 5 and 6 were surfaced by independent review findings, and wave 7 by a report-accuracy review. By **deciding authority**: wave 4 was owner-ordered outright, and wave 6 — although surfaced by review — was decided under the owner's standing ruling rather than by the reviewer, so two waves are owner-derived and three are review-decided. The Origin column below records deciding authority, because that is the ledger's governance value. Credit for owner-directed work must not blur toward review.
 
 | Wave | Commit | Origin | What it closed |
 | --- | --- | --- | --- |
@@ -635,7 +635,9 @@ The owner constraint on wave 4 was explicit and is preserved: exact decimal equa
 | Wave 7 | Report accuracy only, no source change | All five approved paths hashed identical to their `db485292` blobs. |
 | Final independent review | `ACCEPTED` — no findings | Verified live: 91 / 281 / 12 / 551, verifier 13/13, all provenance rows against `git cat-file`, both packages byte-identical and reverse-applying, and a 52-family census giving `quarantine → promote = 0`. |
 
-### Verification current at accepted HEAD
+### Verification rerun at this ledger closeout
+
+Unlike the Tasks 4–6 closeouts, which recorded accepted figures and stated that the docs-only closeout did not rerun product tests, every figure below was rerun during this closeout against accepted HEAD `db485292`, and again after the ledger commit to confirm the docs-only change moved nothing. The figures are therefore sourced to this closeout, not carried from the Task 7 report.
 
 - Task 7 module `91/91`; registry directory `281/281`; verifier contracts `12/12`; full dynamic discovery `551/551`; all exit `0` and `OK`.
 - Clean-HEAD verifier: schema `1.1.0`, PASS, checks `13/13`, failed `0`, embedded dynamic full suite `551`, governed Component Master `20/20`, governed identity-tenancy `7/7`, compile exit `0`.
@@ -656,13 +658,15 @@ These are recorded without softening, because each one bounds what the Task 7 ev
 - Two digests in the Task 7 report are environment-derived and not portable: the embedded full-suite output and the verifier summary contain per-run timings and absolute paths. Three different machines produced three different verifier-summary sizes — 102,873, 111,439, and 112,218 bytes. The portable facts are the check counts and the pass verdict, not the byte size or digest.
 - The figure-derivation guard that proves the report's current-state numbers match live runs is a scratchpad throwaway. Nothing in the repository reruns it, so it protects the report edition it was run against and not the next one. An independent reviewer correctly refused to repeat its result as verified, because it sat outside the repository he could see.
 - The census families are constructed by hand, not sampled from real vendor data. They bound the rules against imagined shapes, not against the field.
-- `:13` and the fix-wave section heading both use the phrase "review-driven fix waves" while wave 4 was owner-ordered. The disambiguation sits directly beneath the heading, but the phrase itself is imprecise and is named here so the record says it cleanly the first time.
+- **`evidence.py` and `ingestion.py` disagree on admitted values, deliberately, and a Task 8 implementer must know it.** `evidence.FieldAssertion` still accepts a value of type `Decimal`, `bytearray`, `frozenset`, or a non-finite `float`, all four of which `CandidateRecord` refuses at construction — verified directly at accepted HEAD. The divergence is intended and is tested on the ingestion side; `evidence.py` was outside the Task 7 approved paths and was not touched. Any later task that wants one admitted-value contract across both modules must reconcile it inside `evidence.py`.
+- The Task 7 report's own current-boundary line and its fix-wave section heading both use the phrase "review-driven fix waves" while wave 4 was owner-ordered. That phrase does not appear in this ledger, and the "Wave provenance" section above states both axes explicitly instead; the imprecision is recorded here so the report and the ledger are not read as agreeing on it.
+- Wave numbering runs 1, 3, 4, 5, 6, 7 with no wave 2. The coordinator assigned the numbers in the coordination messages and simply never used 2. **No work is missing, nothing was reverted, and nothing was suppressed.** The gap is recorded so it cannot be misread later as a removed or hidden wave.
 - Carry-forward, still open and owned by nobody unless the plan names them: `EvidenceVault`/source-hash binding to `review_state`; `SourceContext` versus `SourceSnapshot` rights reconciliation; `geometry.*` versus `dimensions.*` cross-prefix comparison, which needs a field-naming ruling Task 7 does not own; regional order-code collision; pack/finish ambiguity; per-entity ID namespacing; and the CLI `except` escape, where `AttributeError` and `RecursionError` exit `1` with a bare traceback instead of exit `2` with a reason, still fail-closed with no files written.
 
 ### Task 7 authority boundary
 
 - Task 7 establishes only a reviewed-ingestion and fail-closed quarantine foundation.
-- **The registry contains zero real SKUs.** Task 7 populates no registry data whatsoever.
+- **Task 7 adds no registry data, and its ingestion surface holds zero records.** Separately, and outside Task 7's scope, the repository carries a 20-record bootstrap SKU seed at `data/component-master/skus.jsonl`, adopted by the Task 1 baseline commit `6dd99372` — which predates the Task 7 base — of which 2 records are marked verified against primary-supplier catalogue URLs. The verifier's own seed contract counts them as `sku_count = 20` and `verified_sku_count = 2`. That seed is a bootstrap cohort, not a qualified registry, and Task 7 neither added to it nor validated it; `git diff --name-only addadab0..db485292 -- data/` is empty. An earlier edition of this ledger claimed "the registry contains zero real SKUs", which was false and is corrected here.
 - It is not a populated worldwide registry, release signing, network monitoring, conflict case-resolution workflow, runtime integration, freeze/export authority, structural or physical qualification, production readiness, or manufacturing readiness.
 - NOT-FOR-PRODUCTION remains active. Software evidence does not grant manufacturing, installation, operational, or production authority.
 - Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.
