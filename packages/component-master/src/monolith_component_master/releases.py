@@ -270,6 +270,19 @@ def build_release_from_snapshot(
     resolved_version = _require_semantic_version(version)
     resolved_created_at = _require_created_at(created_at_utc)
     _exact_snapshot(snapshot)
+    # A release is what downstream consumes as truth. `check_coverage` is a
+    # report and may be run over an unclassified item; a release may not,
+    # unconditionally and with no opt-out flag, because a release containing an
+    # item nobody classified overstates its own coverage.
+    if snapshot.unclassified:
+        raise ValueError(
+            "a release cannot be built while a discovered item is "
+            "unclassified: "
+            + ", ".join(
+                f"{record.item_id} ({record.origin}, {record.reason})"
+                for record in snapshot.unclassified
+            )
+        )
     payload = canonical_json_bytes(snapshot_payload(snapshot))
     return RegistryRelease(
         release_id=RELEASE_ID_PREFIX + resolved_version,

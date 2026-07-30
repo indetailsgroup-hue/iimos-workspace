@@ -150,6 +150,16 @@ def coverage_item(
     )
 
 
+def registered_denominator(
+    source_id: str = SOURCE_ID,
+) -> tuple[SourceDenominatorEntry, ...]:
+    return (
+        SourceDenominatorEntry(
+            source_id=source_id, sha256=SOURCE_SHA256, state="REGISTERED"
+        ),
+    )
+
+
 def loaded_vault() -> tuple[EvidenceVault, dict[str, bytes]]:
     vault = EvidenceVault()
     vault.register(source_snapshot(), SOURCE_CONTENT)
@@ -960,7 +970,7 @@ class CoverageSnapshotTests(unittest.TestCase):
             items=(item,),
             unclassified=(),
             blocked_sources=(),
-            source_denominator=(),
+            source_denominator=registered_denominator(),
             evidence_gate_findings=(),
         )
         self.assertEqual(1, snapshot.dimension_verified_counts["identity"].count)
@@ -1128,7 +1138,7 @@ class CoverageSnapshotTests(unittest.TestCase):
             items=(first, second),
             unclassified=(),
             blocked_sources=(),
-            source_denominator=(),
+            source_denominator=registered_denominator(),
             evidence_gate_findings=(),
         )
         reverse = CoverageSnapshot(
@@ -1136,7 +1146,7 @@ class CoverageSnapshotTests(unittest.TestCase):
             items=(second, first),
             unclassified=(),
             blocked_sources=(),
-            source_denominator=(),
+            source_denominator=registered_denominator(),
             evidence_gate_findings=(),
         )
         self.assertEqual(
@@ -1144,6 +1154,210 @@ class CoverageSnapshotTests(unittest.TestCase):
             tuple(item.item_id for item in forward.items),
         )
         self.assertEqual(forward.items, reverse.items)
+
+
+# ---------------------------------------------------------------------------
+# 8 (continued). The backing invariant enforced by the snapshot itself
+# ---------------------------------------------------------------------------
+
+
+class SnapshotBackingInvariantTests(unittest.TestCase):
+    """An unbacked claim must be unable to reach a release.
+
+    Calling `evaluate_evidence_gate` is a convention inside `build_snapshot`;
+    a convention is not a gate. `CoverageSnapshot` already holds the items and
+    the measured source denominator, so it can refuse the two shapes that make
+    an unbacked claim publishable: a `VERIFIED` record with no assertion, and a
+    `VERIFIED` record whose assertion names a source the denominator does not
+    hold in a `REGISTERED` state.
+    """
+
+    def snapshot(
+        self,
+        *,
+        items: tuple[CoverageItem, ...],
+        source_denominator: tuple[SourceDenominatorEntry, ...] = (),
+        findings: tuple[EvidenceGateFinding, ...] = (),
+    ) -> CoverageSnapshot:
+        return CoverageSnapshot(
+            discovered_item_count=len(items),
+            items=items,
+            unclassified=(),
+            blocked_sources=(),
+            source_denominator=source_denominator,
+            evidence_gate_findings=findings,
+        )
+
+    def unassertedb_item(self, item_id: str = "item:demo:a") -> CoverageItem:
+        return CoverageItem(
+            item_id=item_id,
+            classification="VERIFIED",
+            dimension_states=dimension_states(
+                **{name: VerificationState.VERIFIED.value for name in ALL_DIMENSIONS}
+            ),
+            assertions=(),
+        )
+
+    def test_verified_item_with_no_assertion_cannot_be_snapshotted(self) -> None:
+        """The coordinator's reproduction, refused at construction."""
+
+        with self.assertRaises(ValueError) as caught:
+            self.snapshot(items=(self.unassertedb_item(),))
+        self.assertIn("item:demo:a", str(caught.exception))
+
+    def test_no_release_can_be_built_from_that_shape(self) -> None:
+        with self.assertRaises(ValueError):
+            build_release_from_snapshot(
+                self.snapshot(items=(self.unassertedb_item(),)),
+                version="0.1.0",
+                created_at_utc=CREATED_AT,
+            )
+
+    def test_verified_item_with_an_unregistered_source_is_refused(self) -> None:
+        with self.assertRaises(ValueError) as caught:
+            self.snapshot(items=(coverage_item(),))
+        self.assertIn(ITEM_ID, str(caught.exception))
+        self.assertIn(SOURCE_ID, str(caught.exception))
+
+    def test_verified_item_with_a_blocked_source_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            self.snapshot(
+                items=(coverage_item(),),
+                source_denominator=(
+                    SourceDenominatorEntry(
+                        source_id=SOURCE_ID,
+                        sha256=SOURCE_SHA256,
+                        state="BLOCKED",
+                    ),
+                ),
+            )
+
+    def test_registered_source_permits_a_backed_item(self) -> None:
+        snapshot = self.snapshot(
+            items=(coverage_item(),),
+            source_denominator=registered_denominator(),
+        )
+        self.assertEqual(1, snapshot.verified_item_count.count)
+
+    def test_a_matching_finding_permits_the_zero_assertion_shape(self) -> None:
+        snapshot = self.snapshot(
+            items=(self.unassertedb_item(),),
+            findings=(
+                EvidenceGateFinding(
+                    item_id="item:demo:a",
+                    assertion_id="",
+                    reason="MISSING_ASSERTION",
+                ),
+            ),
+        )
+        self.assertEqual(0, snapshot.verified_item_count.count)
+        self.assertEqual(1, snapshot.unbacked_verified_item_count.count)
+
+    def test_a_matching_finding_permits_the_ghost_source_shape(self) -> None:
+        snapshot = self.snapshot(
+            items=(coverage_item(),),
+            findings=(
+                EvidenceGateFinding(
+                    item_id=ITEM_ID,
+                    assertion_id=ASSERTION_ID,
+                    reason="SOURCE_NOT_REGISTERED",
+                ),
+            ),
+        )
+        self.assertEqual(0, snapshot.verified_item_count.count)
+
+    def test_a_missing_assertion_finding_does_not_exempt_a_ghost_source(
+        self,
+    ) -> None:
+        """The exemption is per assertion, not per item."""
+
+        with self.assertRaises(ValueError):
+            self.snapshot(
+                items=(coverage_item(),),
+                findings=(
+                    EvidenceGateFinding(
+                        item_id=ITEM_ID,
+                        assertion_id="",
+                        reason="MISSING_ASSERTION",
+                    ),
+                ),
+            )
+
+    def test_a_finding_for_one_assertion_does_not_exempt_another(self) -> None:
+        item = coverage_item(
+            assertions=(
+                field_assertion(assertion_id="assertion:demo:one"),
+                field_assertion(
+                    assertion_id="assertion:demo:two",
+                    field_path="commercial.note",
+                ),
+            )
+        )
+        with self.assertRaises(ValueError) as caught:
+            self.snapshot(
+                items=(item,),
+                findings=(
+                    EvidenceGateFinding(
+                        item_id=ITEM_ID,
+                        assertion_id="assertion:demo:one",
+                        reason="SOURCE_NOT_REGISTERED",
+                    ),
+                ),
+            )
+        self.assertIn("assertion:demo:two", str(caught.exception))
+
+    def test_a_finding_for_one_item_does_not_exempt_another(self) -> None:
+        first = coverage_item(
+            item_id="sku:demo:a",
+            assertions=(
+                field_assertion(
+                    assertion_id="assertion:demo:a", entity_id="sku:demo:a"
+                ),
+            ),
+        )
+        second = coverage_item(
+            item_id="sku:demo:b",
+            assertions=(
+                field_assertion(
+                    assertion_id="assertion:demo:b", entity_id="sku:demo:b"
+                ),
+            ),
+        )
+        with self.assertRaises(ValueError) as caught:
+            self.snapshot(
+                items=(first, second),
+                findings=(
+                    EvidenceGateFinding(
+                        item_id="sku:demo:a",
+                        assertion_id="assertion:demo:a",
+                        reason="SOURCE_NOT_REGISTERED",
+                    ),
+                ),
+            )
+        self.assertIn("sku:demo:b", str(caught.exception))
+
+    def test_a_dimension_level_claim_is_covered_by_the_invariant(self) -> None:
+        item = CoverageItem(
+            item_id="item:demo:a",
+            classification="PENDING",
+            dimension_states=dimension_states(
+                geometry=VerificationState.VERIFIED.value
+            ),
+            assertions=(),
+        )
+        with self.assertRaises(ValueError):
+            self.snapshot(items=(item,))
+
+    def test_a_record_claiming_nothing_verified_needs_no_backing(self) -> None:
+        item = CoverageItem(
+            item_id="item:demo:a",
+            classification="PENDING",
+            dimension_states=dimension_states(),
+            assertions=(),
+        )
+        snapshot = self.snapshot(items=(item,))
+        self.assertEqual(1, snapshot.discovered_item_count)
+        self.assertEqual(0, snapshot.verified_item_count.count)
 
 
 # ---------------------------------------------------------------------------
@@ -1298,6 +1512,34 @@ class ReleaseRecordTests(unittest.TestCase):
             empty.source_denominator_sha256,
             populated.source_denominator_sha256,
         )
+
+    def test_a_release_refuses_an_unclassified_item(self) -> None:
+        """A release is what downstream consumes as truth.
+
+        `check_coverage` is a report and may be run either way. A release that
+        contains an item nobody classified overstates its own coverage, so the
+        release boundary refuses unconditionally — there is no opt-out flag.
+        """
+
+        snapshot = CoverageSnapshot(
+            discovered_item_count=1,
+            items=(),
+            unclassified=(
+                UnclassifiedItem(
+                    item_id=ITEM_ID,
+                    origin="materials.jsonl:1",
+                    reason="CLASSIFICATION_ABSENT",
+                ),
+            ),
+            blocked_sources=(),
+            source_denominator=(),
+            evidence_gate_findings=(),
+        )
+        with self.assertRaises(ValueError) as caught:
+            build_release_from_snapshot(
+                snapshot, version="0.1.0", created_at_utc=CREATED_AT
+            )
+        self.assertIn(ITEM_ID, str(caught.exception))
 
     def test_payload_states_the_authority_boundary(self) -> None:
         release = build_release_from_snapshot(
@@ -1545,6 +1787,203 @@ class DiscoveryTests(TemporaryRootTestCase):
         with self.assertRaises(FileNotFoundError):
             discover_registry_root(self.root)
 
+    def test_nested_item_file_is_measured(self) -> None:
+        """A file added later must not go unmeasured. Silence is not a state."""
+
+        self.populated_root()
+        nested = self.root / "nested"
+        nested.mkdir()
+        write_jsonl(
+            nested / "more.jsonl",
+            [
+                item_line(
+                    item_id="sku:demo:nested",
+                    assertions=[
+                        {
+                            "assertion_id": "assertion:demo:nested",
+                            "entity_id": "sku:demo:nested",
+                            "field_path": "identity.exact_sku",
+                            "value": "NESTED",
+                            "source_id": SOURCE_ID,
+                            "locator": "page 7",
+                            "reviewer": "reviewer:demo",
+                            "review_state": "VERIFIED",
+                        }
+                    ],
+                )
+            ],
+        )
+        snapshot = build_snapshot(self.root)
+        self.assertEqual(2, snapshot.discovered_item_count)
+        self.assertIn(
+            "sku:demo:nested", [item.item_id for item in snapshot.items]
+        )
+
+    def test_nested_origin_names_the_path_relative_to_the_root(self) -> None:
+        self.seed_root()
+        nested = self.root / "nested"
+        nested.mkdir()
+        write_jsonl(nested / "more.jsonl", [item_line(classification=None)])
+        result = discover_registry_root(self.root)
+        self.assertEqual("nested/more.jsonl:1", result.unclassified[0].origin)
+
+    def test_the_source_cache_directory_is_not_read_as_item_data(self) -> None:
+        """`_source-cache/` holds source content, declared in the root's own
+
+        `.gitignore`. It is the one documented exclusion.
+        """
+
+        self.populated_root()
+        cache = self.root / SOURCE_CACHE_DIRNAME
+        write_jsonl(cache / "feed.jsonl", [item_line(item_id="sku:demo:cached")])
+        snapshot = build_snapshot(self.root)
+        self.assertEqual(1, snapshot.discovered_item_count)
+        self.assertNotIn(
+            "sku:demo:cached", [item.item_id for item in snapshot.items]
+        )
+
+    def test_unicode_line_separators_survive_the_reader(self) -> None:
+        """The serializer emits U+2028/U+2029/U+0085 raw; the reader must
+
+        read them back. `str.splitlines()` breaks on all three.
+        """
+
+        for separator in ("\u2028", "\u2029", "\u0085"):
+            with self.subTest(separator=repr(separator)):
+                self.populated_root()
+                # Written with Task 8's own serializer, which emits these
+                # characters raw because it uses ensure_ascii=False.
+                (self.root / "materials.jsonl").write_bytes(
+                    canonical_json_bytes(
+                        item_line(
+                            assertions=[
+                                {
+                                    "assertion_id": ASSERTION_ID,
+                                    "entity_id": ITEM_ID,
+                                    "field_path": "commercial.note",
+                                    "value": f"before{separator}after",
+                                    "source_id": SOURCE_ID,
+                                    "locator": "page 24",
+                                    "reviewer": "reviewer:demo",
+                                    "review_state": "VERIFIED",
+                                }
+                            ]
+                        )
+                    )
+                )
+                raw = (self.root / "materials.jsonl").read_bytes()
+                self.assertIn(separator.encode("utf-8"), raw)
+                snapshot = build_snapshot(self.root)
+                self.assertEqual(1, snapshot.discovered_item_count)
+                self.assertEqual((), snapshot.evidence_gate_findings)
+                self.assertEqual(
+                    f"before{separator}after",
+                    snapshot.items[0].assertions[0].value,
+                )
+
+    def test_a_published_string_may_carry_a_line_separator(self) -> None:
+        """The payload emits these raw, so the reader must tolerate them.
+
+        A blocked-source reason is free text taken from the manifest, so it is
+        a field an OEM feed can put exotic Unicode into.
+        """
+
+        for separator in ("\u2028", "\u2029", "\u0085"):
+            with self.subTest(separator=repr(separator)):
+                root = self.workspace / f"sep-{ord(separator)}"
+                RootBuilder(root).with_sources(
+                    [
+                        source_line(
+                            content_path=None,
+                            blocked_reason=f"PAYWALLED{separator}TIER2",
+                        )
+                    ]
+                )
+                payload = build_release(
+                    root=root, version="0.1.0", created_at_utc=CREATED_AT
+                ).payload_bytes
+                self.assertIn(separator.encode("utf-8"), payload)
+
+    def test_blocked_source_names_its_own_gate_reason(self) -> None:
+        (
+            self.seed_root()
+            .with_items([item_line()])
+            .with_sources(
+                [source_line(content_path=None, blocked_reason="PAYWALLED")]
+            )
+        )
+        snapshot = build_snapshot(self.root)
+        self.assertEqual(
+            ("SOURCE_BLOCKED_IN_MANIFEST",),
+            tuple(f.reason for f in snapshot.evidence_gate_findings),
+        )
+
+    def test_hash_mismatch_names_hash_mismatch_at_the_gate(self) -> None:
+        (
+            self.seed_root()
+            .with_items([item_line()])
+            .with_sources([source_line()])
+            .with_cached_source(content=b"different bytes")
+        )
+        snapshot = build_snapshot(self.root)
+        self.assertEqual(
+            ("SOURCE_HASH_MISMATCH",),
+            tuple(f.reason for f in snapshot.evidence_gate_findings),
+        )
+
+    def test_absent_source_content_names_bytes_unavailable(self) -> None:
+        (
+            self.seed_root()
+            .with_items([item_line()])
+            .with_sources([source_line()])
+        )
+        snapshot = build_snapshot(self.root)
+        self.assertEqual(
+            ("SOURCE_BYTES_UNAVAILABLE",),
+            tuple(f.reason for f in snapshot.evidence_gate_findings),
+        )
+
+    def test_source_absent_from_the_manifest_names_source_not_registered(
+        self,
+    ) -> None:
+        self.seed_root().with_items([item_line()])
+        snapshot = build_snapshot(self.root)
+        self.assertEqual(
+            ("SOURCE_NOT_REGISTERED",),
+            tuple(f.reason for f in snapshot.evidence_gate_findings),
+        )
+
+    def test_the_four_source_side_reasons_are_distinguishable(self) -> None:
+        """Each source failure must name itself, not collapse into one code."""
+
+        observed = set()
+        for name, prepare in (
+            ("absent", lambda b: b),
+            (
+                "blocked",
+                lambda b: b.with_sources(
+                    [source_line(content_path=None, blocked_reason="PAYWALLED")]
+                ),
+            ),
+            ("unreadable", lambda b: b.with_sources([source_line()])),
+            (
+                "mismatch",
+                lambda b: b.with_sources([source_line()]).with_cached_source(
+                    content=b"different bytes"
+                ),
+            ),
+        ):
+            with self.subTest(case=name):
+                root = self.workspace / f"root-{name}"
+                builder = prepare(RootBuilder(root).with_items([item_line()]))
+                snapshot = build_snapshot(builder.root)
+                reasons = tuple(
+                    f.reason for f in snapshot.evidence_gate_findings
+                )
+                self.assertEqual(1, len(reasons))
+                observed.add(reasons[0])
+        self.assertEqual(4, len(observed))
+
     def test_snapshot_over_a_populated_root_passes_the_gate(self) -> None:
         self.populated_root()
         snapshot = build_snapshot(self.root)
@@ -1557,8 +1996,10 @@ class DiscoveryTests(TemporaryRootTestCase):
         self.seed_root().with_items([item_line()])
         snapshot = build_snapshot(self.root)
         self.assertEqual(1, snapshot.discovered_item_count)
+        # Named from the measured denominator, which is what makes this
+        # distinguishable from a blocked or hash-mismatched source.
         self.assertEqual(
-            ("ASSERTION_NOT_REGISTERED",),
+            ("SOURCE_NOT_REGISTERED",),
             tuple(
                 finding.reason for finding in snapshot.evidence_gate_findings
             ),
@@ -1820,6 +2261,25 @@ class BuildReleaseCliTests(CliTestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertNotIn("Traceback", result.stderr)
         self.assertIn("error:", result.stderr)
+
+    def test_unclassified_item_refuses_the_release_and_writes_nothing(
+        self,
+    ) -> None:
+        self.seed_root().with_items([item_line(classification=None)])
+        out_dir = self.workspace / "out"
+        out_dir.mkdir()
+        result = self.run_script(
+            "--root", self.root, "--version", "0.1.0", "--out-dir", out_dir
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn(ITEM_ID, result.stderr)
+        self.assertEqual([], sorted(out_dir.iterdir()))
+        self.assertEqual("", result.stdout)
+
+    def test_there_is_no_flag_to_publish_over_an_unclassified_item(self) -> None:
+        result = self.run_script("--help")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertNotIn("unclassified", result.stdout)
 
     def test_two_runs_write_identical_registry_bytes(self) -> None:
         self.populated_root()

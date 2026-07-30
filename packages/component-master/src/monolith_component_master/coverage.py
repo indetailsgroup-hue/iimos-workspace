@@ -27,12 +27,19 @@ Documented local input contract for a registry root
 carrying ``content_path`` (a path relative to the root holding the exact stored
 bytes) and ``blocked_reason`` (free text naming why the source is unavailable).
 
-Every other ``*.jsonl`` file in the root is a coverage-item file. Each nonblank
-line is an object with ``item_id``, ``classification``, ``dimension_states``
-and ``assertions`` — the last being
+Every other ``*.jsonl`` file under the root, **at any depth**, is a
+coverage-item file. Each nonblank line is an object with ``item_id``,
+``classification``, ``dimension_states`` and ``assertions`` — the last being
 :class:`~monolith_component_master.evidence.FieldAssertion` objects in the same
-shape Task 7's ingestion CLI already reads. Every ``*.jsonl`` file under the
-root is read; none is skipped, so a file added later cannot go unmeasured.
+shape Task 7's ingestion CLI already reads.
+
+Discovery recurses. There is exactly one excluded directory, ``_source-cache``,
+which holds the stored source bytes ``content_path`` points at and is declared
+in the registry root's own ``.gitignore``. Nothing else is skipped, so a file
+added in a subdirectory later is measured rather than silently omitted — an
+unmeasured file would be silence, and silence is not a classification. An
+``evidence-manifest.jsonl`` anywhere other than the root is refused as
+ambiguous rather than guessed at.
 
 All five seed files in ``data/component-master/registry/v1`` are zero-record
 today, so this contract reinterprets no existing data.
@@ -86,6 +93,8 @@ VERIFICATION_STATES: tuple[str, ...] = tuple(
 )
 
 SOURCE_MANIFEST_FILENAME = "evidence-manifest.jsonl"
+# Declared in data/component-master/registry/v1/.gitignore as `/_source-cache/`.
+SOURCE_CACHE_DIRNAME = "_source-cache"
 SNAPSHOT_SCHEMA = "monolith.connector-registry.coverage-snapshot/1"
 
 UNCLASSIFIED_REASONS: tuple[str, ...] = (
@@ -95,17 +104,45 @@ UNCLASSIFIED_REASONS: tuple[str, ...] = (
 
 SOURCE_DENOMINATOR_STATES: tuple[str, ...] = ("BLOCKED", "REGISTERED")
 
-# Closed allowlist. Each reason names exactly why a claim of VERIFIED could not
-# be traced back to a registered source with a verified hash.
+# Closed allowlist of reasons a claim of VERIFIED could not be traced back to a
+# registered source with a verified hash.
+#
+# Reachability is stated here rather than implied, because a code that should
+# fire and cannot is information the next task needs. Through
+# ``discover_registry_root`` -> ``build_snapshot``:
+#
+# - reachable: MISSING_ASSERTION, SOURCE_NOT_REGISTERED,
+#   SOURCE_BLOCKED_IN_MANIFEST, SOURCE_BYTES_UNAVAILABLE, SOURCE_HASH_MISMATCH,
+#   ASSERTION_NOT_REGISTERED.
+# - not reachable through discovery, reachable when the gate is called directly
+#   with a vault the caller populated: ASSERTION_NOT_VERIFIED,
+#   ASSERTION_VALUE_NOT_CANONICALIZABLE, ASSERTION_DOES_NOT_MATCH_VAULT.
+#   Discovery builds the vault from the same lines it builds the items from, and
+#   ``CoverageItem`` refuses a non-canonicalizable value at construction, so
+#   discovery cannot produce a divergence between the two. The codes are kept
+#   because the gate is a public entry point that other callers may reach with a
+#   vault this module did not build.
 EVIDENCE_GATE_REASONS: tuple[str, ...] = (
     "ASSERTION_DOES_NOT_MATCH_VAULT",
     "ASSERTION_NOT_REGISTERED",
     "ASSERTION_NOT_VERIFIED",
     "ASSERTION_VALUE_NOT_CANONICALIZABLE",
     "MISSING_ASSERTION",
+    "SOURCE_BLOCKED_IN_MANIFEST",
     "SOURCE_BYTES_UNAVAILABLE",
     "SOURCE_HASH_MISMATCH",
     "SOURCE_NOT_REGISTERED",
+)
+
+# A blocked source states why it is blocked. Mapping it here keeps the gate
+# reason specific instead of collapsing every source failure into the vault's
+# single refusal.
+_BLOCKED_REASON_TO_GATE_REASON: Mapping[str, str] = MappingProxyType(
+    {
+        "SOURCE_CONTENT_ABSENT": "SOURCE_BYTES_UNAVAILABLE",
+        "SOURCE_CONTENT_UNREADABLE": "SOURCE_BYTES_UNAVAILABLE",
+        "SOURCE_HASH_MISMATCH": "SOURCE_HASH_MISMATCH",
+    }
 )
 
 _ADMITTED_VALUE_TYPES = frozenset({type(None), bool, int, float, str})
@@ -446,6 +483,9 @@ def evaluate_evidence_gate(
     items: object,
     vault: EvidenceVault,
     source_bytes: Mapping[str, bytes],
+    *,
+    source_denominator: object = None,
+    blocked_sources: object = (),
 ) -> tuple[EvidenceGateFinding, ...]:
     """Refuse every claim of VERIFIED that is not traceable to a source.
 
@@ -462,12 +502,33 @@ def evaluate_evidence_gate(
     ``CandidateRecord`` refuses. Task 8 does not reconcile that. It states its
     own behaviour instead: such a value is not canonicalizable, so the claim is
     refused as ``ASSERTION_VALUE_NOT_CANONICALIZABLE`` and cannot be counted.
+
+    When ``source_denominator`` is supplied, source-side failures are diagnosed
+    from the measured denominator before the vault is consulted, so a blocked,
+    unreadable, hash-mismatched or entirely unnamed source each names itself.
+    Without it the gate falls back to vault-only resolution, which is sound but
+    reports every source-side failure as ``ASSERTION_NOT_REGISTERED``, because
+    ``EvidenceVault`` refuses to store a ``VERIFIED`` assertion whose source is
+    not already registered.
     """
 
     if not isinstance(vault, EvidenceVault):
         raise TypeError("vault must be an EvidenceVault")
     if not isinstance(source_bytes, Mapping):
         raise TypeError("source_bytes must be a mapping")
+
+    source_states: dict[str, str] | None = None
+    if source_denominator is not None:
+        source_states = {}
+        for entry in _snapshot_iterable(
+            source_denominator, "source_denominator"
+        ):
+            _snapshot_exact(entry, SourceDenominatorEntry, "source_denominator")
+            source_states[entry.source_id] = entry.state
+    blocked_reasons: dict[str, str] = {}
+    for record in _snapshot_iterable(blocked_sources, "blocked_sources"):
+        _snapshot_exact(record, BlockedSource, "blocked_sources")
+        blocked_reasons[record.source_id] = record.reason
 
     findings: list[EvidenceGateFinding] = []
     for item in _snapshot_iterable(items, "items"):
@@ -484,7 +545,9 @@ def evaluate_evidence_gate(
             )
             continue
         for claimed in item.assertions:
-            reason = _gate_assertion(claimed, vault, source_bytes)
+            reason = _gate_assertion(
+                claimed, vault, source_bytes, source_states, blocked_reasons
+            )
             if reason is not None:
                 findings.append(
                     EvidenceGateFinding(
@@ -501,7 +564,22 @@ def _gate_assertion(
     claimed: FieldAssertion,
     vault: EvidenceVault,
     source_bytes: Mapping[str, bytes],
+    source_states: Mapping[str, str] | None,
+    blocked_reasons: Mapping[str, str],
 ) -> str | None:
+    if source_states is not None:
+        # Diagnosed from the measured denominator first. The vault's own
+        # refusal carries no reason, so resolving the source here is what keeps
+        # a blocked source distinguishable from a hash mismatch.
+        state = source_states.get(claimed.source_id)
+        if state is None:
+            return "SOURCE_NOT_REGISTERED"
+        if state != "REGISTERED":
+            return _BLOCKED_REASON_TO_GATE_REASON.get(
+                blocked_reasons.get(claimed.source_id, ""),
+                "SOURCE_BLOCKED_IN_MANIFEST",
+            )
+
     registered = vault.get_assertion(claimed.assertion_id)
     if registered is None:
         return "ASSERTION_NOT_REGISTERED"
@@ -520,6 +598,10 @@ def _gate_assertion(
         or registered_value != claimed.value
     ):
         return "ASSERTION_DOES_NOT_MATCH_VAULT"
+    # Defence in depth. Unreachable while `EvidenceVault` keeps its own
+    # invariant (evidence.py:148-154 refuses to store a VERIFIED assertion
+    # whose source is not registered), and kept because the gate must not
+    # depend on another module's invariant holding.
     source = vault.get_source(registered.source_id)
     if source is None:
         return "SOURCE_NOT_REGISTERED"
@@ -529,6 +611,79 @@ def _gate_assertion(
     if not verify_source_hash(source, content):
         return "SOURCE_HASH_MISMATCH"
     return None
+
+
+def _require_backed_verified_claims(
+    items: tuple[CoverageItem, ...],
+    denominator: tuple[SourceDenominatorEntry, ...],
+    findings: tuple[EvidenceGateFinding, ...],
+) -> None:
+    """Refuse a snapshot in which a claim of VERIFIED is not backed.
+
+    Calling :func:`evaluate_evidence_gate` is what ``build_snapshot`` does; a
+    convention is not a gate. The snapshot already holds the items and the
+    measured source denominator, so it enforces the floor itself and an
+    unbacked claim cannot reach a release through any caller.
+
+    Two shapes are refused: a record claiming VERIFIED with no assertion at
+    all, and a record whose assertion names a source the denominator does not
+    hold in a ``REGISTERED`` state.
+
+    The exemption is deliberately narrow. A finding permits a claim only when
+    it names **that** item, and for the assertion shape only when it also names
+    **that** assertion. A ``MISSING_ASSERTION`` finding carries a blank
+    assertion ID and therefore exempts only the zero-assertion shape, never a
+    ghost source on a record that does have assertions.
+
+    What this floor cannot do: it holds no source bytes, so it cannot re-verify
+    a digest. A caller who hand-builds a denominator entry claiming
+    ``REGISTERED`` for a source that was never read will pass this floor. Full
+    verification is :func:`evaluate_evidence_gate`, which re-hashes through
+    :func:`~monolith_component_master.evidence.verify_source_hash`.
+    """
+
+    registered = frozenset(
+        entry.source_id
+        for entry in denominator
+        if entry.state == "REGISTERED"
+    )
+    exempt_items = frozenset(
+        finding.item_id
+        for finding in findings
+        if finding.reason == "MISSING_ASSERTION"
+    )
+    exempt_assertions = frozenset(
+        (finding.item_id, finding.assertion_id)
+        for finding in findings
+        if finding.assertion_id.strip()
+    )
+
+    unbacked: list[str] = []
+    for item in items:
+        if not item.claims_verified:
+            continue
+        if not item.assertions:
+            if item.item_id not in exempt_items:
+                unbacked.append(
+                    f"{item.item_id} claims VERIFIED with no assertion"
+                )
+            continue
+        for assertion in item.assertions:
+            if assertion.source_id in registered:
+                continue
+            if (item.item_id, assertion.assertion_id) in exempt_assertions:
+                continue
+            unbacked.append(
+                f"{item.item_id} assertion {assertion.assertion_id} names "
+                f"source {assertion.source_id}, which the source denominator "
+                f"does not hold as REGISTERED"
+            )
+    if unbacked:
+        raise ValueError(
+            "a record counted as verified must resolve to a registered "
+            "source or be named by an evidence gate finding: "
+            + "; ".join(sorted(unbacked))
+        )
 
 
 @dataclass(frozen=True)
@@ -603,6 +758,7 @@ class CoverageSnapshot:
                 "discovered_item_count must equal classified plus "
                 "unclassified items"
             )
+        _require_backed_verified_claims(items, denominator, findings)
 
         object.__setattr__(
             self,
@@ -848,26 +1004,37 @@ class DiscoveryResult:
     source_bytes: Mapping[str, bytes]
 
 
-def _read_jsonl(path: Path) -> tuple[tuple[int, Mapping[str, object]], ...]:
+def _read_jsonl(
+    path: Path,
+    label: str | None = None,
+) -> tuple[tuple[int, Mapping[str, object]], ...]:
+    name = path.name if label is None else label
     try:
+        # newline=None gives universal-newline translation, so CRLF and CR
+        # inputs arrive as LF and a checkout-time EOL rewrite cannot change
+        # what is read.
         text = path.read_text(encoding="utf-8")
     except OSError as error:
-        raise ValueError(f"{path.name}: {error}") from error
+        raise ValueError(f"{name}: {error}") from error
     except UnicodeDecodeError as error:
-        raise ValueError(f"{path.name}: not valid UTF-8") from error
+        raise ValueError(f"{name}: not valid UTF-8") from error
     records: list[tuple[int, Mapping[str, object]]] = []
-    for line_number, raw_line in enumerate(text.splitlines(), start=1):
+    # Split on LF only. `str.splitlines()` also breaks on U+2028, U+2029 and
+    # U+0085, all three of which this package's own serializer emits raw
+    # because it uses ensure_ascii=False. Splitting on them would tear a valid
+    # single-line record in half.
+    for line_number, raw_line in enumerate(text.split("\n"), start=1):
         if not raw_line.strip():
             continue
         try:
             payload = json.loads(raw_line)
         except json.JSONDecodeError as error:
             raise ValueError(
-                f"{path.name}:{line_number}: malformed JSON ({error.msg})"
+                f"{name}:{line_number}: malformed JSON ({error.msg})"
             ) from error
         if not isinstance(payload, dict):
             raise ValueError(
-                f"{path.name}:{line_number}: each line must be a JSON object"
+                f"{name}:{line_number}: each line must be a JSON object"
             )
         records.append((line_number, payload))
     return tuple(records)
@@ -995,14 +1162,28 @@ def discover_registry_root(root: object) -> DiscoveryResult:
     seen_items: set[str] = set()
     seen_assertions: set[str] = set()
 
-    item_files = tuple(
-        path
-        for path in sorted(root_path.glob("*.jsonl"))
-        if path.name != SOURCE_MANIFEST_FILENAME
-    )
-    for path in item_files:
-        for line_number, payload in _read_jsonl(path):
-            origin = f"{path.name}:{line_number}"
+    manifest_path = root_path / SOURCE_MANIFEST_FILENAME
+    item_files: list[tuple[str, Path]] = []
+    for path in root_path.rglob("*.jsonl"):
+        relative = path.relative_to(root_path).as_posix()
+        if path == manifest_path:
+            continue
+        if relative.split("/")[0] == SOURCE_CACHE_DIRNAME:
+            # The one documented exclusion: this directory holds the stored
+            # source bytes `content_path` points at, and is declared in the
+            # registry root's own .gitignore.
+            continue
+        if path.name == SOURCE_MANIFEST_FILENAME:
+            raise ValueError(
+                f"{relative}: a source manifest is only recognized at the "
+                "registry root; a nested one is ambiguous"
+            )
+        item_files.append((relative, path))
+    item_files.sort(key=lambda entry: entry[0])
+
+    for relative, path in item_files:
+        for line_number, payload in _read_jsonl(path, relative):
+            origin = f"{relative}:{line_number}"
             item_id = payload.get("item_id")
             if type(item_id) is not str or not item_id.strip():
                 raise ValueError(
@@ -1053,10 +1234,12 @@ def discover_registry_root(root: object) -> DiscoveryResult:
                         f"{assertion.assertion_id}"
                     )
                 seen_assertions.add(assertion.assertion_id)
-                # A refusal here is not swallowed: the gate re-resolves every
-                # claim through the vault and names the exact reason, so an
-                # assertion the vault would not accept becomes a visible
-                # finding rather than a silent omission.
+                # `EvidenceVault.register` raises a bare ValueError with no
+                # machine-readable reason, so the reason is not taken from here
+                # at all: the gate is handed the measured source denominator
+                # and the blocked-source reasons, and re-derives the specific
+                # code itself. A refusal therefore becomes a named finding, not
+                # a silent omission and not a single collapsed code.
                 try:
                     vault.register(assertion)
                 except (TypeError, ValueError):
@@ -1078,7 +1261,11 @@ def build_snapshot(root: object) -> CoverageSnapshot:
 
     discovered = discover_registry_root(root)
     findings = evaluate_evidence_gate(
-        discovered.items, discovered.vault, discovered.source_bytes
+        discovered.items,
+        discovered.vault,
+        discovered.source_bytes,
+        source_denominator=discovered.source_denominator,
+        blocked_sources=discovered.blocked_sources,
     )
     return CoverageSnapshot(
         discovered_item_count=len(discovered.items)
