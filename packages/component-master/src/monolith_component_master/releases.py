@@ -144,10 +144,22 @@ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
     The list below is therefore a record of what happened, not the guarantee.
     The guarantee is
     ``tests.component_master.registry.test_first_cohort_denominator.PayloadCountCompletenessTests``,
-    which compares ``{count.label for count in snapshot.counts}`` against every
-    count object reachable in this payload and fails if either side holds a
-    label the other does not. A hand-maintained key list cannot make that
+    which compares every count object reachable in this payload against
+    :attr:`~monolith_component_master.coverage.CoverageSnapshot.counts` in both
+    directions and fails if either side holds one the other does not. The
+    comparison carries all five fields of each count, not only its label, so a
+    count republished under the right name with a wrong number, denominator or
+    ``measured_by`` fails it too. A hand-maintained key list cannot make that
     check, because it can only freeze whatever was true when it was typed.
+
+    **The field list in this function is still written by hand, and the
+    record's enumeration is not.** ``counts`` is derived by introspection over
+    the record's count-bearing properties, so a count added there and
+    forgotten cannot go missing from the comparison; the key names below are
+    part of the published contract and are not derivable from a label, so they
+    stay written out. The comparison is what stops this hand-written half
+    going stale, and it is what a reviewer should re-run rather than reading
+    this list for reassurance.
 
     - ``verified_item_count``. The module's **headline coverage number** — the
       clause ``coverage_statement`` speaks second — and the one that survived

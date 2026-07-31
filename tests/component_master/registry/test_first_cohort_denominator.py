@@ -38,10 +38,12 @@ from monolith_component_master.coverage import (  # noqa: E402
     BlockedSource,
     BrandUniverseEntry,
     CoverageSnapshot,
+    MeasuredCount,
     SourceDenominatorEntry,
     build_snapshot,
     discover_registry_root,
 )
+from monolith_component_master import releases as releases_module  # noqa: E402
 from monolith_component_master.releases import (  # noqa: E402
     build_release,
     canonical_json_bytes,
@@ -1169,6 +1171,55 @@ def payload_count_labels(node: object) -> set[str]:
     return found
 
 
+CountFingerprint = tuple[tuple[str, object], ...]
+
+
+def payload_count_objects(node: object) -> set[CountFingerprint]:
+    """The same walk, carrying **every field** of each count rather than its label.
+
+    A label-only comparison answers "is a count of this name published?" and
+    stops there, so a count republished under the right label with a wrong
+    number, a wrong denominator or a wrong ``measured_by`` would satisfy it.
+    The five fields together are what :meth:`MeasuredCount.as_payload` emits,
+    so comparing on all five is what makes the guard say "the payload carries
+    the record's count" rather than "the payload carries a count with that
+    name".
+    """
+
+    found: set[CountFingerprint] = set()
+    if isinstance(node, Mapping):
+        if MEASURED_COUNT_KEYS <= set(node):
+            found.add(
+                tuple(sorted((key, node[key]) for key in MEASURED_COUNT_KEYS))
+            )
+        for value in node.values():
+            found |= payload_count_objects(value)
+    elif isinstance(node, (list, tuple)):
+        for item in node:
+            found |= payload_count_objects(item)
+    return found
+
+
+def record_count_objects(snapshot: CoverageSnapshot) -> set[CountFingerprint]:
+    """The record's own enumeration, in the same shape, for comparison."""
+
+    return {
+        tuple(sorted(count.as_payload().items())) for count in snapshot.counts
+    }
+
+
+def prose(text: str | None) -> str:
+    """A docstring flattened for phrase search: one space, lower case.
+
+    A residual list is prose a human reads, and a fragment assertion that
+    breaks on a line wrap or a capital letter would push the author toward
+    writing the docstring for the test instead of for the reader. Flattening
+    is what keeps the assertion about the *statement* rather than its layout.
+    """
+
+    return " ".join((text or "").split()).lower()
+
+
 class PayloadAttestsTheDeclaredCohortTests(RootCase):
     """A published digest must change when the declared cohort changes.
 
@@ -1928,6 +1979,258 @@ class PayloadCountCompletenessTests(RootCase):
         )
         self.assertEqual(0, payload["verified_item_count"]["count"])
 
+    def test_the_comparison_carries_every_field_not_only_the_label(
+        self,
+    ) -> None:
+        """H3 of wave 2's review, closed rather than recorded.
+
+        The label-only comparison could be satisfied by a count published
+        under the right name with a wrong number. Comparing the five fields
+        `MeasuredCount.as_payload` emits is what makes it say *the payload
+        carries the record's count*.
+        """
+
+        for name, root in self.every_root():
+            with self.subTest(root=name):
+                snapshot = build_snapshot(root)
+                payload = json.loads(
+                    canonical_json_bytes(snapshot_payload(snapshot))
+                )
+                self.assertEqual(
+                    record_count_objects(snapshot),
+                    payload_count_objects(payload),
+                )
+
+    def test_the_value_level_comparison_is_not_vacuous(self) -> None:
+        """Twenty-five fingerprints, not two empty sets."""
+
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        fingerprints = record_count_objects(snapshot)
+        self.assertEqual(25, len(fingerprints))
+        for fingerprint in fingerprints:
+            with self.subTest(fingerprint=fingerprint):
+                self.assertEqual(
+                    MEASURED_COUNT_KEYS, {key for key, _value in fingerprint}
+                )
+
+
+# ---------------------------------------------------------------------------
+# H2. `counts` must be **derived**, not hand-typed. A MeasuredCount property
+# nobody remembered to enrol was invisible to the guard and to the payload.
+# ---------------------------------------------------------------------------
+
+
+class CountEnrollmentDerivationTests(RootCase):
+    """The record's enumeration is introspected from the class, not typed out.
+
+    The module docstring's guarantee is *"a count-by-count comparison of the
+    record against the payload — not a list anybody maintains by hand"*. That
+    sentence was false in one direction: ``CoverageSnapshot.counts`` was itself
+    a hand-typed list, so a real ``MeasuredCount`` property added to the class
+    and forgotten there was absent from the record's own enumeration, absent
+    from the payload, and invisible to every test in this file.
+
+    These tests attack the sentence rather than restate it: each one adds a
+    genuine count-bearing property to the class and asserts what happens.
+    """
+
+    def add_count_property(
+        self,
+        name: str,
+        label: str,
+        *,
+        shape: str = "count",
+    ) -> None:
+        """Install a real count-bearing class attribute, then remove it.
+
+        ``shape`` decides how the count is reached, because *how* is exactly
+        what the enumeration can and cannot walk.
+        """
+
+        def one(inner: CoverageSnapshot) -> MeasuredCount:
+            return MeasuredCount(
+                label=label,
+                count=0,
+                denominator=len(inner.source_denominator),
+                denominator_label="sources_in_denominator",
+                measured_by="coverage.discover_registry_root",
+            )
+
+        if shape == "count":
+            attribute: object = property(one)
+        elif shape == "tuple":
+            attribute = property(lambda inner: (one(inner),))
+        elif shape == "mapping":
+            attribute = property(lambda inner: {"only": one(inner)})
+        elif shape == "plain":
+            attribute = MeasuredCount(
+                label=label,
+                count=0,
+                denominator=0,
+                denominator_label="sources_in_denominator",
+                measured_by="coverage.discover_registry_root",
+            )
+        else:  # pragma: no cover - guard against a typo in a subTest
+            raise AssertionError(f"unknown shape {shape}")
+        setattr(CoverageSnapshot, name, attribute)
+        self.addCleanup(delattr, CoverageSnapshot, name)
+
+    def test_a_new_count_property_is_enrolled_without_being_listed(
+        self,
+    ) -> None:
+        """The mutation. Nothing in `coverage.py` names this property."""
+
+        before = {count.label for count in build_snapshot(
+            LIVE_REGISTRY_ROOT
+        ).counts}
+        self.assertNotIn("smuggled_by_a_property", before)
+
+        self.add_count_property("smuggled_count", "smuggled_by_a_property")
+        after = {
+            count.label
+            for count in build_snapshot(LIVE_REGISTRY_ROOT).counts
+        }
+        self.assertIn("smuggled_by_a_property", after)
+        self.assertEqual(len(before) + 1, len(after))
+
+    def test_a_mapping_of_counts_is_enrolled_too(self) -> None:
+        """The second shape the record actually uses — `classification_counts`
+        and `dimension_verified_counts` are both mappings."""
+
+        self.add_count_property(
+            "smuggled_mapping", "smuggled_in_a_mapping", shape="mapping"
+        )
+        self.assertIn(
+            "smuggled_in_a_mapping",
+            {
+                count.label
+                for count in build_snapshot(LIVE_REGISTRY_ROOT).counts
+            },
+        )
+
+    def test_the_payload_guard_fails_when_a_property_is_not_published(
+        self,
+    ) -> None:
+        """The proof, watched rather than argued.
+
+        A real `MeasuredCount` property is added to the class and
+        `snapshot_payload` — which names its fields one by one — does not
+        publish it. The wave's central guard is then **run** and its failure is
+        observed. Before this wave the same mutation left the guard green,
+        because the record's own enumeration could not see the property either.
+        """
+
+        self.add_count_property("smuggled_count", "smuggled_by_a_property")
+        result = unittest.TestResult()
+        PayloadCountCompletenessTests(
+            "test_every_measured_count_on_the_record_reaches_the_payload"
+        ).run(result)
+        self.assertEqual([], result.errors)
+        self.assertTrue(
+            result.failures,
+            "the guard stayed green while the record held a count the "
+            "payload does not publish",
+        )
+        self.assertIn(
+            "smuggled_by_a_property",
+            "".join(text for _case, text in result.failures),
+        )
+
+    def test_the_guard_is_green_without_the_mutation(self) -> None:
+        """The control. Without the added property the same guard passes, so
+        the failure above is the mutation and not a broken guard."""
+
+        result = unittest.TestResult()
+        PayloadCountCompletenessTests(
+            "test_every_measured_count_on_the_record_reaches_the_payload"
+        ).run(result)
+        self.assertEqual([], result.errors)
+        self.assertEqual([], result.failures)
+
+    def test_no_two_counts_share_a_label(self) -> None:
+        """A set comparison cannot see a duplicate, so the enumeration refuses
+        one instead of publishing two counts a reader cannot tell apart."""
+
+        counts = build_snapshot(LIVE_REGISTRY_ROOT).counts
+        self.assertEqual(len(counts), len({count.label for count in counts}))
+
+        self.add_count_property(
+            "smuggled_duplicate", "first_cohort_brands_with_a_source_read"
+        )
+        with self.assertRaises(ValueError) as caught:
+            build_snapshot(LIVE_REGISTRY_ROOT).counts
+        self.assertIn(
+            "first_cohort_brands_with_a_source_read", str(caught.exception)
+        )
+
+    def test_counts_is_not_reached_by_its_own_enumeration(self) -> None:
+        """`counts` is a property too. Walking it would recurse forever, so it
+        is skipped by name, and this pins that the skip is exactly one name."""
+
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        self.assertEqual(25, len(snapshot.counts))
+        self.assertNotIn("counts", {count.label for count in snapshot.counts})
+
+
+class CountEnrollmentResidualTests(RootCase):
+    """What the derivation does **not** reach, asserted so the list cannot rot.
+
+    Same shape as :class:`DeclaredUrlResidualTests`: every residual the
+    docstring names is exercised here and asserted **still open**, so the list
+    cannot be wrong in either direction.
+    """
+
+    def add(self, name: str, label: str, shape: str) -> None:
+        CountEnrollmentDerivationTests.add_count_property(
+            self, name, label, shape=shape
+        )
+
+    def test_a_count_inside_a_tuple_is_not_enumerated(self) -> None:
+        self.add("smuggled_tuple", "smuggled_in_a_tuple", "tuple")
+        self.assertNotIn(
+            "smuggled_in_a_tuple",
+            {
+                count.label
+                for count in build_snapshot(LIVE_REGISTRY_ROOT).counts
+            },
+        )
+
+    def test_a_count_in_a_plain_class_attribute_is_not_enumerated(
+        self,
+    ) -> None:
+        self.add("smuggled_plain", "smuggled_in_an_attribute", "plain")
+        self.assertNotIn(
+            "smuggled_in_an_attribute",
+            {
+                count.label
+                for count in build_snapshot(LIVE_REGISTRY_ROOT).counts
+            },
+        )
+
+    def test_the_docstring_names_each_residual(self) -> None:
+        text = prose(coverage_module.CoverageSnapshot.counts.fget.__doc__)
+        for fragment in (
+            "what this does not close",
+            "tuple",
+            "not a property",
+            "does not check that a count is right",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
+    def test_the_module_docstring_says_the_payload_list_is_hand_written(
+        self,
+    ) -> None:
+        """The record side is derived; the payload side is not, and the module
+        docstring must say which is which rather than claim both."""
+
+        text = coverage_module.__doc__ or ""
+        self.assertIn("enumerated by introspection", text)
+        self.assertIn("still written by hand", text)
+        payload_doc = releases_module.snapshot_payload.__doc__ or ""
+        self.assertIn("still written by hand", payload_doc)
+        self.assertIn("derived by introspection", payload_doc)
+
 
 # ---------------------------------------------------------------------------
 # G2. The declared-URL rule: userinfo, the percent grammar, and an accurate
@@ -1994,6 +2297,49 @@ STILL_OPEN_URL_CASES: tuple[tuple[str, str], ...] = (
         "percent-encoded zero width space",
         "https://exam%E2%80%8Bple.invalid/x",
     ),
+    # Added in wave 3. `%40` is not a literal `@`, so RFC 3986 reads the whole
+    # string as one reg-name and no fetcher reaches `evil.invalid` — it is not
+    # a live spoof. It is admitted, it was not on the list, and the list is
+    # what this wave is about.
+    (
+        "percent-encoded at sign in the host",
+        "https://www.hafele.com%40evil.invalid/",
+    ),
+    # Added in wave 3 with the host rule. The rule asks whether a host is
+    # **present**; it does not ask whether the host is well formed.
+    ("empty IP-literal brackets", "https://[]/x"),
+    ("unclosed IP-literal bracket", "https://[2001:db8::1/x"),
+)
+
+# The ten-case matrix `_require_hostful_authority_without_userinfo` is judged
+# against. Wave 2 wrote it; wave 3 changed the implementation underneath it
+# from "the authority string is empty" to "the authority names no host", so
+# every row here is regression surface and each is asserted with its verdict
+# rather than left to two separate tests to imply.
+AUTHORITY_MATRIX: tuple[tuple[str, str, bool], ...] = (
+    ("port", "https://example.invalid:8443/a", True),
+    ("IPv4 literal", "https://203.0.113.9/x", True),
+    ("IPv6 literal", "https://[2001:db8::1]/x", True),
+    ("at sign in the path", "https://example.invalid/a@b", True),
+    ("at sign in the query", "https://example.invalid/x?to=a@b", True),
+    ("at sign in the fragment", "https://example.invalid/x#a@b", True),
+    ("no authority before a path", "https:///path", False),
+    ("no authority before a query", "https://?a=1", False),
+    ("no authority before a fragment", "https://#f", False),
+    ("no authority, bare slash", "https:///", False),
+)
+
+# Refused by wave 3 and **admitted at `277d508b`**: the authority string is
+# nonempty, so the old `if not authority:` never fired, but RFC 3986 section
+# 3.2 reads `authority = [ userinfo "@" ] host [ ":" port ]`, and the host in
+# each of these is the empty string.
+HOSTLESS_AUTHORITY_URL_CASES: tuple[tuple[str, str], ...] = (
+    ("port only", "https://:8443/x"),
+    ("well-known port only", "https://:80"),
+    ("colon then path", "https://:/x"),
+    ("bare colon", "https://:"),
+    ("colon then query", "https://:?a=1"),
+    ("colon then fragment", "https://:#f"),
 )
 
 
@@ -2131,6 +2477,79 @@ class DeclaredUrlPercentGrammarTests(RootCase):
                     )
 
 
+class DeclaredUrlHostTests(RootCase):
+    """The rule says *names no host*; wave 2 implemented *authority is empty*.
+
+    RFC 3986 section 3.2 reads ``authority = [ userinfo "@" ] host [ ":" port
+    ]``, so ``":8443"`` is an authority whose **host** is the empty string. The
+    old check tested the authority *string*, which is one character away from
+    the sentence it was written to enforce.
+    """
+
+    def refuse_url(self, name: str, url: str) -> str:
+        root = self.new_root(f"host-{name}")
+        self.with_brands([brand_row()], root)
+        self.with_declared([declared_row(url=url)], root)
+        return self.assert_refused(
+            root, f"{SOURCE_DENOMINATOR_FILENAME}:1", "url"
+        )
+
+    def test_an_authority_whose_host_is_empty_is_refused(self) -> None:
+        for index, (label, url) in enumerate(HOSTLESS_AUTHORITY_URL_CASES):
+            with self.subTest(label=label, url=url):
+                message = self.refuse_url(f"empty-host-{index}", url)
+                self.assertIn("names no host", message)
+
+    def test_the_type_refuses_them_too_not_only_the_file_reader(self) -> None:
+        for label, url in HOSTLESS_AUTHORITY_URL_CASES:
+            with self.subTest(label=label, url=url):
+                with self.assertRaises(ValueError) as caught:
+                    SourceDenominatorEntry(
+                        source_id=DECLARED_ID,
+                        sha256=None,
+                        state=DECLARED_UNREAD,
+                        url=url,
+                    )
+                self.assertIn("names no host", str(caught.exception))
+
+    def test_the_refusal_states_the_rule_it_comes_from(self) -> None:
+        """A refusal reading only "bad URL" would leave a writer guessing that
+        the port was the problem."""
+
+        message = self.refuse_url("explains", "https://:8443/x")
+        self.assertIn("host", message)
+        self.assertIn("port", message)
+
+    def test_the_ten_case_matrix_is_unchanged(self) -> None:
+        """Every currently-refused case still refused, every currently-admitted
+        case still admitted. This is the regression surface the brief names."""
+
+        for index, (label, url, admitted) in enumerate(AUTHORITY_MATRIX):
+            with self.subTest(label=label, url=url, admitted=admitted):
+                if admitted:
+                    entry = SourceDenominatorEntry(
+                        source_id=DECLARED_ID,
+                        sha256=None,
+                        state=DECLARED_UNREAD,
+                        url=url,
+                    )
+                    self.assertEqual(url, entry.url)
+                else:
+                    self.refuse_url(f"matrix-{index}", url)
+
+    def test_the_host_rule_records_what_it_does_not_close(self) -> None:
+        text = prose(
+            coverage_module._require_hostful_authority_without_userinfo.__doc__
+        )
+        for fragment in (
+            "what this does not close",
+            "well formed",
+            "ip-literal",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
+
 class DeclaredUrlResidualTests(RootCase):
     """What the rule does **not** close, asserted so the record cannot drift.
 
@@ -2165,6 +2584,10 @@ class DeclaredUrlResidualTests(RootCase):
             "percent-escape",
             "subdomain",
             "Nothing here resolves a host",
+            # Added in wave 3. The first was admitted and unlisted; the second
+            # is what the new host rule deliberately does not check.
+            "%40",
+            "well formed",
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
@@ -2499,6 +2922,518 @@ class BrandNameNormalizationTests(RootCase):
             "``Zp``",
             "``Zs``",
             "NFC",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
+
+# ---------------------------------------------------------------------------
+# H1. The category rule refused two named invisibles while its prose closed the
+# class. `Lo`, `So` and `Mn` hold characters that render as nothing too, and a
+# trailing U+0020 made a second brand out of one name.
+# ---------------------------------------------------------------------------
+
+
+# The transcription `coverage.py` carries, written here independently so the
+# two can be compared rather than one read from the other. Source: Unicode
+# 16.0.0 `DerivedCoreProperties.txt`, property `Default_Ignorable_Code_Point`,
+# restricted to the members whose general category is **not** already on
+# `_REFUSED_BRAND_NAME_CATEGORIES`, plus U+2800 which is not
+# `Default_Ignorable` and renders as an empty braille cell.
+#
+# It is a **transcription, not a derivation**: `unicodedata` exposes no
+# `Default_Ignorable_Code_Point` accessor, so nothing here can re-derive it and
+# nothing here proves it complete. What can be checked is checked below.
+TRANSCRIBED_INVISIBLE_RANGES: tuple[tuple[int, int, str], ...] = (
+    (0x034F, 0x034F, "Mn"),
+    (0x115F, 0x1160, "Lo"),
+    (0x17B4, 0x17B5, "Mn"),
+    (0x180B, 0x180D, "Mn"),
+    (0x180F, 0x180F, "Mn"),
+    (0x2800, 0x2800, "So"),
+    (0x3164, 0x3164, "Lo"),
+    (0xFE00, 0xFE0F, "Mn"),
+    (0xFFA0, 0xFFA0, "Lo"),
+    (0xE0100, 0xE01EF, "Mn"),
+)
+
+TRANSCRIBED_INVISIBLE_CODE_POINTS = frozenset(
+    code_point
+    for start, end, _category in TRANSCRIBED_INVISIBLE_RANGES
+    for code_point in range(start, end + 1)
+)
+
+# The Unicode release the transcription above was read against. Pinned rather
+# than tolerated: a release that adds a member changes what the rule ought to
+# refuse, and nothing in this package would notice unless this fails.
+TRANSCRIBED_AGAINST_UNICODE = "16.0.0"
+
+# The five the orchestrator reproduced as **admitted** at `277d508b`, each
+# appended to a real cohort name. Named individually so the reproduction and
+# the fix sit beside each other.
+REPRODUCED_ADMITTED_INVISIBLES: tuple[tuple[int, str], ...] = (
+    (0x3164, "Lo"),
+    (0x115F, "Lo"),
+    (0x2800, "So"),
+    (0x034F, "Mn"),
+    (0xFFA0, "Lo"),
+)
+
+
+class BrandNameInvisibleTranscriptionTests(RootCase):
+    """The category rule closed `Cc` and `Cf`; the prose closed *renders as nothing*.
+
+    Those are not the same set. `U+3164` is `Lo`, `U+2800` is `So`, `U+034F` is
+    `Mn`, and all three render as nothing. No category rule can reach them and
+    `unicodedata` exposes no property that names the class, so the refusal is
+    **extended by transcription** and the prose is **narrowed to say so**.
+    """
+
+    def refuse_name(self, name: str, brand_name: str) -> str:
+        root = self.new_root(f"invisible-{name}")
+        self.with_brands([brand_row(brand_name=brand_name)], root)
+        self.with_declared([declared_row()], root)
+        return self.assert_refused(
+            root, f"{BRAND_UNIVERSE_FILENAME}:1", "brand_name"
+        )
+
+    def test_the_transcription_is_pinned_to_the_release_it_was_read_from(
+        self,
+    ) -> None:
+        """The staleness residual, made loud instead of silent.
+
+        A transcription cannot notice a Unicode release that adds a member.
+        This is the only thing that can, so it fails rather than skips.
+        """
+
+        self.assertEqual(
+            TRANSCRIBED_AGAINST_UNICODE,
+            unicodedata.unidata_version,
+            "the invisible-code-point list in coverage.py was transcribed "
+            f"from Unicode {TRANSCRIBED_AGAINST_UNICODE} and is not derived "
+            "from anything this interpreter can query; re-read "
+            "DerivedCoreProperties.txt for this release before changing this "
+            "constant",
+        )
+
+    def test_every_transcribed_code_point_has_the_category_it_claims(
+        self,
+    ) -> None:
+        """Attacks the transcription itself, not the code that consumes it."""
+
+        for start, end, category in TRANSCRIBED_INVISIBLE_RANGES:
+            for code_point in range(start, end + 1):
+                with self.subTest(code_point=code_point_label(code_point)):
+                    self.assertEqual(
+                        category, unicodedata.category(chr(code_point))
+                    )
+
+    def test_no_transcribed_code_point_was_already_refused_by_category(
+        self,
+    ) -> None:
+        """Every member must be doing work. A member the category rule already
+        refuses would make the list look larger than the hole it closes."""
+
+        for code_point in sorted(TRANSCRIBED_INVISIBLE_CODE_POINTS):
+            with self.subTest(code_point=code_point_label(code_point)):
+                self.assertNotIn(
+                    unicodedata.category(chr(code_point)),
+                    coverage_module._REFUSED_BRAND_NAME_CATEGORIES,
+                )
+
+    def test_the_module_carries_the_same_transcription(self) -> None:
+        """Two independent transcriptions of one table, compared."""
+
+        self.assertEqual(
+            TRANSCRIBED_INVISIBLE_CODE_POINTS,
+            coverage_module._REFUSED_BRAND_NAME_CODE_POINTS,
+        )
+        self.assertEqual(268, len(TRANSCRIBED_INVISIBLE_CODE_POINTS))
+        # Spot-named so a reviewer can check the boundaries by eye rather than
+        # by trusting a set comparison between two lists in one commit.
+        for code_point, expected in (
+            (0x034F, "COMBINING GRAPHEME JOINER"),
+            (0x115F, "HANGUL CHOSEONG FILLER"),
+            (0x1160, "HANGUL JUNGSEONG FILLER"),
+            (0x17B4, "KHMER VOWEL INHERENT AQ"),
+            (0x2800, "BRAILLE PATTERN BLANK"),
+            (0x3164, "HANGUL FILLER"),
+            (0xFE0F, "VARIATION SELECTOR-16"),
+            (0xFFA0, "HALFWIDTH HANGUL FILLER"),
+            (0xE01EF, "VARIATION SELECTOR-256"),
+        ):
+            with self.subTest(code_point=code_point_label(code_point)):
+                self.assertEqual(expected, unicodedata.name(chr(code_point)))
+
+    def test_the_five_reproduced_admissions_are_refused_and_named(
+        self,
+    ) -> None:
+        """Each of these was **admitted** at `277d508b`, appended to `Häfele`."""
+
+        for index, (code_point, category) in enumerate(
+            REPRODUCED_ADMITTED_INVISIBLES
+        ):
+            with self.subTest(
+                code_point=code_point_label(code_point), category=category
+            ):
+                message = self.refuse_name(
+                    f"reproduced-{index}", "Häfele" + chr(code_point)
+                )
+                self.assertIn(code_point_label(code_point), message)
+                self.assertIn("renders as nothing", message)
+
+    def test_the_type_refuses_every_transcribed_code_point(self) -> None:
+        """All 268, through the type rather than through a file."""
+
+        for code_point in sorted(TRANSCRIBED_INVISIBLE_CODE_POINTS):
+            with self.subTest(code_point=code_point_label(code_point)):
+                with self.assertRaises(ValueError) as caught:
+                    BrandUniverseEntry(
+                        brand_id="brand:demo",
+                        brand_name=refused_brand_name(code_point),
+                        source_ids=(DECLARED_ID,),
+                    )
+                self.assertIn(
+                    code_point_label(code_point), str(caught.exception)
+                )
+
+    def test_a_name_made_only_of_transcribed_invisibles_is_refused(
+        self,
+    ) -> None:
+        """`'ㅤㅤㅤ'` was a brand at `277d508b`."""
+
+        for index, code_point in enumerate((0x3164, 0x2800, 0x115F, 0x034F)):
+            with self.subTest(code_point=code_point_label(code_point)):
+                self.refuse_name(
+                    f"only-invisible-{index}", chr(code_point) * 3
+                )
+
+    def test_a_name_padded_with_one_collides_with_nothing_because_it_is_refused(
+        self,
+    ) -> None:
+        """The harm the rule exists to stop: two rows that print the same."""
+
+        root = self.new_root("invisible-pair")
+        self.with_brands(
+            [
+                brand_row(
+                    brand_id="brand:a",
+                    brand_name="Häfele",
+                    source_ids=["source:a:x"],
+                ),
+                brand_row(
+                    brand_id="brand:b",
+                    brand_name="Häfele" + chr(0x3164),
+                    source_ids=["source:b:x"],
+                ),
+            ],
+            root,
+        )
+        self.with_declared(
+            [
+                declared_row("source:a:x", "https://a.invalid/"),
+                declared_row("source:b:x", "https://b.invalid/"),
+            ],
+            root,
+        )
+        self.assert_refused(root, f"{BRAND_UNIVERSE_FILENAME}:2", "U+3164")
+
+    def test_the_docstring_states_that_it_is_a_transcription(self) -> None:
+        """The narrowing, asserted. The old prose claimed the class."""
+
+        text = prose(coverage_module.BrandUniverseEntry.__doc__)
+        for fragment in (
+            "transcription",
+            "default_ignorable_code_point",
+            TRANSCRIBED_AGAINST_UNICODE,
+            "not a derivation",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
+
+class BrandNameWhitespaceTests(RootCase):
+    """`'Festool DOMINO'` and `'Festool DOMINO '` were two brands.
+
+    The rule's own argument for refusing U+00A0 is that *`Festool DOMINO`
+    spelled with U+00A0 renders exactly like `Festool DOMINO` spelled with
+    U+0020 and would sit beside it as a second brand*. The U+0020 spelling of
+    that same collision was admitted — one character away from the case the
+    docstring argues.
+    """
+
+    PAIR = ("Festool DOMINO", "Festool DOMINO ")
+
+    def two_brand_root(self, name: str, first: str, second: str) -> Path:
+        root = self.new_root(name)
+        self.with_brands(
+            [
+                brand_row(
+                    brand_id="brand:a",
+                    brand_name=first,
+                    source_ids=["source:a:x"],
+                ),
+                brand_row(
+                    brand_id="brand:b",
+                    brand_name=second,
+                    source_ids=["source:b:x"],
+                ),
+            ],
+            root,
+        )
+        self.with_declared(
+            [
+                declared_row("source:a:x", "https://a.invalid/"),
+                declared_row("source:b:x", "https://b.invalid/"),
+            ],
+            root,
+        )
+        return root
+
+    def test_a_trailing_space_collides_in_the_file(self) -> None:
+        self.assert_refused(
+            self.two_brand_root("trailing-space", *self.PAIR),
+            f"{BRAND_UNIVERSE_FILENAME}:2",
+            "duplicate brand_name",
+        )
+
+    def test_a_leading_space_collides_too(self) -> None:
+        self.assert_refused(
+            self.two_brand_root(
+                "leading-space", "Festool DOMINO", " Festool DOMINO"
+            ),
+            f"{BRAND_UNIVERSE_FILENAME}:2",
+            "duplicate brand_name",
+        )
+
+    def test_the_same_collision_is_refused_on_the_record(self) -> None:
+        """The invariant where it belongs, for a caller with no file."""
+
+        with self.assertRaises(ValueError) as caught:
+            CoverageSnapshot(
+                discovered_item_count=0,
+                items=(),
+                unclassified=(),
+                blocked_sources=(),
+                source_denominator=(
+                    SourceDenominatorEntry(
+                        source_id="source:a:x",
+                        sha256=None,
+                        state=DECLARED_UNREAD,
+                        url="https://a.invalid/",
+                    ),
+                    SourceDenominatorEntry(
+                        source_id="source:b:x",
+                        sha256=None,
+                        state=DECLARED_UNREAD,
+                        url="https://b.invalid/",
+                    ),
+                ),
+                evidence_gate_findings=(),
+                brand_universe=(
+                    BrandUniverseEntry(
+                        brand_id="brand:a",
+                        brand_name=self.PAIR[0],
+                        source_ids=("source:a:x",),
+                    ),
+                    BrandUniverseEntry(
+                        brand_id="brand:b",
+                        brand_name=self.PAIR[1],
+                        source_ids=("source:b:x",),
+                    ),
+                ),
+            )
+        self.assertIn("duplicate brand_name", str(caught.exception))
+
+    def test_the_record_stores_the_trimmed_name(self) -> None:
+        for supplied in (
+            "Festool DOMINO ",
+            " Festool DOMINO",
+            "  Festool DOMINO  ",
+        ):
+            with self.subTest(supplied=ascii(supplied)):
+                entry = BrandUniverseEntry(
+                    brand_id="brand:demo",
+                    brand_name=supplied,
+                    source_ids=(DECLARED_ID,),
+                )
+                self.assertEqual("Festool DOMINO", entry.brand_name)
+
+    def test_the_published_bytes_carry_the_trimmed_name(self) -> None:
+        root = self.new_root("trimmed-payload")
+        self.with_brands(
+            [
+                brand_row(
+                    brand_id="brand:a",
+                    brand_name=" Festool DOMINO ",
+                    source_ids=["source:a:x"],
+                )
+            ],
+            root,
+        )
+        self.with_declared(
+            [declared_row("source:a:x", "https://a.invalid/")], root
+        )
+        raw = canonical_json_bytes(snapshot_payload(build_snapshot(root)))
+        self.assertIn(b'"brand_name":"Festool DOMINO"', raw)
+        self.assertNotIn(b'"brand_name":" Festool DOMINO "', raw)
+
+    def test_only_u0020_is_trimmed_and_every_other_space_is_refused(
+        self,
+    ) -> None:
+        """Trimming a refused character would silently repair a line a human
+        has to read; each of these is refused by name instead."""
+
+        for code_point in (0x00A0, 0x3000, 0x2007, 0x205F):
+            with self.subTest(code_point=code_point_label(code_point)):
+                with self.assertRaises(ValueError) as caught:
+                    BrandUniverseEntry(
+                        brand_id="brand:demo",
+                        brand_name="Festool DOMINO" + chr(code_point),
+                        source_ids=(DECLARED_ID,),
+                    )
+                self.assertIn(
+                    code_point_label(code_point), str(caught.exception)
+                )
+
+    def test_a_name_of_only_spaces_is_still_refused_as_blank(self) -> None:
+        for supplied in (" ", "   ", "\t "):
+            with self.subTest(supplied=ascii(supplied)):
+                with self.assertRaises(ValueError) as caught:
+                    BrandUniverseEntry(
+                        brand_id="brand:demo",
+                        brand_name=supplied,
+                        source_ids=(DECLARED_ID,),
+                    )
+                self.assertIn("blank", str(caught.exception))
+
+    def test_the_twelve_committed_names_are_unaffected_by_trimming(
+        self,
+    ) -> None:
+        """None of them carries a leading or trailing U+0020, so trimming is a
+        no-op on all twelve — the control that keeps the fix from moving data."""
+
+        for _brand_id, brand_name in EXPECTED_FIRST_COHORT:
+            with self.subTest(brand_name=brand_name):
+                self.assertEqual(brand_name, brand_name.strip(" "))
+                entry = BrandUniverseEntry(
+                    brand_id="brand:demo",
+                    brand_name=brand_name,
+                    source_ids=(DECLARED_ID,),
+                )
+                self.assertEqual(brand_name, entry.brand_name)
+
+    def test_the_docstring_states_what_is_trimmed(self) -> None:
+        text = prose(coverage_module.BrandUniverseEntry.__doc__)
+        for fragment in ("leading and trailing", "u+0020"):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
+
+# Each of these is **still admitted** after wave 3, is named in
+# `BrandUniverseEntry`'s docstring, and is asserted below. The list cannot be
+# wrong in either direction: a case that quietly became refused fails here, and
+# the docstring would then be claiming a weakness the rule no longer has.
+STILL_OPEN_BRAND_NAME_CASES: tuple[tuple[str, str], ...] = (
+    # Cyrillic U+0443 in place of Latin `u`. Refusing it would mean an ASCII
+    # allowlist, which would refuse three of the twelve committed names.
+    ("cyrillic homograph", "Blуm"),
+    # Interior runs are not collapsed. Only the ends are trimmed.
+    ("interior double space", "Festool  DOMINO"),
+    # A name with no base character at all.
+    ("combining marks only", "́́́"),
+    # Padding with a visible-but-tiny mark rather than an invisible one.
+    ("padded with a combining mark", "Blum̀"),
+)
+
+
+class BrandNameResidualTests(RootCase):
+    """What the brand-name rule does **not** close, in the residual shape.
+
+    `_require_declared_url` has carried a tested residual list since wave 2.
+    `BrandUniverseEntry` carried none at all while making a class-level claim,
+    and that asymmetry is the finding this class answers.
+    """
+
+    def test_every_named_residual_is_genuinely_still_admitted(self) -> None:
+        for label, brand_name in STILL_OPEN_BRAND_NAME_CASES:
+            with self.subTest(label=label, brand_name=ascii(brand_name)):
+                entry = BrandUniverseEntry(
+                    brand_id="brand:demo",
+                    brand_name=brand_name,
+                    source_ids=(DECLARED_ID,),
+                )
+                self.assertEqual(
+                    unicodedata.normalize("NFC", brand_name), entry.brand_name
+                )
+
+    def test_an_interior_double_space_still_makes_two_brands(self) -> None:
+        """The residual with its consequence spelled out: the cohort
+        denominator counts two where a reader sees one name twice."""
+
+        root = self.new_root("interior-space")
+        self.with_brands(
+            [
+                brand_row(
+                    brand_id="brand:a",
+                    brand_name="Festool DOMINO",
+                    source_ids=["source:a:x"],
+                ),
+                brand_row(
+                    brand_id="brand:b",
+                    brand_name="Festool  DOMINO",
+                    source_ids=["source:b:x"],
+                ),
+            ],
+            root,
+        )
+        self.with_declared(
+            [
+                declared_row("source:a:x", "https://a.invalid/"),
+                declared_row("source:b:x", "https://b.invalid/"),
+            ],
+            root,
+        )
+        self.assertEqual(
+            2, build_snapshot(root).first_cohort_brand_count.denominator
+        )
+
+    def test_a_homograph_still_makes_two_brands(self) -> None:
+        root = self.new_root("homograph-pair")
+        self.with_brands(
+            [
+                brand_row(
+                    brand_id="brand:a",
+                    brand_name="Blum",
+                    source_ids=["source:a:x"],
+                ),
+                brand_row(
+                    brand_id="brand:b",
+                    brand_name="Blуm",
+                    source_ids=["source:b:x"],
+                ),
+            ],
+            root,
+        )
+        self.with_declared(
+            [
+                declared_row("source:a:x", "https://a.invalid/"),
+                declared_row("source:b:x", "https://b.invalid/"),
+            ],
+            root,
+        )
+        self.assertEqual(
+            2, build_snapshot(root).first_cohort_brand_count.denominator
+        )
+
+    def test_the_docstring_names_each_residual(self) -> None:
+        text = prose(coverage_module.BrandUniverseEntry.__doc__)
+        for fragment in (
+            "what this does not close",
+            "homograph",
+            "interior runs",
+            "combining mark",
+            "transcription",
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)

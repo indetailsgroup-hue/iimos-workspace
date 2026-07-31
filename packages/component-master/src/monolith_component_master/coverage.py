@@ -129,9 +129,25 @@ states as an incomplete partition; and
 :attr:`CoverageSnapshot.verified_item_count`, the module's **headline coverage
 number**, which survived a wave that fixed the other three and said in its own
 prose that the audit was complete. All four are inside the payload now, and a
-count-by-count comparison of the record against the payload — not a list
-anybody maintains by hand — is what keeps a fifth from being dropped
-silently.
+count-by-count comparison of the record against the payload is what keeps a
+fifth from being dropped silently.
+
+Which side of that comparison is derived, and which is not
+----------------------------------------------------------
+
+The record side is **enumerated by introspection** over
+:class:`CoverageSnapshot`'s own properties, so a count added to the class and
+forgotten everywhere else still appears in :attr:`CoverageSnapshot.counts`.
+That is a change from the previous wave, whose prose called the guarantee "not
+a list anybody maintains by hand" while ``counts`` was itself a hand-typed
+list: a count nobody enrolled there was invisible to the record, to the
+payload and to every test at once.
+
+``releases.snapshot_payload``'s field list is **still written by hand**, and
+deliberately, because the payload's key names are part of the published
+contract and are not derivable from a count's label. The two-way comparison is
+what stops that hand-written list going stale. Which half is derived and which
+is not is stated here rather than left for a reader to assume both are.
 
 Every other ``*.jsonl`` file under the root, **at any depth**, is a
 coverage-item file. Each nonblank line is an object with ``item_id``,
@@ -347,6 +363,11 @@ _ADMITTED_VALUE_TYPES = frozenset({type(None), bool, int, float, str})
 _MEASURED_BY_DISCOVERY = "coverage.discover_registry_root"
 _MEASURED_BY_GATE = "coverage.evaluate_evidence_gate"
 
+# `CoverageSnapshot.counts` enumerates this class's count-bearing properties by
+# introspection, and it is a property itself. Named here so the one exclusion
+# is a constant a reader can find rather than a literal buried in a loop.
+_COUNTS_PROPERTY_NAME = "counts"
+
 
 def canonical_value(value: object, field_name: str) -> object:
     """Return an immutable snapshot, or refuse the value outright.
@@ -508,8 +529,10 @@ def _require_declared_url(value: object, field_name: str) -> str:
     A declared source URL has no business carrying credentials — nothing in
     this registry fetches anything, and no source here is behind a login — so
     userinfo is refused outright rather than parsed and ignored. An authority
-    that names no host at all is refused by the same reading, because a
-    locator with no host locates nothing.
+    whose **host** is empty is refused by the same reading, because a locator
+    with no host locates nothing;
+    :func:`_require_hostful_authority_without_userinfo` states exactly what it
+    reads as the host and what it does not check about it.
 
     **A percent-escape must be exactly ``%`` followed by two hexadecimal
     digits**, as RFC 3986 section 2.1 requires. ``%zz`` and a trailing bare
@@ -551,6 +574,19 @@ def _require_declared_url(value: object, field_name: str) -> str:
       character rule at all. **Nothing here resolves a host, contacts one, or
       establishes that any of the fourteen committed URLs belongs to the brand
       whose row names it.**
+    - **A percent-escape is never decoded before the authority is read.**
+      ``https://www.hafele.com%40evil.invalid/`` is admitted. It is **not** a
+      live spoof — ``%40`` is not a literal ``@``, so RFC 3986 reads the whole
+      string as one reg-name and no fetcher reaches ``evil.invalid`` — but it
+      was admitted and was not on this list, and this list is the thing the
+      rule rests on.
+    - **The host is checked for being present, never for being well formed.**
+      ``https://[]/x`` has empty IP-literal brackets and
+      ``https://[2001:db8::1/x`` never closes its own; both carry a nonempty
+      host by the reading in
+      :func:`_require_hostful_authority_without_userinfo` and both are
+      admitted. Validating a reg-name or an IP-literal is a different rule and
+      neither function attempts it.
     """
 
     text = _require_string(value, field_name)
@@ -625,11 +661,42 @@ def _require_percent_escape_grammar(text: str, field_name: str) -> None:
 def _require_hostful_authority_without_userinfo(
     text: str, field_name: str
 ) -> None:
-    """Refuse an authority that carries credentials, or that names no host.
+    """Refuse an authority that carries credentials, or whose host is empty.
 
     Both refusals come from reading RFC 3986 section 3.2 rather than from a
     character rule, which is why neither could be expressed in the admitted
     set: every character involved is already admitted.
+
+    **The host, not the authority string.** ``authority = [ userinfo "@" ]
+    host [ ":" port ]``, so ``":8443"`` is an authority that is a nonempty
+    string and names no host at all. The previous version of this function
+    tested ``if not authority:`` and therefore admitted ``https://:8443/x``,
+    ``https://:80`` and ``https://:/x`` while its own sentence said *"An
+    authority that names no host at all is refused"* — one character away from
+    the case it argued. What is checked now is the host.
+
+    Userinfo is refused first, so the authority the host rule reads carries
+    none and the host is what stands before an optional ``":" port``. An
+    IP-literal is bracketed and holds colons of its own, so a closing ``]`` is
+    what ends it; every other host ends at the first ``:``.
+
+    **What this does not close, stated rather than claimed.** Each of these is
+    still admitted and each is exercised by
+    ``tests.component_master.registry.test_first_cohort_denominator.DeclaredUrlResidualTests``.
+
+    - **The host is checked for being present, never for being well formed.**
+      ``https://[]/x`` has empty IP-literal brackets and
+      ``https://[2001:db8::1/x`` never closes its own. Both leave a nonempty
+      host by the reading above and both are admitted. A reg-name and an
+      IP-literal each have their own grammar in RFC 3986 section 3.2.2; this
+      rule implements neither, and says so rather than implying it does.
+    - **No percent-escape is decoded before the authority is read**, so
+      ``https://www.hafele.com%40evil.invalid/`` is one reg-name here. That is
+      also what RFC 3986 makes of it, so no fetcher reaches ``evil.invalid``;
+      it is a residual of the record, not a live spoof.
+    - Everything :func:`_require_declared_url` already records. This rule reads
+      a string. It resolves nothing, contacts nothing, and establishes nothing
+      about who owns the host it finds.
     """
 
     remainder = text[len(_DECLARED_URL_SCHEME) :]
@@ -639,13 +706,8 @@ def _require_hostful_authority_without_userinfo(
         if position != -1:
             end = min(end, position)
     authority = remainder[:end]
-    if not authority:
-        raise ValueError(
-            f"{field_name} names no host: everything between "
-            f"{_DECLARED_URL_SCHEME!r} and the first {_AUTHORITY_TERMINATORS!r} "
-            "is empty, so the line records a scheme and a path and nothing "
-            "anybody could fetch"
-        )
+    # Refused first, so that what follows reads a host out of an authority
+    # already known to carry no userinfo.
     if "@" in authority:
         userinfo, _, host = authority.rpartition("@")
         raise ValueError(
@@ -655,6 +717,28 @@ def _require_hostful_authority_without_userinfo(
             "while every fetcher reaches another. A declared source URL "
             "records where a catalogue would be read from; it carries no "
             "credentials, and nothing in this registry fetches anything"
+        )
+    if authority.startswith("[") and "]" in authority:
+        # An IP-literal carries its own colons, so the bracket pair is what
+        # ends the host rather than the first colon.
+        host = authority[: authority.index("]") + 1]
+    else:
+        host, _, _port = authority.partition(":")
+    if not host:
+        if authority:
+            detail = (
+                f"the authority {authority!r} names nothing before the ':' "
+                "that RFC 3986 section 3.2 reads as the port separator, so "
+                "its host is the empty string"
+            )
+        else:
+            detail = (
+                f"everything between {_DECLARED_URL_SCHEME!r} and the first "
+                f"{_AUTHORITY_TERMINATORS!r} is empty"
+            )
+        raise ValueError(
+            f"{field_name} names no host: {detail}. The line records a scheme "
+            "and a path and nothing anybody could fetch"
         )
 
 
@@ -678,17 +762,86 @@ _REFUSED_BRAND_NAME_CATEGORIES = frozenset(
 # one cohort — the failure the duplicate-name refusal exists to prevent.
 _ADMITTED_BRAND_NAME_SPACE = " "
 
+# The Unicode release ``_REFUSED_BRAND_NAME_CODE_POINT_RANGES`` was read
+# against. Pinned by
+# ``BrandNameInvisibleTranscriptionTests.test_the_transcription_is_pinned_to_the_release_it_was_read_from``,
+# which **fails** rather than skips on a later release, because a transcription
+# cannot notice a code point a later release adds.
+_TRANSCRIBED_AGAINST_UNICODE = "16.0.0"
+
+# Characters that render as nothing and that no general category above
+# reaches. ``Cc`` and ``Cf`` are two of the categories such characters live in;
+# they are not the class. U+3164 HANGUL FILLER is ``Lo``, U+2800 BRAILLE
+# PATTERN BLANK is ``So``, U+034F COMBINING GRAPHEME JOINER is ``Mn``, and all
+# three were admitted while the prose above claimed the class was closed.
+# Refusing ``Lo``, ``So`` or ``Mn`` wholesale is not available: ``Lo`` is how
+# ニチハ is spelled, ``Mn`` is how most of the world's diacritics are, and a
+# rule that refused them would be the ASCII allowlist this entry exists not to
+# be.
+#
+# **This is a transcription, not a derivation.** ``unicodedata`` exposes no
+# ``Default_Ignorable_Code_Point`` accessor, so nothing in this package can
+# re-derive the list or prove it complete. Each range below is the property's
+# membership as published in Unicode 16.0.0 ``DerivedCoreProperties.txt``,
+# restricted to the members whose general category is **not** already on
+# ``_REFUSED_BRAND_NAME_CATEGORIES`` — the rest would be a longer list closing
+# nothing new — plus U+2800, which is not ``Default_Ignorable`` at all and
+# renders as an empty braille cell.
+#
+# What is checked, and by what: every member's general category, that no
+# member was already refused by category, and the Unicode release the
+# transcription was read from. What is **not** checked, and cannot be from
+# here: that the transcription is complete.
+_REFUSED_BRAND_NAME_CODE_POINT_RANGES: tuple[tuple[int, int, str], ...] = (
+    (0x034F, 0x034F, "Mn"),  # COMBINING GRAPHEME JOINER
+    (0x115F, 0x1160, "Lo"),  # HANGUL CHOSEONG/JUNGSEONG FILLER
+    (0x17B4, 0x17B5, "Mn"),  # KHMER VOWEL INHERENT AQ/AA
+    (0x180B, 0x180D, "Mn"),  # MONGOLIAN FREE VARIATION SELECTOR ONE-THREE
+    (0x180F, 0x180F, "Mn"),  # MONGOLIAN FREE VARIATION SELECTOR FOUR
+    (0x2800, 0x2800, "So"),  # BRAILLE PATTERN BLANK
+    (0x3164, 0x3164, "Lo"),  # HANGUL FILLER
+    (0xFE00, 0xFE0F, "Mn"),  # VARIATION SELECTOR-1 to -16
+    (0xFFA0, 0xFFA0, "Lo"),  # HALFWIDTH HANGUL FILLER
+    (0xE0100, 0xE01EF, "Mn"),  # VARIATION SELECTOR-17 to -256
+)
+
+_REFUSED_BRAND_NAME_CODE_POINTS: frozenset[int] = frozenset(
+    code_point
+    for start, end, _category in _REFUSED_BRAND_NAME_CODE_POINT_RANGES
+    for code_point in range(start, end + 1)
+)
+
 
 def _require_brand_name(value: object, field_name: str) -> str:
-    """Require a published display name, and return it in NFC.
+    """Trim, refuse, and return a published display name in NFC.
 
     The rules are stated on :class:`BrandUniverseEntry`, which is where a
-    reader meets them. This function is what enforces them.
+    reader meets them, together with what they do not close. This function is
+    what enforces them.
     """
 
     text = _require_string(value, field_name)
-    for index, character in enumerate(text):
+    # Leading and trailing U+0020 come off before anything else reads the
+    # name, so that ``'X'`` and ``'X '`` are one name in both duplicate checks
+    # and in the released bytes. **Only** U+0020: every other ``Zs`` is
+    # refused below, and trimming a character the rule refuses would silently
+    # repair a line a human is supposed to read and approve.
+    trimmed = text.strip(_ADMITTED_BRAND_NAME_SPACE)
+    if not trimmed:
+        raise ValueError(f"{field_name} must not be blank")
+    for index, character in enumerate(trimmed):
         category = unicodedata.category(character)
+        if ord(character) in _REFUSED_BRAND_NAME_CODE_POINTS:
+            raise ValueError(
+                f"{field_name} holds a character that renders as nothing; "
+                f"position {index} holds U+{ord(character):04X} "
+                f"({_character_name(character)}), general category "
+                f"{category}. No general category names this class, so it is "
+                f"refused from a list transcribed from Unicode "
+                f"{_TRANSCRIBED_AGAINST_UNICODE}. A name padded with one "
+                "prints exactly like the name beside it and would be counted "
+                "as a second brand"
+            )
         if (
             category in _REFUSED_BRAND_NAME_CATEGORIES
             or (
@@ -712,7 +865,7 @@ def _require_brand_name(value: object, field_name: str) -> str:
     # must collide in the duplicate check rather than sit in the cohort as
     # two brands that print the same. Normalising here rather than at each
     # comparison means the released bytes also carry one spelling per name.
-    return unicodedata.normalize("NFC", text)
+    return unicodedata.normalize("NFC", trimmed)
 
 
 def _require_sha256(value: object, field_name: str) -> str:
@@ -817,14 +970,14 @@ class BrandUniverseEntry:
     twelve declared brands outright. The rule here is therefore by **Unicode
     general category**, and it admits every script.
 
-    Refused, with the reason each category is on the list:
+    Refused by general category, with the reason each one is on the list:
 
-    - ``Cc`` control and ``Cf`` format — the characters that render as
-      nothing. A name padded with U+200B counts as a distinct brand while
-      printing identically to another, which is exactly the failure the
-      duplicate-name refusal exists to prevent. Every character carrying the
-      Unicode ``Bidi_Control`` property is ``Cf``, so U+202E and its family —
-      which reorder the text that follows them — are refused here too.
+    - ``Cc`` control and ``Cf`` format. Every character carrying the Unicode
+      ``Bidi_Control`` property is ``Cf``, so U+202E and its family — which
+      reorder the text that follows them — are refused here too. A name padded
+      with U+200B counts as a distinct brand while printing identically to
+      another, which is exactly the failure the duplicate-name refusal exists
+      to prevent.
     - ``Cn`` unassigned — a code point this Unicode release gives no meaning
       to. It renders as a fallback box or as nothing, differently on every
       reader's machine.
@@ -838,9 +991,32 @@ class BrandUniverseEntry:
       spelled with U+00A0 renders exactly like ``Festool DOMINO`` spelled with
       U+0020 and would sit beside it as a second brand.
 
-    A name with nothing visible left in it needs no separate check: each of
-    its characters is refused individually, and a name of ordinary spaces is
-    already refused as blank.
+    **``Cc`` and ``Cf`` are two categories such characters live in. They are
+    not the class.** The previous version of this docstring called them *the
+    characters that render as nothing*, and that sentence did not survive
+    contact: U+3164 HANGUL FILLER is ``Lo``, U+2800 BRAILLE PATTERN BLANK is
+    ``So``, U+034F COMBINING GRAPHEME JOINER is ``Mn``, and all three were
+    admitted, as was a name made of nothing but fillers. No general category
+    reaches them, and refusing ``Lo``, ``So`` or ``Mn`` wholesale would refuse
+    ニチハ and most of the world's diacritics.
+
+    They are therefore refused from an explicit list, and the claim is
+    narrowed to match it. ``_REFUSED_BRAND_NAME_CODE_POINT_RANGES`` is a
+    **transcription** of the Unicode 16.0.0 ``Default_Ignorable_Code_Point``
+    property, restricted to members no category above already refuses, plus
+    U+2800. It is **not a derivation**: ``unicodedata`` exposes no accessor
+    for that property, so nothing here re-derives the list and nothing here
+    proves it complete. What is checked is every member's category, that every
+    member does work no category rule already did, and the Unicode release the
+    list was read from.
+
+    **Leading and trailing U+0020 are trimmed** before validation and before
+    the name is stored, so that ``'X'`` and ``'X '`` collide in both duplicate
+    checks. Without that the paragraph above about U+00A0 was false one
+    character away from the case it argues: ``Festool DOMINO`` and ``Festool
+    DOMINO`` with a trailing U+0020 were two brands. Only U+0020 is trimmed —
+    every other ``Zs`` is refused by name, because trimming a refused
+    character would silently repair a line a human has to read and approve.
 
     **Normalisation form: NFC, applied here, and the composed form is what the
     record keeps.** A name is a rendered thing, so two encodings of one
@@ -849,7 +1025,32 @@ class BrandUniverseEntry:
     ``brand-universe.jsonl``'s reader and the one on
     :class:`CoverageSnapshot` — answer the same question without either
     knowing about it, and it means the released bytes carry one spelling per
-    name. All twelve committed names are already NFC and are unchanged by it.
+    name. All twelve committed names are already NFC, carry no leading or
+    trailing U+0020, and are unchanged by either step.
+
+    **What this does not close, stated rather than claimed.** Each of these is
+    still admitted, and each is exercised by
+    ``tests.component_master.registry.test_first_cohort_denominator.BrandNameResidualTests``
+    so that this list cannot drift from the code in either direction.
+
+    - **A homograph.** ``Blуm`` with a Cyrillic U+0443 is admitted and sits
+      beside ``Blum`` as a second brand. Closing it would mean an ASCII
+      allowlist, which would refuse Häfele, Välinge/Threespine and Italiana
+      Ferramenta — three of the twelve. This is a real asymmetry with ``url``,
+      which *is* ASCII-only, and it is deliberate: a URL is a machine locator,
+      a brand name is a human name in whatever script its owner writes it in.
+    - **Interior runs of U+0020 are not collapsed.** ``Festool  DOMINO`` with
+      two spaces is a second brand beside ``Festool DOMINO``. Only the ends
+      are trimmed; collapsing the interior would rewrite a name rather than
+      normalise its edges.
+    - **A combining mark is not an invisible.** A name made only of combining
+      marks has no base character and is admitted, and so is a name padded
+      with one — ``Blum`` followed by U+0300 renders very nearly like
+      ``Blum``. Refusing ``Mn`` is what the second paragraph above rules out.
+    - **The transcription is version-pinned, not derived.** A code point a
+      later Unicode release adds to ``Default_Ignorable_Code_Point`` is not
+      covered until a human re-reads the table. Nothing here can notice that,
+      which is why the pinned release is asserted and fails loudly.
     """
 
     brand_id: str
@@ -1777,18 +1978,79 @@ class CoverageSnapshot:
 
     @property
     def counts(self) -> tuple[MeasuredCount, ...]:
-        collected = [
-            self.classified_item_count,
-            self.unclassified_item_count,
-            self.verified_item_count,
-            self.unbacked_verified_item_count,
-            self.blocked_source_count,
-            self.registered_source_count,
-            self.declared_unread_source_count,
-            self.first_cohort_brand_count,
-            *self.classification_counts.values(),
-            *self.dimension_verified_counts.values(),
-        ]
+        """Every :class:`MeasuredCount` this record holds, **derived**.
+
+        Enumerated by introspection over this class's own properties rather
+        than typed out. The list this replaced was hand-maintained, which made
+        the module docstring's guarantee — *a count-by-count comparison of the
+        record against the payload, not a list anybody maintains by hand* —
+        false on the record side: a real ``MeasuredCount`` property added to
+        this class and forgotten in that list was absent from the record's own
+        enumeration, absent from the hashed payload, and invisible to every
+        test at once. Deriving it is what makes the sentence true.
+
+        Two shapes are walked, and they are the two this record uses: a
+        property returning a ``MeasuredCount``, and a property returning a
+        nonempty mapping whose values are all ``MeasuredCount`` —
+        ``classification_counts`` and ``dimension_verified_counts``.
+
+        Two counts sharing one label are **refused** rather than published,
+        because every comparison downstream is over a *set* of labels and a
+        set cannot see a duplicate.
+
+        **What this does not close, stated rather than claimed.** Each is
+        exercised by
+        ``tests.component_master.registry.test_first_cohort_denominator.CountEnrollmentResidualTests``.
+
+        - **A count reached through any other shape.** A property returning a
+          ``tuple`` of counts, or a mapping of mappings, is not walked. Adding
+          one more level would only move the boundary, so the boundary is
+          named here instead of chased.
+        - **A count held in something that is not a property** — a plain class
+          attribute or a dataclass field — is not reached at all. This walk
+          asks the class for its properties and enumerates nothing else.
+        - **This is an enrolment check, not an arithmetic one.** It
+          establishes that every count the record computes reaches the payload
+          carrying the same five field values. It **does not check that a
+          count is right**: whether ``verified_items_with_backing_evidence``
+          is the number it ought to be is decided by the evidence gate, and
+          nothing here re-derives it.
+        """
+
+        collected: list[MeasuredCount] = []
+        for name in sorted(
+            {
+                attribute_name
+                for klass in type(self).__mro__
+                for attribute_name, attribute in vars(klass).items()
+                if isinstance(attribute, property)
+            }
+        ):
+            # The one property this walk must not read is itself; doing so
+            # would recurse without end.
+            if name == _COUNTS_PROPERTY_NAME:
+                continue
+            value = getattr(self, name)
+            if isinstance(value, MeasuredCount):
+                collected.append(value)
+            elif (
+                isinstance(value, Mapping)
+                and value
+                and all(
+                    isinstance(item, MeasuredCount) for item in value.values()
+                )
+            ):
+                collected.extend(value.values())
+        labels = [count.label for count in collected]
+        duplicated = sorted(
+            {label for label in labels if labels.count(label) > 1}
+        )
+        if duplicated:
+            raise ValueError(
+                "two counts on this record publish the same label, and every "
+                "comparison against this enumeration is over a set of labels, "
+                "which cannot see a duplicate: " + ", ".join(duplicated)
+            )
         return tuple(sorted(collected, key=lambda item: item.label))
 
     @property
