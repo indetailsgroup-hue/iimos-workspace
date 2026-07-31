@@ -106,7 +106,6 @@ function getSpecState(): SpecState {
     // Synchronously access the already-loaded module from the module cache
     // This works because by the time this function is called, useSpecStore is already loaded
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       _specStoreRef = (window as any).__MONOLITH_SPEC_STORE__;
       if (!_specStoreRef) {
         // Fallback: return DRAFT to allow mutations if store not ready
