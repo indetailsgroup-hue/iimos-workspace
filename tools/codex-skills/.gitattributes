@@ -1,10 +1,19 @@
 # The book-to-skill tree is byte-pinned to upstream commit c6bc1b79 and every
 # path's SHA-256 is recorded in tests/codex_skills/test_upstream_manifest.py.
 #
-# The pinned blobs are CRLF, and three lines of book_to_skill/utils.py are not —
-# so this tree is not safely normalizable in either direction. With this repo's
-# core.autocrlf=true and no attribute here, Git stores an LF-normalized copy and
-# restores CRLF on checkout; a fresh clone would then disagree with the recorded
-# digests, and re-deploying from it would ship bytes that are not the audited
-# ones. `-text` freezes the bytes exactly as they were audited.
-book-to-skill/** -text
+# The pinned blobs are stored LF-only, and this repository sets
+# core.autocrlf=true. Without an attribute here Git would rewrite every one of
+# them to CRLF on checkout — `git ls-files --eol` reports `i/lf w/crlf` for any
+# unpinned text file in this repo, against `i/lf w/lf` for these. All nineteen
+# recorded digests would stop matching at once, and re-deploying from such a
+# checkout would ship bytes that are not the audited ones.
+#
+# `-text` freezes the bytes exactly as they were audited, in both directions.
+# `-whitespace` stops `git diff --check`, `git apply --whitespace=fix`, and
+# whitespace-linting hooks from reporting — or silently repairing — upstream's
+# own formatting inside a tree nobody here is allowed to edit.
+#
+# Git reads attributes from the index during checkout, so removing this file
+# from the working tree does not relax the pin; it has to be removed from a
+# commit before it stops applying.
+book-to-skill/** -text -whitespace

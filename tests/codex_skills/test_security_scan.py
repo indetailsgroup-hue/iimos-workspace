@@ -32,6 +32,8 @@ INSTALLER = SKILL_DIR / "scripts" / "install_generated_skill.py"
 CODEX_HOME = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
 VALIDATOR = CODEX_HOME / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py"
 
+SUBPROCESS_TIMEOUT = 30
+
 
 def scan(target: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -40,6 +42,7 @@ def scan(target: Path) -> subprocess.CompletedProcess[str]:
         encoding="utf-8",
         capture_output=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT,
     )
 
 
@@ -84,6 +87,10 @@ def test_injection_shaped_content_is_reported_with_rule_and_line(tmp_path: Path)
     assert "chapters/ch01-planning.md" in report
     assert ":3" in report, "the finding must carry a line number"
     assert "No files were modified by this scan." in report
+    # The report is read by an agent. Echoing the matched line back would put the
+    # injection into the transcript that decides whether to install it, so the
+    # scanner reports rule id, path, and line only.
+    assert "ignore previous instructions" not in report.lower()
 
 
 def test_incomplete_scan_is_distinguishable_from_a_clean_scan(tmp_path: Path) -> None:
@@ -108,6 +115,7 @@ def test_staged_skill_passes_scan_validator_and_guarded_install(tmp_path: Path) 
         encoding="utf-8",
         capture_output=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT,
     )
     assert validated.returncode == 0, validated.stdout + validated.stderr
     assert "Skill is valid!" in validated.stdout

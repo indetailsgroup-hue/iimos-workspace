@@ -16,15 +16,36 @@ Recording the hashes in the test rather than in prose is what makes the
 distinction enforceable offline: an undeclared edit to upstream bytes, or an
 extra file appearing inside the skill, fails here instead of being discovered
 during the next upstream merge.
+
+The digests are only meaningful if a checkout reproduces the audited bytes. This
+repository sets `core.autocrlf=true` and the pinned blobs are LF-only, so
+without a `-text` attribute Git rewrites every one of them to CRLF on checkout
+and all nineteen recorded digests stop matching at once. The last two tests pin
+that attribute directly, so the failure names its cause instead of appearing as
+nineteen simultaneous "drifted" hashes.
 """
 
 from __future__ import annotations
 
+import re
+import shutil
+import subprocess
 from hashlib import sha256
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "tools" / "codex-skills" / "book-to-skill"
+SKILL_RELATIVE = SKILL.relative_to(ROOT).as_posix()
+
+# Every .gitattributes that could carry the checkout pin, nearest-first. Git
+# resolves the deepest matching file last, so a rule here also wins over any
+# future repository-wide `* text=auto` line at the root.
+ATTRIBUTE_FILES = (
+    ROOT / "tools" / "codex-skills" / ".gitattributes",
+    ROOT / ".gitattributes",
+)
 
 UPSTREAM_REPOSITORY = "https://github.com/virgiliojr94/book-to-skill"
 UPSTREAM_COMMIT = "c6bc1b7927822e563aae6212c07670f5a3d95ea7"
@@ -149,3 +170,195 @@ def test_governed_tree_contains_no_symlinks() -> None:
         path.relative_to(SKILL).as_posix() for path in SKILL.rglob("*") if path.is_symlink()
     ]
     assert links == []
+
+
+def pattern_to_regex(pattern: str) -> re.Pattern[str]:
+    """Translate the gitattributes glob subset this repository uses.
+
+    The trap this function exists to avoid: `*` and `?` never cross `/` in
+    gitattributes, but they do in `fnmatch`. Matching with `fnmatch` would
+    report that `book-to-skill/*.py` covers `book-to-skill/scripts/extract.py`,
+    so a rule matching *nothing* would read as full coverage — the exact false
+    pass found while reviewing the first version of this test.
+    """
+    # A pattern with no separator matches the basename at any depth.
+    prefix = "" if "/" in pattern.rstrip("/") else r"(?:.*/)?"
+    out: list[str] = []
+    index = 0
+    while index < len(pattern):
+        if pattern.startswith("/**", index) and index + 3 == len(pattern):
+            out.append(r"/.*")  # trailing `/**`: everything inside
+            index += 3
+        elif pattern.startswith("**/", index):
+            out.append(r"(?:[^/]+/)*")  # `**/`: zero or more directories
+            index += 3
+        elif pattern.startswith("**", index):
+            out.append(r".*")
+            index += 2
+        elif pattern[index] == "*":
+            out.append(r"[^/]*")
+            index += 1
+        elif pattern[index] == "?":
+            out.append(r"[^/]")
+            index += 1
+        else:
+            out.append(re.escape(pattern[index]))
+            index += 1
+    return re.compile(f"^{prefix}{''.join(out)}$")
+
+
+def attributes_in_force() -> dict[str, list[str]]:
+    """Governed path -> the attributes a checkout would apply to it.
+
+    Git reads `.gitattributes` from the repository root downwards, so a deeper
+    file overrides a shallower one; within one file the last matching line wins.
+    This models a later rule as *replacing* an earlier one rather than merging
+    attribute by attribute, which is exact for the single-rule pin in force and
+    errs toward failing on anything more complicated.
+    """
+    in_force: dict[str, list[str]] = {}
+    ordered = sorted(
+        (path for path in ATTRIBUTE_FILES if path.is_file()),
+        key=lambda path: len(path.parent.relative_to(ROOT).parts),
+    )
+    for attribute_file in ordered:
+        base = attribute_file.parent
+        for line in attribute_file.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            pattern, *attributes = stripped.split()
+            matcher = pattern_to_regex(pattern)
+            for relative in governed_tree():
+                try:
+                    candidate = (SKILL / relative).relative_to(base).as_posix()
+                except ValueError:  # attributes file outside the governed tree
+                    continue
+                if matcher.match(candidate):
+                    in_force[relative] = attributes
+    return in_force
+
+
+@pytest.mark.parametrize(
+    ("pattern", "path", "covered"),
+    (
+        ("book-to-skill/**", "book-to-skill/SKILL.md", True),
+        ("book-to-skill/**", "book-to-skill/scripts/extract.py", True),
+        ("book-to-skill/**/*.py", "book-to-skill/scripts/extract.py", True),
+        ("*.py", "book-to-skill/scripts/extract.py", True),
+        # The two cases fnmatch gets wrong, and the reason this matcher exists.
+        ("book-to-skill/*.py", "book-to-skill/scripts/extract.py", False),
+        ("book-to-skill/*", "book-to-skill/scripts/extract.py", False),
+    ),
+)
+def test_the_pattern_matcher_follows_gitattributes_not_fnmatch(
+    pattern: str, path: str, covered: bool
+) -> None:
+    assert bool(pattern_to_regex(pattern).match(path)) is covered
+
+
+def test_a_gitattributes_rule_pins_every_governed_file() -> None:
+    """The pin must ship in the repository, cover the whole tree, and be readable
+    without Git so an exported tree still asserts it.
+
+    Coverage is checked file by file rather than "a rule mentions this
+    directory": a rule that names the tree but matches none of its files is a
+    pin in name only. `test_git_reports_no_conversion_...` then proves the rule
+    is what a checkout actually applies.
+    """
+    shipped = [path for path in ATTRIBUTE_FILES if path.is_file()]
+    assert shipped, (
+        "no .gitattributes ships with the governed tree; a Windows checkout "
+        "will rewrite the pinned bytes and every digest above will fail"
+    )
+
+    in_force = attributes_in_force()
+
+    unpinned = sorted(
+        relative for relative in governed_tree() if "-text" not in in_force.get(relative, [])
+    )
+    assert unpinned == [], (
+        "no shipped .gitattributes rule disables text conversion for these "
+        "governed files; a Windows checkout will rewrite them"
+    )
+
+    unprotected = sorted(
+        relative for relative in governed_tree() if "-whitespace" not in in_force.get(relative, [])
+    )
+    assert unprotected == [], (
+        "the pinned tree must also opt out of whitespace checking, or "
+        "`git apply --whitespace=fix` and whitespace hooks can rewrite bytes "
+        "we are not allowed to edit"
+    )
+
+
+def test_the_checkout_pin_is_declared_in_exactly_one_place() -> None:
+    """One source of truth, so an update cannot half-apply across two files."""
+    declaring = []
+    for attribute_file in (path for path in ATTRIBUTE_FILES if path.is_file()):
+        base = attribute_file.parent
+        for line in attribute_file.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            pattern, *attributes = stripped.split()
+            if "-text" not in attributes:
+                continue
+            matcher = pattern_to_regex(pattern)
+            for relative in governed_tree():
+                try:
+                    candidate = (SKILL / relative).relative_to(base).as_posix()
+                except ValueError:
+                    continue
+                if matcher.match(candidate):
+                    declaring.append(attribute_file.relative_to(ROOT).as_posix())
+                    break
+
+    # "Declared nowhere" is the previous test's failure, not this one's.
+    assert len(set(declaring)) <= 1, (
+        f"the checkout pin is declared in more than one place: {sorted(set(declaring))}"
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("git") is None or not (ROOT / ".git").exists(),
+    reason="needs a Git checkout to report the attributes actually in force",
+)
+def test_git_reports_no_conversion_for_any_governed_file() -> None:
+    """`i/` is the stored blob's line ending, `w/` the working tree's.
+
+    Any governed file where the two differ was rewritten on checkout, and its
+    recorded SHA-256 no longer describes the bytes on disk. Deleting the
+    attributes file from the working tree does not relax this: Git reads
+    attributes from the index during checkout, so the pin has to be removed from
+    a commit before it stops applying.
+    """
+    result = subprocess.run(
+        ["git", "ls-files", "--eol", "--", SKILL_RELATIVE],
+        cwd=ROOT,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    line_re = re.compile(r"^i/(?P<index>\S+)\s+w/(?P<worktree>\S+)\s+attr/(?P<attr>\S*)\s*\t(?P<path>.+)$")
+    reported = {}
+    for line in result.stdout.splitlines():
+        match = line_re.match(line)
+        assert match is not None, f"unparsed `git ls-files --eol` line: {line!r}"
+        reported[match.group("path")] = match.groupdict()
+
+    assert set(reported) == {f"{SKILL_RELATIVE}/{relative}" for relative in governed_tree()}
+
+    converted = {
+        path: (fields["index"], fields["worktree"])
+        for path, fields in reported.items()
+        if fields["index"] != fields["worktree"]
+    }
+    assert converted == {}, "checkout conversion rewrote pinned bytes"
+
+    unpinned = sorted(path for path, fields in reported.items() if "-text" not in fields["attr"])
+    assert unpinned == []
