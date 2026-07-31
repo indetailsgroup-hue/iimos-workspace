@@ -11,8 +11,45 @@ on:
   workflow_dispatch:
 
 jobs:
+  # `tools/iimos-verify/` does not exist in this repository and never has --
+  # `git log --diff-filter=A --all -- 'tools/iimos-verify/*'` is empty, and this
+  # workflow has been present since the root commit. It is scaffolding written
+  # ahead of a verifier binary and a key ceremony that have not been built yet;
+  # CODEOWNERS and the two keyset workflows reference the same absent tree.
+  #
+  # The path filters above look like they keep this workflow quiet until that
+  # tree appears. They do not. Pushing a NEW BRANCH makes GitHub treat every
+  # path as changed, so all three build jobs fire and die in `Setup Node.js`
+  # looking for `tools/iimos-verify/package-lock.json`. Measured: every run of
+  # this workflow in the repository's history has failed or been cancelled --
+  # it has never once succeeded.
+  #
+  # This guard makes the absence explicit. When the tree is missing the build
+  # jobs are SKIPPED, not failed and not passed: a skipped job says "this did
+  # not run", which is the truth, where a green job would claim a build that
+  # never happened. When the tree lands, the guard sees it and everything below
+  # runs unchanged.
+  guard:
+    name: iimos-verify tree present?
+    runs-on: ubuntu-latest
+    outputs:
+      present: ${{ steps.check.outputs.present }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - id: check
+        run: |
+          if [ -f tools/iimos-verify/package-lock.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::tools/iimos-verify/ is not in this repository; \
+          build, test and release jobs are skipped rather than failed."
+          fi
+
   build-windows:
     name: Build Windows EXE
+    needs: guard
+    if: needs.guard.outputs.present == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -49,6 +86,8 @@ jobs:
 
   build-linux:
     name: Build Linux Binary
+    needs: guard
+    if: needs.guard.outputs.present == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -85,6 +124,8 @@ jobs:
 
   test:
     name: Test Node.js
+    needs: guard
+    if: needs.guard.outputs.present == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -134,7 +175,7 @@ jobs:
 
   release:
     name: Create Release
-    needs: [build-windows, build-linux, test]
+    needs: [guard, build-windows, build-linux, test]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
