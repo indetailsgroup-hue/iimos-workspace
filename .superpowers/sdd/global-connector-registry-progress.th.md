@@ -672,3 +672,119 @@ Implementation commit สร้างทั้งสี่พาธ ส่วน
 - Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data
 - ไม่ได้ push, merge, rebase หรือเปลี่ยน branch
 - งานที่ 8 เป็นงานถัดไป ยังไม่ได้เริ่ม และยังไม่มี brief
+
+## ปิดงานที่ 8 — 31 กรกฎาคม 2026
+
+**สถานะ:** COMPLETE
+**Base ของงานที่ 8:** `3a19417fec54c41f074c91d504f2e6b32d3bfd57`
+**Commit การพัฒนา:** `1fc8df07e6708e49e2356d12bce3b71f7b40a7e5` — `feat(registry): publish deterministic coverage releases`
+**Fix wave 1:** `af351f06225c94419c64ea1391e80cb96e9660c3` — `fix(registry): enforce the evidence backing invariant in the snapshot`
+**Fix wave 2:** `ae14fb6618181bcc4b07a71101b4ebec1e37dd25` — `fix(registry): align the backing floor with the gate on review state`
+**Wave A ตามคำตัดสินเจ้าของ:** `51c6428bf73fdeb41cc5faa5923f6143ad875633` — `chore(registry): pin registry data to byte-exact end-of-line handling`
+**Wave B ตามคำตัดสินเจ้าของ และเป็น HEAD ที่รับแล้ว:** `26d344e3edafb7a1e693c358087c001d51c0373b` — `feat(coverage): recognize root denominator input files`
+**ขอบเขตปัจจุบัน:** งานที่ 9 เป็นงานถัดไป ยังไม่ได้เริ่ม และยังไม่มี brief **brief ของงานที่ 9 เขียนไม่ได้ตามที่แผนเขียนไว้ในขณะนี้** — มีความขัดแย้งระหว่างแผนกับ implementation ที่ทำซ้ำได้จริง บันทึกไว้ในหัวข้อข้อจำกัดด้านล่าง และต้องได้รับคำตัดสินจากเจ้าของก่อน การปิดงานนี้แทนที่เฉพาะประโยคขอบเขตปัจจุบันของงานที่ 7 ที่บันทึกว่างานที่ 8 เป็นงานถัดไปหรือยังไม่ได้เริ่มเท่านั้น ประโยคทั้งหมดของงานที่ 1–7 ยังคงถูกเก็บรักษาไว้เป็น snapshot ทางประวัติศาสตร์
+
+### ขอบเขตที่ติดตามได้จริงของงานที่ 8
+
+`git diff --name-status 3a19417f..26d344e3` ให้ผลลัพธ์เจ็ดรายการพอดี เป็นการเพิ่มทั้งหมด และไม่มีการลบใดในช่วงนี้:
+
+| สถานะ | Path | บรรทัดที่เพิ่ม | บรรทัดที่ลบ |
+| --- | --- | ---: | ---: |
+| เพิ่ม | `packages/component-master/src/monolith_component_master/coverage.py` | 1,523 | 0 |
+| เพิ่ม | `packages/component-master/src/monolith_component_master/releases.py` | 381 | 0 |
+| เพิ่ม | `tools/connector_registry/check_coverage.py` | 111 | 0 |
+| เพิ่ม | `tools/connector_registry/build_release.py` | 143 | 0 |
+| เพิ่ม | `tests/component_master/registry/test_release.py` | 3,163 | 0 |
+| เพิ่ม | `data/component-master/registry/v1/coverage-snapshot.json` | 1 | 0 |
+| เพิ่ม | `data/component-master/registry/v1/.gitattributes` | 25 | 0 |
+
+รวม 5,347 บรรทัดที่เพิ่ม และไม่มีการลบ ไม่มีการแก้ไข path ใดในรากธรรมาภิบาลของเจ้าของ, product runtime ที่ซ้อนอยู่, seed data, verifier, export หรือ product path อื่น ไม่ได้แก้ไข `evidence.py` ตามที่ brief กำหนด ไม่ได้ push, merge, rebase หรือเปลี่ยน branch
+
+**brief อนุมัติหก path ไม่ใช่เจ็ด และต้องไม่อ่านข้อนี้ว่าเป็นการขยายขอบเขตแบบเงียบ** brief เขียนไว้ว่า *"หากการแก้ไขจำเป็นต้องใช้ path ที่เจ็ดจริง ให้หยุดและรายงาน ไม่ใช่ขยายขอบเขตแบบเงียบ"* path ที่เจ็ดคือ `.gitattributes` ถูกเพิ่มหลังจาก implementation ผ่านการรีวิวและรับแล้ว โดยคำตัดสินชัดเจนของเจ้าของต่อคำถามที่ orchestrator ยกขึ้นมาเป็นรายการค้าง และเขียนกับ commit โดย orchestrator ไม่ใช่ implementer ไฟล์นี้เป็นไฟล์ attribute ของ repository และไม่เพิ่มพฤติกรรมที่ทำงานได้ใด ๆ
+
+### สัญญาที่แน่นอนของ coverage ledger และ release
+
+- `CoverageSnapshot` เก็บตัวส่วนที่วัดได้และการจำแนกทุกรายการเทียบกับตัวส่วนนั้น ตัวเลขเป็นค่า `MeasuredCount` ที่พกตัวส่วน ป้ายกำกับตัวส่วน และฟังก์ชันที่วัดมาด้วย ดังนั้นจึงไม่มีตัวเลขใดที่อ่านได้โดยไม่มีคำว่า "จากทั้งหมดเท่าไร"
+- **มิติของหลักฐานถูกนับแยกกันและไม่เคยถูกรวมเป็นคะแนนเดียว** สิบมิติ — `bom`, `commercial`, `field`, `geometry`, `identity`, `lifecycle`, `material_thickness`, `rights`, `structural`, `tooling` — แต่ละมิติรายงานจำนวน verified ของตัวเอง ไม่มีเปอร์เซ็นต์ coverage เดียวอยู่ที่ใดใน payload โดยเจตนา
+- **ไม่มี item ที่ค้นพบแล้วแต่ยังไม่ถูกจำแนกที่จะไปถึง release ได้** release ปฏิเสธที่จะ build เมื่อมี item ที่ยังไม่ถูกจำแนก อย่างไม่มีเงื่อนไข และไม่มี flag ให้ปิด
+- **หนี้ที่ตกทอดมาจากงานที่ 7 ถูกปิดที่ระดับ snapshot ไม่ใช่ด้วยธรรมเนียมปฏิบัติ** `CoverageSnapshot` ปฏิเสธ record ใดก็ตามที่อ้างว่า `VERIFIED` แต่ไม่มี assertion หรือมี assertion ที่ระบุ source ซึ่งตัวส่วนที่วัดได้ไม่ได้ถือไว้ว่า `REGISTERED` เว้นแต่จะมี evidence gate finding ที่ระบุ item และ assertion นั้นตรงตัว ก่อน `af351f06` สิ่งนี้เป็นเพียงธรรมเนียมภายใน `build_snapshot` ดังนั้นข้ออ้างที่ไม่มีหลักฐานหนุนยังไปถึง release ได้ผ่าน caller อื่นใด
+- floor และ gate ตอบคำถามเรื่อง review state ตรงกันแล้ว: assertion ที่ยังไม่มีใครรีวิวไม่ใช่หลักฐานหนุน `EvidenceGateFinding` บังคับความสัมพันธ์ blank แปลว่า `MISSING_ASSERTION` ทั้งสองทิศทาง finding เดียวจึงไม่สามารถครอบคลุมรูปแบบการปฏิเสธสองแบบพร้อมกันได้อีก
+- ความเข้าถึงได้ของเหตุผล gate เป็นสิ่งที่ **derive ออกมา** ไม่ใช่เขียนด้วยมือ `GateReasonReachabilityTests` ขับทุกเหตุผลและยืนยันว่าพื้นผิวใดเป็นผู้ผลิตเหตุผลนั้น ค่าคงที่ถูกอธิบายว่าเป็นชุดที่ demonstrated แล้ว ไม่ใช่ชุดของความเป็นไปได้ การ derive แก้สองรายการที่ตารางเขียนมือเขียนผิด
+- การค้นหาเดินลงไปในไดเรกทอรีย่อยจากรากของ registry โดยมี `_source-cache` เป็นข้อยกเว้นเดียวที่มีเอกสารกำกับและผูกกับรากเท่านั้น ดังนั้น `.jsonl` ที่เพิ่มในไดเรกทอรีย่อยจะถูกวัด ไม่ใช่ถูกละเว้นเงียบ ๆ
+- ตัวอ่านแยกบรรทัดที่ LF เท่านั้น `str.splitlines()` แยกที่ U+2028, U+2029 และ U+0085 ด้วย ซึ่ง serializer ของแพ็กเกจนี้เองปล่อยออกมาแบบดิบ
+- มีชื่อไฟล์สองชื่อพอดีที่ถูกรับรู้ว่าไม่ใช่ item input ที่รากของ registry — `brand-universe.jsonl` และ `source-denominator.jsonl` — โดยชื่อตรงตัว ไม่ใช่ pattern `.jsonl` ที่ไม่รู้จักยังคงล้มดัง ทั้งที่รากและที่ความลึกใด ๆ ชื่อที่อยู่ใน allowlist หากอยู่ในไดเรกทอรีย่อยจะถูกปฏิเสธว่ากำกวม และทั้งสองไฟล์ไม่มีส่วนใน `discovered_item_count`
+- แถวใน `source-denominator.jsonl` ต้องประกาศ `state: BLOCKED` คำว่า `REGISTERED` ถูกปฏิเสธที่นั่น เพราะตัวอ่านนี้ไม่ได้ถือ byte ของ source ที่ถูกประกาศไว้ด้วยชื่อเท่านั้น จึงตรวจ digest ซ้ำไม่ได้ ขณะที่ `coverage_statement` เผยแพร่คำว่า `REGISTERED` ในความหมาย *"readable and hash-verified"* การรับคำนั้นจะทำให้ประโยคที่เผยแพร่ไปแล้วกลายเป็นเท็จ
+- `RegistryRelease` เก็บอัตลักษณ์ของ release, semantic version, payload digest และ source-denominator digest ส่วน metadata การสร้างอยู่ **นอก** payload ที่ถูก hash JSON แบบ canonical เป็น UTF-8 เรียง key แยกตัวคั่นแบบกระชับ `allow_nan=False` และลงท้ายบรรทัดด้วย LF การเผยแพร่เป็นแบบทั้งหมดหรือไม่มีเลย ผ่านไฟล์ชั่วคราวร่วมกับ `os.fsync` และ `os.link`
+
+### ที่มาของแต่ละ wave — การเปลี่ยนแปลงใดมาจากไหน
+
+สอง wave เกิดจากการรีวิวอิสระ และสอง wave มาจากคำตัดสินของเจ้าของ คอลัมน์ "ที่มา" บันทึกอำนาจในการตัดสิน เช่นเดียวกับ ledger ของงานที่ 7 เพราะนั่นคือคุณค่าเชิงธรรมาภิบาลของ ledger
+
+| Wave | Commit | ที่มา | ปิดอะไร |
+| --- | --- | --- | --- |
+| 1 | `af351f06` | รีวิว ห้าข้อค้นพบ | ข้อบังคับเรื่องหลักฐานหนุนเป็นเพียงธรรมเนียมภายใน caller หนึ่งตัว ไม่ใช่ invariant ของ record ข้ออ้าง `VERIFIED` ที่ไม่มีหลักฐานหนุนจึงไปถึง release ได้ผ่าน caller อื่น ความล้มเหลวฝั่ง source ยุบรวมเป็น `ASSERTION_NOT_REGISTERED` ทั้งหมดแทนที่จะระบุตัวเอง การค้นหาไม่เดินลงไดเรกทอรีย่อย ตัวอ่านแยกบรรทัดที่ Unicode line separator ที่ serializer ของตัวเองปล่อยออกมาดิบ และ release ไม่ได้ปฏิเสธ item ที่ยังไม่ถูกจำแนกอย่างไม่มีเงื่อนไข |
+| 2 | `ae14fb66` | รีวิว สามข้อค้นพบ | จุดบังคับใช้สองจุดในโมดูลเดียวตอบคำถามเดียวกันต่างกัน: floor รับ assertion ที่เป็น `PENDING` ว่าเป็นหลักฐานหนุน ขณะที่ gate ปฏิเสธรูปแบบเดียวกันด้วย `ASSERTION_NOT_VERIFIED` `EvidenceGateFinding` บังคับความสัมพันธ์ blank แปลว่า `MISSING_ASSERTION` เพียงทิศทางเดียว และตารางความเข้าถึงได้ที่เขียนด้วยมือผิดสองรายการ ตอนนี้ derive แล้ว |
+| A | `51c6428b` | **คำตัดสินเจ้าของ — ไม่ใช่ข้อค้นพบจากรีวิว** | การ clone ใหม่บน Windows เขียน `coverage-snapshot.json` ที่ commit ไว้จาก LF เป็น CRLF วัดได้ 4428 → 4429 byte พร้อม digest ที่ต่างออกไป ผู้อ่านจึงยืนยัน digest ที่เผยแพร่กับไฟล์ที่ได้รับไม่ได้ ขอบเขตถูกจำกัดไว้ที่รากของ registry ตามคำตัดสินเจ้าของ เขียนและ commit โดย orchestrator |
+| B | `26d344e3` | **คำตัดสินเจ้าของ — ไม่ใช่ข้อค้นพบจากรีวิว** | `discover_registry_root` ปฏิบัติกับทุก `*.jsonl` ยกเว้น source manifest ว่าเป็นข้อมูล item ที่ความลึกใดก็ได้ ไฟล์ input สองไฟล์ที่รากซึ่งงานที่ 9 จะสร้างจึงจะล้มแรงด้วย `item_id must be a nonblank string` ตอนนี้รับรู้ชื่อไฟล์ตรงตัวสองชื่อ ที่รากเท่านั้น พร้อมข้อบังคับชัดเจนของเจ้าของว่า `.jsonl` ที่ไม่รู้จักต้องยังล้มดัง ไม่ใช่ถูกข้ามเงียบ |
+
+ข้อบังคับของเจ้าของใน wave B ถูกรักษาไว้ครบตามผลจริง: **allowlist เป็นชื่อไฟล์ที่ระบุชัด ไม่ใช่ pattern กว้าง และ `.jsonl` ที่ไม่รู้จักยังล้มดัง** ผลที่ยอมรับคือวันนี้ `brand-universe.jsonl` ถูกรับรู้ในฐานะไฟล์ที่ไม่มี record เท่านั้น แถวที่ไม่ว่างจะถูกปฏิเสธ เพราะยังไม่มี type ของ brand record ให้ตรวจสอบ และ `CoverageSnapshot` ไม่มีช่องให้เก็บ schema ของแถวนั้นเป็นของงานที่ 9 ที่จะนิยาม
+
+### ลำดับเหตุการณ์ TDD และการรีวิวอิสระตามจริง
+
+| ขั้น | ผลตัดสิน / ผลลัพธ์ | การจัดการ |
+| --- | --- | --- |
+| Implementation | commit เป็น `1fc8df07` | สร้าง path หกในเจ็ด path สุดท้าย ยังไม่ถูกรับ |
+| รีวิวอิสระครั้งที่หนึ่ง | `NEEDS_FIXES` | ห้าข้อค้นพบ นำโดยข้อบังคับเรื่องหลักฐานหนุนที่เป็นธรรมเนียมของ caller ไม่ใช่ invariant ของ record |
+| Wave 1 | commit เป็น `af351f06` | `coverage.py` +214/−27, `releases.py` +13/−0, `test_release.py` +464/−4 |
+| รีวิวอิสระครั้งที่สอง | `NEEDS_FIXES` | สามข้อค้นพบที่แคบ: floor กับ gate ไม่ตรงกันเรื่อง `review_state`, ความสัมพันธ์ทางเดียวของ `EvidenceGateFinding` และตารางความเข้าถึงได้ที่เขียนด้วยมือผิดสองรายการ |
+| Wave 2 | commit เป็น `ae14fb66` | `coverage.py` +88/−35, `test_release.py` +294/−0 ตารางความเข้าถึงได้กลายเป็นการ derive พร้อม guard ที่ผ่าน mutation testing |
+| รีวิวอิสระครั้งที่สาม | `ACCEPTED` | งานที่ 8 ถูกรับ รายการค้างสองข้อถูกยกให้เจ้าของตัดสิน แทนที่จะดำเนินการเองฝ่ายเดียว |
+| คำตัดสินเจ้าของต่อรายการค้างทั้งสอง | เป็นการเพิ่มขอบเขต ไม่ใช่ข้อค้นพบจากรีวิว | เจ้าของตัดสินทั้งสองข้อ: ตรึงการจัดการ end-of-line ที่รากของ registry และเพิ่ม allowlist ชื่อไฟล์ที่ระบุชัด พร้อมข้อบังคับว่า allowlist ต้องเป็นชื่อตรงตัว และ `.jsonl` ที่ไม่รู้จักต้องยังล้มดัง |
+| Wave A | commit เป็น `51c6428b` | เขียนโดย orchestrator พิสูจน์ผลด้วย `git checkout-index` ลง prefix ชั่วคราวทั้งก่อนและหลัง ไม่ใช่การกล่าวอ้าง |
+| Wave B | commit เป็น `26d344e3` | `coverage.py` +195/−3, `test_release.py` +413/−0 ใน wave นี้ไม่มีการลบเทสต์และไม่มีการแก้ไขเทสต์เดิมเลย ทุกการเปลี่ยนแปลงเทสต์เป็นการเพิ่มล้วน |
+| รีวิวอิสระครั้งสุดท้าย | `ACCEPTED` — ไม่มีข้อค้นพบใน `26d344e3` | ตรวจสอบจากการรันจริง: ชื่อไฟล์ที่ใกล้เคียง, ไดเรกทอรีที่ตั้งชื่อตรงกับ allowlist, symlink, UTF-16, UTF-8 BOM, ตัวจบบรรทัด CRLF, ความลึกซ้อน และ `source_id` ซ้ำทั้งภายในไฟล์เดียวและข้ามไฟล์ ล้วนถูกปฏิเสธดัง ๆ พร้อมระบุไฟล์ บรรทัด และฟิลด์ มีข้อ P3 หนึ่งข้อที่ยกขึ้นต่อ `51c6428b` ซึ่งอยู่นอกขอบเขตงานที่ 8 — ดูหัวข้อข้อจำกัด |
+
+### การรันตรวจสอบซ้ำ ณ การปิดงานนี้
+
+ทุกตัวเลขด้านล่างถูกรันใหม่โดย orchestrator ระหว่างการปิดงานนี้ เทียบกับ HEAD ที่รับแล้ว `26d344e3` ไม่ได้ยกมาจากรายงานของงานใด
+
+- `test_release` `177/177`; ไดเรกทอรี registry `458/458`; full dynamic discovery `728/728`; ทั้งหมด `OK` และ exit `0`
+- Verifier: `overall_passed: true`, `check_count 13`, `passed_count 13`, `failed_count 0`
+- คำสั่ง CLI ทั้งสองตามแผน ที่รากของ registry: `check_coverage.py --fail-on-unclassified` exit `0`; `build_release.py --version 0.1.0` exit `0`
+- payload ของ release ที่ build ใหม่มี byte เหมือนกันทุกประการกับ `data/component-master/registry/v1/coverage-snapshot.json` ที่ commit ไว้: 4,428 byte, SHA-256 ขึ้นต้นด้วย `f957bb48d5be2c3f`, ไม่มี byte CR เลย
+- `coverage_statement` ที่เผยแพร่บนรากที่ว่างเปล่าอ่านได้เต็มความว่า *"0 of 0 discovered registry items classified; 0 of 0 counted as verified with backing evidence; 0 of 0 verified claims refused by the evidence gate; 0 of 0 named sources readable and hash-verified; 0 of 0 named sources blocked. The registry root holds zero records, so this release covers nothing. Measured by coverage.discover_registry_root over the named registry root; no figure here is a market-wide claim."*
+- `git status --porcelain` ว่างเปล่าที่ `26d344e3edafb7a1e693c358087c001d51c0373b`
+
+### ความสมบูรณ์ของหลักฐานที่รับแล้วและการทำความสะอาด
+
+- brief ที่รับแล้ว: `.superpowers/sdd/task-8-brief.md`; 9,507 byte; SHA-256 `21decd81881989e1c31026091946a01ae6c143f1206b802f0b6331f7f956072d`
+- digest ของ path ทั้งเจ็ดในสภาพ worktree ณ HEAD ที่รับแล้ว แสดงสิบหกตัวอักษร hex แรก: `coverage.py` 59,007 B `e29cef4b1a6adbee`; `releases.py` 13,647 B `5b610723c6ad5235`; `check_coverage.py` 3,492 B `d90f6861459517d5`; `build_release.py` 4,481 B `ee5c37e6429d32ce`; `test_release.py` 119,512 B `12f3e3aabbe3b260`; `coverage-snapshot.json` 4,428 B `f957bb48d5be2c3f`; `.gitattributes` 1,388 B `67311d63d485cd71`
+- การทำความสะอาดเหลือไดเรกทอรี `__pycache__` ศูนย์รายการและไฟล์ `.pyc` ศูนย์ไฟล์ภายในเลนแยกของ parent และ prefix ของ checkout ชั่วคราวทุกอันถูกลบแล้ว
+
+### ข้อจำกัดที่บันทึกไว้
+
+บันทึกไว้โดยไม่ลดทอน เพราะแต่ละข้อกำหนดขอบเขตว่าหลักฐานของงานที่ 8 รองรับอะไรได้
+
+- **ข้อความ commit ของ `51c6428b` มีข้ออ้างที่การปิดงานนี้พิสูจน์ว่าเป็นเท็จ และบันทึกไว้ที่นี่เพราะข้อความ commit แก้ไขในที่เดิมไม่ได้** ข้อความนั้นเขียนว่าไฟล์ที่ติดตามอยู่นอกรากของ registry *"เป็นเอกสารและ workflow ที่การแปลงไม่มีผลเสีย"* วัดใหม่ที่ HEAD ที่รับแล้วด้วยการจำลอง checkout ใหม่ผ่าน `git checkout-index`: จากไฟล์ที่ติดตาม 196 ไฟล์ มี 113 ไฟล์ที่ต่างจาก worktree เมื่อ checkout และ **9 ไฟล์ในนั้นเป็นไฟล์ข้อมูล `.json`/`.jsonl`** โดยหกไฟล์อยู่ใต้ `data/component-master/` ที่สำคัญกว่านั้น `docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.json` เผยแพร่คู่ path กับ SHA-256 จำนวน 77 คู่ และ **ไม่มีคู่ใดใน 77 คู่ที่ทำซ้ำได้บน checkout ใหม่** โดย 74 คู่ยังตรงกับ worktree ส่วนอีก 3 คู่เปลี่ยนไปตาม commit หลังจากนั้นโดยชอบธรรม เจ้าของตัดสิน *ขอบเขต* ของ `51c6428b` ให้จำกัดที่รากของ registry เท่านั้น และ **คำตัดสินนั้นยังคงอยู่ไม่เปลี่ยน** สิ่งที่ถูกพิสูจน์ว่าเป็นเท็จคือคำว่า "ไม่มีผลเสีย" ไม่ใช่ขอบเขต ไม่มี digest ของ release ใดได้รับผลกระทบ เพราะเส้นทาง release อ่านเฉพาะ `data/component-master/registry/v1` ส่วนที่ว่า manifest baseline ของงานที่ 1 จะได้ wave ของตัวเองหรือไม่ เป็นการตัดสินใจของเจ้าของที่ยังเปิดอยู่
+- **ตัวเลข "76 ไฟล์ที่ติดตาม" ใน `51c6428b` ไม่สามารถ derive จาก repository ได้** ตัวเลขนั้นนับไฟล์ที่มี CR อยู่แล้วใน *working tree นี้โดยเฉพาะ* ซึ่งเป็นคุณสมบัติของวิธีที่ tree นั้นถูกสร้าง ไม่ใช่ของ commit ใด การนับเดียวกันที่ HEAD ที่รับแล้วได้ 81 ตัวเลขรูปแบบนี้ไม่ควรถูกเขียนลงในข้อความ commit ราวกับเป็นข้อเท็จจริงของ repository
+- **ความขัดแย้งระหว่างแผนกับ implementation ปิดกั้นงานที่ 9 ตามที่แผนเขียนไว้ในขณะนี้ และได้ทำซ้ำจนครบด้วยคำสั่งของแผนเอง** แผนระบุให้แถวของตัวส่วนพก `publisher`, `url`, `edition`, `region`, `language`, `accessed_at` และ `rights_state` พร้อมสถานะหนึ่งใน `DISCOVERED`, `SOURCE_BLOCKED`, `DORMANT_OR_DEFUNCT` หรือ `REVIEWED` โดยไม่มี `sha256` ทั้งสามจุดชนกับโมดูลนี้: ฟิลด์ทั้งเจ็ดถูกปฏิเสธทีละชื่อ สามในสี่สถานะอยู่นอก vocabulary ที่มีสองค่า และ `SourceDenominatorEntry` บังคับ 64 ตัวอักษร hex ตัวพิมพ์เล็ก แถวที่เขียนตามแผนทุกประการถูกปฏิเสธ และคำสั่ง Step 4 ของแผนเอง `check_coverage.py --root data/component-master/registry/v1 --fail-on-unclassified` ให้ exit `2` ขณะที่แผนระบุว่า *"Expected: exit 0."* นี่ไม่ใช่ข้อบกพร่องใน `26d344e3` — ตัวอ่านปฏิเสธดัง ๆ และบอกว่าต้องแก้อะไร — แต่ brief ของงานที่ 9 ต้องกระทบยอด schema ของแถว, vocabulary ของสถานะ และข้อบังคับ `sha256` **ก่อน** เริ่มงานที่ 9 ใด ๆ
+- **การใส่ `brand-universe.jsonl` ไว้ใน allowlist ในขณะนี้ซื้อได้เพียงข้อความ error ที่ดีขึ้น และไม่ได้อะไรมากกว่านั้น** แถวที่ไม่ว่างถูกปฏิเสธไม่ว่าชื่อจะถูกรับรู้หรือไม่ และไฟล์ที่ไม่มี record ก็ไม่มีส่วนใดทั้งสองทาง วันนี้ไม่มีข้อมูล brand ใดถูกวัด และ payload ของ release ไม่ได้อะไรจากไฟล์นั้น การซื้อนี้ชอบธรรม — ข้อความปฏิเสธบอกงานที่ 9 อย่างแม่นยำว่าต้องนิยามอะไร — แต่ต้องไม่ถูกอ่านว่าเป็น brand coverage
+- **`Path.rglob` ไม่เดินตาม symlink ของไดเรกทอรี ดังนั้นไดเรกทอรีย่อยที่เป็น symlink ภายในรากของ registry จึงไม่ถูกวัด** บันทึกไว้ ไม่ได้แก้
+- **floor ไม่ได้ตรวจสอบไขว้ระหว่าง `blocked_sources` กับ `source_denominator`** บันทึกไว้ ไม่ได้แก้
+- **floor ทำ hash ซ้ำไม่ได้** มันตรวจว่า source ถูกถือไว้ว่า `REGISTERED` ในตัวส่วนที่วัดได้ ไม่ได้อ่าน byte ของ source เองแล้วคำนวณ digest ใหม่ นั่นคือเหตุผลที่ `REGISTERED` ถูกปฏิเสธจาก `source-denominator.jsonl` และเป็นสิ่งที่กำหนดขอบเขตว่าคำว่า "hash-verified" ในประโยคที่เผยแพร่ตั้งอยู่บนอะไร
+- **ตระกูลของ census ถูกสร้างด้วยมือ ไม่ได้สุ่มจากข้อมูลผู้จำหน่ายจริง** มันกำหนดขอบเขตของกฎเทียบกับรูปแบบที่จินตนาการขึ้น ไม่ใช่เทียบกับสนามจริง
+- **ความเป็น deterministic พิสูจน์บน interpreter เดียวและระบบปฏิบัติการเดียว** ความเหมือนกันระดับ byte ได้รับการยืนยันข้าม process แยกกัน ภายใต้ `PYTHONHASHSEED=random` และเมื่อสลับลำดับ input แต่ทำบน Windows ด้วย CPython บนเครื่องนี้เท่านั้น ความเหมือนกันระดับ byte ข้ามแพลตฟอร์มและข้าม interpreter ยังไม่ได้พิสูจน์
+- **ไม่เคยทดสอบบน filesystem ที่แยกตัวพิมพ์ใหญ่เล็ก** พฤติกรรมของ `Brand-Universe.jsonl` ที่มีตัวพิมพ์ผสมบนระบบเช่นนั้นเป็นการให้เหตุผลจากข้อเท็จจริงที่ `rglob` รายงานชื่อจริงบนดิสก์ ไม่ใช่การสังเกตจริง ผลลัพธ์ที่สังเกตได้คือการปฏิเสธดัง ๆ ทั้งสองทาง ความเสี่ยงจึงเป็นเรื่องของการ checkout repository มากกว่าเรื่องของตัวอ่าน
+- **งานที่ 8 ไม่มีไฟล์รายงานและไม่มี review-package diff ต่างจากงานที่ 1–7** ค้นและยืนยันว่าไม่มีจริง ครอบคลุมทั้ง tree ของ repository ในเลน parent, เลน runtime ที่แยกอยู่ และ scratchpad ของ session: `.superpowers/sdd/task-8-brief.md` เป็นไฟล์เดียวของงานที่ 8 ที่มีอยู่ รายงานของ implementer และ reviewer ทุกฉบับของงานที่ 8 ถูกส่งภายใน session และไม่เคยเขียนลงดิสก์ ledger นี้จึงอ้าง digest ของรายงานเหล่านั้นไม่ได้ และไม่ได้ยกตัวเลข RED รายคลื่นมากล่าวซ้ำ **ดังนั้น RED รายคลื่นของงานที่ 8 จึงไม่มี artifact ใดหลงเหลือเป็นหลักฐาน** และการปิดงานนี้ไม่กล่าวอ้างเรื่องนั้นเลย นี่คือการถดถอยเชิงกระบวนการเทียบกับงานที่ 7 และถูกบันทึกไว้แทนที่จะกลบเกลื่อน
+- **commit การพัฒนา `1fc8df07` มีเพียงบรรทัดหัวเรื่องเปล่า ไม่มีเนื้อความและไม่มี trailer** ต่างจากทุก commit อื่นในช่วงนี้ เหตุผลของ implementation ดั้งเดิมจึงกู้คืนจาก git เพียงอย่างเดียวไม่ได้
+
+### ขอบเขตอำนาจของงานที่ 8
+
+- งานที่ 8 สร้างเพียง coverage ledger และตัว build release แบบ deterministic มันเผยแพร่สิ่งที่ registry ถืออยู่ในปัจจุบัน ไม่ได้ตัดสินว่าอะไรควรอยู่ใน registry และไม่ได้ใส่ข้อมูลเข้าไป
+- **รากของ registry ว่างเปล่า และทุก release ที่ build จากรากนั้นครอบคลุมศูนย์** ทุก `.jsonl` ใต้ `data/component-master/registry/v1/` เป็น seed ที่ไม่มี record และประโยคที่เผยแพร่บอกเช่นนั้นด้วยถ้อยคำ ไม่ใช่ด้วยการเว้นว่าง แยกจากกันและอยู่นอกขอบเขตของงานที่ 8 repository ยังคงมี bootstrap SKU seed จำนวน 20 record ที่ `data/component-master/skus.jsonl` ซึ่งรับเข้ามาโดย commit baseline ของงานที่ 1 คือ `6dd99372` โดยมี 2 record ที่ทำเครื่องหมายว่า verified คำสั่ง `git diff --name-only 3a19417f..26d344e3 -- data/component-master/skus.jsonl` ให้ผลว่าง
+- งานที่ 8 ไม่ได้ลงลายเซ็นอะไร และไม่ได้ให้อำนาจด้าน manufacturing, freeze, export หรือ production
+- งานนี้ไม่ใช่ registry ทั่วโลกที่มีข้อมูลแล้ว, release signing, network access, runtime integration, การ qualify เชิงโครงสร้างหรือทางกายภาพ, coupon testing, machine capability, first-article inspection, field validation, การให้สัตยาบันของเจ้าของ, production readiness หรือ manufacturing readiness
+- NOT-FOR-PRODUCTION ยังคงทำงานอยู่ หลักฐาน software ไม่ได้ให้อำนาจด้าน manufacturing, installation, operational หรือ production
+- Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data
+- ไม่ได้ push, merge, rebase หรือเปลี่ยน branch
+- งานที่ 9 เป็นงานถัดไป ยังไม่ได้เริ่ม ยังไม่มี brief และเริ่มไม่ได้จนกว่าความขัดแย้งของแผนที่บันทึกไว้ข้างต้นจะได้รับคำตัดสินจากเจ้าของ

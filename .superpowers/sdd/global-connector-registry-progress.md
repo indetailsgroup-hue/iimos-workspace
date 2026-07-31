@@ -672,3 +672,119 @@ These are recorded without softening, because each one bounds what the Task 7 ev
 - Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.
 - No push, merge, rebase, or branch change was performed.
 - Task 8 is next, has not started, and has no brief yet.
+
+## Task 8 closeout — 31 July 2026
+
+**Status:** COMPLETE
+**Task 8 base:** `3a19417fec54c41f074c91d504f2e6b32d3bfd57`
+**Implementation commit:** `1fc8df07e6708e49e2356d12bce3b71f7b40a7e5` — `feat(registry): publish deterministic coverage releases`
+**Fix wave 1:** `af351f06225c94419c64ea1391e80cb96e9660c3` — `fix(registry): enforce the evidence backing invariant in the snapshot`
+**Fix wave 2:** `ae14fb6618181bcc4b07a71101b4ebec1e37dd25` — `fix(registry): align the backing floor with the gate on review state`
+**Owner-ruled wave A:** `51c6428bf73fdeb41cc5faa5923f6143ad875633` — `chore(registry): pin registry data to byte-exact end-of-line handling`
+**Owner-ruled wave B and accepted HEAD:** `26d344e3edafb7a1e693c358087c001d51c0373b` — `feat(coverage): recognize root denominator input files`
+**Current boundary:** Task 9 is next, has not started, and has no brief yet. **Task 9's brief cannot be written as the plan stands** — a reproduced plan-versus-implementation conflict is recorded in the limitations below and must be resolved by owner ruling first. This closeout supersedes only the Task 7 current-boundary statement that recorded Task 8 as next or not started; all earlier Task 1–7 statements remain preserved as historical snapshots.
+
+### Exact tracked Task 8 scope
+
+`git diff --name-status 3a19417f..26d344e3` returns exactly seven entries, all additions, with zero deletions in the range:
+
+| Status | Path | Insertions | Deletions |
+| --- | --- | ---: | ---: |
+| Added | `packages/component-master/src/monolith_component_master/coverage.py` | 1,523 | 0 |
+| Added | `packages/component-master/src/monolith_component_master/releases.py` | 381 | 0 |
+| Added | `tools/connector_registry/check_coverage.py` | 111 | 0 |
+| Added | `tools/connector_registry/build_release.py` | 143 | 0 |
+| Added | `tests/component_master/registry/test_release.py` | 3,163 | 0 |
+| Added | `data/component-master/registry/v1/coverage-snapshot.json` | 1 | 0 |
+| Added | `data/component-master/registry/v1/.gitattributes` | 25 | 0 |
+
+Total 5,347 insertions and zero deletions. No owner governance-root, nested product-runtime, seed-data, verifier, export, or other product path was changed. `evidence.py` was not modified, as the brief required. No push, merge, rebase, or branch change was performed.
+
+**The brief authorized six paths, not seven, and this must not be read as silent widening.** The brief states: *"If a fix genuinely requires a seventh path, stop and report rather than widening silently."* The seventh path, `.gitattributes`, was added after the implementation had already been reviewed and accepted, by explicit owner ruling on a question the orchestrator raised as a carry-forward, and it was authored and committed by the orchestrator rather than by an implementer. It is a repository-attribute file and adds no executable behaviour.
+
+### Exact coverage-ledger and release contract
+
+- `CoverageSnapshot` carries the measured denominator and every classification against it. Counts are `MeasuredCount` values that carry a denominator, a denominator label, and the function that measured them, so no figure can be read without its "of what".
+- **Evidence dimensions are counted separately and never blended.** Ten dimensions — `bom`, `commercial`, `field`, `geometry`, `identity`, `lifecycle`, `material_thickness`, `rights`, `structural`, `tooling` — each report their own verified count. No single coverage percentage exists anywhere in the payload, by design.
+- **No unclassified discovered item can reach a release.** A release refuses to build over an unclassified item unconditionally, with no opt-out flag.
+- **The inherited Task 7 debt is closed at the snapshot, not by convention.** `CoverageSnapshot` refuses any record claiming `VERIFIED` that has no assertion, or whose assertion names a source the measured denominator does not hold as `REGISTERED`, unless an evidence gate finding names that exact item and assertion. Before `af351f06` this was a convention inside `build_snapshot`, so an unbacked claim could still reach a release through any other caller.
+- The floor and the gate now answer the review-state question identically: an assertion nobody has reviewed is not backing. `EvidenceGateFinding` enforces blank-implies-`MISSING_ASSERTION` in both directions, so one finding can no longer cover two refusal shapes at once.
+- Gate-reason reachability is **derived**, not hand-written. `GateReasonReachabilityTests` drives every reason and asserts which surface produced it; the constants are documented as demonstrated sets, not possibility sets. The derivation corrected two entries that the hand-written table had wrong.
+- Discovery recurses from the registry root with `_source-cache` as the one documented, root-anchored exclusion, so a `.jsonl` added in a subdirectory is measured rather than silently omitted.
+- The reader splits on LF only. `str.splitlines()` also breaks on U+2028, U+2029 and U+0085, which this package's own serializer emits raw.
+- Exactly two filenames are recognized as non-item input at the registry root — `brand-universe.jsonl` and `source-denominator.jsonl` — by literal name, never by pattern. An unrecognized `.jsonl` still fails loudly at the root and at any depth; either allowlisted name in a subdirectory is refused as ambiguous; neither contributes to `discovered_item_count`.
+- `source-denominator.jsonl` rows must declare `state: BLOCKED`. `REGISTERED` is refused there because this reader holds no bytes for a source declared only by name and cannot re-verify its digest, while `coverage_statement` publishes `REGISTERED` as *"readable and hash-verified"*. Accepting the word would have made an already-published sentence false.
+- `RegistryRelease` holds release identity, semantic version, payload digest and source-denominator digest, and creation metadata sits **outside** the hashed payload. Canonical JSON is UTF-8 with sorted keys, tight separators, `allow_nan=False` and LF. Publication is all-or-nothing through a temporary file plus `os.fsync` and `os.link`.
+
+### Wave provenance — which change came from where
+
+Two waves were surfaced by independent review and two were owner-ruled. The Origin column records deciding authority, as in the Task 7 ledger, because that is the ledger's governance value.
+
+| Wave | Commit | Origin | What it closed |
+| --- | --- | --- | --- |
+| 1 | `af351f06` | Review, five findings | The backing invariant was a convention inside one caller rather than an invariant of the record, so an unbacked `VERIFIED` claim could reach a release through any other caller. Source-side gate failures all collapsed into `ASSERTION_NOT_REGISTERED` instead of naming themselves. Discovery did not recurse. The reader split on Unicode line separators its own serializer emits raw. A release did not refuse an unclassified item unconditionally. |
+| 2 | `ae14fb66` | Review, three findings | Two enforcement points in one module answered the same question differently: the floor accepted a `PENDING` assertion as backing while the gate refused the identical shape as `ASSERTION_NOT_VERIFIED`. `EvidenceGateFinding` enforced blank-implies-`MISSING_ASSERTION` in one direction only. The hand-written reachability table was wrong twice and is now derived. |
+| A | `51c6428b` | **OWNER-RULED — not a review finding** | A fresh clone on Windows rewrote the committed `coverage-snapshot.json` from LF to CRLF, measured at 4428 → 4429 bytes with a different digest, so a reader could not confirm the published digest against the file they received. Scope pinned to the registry root by owner ruling. Authored and committed by the orchestrator. |
+| B | `26d344e3` | **OWNER-RULED — not a review finding** | `discover_registry_root` treated every `*.jsonl` except the source manifest as item data at any depth, so the two root input files Task 9 creates would have hard-failed with `item_id must be a nonblank string`. Recognizes exactly two literal filenames at the root only, with the owner's explicit constraint that unknown `.jsonl` must still fail loudly rather than be skipped. |
+
+The owner constraint on wave B is preserved verbatim in effect: **the allowlist is explicit filenames, never a broad pattern, and an unrecognized `.jsonl` still fails loudly.** Its accepted consequence is that `brand-universe.jsonl` is recognized only as a zero-record file today — a nonblank row is refused, because no brand record type exists to validate it and `CoverageSnapshot` has no field to carry it. That row schema is Task 9's to define.
+
+### Honest TDD and independent-review chronology
+
+| Stage | Verdict / result | Disposition |
+| --- | --- | --- |
+| Implementation | Committed as `1fc8df07` | Six of the seven final paths created. Not yet accepted. |
+| First independent review | `NEEDS_FIXES` | Five findings, led by the backing invariant being a caller convention rather than a record invariant. |
+| Wave 1 | Committed as `af351f06` | `coverage.py` +214/−27, `releases.py` +13/−0, `test_release.py` +464/−4. |
+| Second independent review | `NEEDS_FIXES` | Three narrow findings: floor-versus-gate disagreement on `review_state`, one-directional `EvidenceGateFinding` implication, and a hand-written reachability table wrong in two entries. |
+| Wave 2 | Committed as `ae14fb66` | `coverage.py` +88/−35, `test_release.py` +294/−0. The reachability table became a derivation with a mutation-tested guard. |
+| Third independent review | `ACCEPTED` | Task 8 accepted. Two carry-forwards were raised to the owner rather than actioned unilaterally. |
+| Owner ruling on both carry-forwards | Scope addition, not review findings | The owner ruled both: pin end-of-line handling at the registry root, and add an explicit filename allowlist — with the stated constraints that the allowlist be explicit names and that unknown `.jsonl` still fail loudly. |
+| Wave A | Committed as `51c6428b` | Orchestrator-authored. Effect proven by `git checkout-index` into a temporary prefix before and after, not asserted. |
+| Wave B | Committed as `26d344e3` | `coverage.py` +195/−3, `test_release.py` +413/−0. Zero test removals and zero test modifications in the wave; every test change is a pure addition. |
+| Final independent review | `ACCEPTED` — no findings in `26d344e3` | Verified live: near-miss filenames, a directory bearing an allowlisted name, symlinks, UTF-16, a UTF-8 BOM, CRLF terminators, nested depth, and duplicate `source_id` within and across files all refuse loudly and name file, line and field. One P3 was raised against `51c6428b`, outside Task 8 scope — see the limitations. |
+
+### Verification rerun at this ledger closeout
+
+Every figure below was rerun by the orchestrator during this closeout against accepted HEAD `26d344e3`, not carried from any task report.
+
+- `test_release` `177/177`; registry directory `458/458`; full dynamic discovery `728/728`; all `OK` and exit `0`.
+- Verifier: `overall_passed: true`, `check_count 13`, `passed_count 13`, `failed_count 0`.
+- Both plan CLI invocations at the registry root: `check_coverage.py --fail-on-unclassified` exit `0`; `build_release.py --version 0.1.0` exit `0`.
+- The freshly built release payload is byte-identical to the committed `data/component-master/registry/v1/coverage-snapshot.json`: 4,428 bytes, SHA-256 beginning `f957bb48d5be2c3f`, zero CR bytes.
+- The published `coverage_statement` over the empty root reads, in full: *"0 of 0 discovered registry items classified; 0 of 0 counted as verified with backing evidence; 0 of 0 verified claims refused by the evidence gate; 0 of 0 named sources readable and hash-verified; 0 of 0 named sources blocked. The registry root holds zero records, so this release covers nothing. Measured by coverage.discover_registry_root over the named registry root; no figure here is a market-wide claim."*
+- `git status --porcelain` empty at `26d344e3edafb7a1e693c358087c001d51c0373b`.
+
+### Accepted evidence integrity and cleanup
+
+- Accepted brief: `.superpowers/sdd/task-8-brief.md`; 9,507 bytes; SHA-256 `21decd81881989e1c31026091946a01ae6c143f1206b802f0b6331f7f956072d`.
+- Worktree digests of the seven Task 8 paths at accepted HEAD, first sixteen hex characters: `coverage.py` 59,007 B `e29cef4b1a6adbee`; `releases.py` 13,647 B `5b610723c6ad5235`; `check_coverage.py` 3,492 B `d90f6861459517d5`; `build_release.py` 4,481 B `ee5c37e6429d32ce`; `test_release.py` 119,512 B `12f3e3aabbe3b260`; `coverage-snapshot.json` 4,428 B `f957bb48d5be2c3f`; `.gitattributes` 1,388 B `67311d63d485cd71`.
+- Cleanup left zero `__pycache__` directories and zero `.pyc` files inside the isolated parent lane, and every temporary checkout prefix was removed.
+
+### Stated limitations
+
+These are recorded without softening, because each one bounds what the Task 8 evidence can support.
+
+- **The `51c6428b` commit message contains a claim this closeout falsifies, and it is recorded here because a commit message cannot be corrected in place.** That message says the tracked files outside the registry root *"are documents and workflows where the conversion is harmless."* Re-measured at accepted HEAD by simulating a fresh checkout with `git checkout-index`: of 196 tracked files, 113 differ from the worktree on checkout, and **9 of those are `.json`/`.jsonl` data files**, six of them under `data/component-master/`. More consequentially, `docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.json` publishes 77 path-and-SHA-256 pairs, and **none of the 77 reproduce on a fresh checkout**; 74 of the 77 still match the worktree, and the other 3 have legitimately moved on under later commits. The owner ruled the *scope* of `51c6428b` to be the registry root only and **that ruling stands unchanged**; what is falsified is the word "harmless", not the scope. No release digest is affected, because the release path reads only `data/component-master/registry/v1`. Whether the Task 1 baseline manifest gets its own wave is an open owner decision.
+- **The `51c6428b` figure of "76 tracked files" is not derivable from the repository.** It counted files that already carried CR in *this particular working tree*, which is a property of how that tree was created, not of any commit. The same count at accepted HEAD is 81. Figures of this shape should not have been written into a commit message as if they were repository facts.
+- **A plan-versus-implementation conflict blocks Task 9 as the plan is currently written, and it has been reproduced end to end with the plan's own command.** The plan specifies denominator rows carrying `publisher`, `url`, `edition`, `region`, `language`, `accessed_at` and `rights_state`, and one of `DISCOVERED`, `SOURCE_BLOCKED`, `DORMANT_OR_DEFUNCT` or `REVIEWED`, with no `sha256`. All three collide with this module: the seven fields are refused by name, three of the four states are outside the two-value vocabulary, and `SourceDenominatorEntry` requires 64 lowercase hex. A row written exactly as the plan specifies is refused, and the plan's own Step 4 invocation `check_coverage.py --root data/component-master/registry/v1 --fail-on-unclassified` exits `2` where the plan states *"Expected: exit 0."* This is not a defect in `26d344e3` — the reader refuses loudly and names what to change — but Task 9's brief must reconcile the row schema, the state vocabulary and the `sha256` requirement **before** any Task 9 work starts.
+- **Allowlisting `brand-universe.jsonl` currently buys a better diagnostic and nothing else.** A nonblank row is refused whether the name is recognized or not, and a zero-record file contributes nothing either way. No brand data is measured today and the release payload gains nothing from that file. The purchase is legitimate — the refusal message tells Task 9 precisely what it must define — but it must not be read as brand coverage.
+- **`Path.rglob` does not follow directory symlinks, so a symlinked subdirectory inside the registry root is not measured.** This is recorded, not fixed.
+- **The floor does not cross-check `blocked_sources` against `source_denominator`.** Recorded, not fixed.
+- **The floor cannot re-hash.** It verifies that a source is held as `REGISTERED` in the measured denominator; it does not itself re-read source bytes and recompute a digest. That is why `REGISTERED` is refused from `source-denominator.jsonl`, and it bounds what "hash-verified" in the published statement rests on.
+- **The census families are constructed by hand, not sampled from real vendor data.** They bound the rules against imagined shapes, not against the field.
+- **Determinism was proven on one interpreter and one operating system.** Byte identity was confirmed across separate processes and under `PYTHONHASHSEED=random`, and across reversed input order, on Windows with CPython on this host only. Cross-platform and cross-interpreter byte identity is unproven.
+- **A case-sensitive filesystem was never exercised.** The behaviour of a mixed-case `Brand-Universe.jsonl` there is reasoned from `rglob` reporting true on-disk names, not observed. The observable outcome is a loud refusal on both, so the exposure is a repository-checkout concern rather than a reader concern.
+- **Task 8 has no report artifact and no review-package diff, unlike Tasks 1–7.** Searched and confirmed absent across the parent lane repository tree, the isolated runtime lane, and the session scratchpad: `.superpowers/sdd/task-8-brief.md` is the only Task 8 file that exists. Every implementer and reviewer report for Task 8 was delivered in-session and was never written to disk, so this ledger cannot cite their digests and does not restate their per-wave RED figures. **Per-wave RED for Task 8 is therefore not evidenced by any surviving artifact**, and this closeout makes no claim about it. That is a process regression against Task 7 and it is recorded rather than papered over.
+- **The implementation commit `1fc8df07` carries a bare subject line with no body and no trailer**, unlike every other commit in the range. The reasoning for the original implementation is therefore not recoverable from git alone.
+
+### Task 8 authority boundary
+
+- Task 8 establishes only a coverage ledger and a deterministic release builder. It publishes what the registry currently holds; it does not decide what belongs in the registry, and it does not populate it.
+- **The registry root is empty and every release built from it covers nothing.** Every `.jsonl` under `data/component-master/registry/v1/` is a zero-record seed, and the published statement says so in words rather than by omission. Separately, and outside Task 8's scope, the repository still carries the 20-record bootstrap SKU seed at `data/component-master/skus.jsonl` adopted by the Task 1 baseline commit `6dd99372`, of which 2 records are marked verified; `git diff --name-only 3a19417f..26d344e3 -- data/component-master/skus.jsonl` is empty.
+- Task 8 signs nothing. It grants no manufacturing, freeze, export, or production authority.
+- It is not a populated worldwide registry, release signing, network access, runtime integration, structural or physical qualification, coupon testing, machine capability, first-article inspection, field validation, owner ratification, production readiness, or manufacturing readiness.
+- NOT-FOR-PRODUCTION remains active. Software evidence does not grant manufacturing, installation, operational, or production authority.
+- Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.
+- No push, merge, rebase, or branch change was performed.
+- Task 9 is next, has not started, has no brief yet, and cannot begin until the plan conflict recorded above is resolved by owner ruling.
