@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>MONOLITH Production Trust Kernel Design</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>MONOLITH Production Trust Kernel Design</h1>
+<ul>
+<li><strong>Status:</strong> User-approved design for implementation planning</li>
+<li><strong>Date:</strong> 22 July 2026</li>
+<li><strong>Phase objective:</strong> Shadow Trust-Ready</li>
+<li><strong>Safety status:</strong> <code>NOT_FOR_PRODUCTION</code> — no Production, GA, or Factory-Safe claim is permitted</li>
+<li><strong>Product scope:</strong> MONOLITH is a multi-tenant platform; Daph is the first pilot tenant, not a runtime identity hardcoded into the product</li>
+</ul>
+<h2>1. Executive decision</h2>
+<p>MONOLITH will establish a <strong>Canonical Release Authority + FactoryPacket V3 Protocol</strong> so that the path from a frozen design to a manufacturing artifact has one server-side authority, fails closed when evidence or capability is incomplete, produces byte-identical results for the same release revision, uses managed signing, and can be checked offline by a verifier independent of the builder.</p>
+<p>V3 is a protocol and migration boundary that replaces legacy release/export paths. It is not another packet/release stack operating alongside the existing stacks.</p>
+<p>This phase delivers a shadow system that may generate production-shaped payloads to prove deterministic behavior, but cannot distribute them to a real Factory or machine.</p>
+<h2>2. Repository and evidence scope</h2>
+<p>Current-state claims in this document distinguish the two Git roots:</p>
+<div class="tablewrap"><table><thead><tr><th>Root</th><th>Role in this design</th></tr></thead><tbody>
+<tr><td>Parent governance root: <code>C:\Users\thai3\determined-williams (2)</code></td><td>Audit, context, design specifications, governance gates, and future implementation plans</td></tr>
+<tr><td>Nested product root: <code>C:\Users\thai3\determined-williams (2)\determined-williams</code></td><td>MONOLITH source, tests, server, Supabase migrations/functions, and runtime evidence</td></tr>
+</tbody></table></div>
+<p>Primary inputs are the <a href="../../reports/2026-07-22-monolith-platform-executive-deep-audit.en.html">executive deep audit</a>, <code>CONTEXT.md</code>, the 21 July 2026 repository-scope correction, and as-built code in the nested product root.</p>
+<p>The principal evidence driving this design is:</p>
+<div class="tablewrap"><table><thead><tr><th>As-built condition</th><th>Evidence anchor</th><th>Design response</th></tr></thead><tbody>
+<tr><td>Client role and actor can originate from local storage or headers</td><td><code>src/core/auth/roles.ts:67</code>, <code>src/core/api/stateApi.ts:128</code>, <code>supabase/functions/factory-api/index.ts:136</code></td><td>Server-derived <code>ActorContextV1</code>; headers are display-only</td></tr>
+<tr><td>Node filesystem state and Supabase SQL state run in parallel and apply different export policies</td><td><code>server/src/state/</code>, <code>supabase/migrations/0155_factory_state_server.sql</code></td><td>Supabase/Postgres is the sole release authority; Node is a worker</td></tr>
+<tr><td>Supabase <code>factory_jobs</code> uses a global job key and an authenticated-read policy with <code>using (true)</code></td><td><code>supabase/migrations/0155_factory_state_server.sql:9</code>, <code>supabase/migrations/0155_factory_state_server.sql:25</code></td><td>Tenant-bound schema, membership RLS, and tenant-scoped object paths</td></tr>
+<tr><td>Multiple client paths build and download packet/Cut List/DXF artifacts</td><td><code>src/components/ui/ExportPanel.tsx</code>, <code>src/factory/packet/useFactoryPacket.ts</code></td><td>Artifact Class Matrix, route disposition ledger, and negative bypass tests</td></tr>
+<tr><td>Packet/bundle paths contain runtime time, random IDs, and browser ECDSA keys</td><td><code>src/factory/packet/buildFactoryPacket.ts</code>, <code>src/core/manufacturing/release/buildBundleV2.ts</code></td><td>Canonical release data, managed Ed25519, fixed packaging, and idempotent retrieval</td></tr>
+<tr><td>Edge verification checks only the whole-ZIP hash</td><td><code>supabase/functions/factory-api/index.ts</code></td><td>Standalone protocol verifier checks schema, files, signature, trust, release status, gate, and machine binding</td></tr>
+<tr><td>CIX converts an unknown tool to TNO=1 and drops unsupported operations</td><td><code>src/cnc/post/dialects/cix.ts</code></td><td>Capability compiler and dialect defense-in-depth block the whole packet</td></tr>
+</tbody></table></div>
+<h2>3. Scope</h2>
+<h3>3.1 In scope</h3>
+<ul>
+<li>Server-owned identity, membership, tenant/org/site scope, and authorization</li>
+<li>Four-eyes release in which the freezer and release approver are distinct authenticated users</li>
+<li>Separate lifecycles for working revision, release attempt, and immutable release revision</li>
+<li>Immutable release snapshot and candidate hash</li>
+<li>Fail-closed machine capability compiler</li>
+<li>Deterministic FactoryPacket V3 payload and packaging</li>
+<li>Managed signer interface and environment-separated key custody</li>
+<li>Tenant-scoped private artifact store and shadow quarantine</li>
+<li>Signed trust bundle and signed release-status/revocation bundle external to the packet</li>
+<li>Standalone offline verifier and stable machine-readable reason codes</li>
+<li>Legacy route disposition and fail-closed migration</li>
+<li>Evidence bundle tied to exact source state and independently reproducible</li>
+</ul>
+<h3>3.2 Out of scope</h3>
+<ul>
+<li>Enabling production distribution or sending files to real machines</li>
+<li>Production key ceremony, production AAL2 enforcement, GA operations, or SLA</li>
+<li>Changes to unrelated product domains that are not required by the Production Trust Kernel</li>
+<li>Creating a new microservice estate without a demonstrated need</li>
+<li>Hardcoding Daph, tenant identity, or roles into the packet builder</li>
+</ul>
+<h2>4. Locked design decisions</h2>
+<div class="tablewrap"><table><thead><tr><th>ID</th><th>Decision</th></tr></thead><tbody>
+<tr><td><code>DTK-01</code></td><td>The target is Shadow Trust-Ready and every output remains <code>NOT_FOR_PRODUCTION</code></td></tr>
+<tr><td><code>DTK-02</code></td><td>DRAFT/FROZEN may preview or simulate; production-shaped outputs are not downloadable</td></tr>
+<tr><td><code>DTK-03</code></td><td>The server verifies the JWT and resolves tenant/org/site/user/roles from current membership</td></tr>
+<tr><td><code>DTK-04</code></td><td>Designer freezes; a distinct <code>RELEASE_APPROVER</code> releases; Factory only consumes; Admin needs a separate release role to release</td></tr>
+<tr><td><code>DTK-05</code></td><td>The same release revision returns the same packet bytes; a material input change creates a new revision</td></tr>
+<tr><td><code>DTK-06</code></td><td>The application holds only signer key IDs; private keys remain outside the app; production signing stays disabled until key ceremony</td></tr>
+<tr><td><code>DTK-07</code></td><td>An unknown tool or unsupported operation blocks the entire packet and terminates construction before a partial or fallback artifact</td></tr>
+<tr><td><code>DTK-08</code></td><td>The offline verifier has a separate executable/package graph and emits a machine-readable report</td></tr>
+<tr><td><code>DTK-09</code></td><td>Trust and release-status bundles are signed external inputs; a packet cannot authorize its own key</td></tr>
+<tr><td><code>DTK-10</code></td><td>An old release revision is immutable; an error requires revocation and a new working revision</td></tr>
+<tr><td><code>DTK-11</code></td><td>A hard gate always denies; only soft warnings may have reasoned, expiring, four-eyes exceptions that create a new revision</td></tr>
+<tr><td><code>DTK-12</code></td><td>Definition of Done includes contract, property, negative, hostile, golden-vector, E2E, and commit-linked CI evidence</td></tr>
+<tr><td><code>DTK-13</code></td><td>V1/V2 remain readable as history only; production-shaped output requires V3</td></tr>
+<tr><td><code>DTK-14</code></td><td>Supabase/Postgres is the sole canonical release authority; Node acts as a deterministic worker</td></tr>
+<tr><td><code>DTK-15</code></td><td>Working revision, release attempt, and release revision are separate aggregates</td></tr>
+<tr><td><code>DTK-16</code></td><td>A real shadow P2 manufacturing payload is generated but sealed in private quarantine; plaintext is available only to an isolated automated verifier and P3 distribution remains disabled</td></tr>
+<tr><td><code>DTK-17</code></td><td>RELEASE cannot be queued offline or auto-replayed; it requires fresh interactive identity and candidate hash</td></tr>
+<tr><td><code>DTK-18</code></td><td>A machine profile is an authority input only with a valid signed <code>MachineProfileAttestationV1</code> that binds scope, tool library, and postprocessor</td></tr>
+<tr><td><code>DTK-19</code></td><td>A service role is an executor, not human authority; authoritative RPCs accept immutable <code>VerifiedActionContextV1</code>, never role/name/tenant from a request body</td></tr>
+<tr><td><code>DTK-20</code></td><td>An offline verdict certifies status at bundle sequence/issuedAt; freshness requires a persistent high-water mark and trusted bootstrap checkpoint</td></tr>
+<tr><td><code>DTK-21</code></td><td><code>ReleaseAttempt</code>, <code>ArtifactRecord</code>, and <code>ReleaseRevision</code> have separate state machines; <code>VOID</code> is not a release-revision status</td></tr>
+<tr><td><code>DTK-22</code></td><td>A soft-warning exception requires signed <code>WarningExceptionGrantV1</code>; a hard blocker always denies</td></tr>
+<tr><td><code>DTK-23</code></td><td>Evidence attestation uses a CI/workload identity key separate from the release-signing key</td></tr>
+<tr><td><code>DTK-24</code></td><td>Daph-specific JWT/site helpers are legacy compatibility only and cannot serve as Trust Kernel authority</td></tr>
+</tbody></table></div>
+<h2>5. Architecture</h2>
+<pre><code class="language-text">Untrusted Client Intent
+        |
+        v
+Verified JWT -&gt; Membership Resolver -&gt; ActorContextV1
+        |                |
+        |                +-- tenant / org / site / user / roles / AAL
+        v
+Postgres Canonical Release Authority
+        |-- WorkingRevision + ReleaseCandidate
+        |-- Approval + ReleaseAttempt
+        |-- ReleaseRevision + Release Ledger + Outbox
+        |
+        v
+Deterministic Compute Worker (no state authority)
+        |-- Snapshot compiler
+        |-- Machine capability compiler
+        |-- FactoryPacket V3 canonical payload builder
+        |
+        v
+Private Tenant-Scoped Quarantine -&gt; Managed Ed25519 Signer
+        |                               |
+        +----------- DB atomic commit &lt;-+
+                         |
+                         v
+                Published artifact reference
+                         |
+                  environment policy
+                         |
+             Shadow: QA-only / Factory denied
+
+Standalone Offline Verifier
+  inputs: FactoryPacket V3 + TrustBundleV1 + ReleaseStatusBundleV1
+  output: VerificationReportV1</code></pre>
+<h3>5.1 Authority rule</h3>
+<p>Supabase/Postgres is the sole authority for identity-derived scope, working-revision state, approvals, release attempts, release revisions, signature certificates, artifact references, and lineage events.</p>
+<p>Node or another worker receives an immutable work request and returns a deterministic result. A worker cannot mutate release state, resolve roles itself, or treat a filesystem snapshot as authoritative.</p>
+<h3>5.2 No dual write</h3>
+<p>Migration cannot write the same state to both filesystem and Postgres and decide later which one wins. Legacy readers may read for migration and historical inspection, but every mutation path converges on the single canonical authority.</p>
+<h2>6. Domain model and lifecycle</h2>
+<h3>6.1 <code>TenantScopeV1</code></h3>
+<p>Contains <code>tenantId</code>, <code>orgId</code>, <code>siteId</code>, and policy version. Every aggregate and artifact metadata record binds this scope. Daph is provisioned as the first tenant through configuration and onboarding data, never as a source-code constant.</p>
+<h3>6.2 <code>WorkingRevision</code></h3>
+<p>Its authoritative statuses are only:</p>
+<ul>
+<li><code>DRAFT</code>: editable and eligible for P0 preview</li>
+<li><code>FROZEN</code>: immutable review candidate; inputs cannot change without unfreeze or fork</li>
+</ul>
+<p>Core data includes working revision ID, parent revision ID, tenant scope, content references, creator, freezer, frozen time, candidate hash, and policy/profile versions.</p>
+<h3>6.3 <code>ReleaseCandidate</code></h3>
+<p>Created at freeze. Its <code>candidateHash</code> covers the canonical snapshot, gate inputs including warning facts and eligibility, machine capability profile, <code>MachineProfileAttestationV1</code>, policy versions, tenant scope, and required artifact definitions. It deliberately excludes exception grants to avoid a circular hash.</p>
+<p>After exception grants are issued, the Authority computes <code>releaseAuthorizationHash = SHA-256(canonical({domain: "MONOLITH/ReleaseAuthorization/V1", candidateHash, sortedGrantHashes}))</code>; an empty grant list has one canonical representation. Candidate already covers profile, policy, and artifacts, so they are not hashed twice. Final approval, release attempt, and release certificate bind both candidate hash and release authorization hash. A grant change requires a new release authorization and attempt; after a release exists, it requires a new release revision. A change to an underlying candidate input or profile attestation requires a new freeze and candidate.</p>
+<h3>6.4 <code>ReleaseAttempt</code></h3>
+<p>Statuses:</p>
+<ul>
+<li><code>PENDING</code>: preconditions passed and compile/sign/commit is in progress</li>
+<li><code>FAILED</code>: deterministic blocker or non-retryable failure</li>
+<li><code>PUBLISHED</code>: release commit succeeded and the artifact is available under environment policy</li>
+<li><code>VOID</code>: the attempt was cancelled before a release revision existed and can never be published</li>
+</ul>
+<p>A transient signer or store failure may retry only with the same candidate hash and idempotency key. Idempotency scope is <code>(tenantId, actorUserId, candidateHash, idempotencyKey)</code> with a stored <code>requestHash</code>; reuse of the key with a different request hash returns <code>STATE_IDEMPOTENCY_MISMATCH</code>.</p>
+<h3>6.5 <code>ArtifactRecordV1</code></h3>
+<p>Statuses:</p>
+<ul>
+<li><code>QUARANTINED</code>: unsigned payload or private source bytes not eligible for publication</li>
+<li><code>MATERIALIZING</code>: release commit succeeded and the worker is writing final bytes for the expected hash</li>
+<li><code>AVAILABLE</code>: exact bytes were stored and their hash verified, still subject to publication policy</li>
+<li><code>VOID</code>: the artifact was cancelled or failed materialization/hash verification and can never be published</li>
+</ul>
+<p>An artifact record binds tenant/site, artifact class, release-attempt/revision reference, content hash, expected packet hash, internal object locator, and timestamps. Artifact status is never release authority, and a raw storage locator is never exposed to the client.</p>
+<h3>6.6 <code>ReleaseRevision</code></h3>
+<p>Statuses:</p>
+<ul>
+<li><code>ACTIVE</code>: immutable release whose signature, artifact reference, and ledger commit succeeded</li>
+<li><code>REVOKED</code>: immutable historical release that can no longer be consumed</li>
+</ul>
+<p>A release revision carries its release revision ID, candidate hash, release authorization hash, sorted warning-exception grant hashes, content hash, expected packet hash, release certificate, approver identity, approval evidence, machine-profile-attestation binding, tenant scope, parent lineage, and authoritative timestamps.</p>
+<p>The UI may project “RELEASED” when an <code>ACTIVE ReleaseRevision</code> exists, but <code>RELEASED</code> cannot be stored as mutable <code>WorkingRevision</code> state.</p>
+<h3>6.7 Concurrent history after change</h3>
+<p>After revocation or a required design change, the system can hold <code>REVOKED ReleaseRevision R1</code> and <code>WorkingRevision R2 = DRAFT</code> simultaneously. It never mutates the old release back to FROZEN or destroys history.</p>
+<h2>7. Authorization, tenancy, and separation of duties</h2>
+<h3>7.1 Actor resolution</h3>
+<p><code>AuthContextResolver</code> must:</p>
+<ol>
+<li>Verify JWT signature, issuer, audience, expiry, and subject</li>
+<li>Reject an anonymous service identity as a human actor</li>
+<li>Read current membership from a server-side source</li>
+<li>Resolve tenant/org/site, authenticated user ID, roles, AAL, and membership version</li>
+<li>Reject mismatched scope, revoked membership, or a role not allowed for the action</li>
+</ol>
+<p>Client-supplied role or name may be a display hint only. It cannot influence authorization or authoritative audit identity.</p>
+<p>JWT app metadata and the legacy helpers <code>current_app_roles()</code>, <code>current_site_codes()</code>, and <code>get_active_site_codes()</code> are compatibility data or hints only. They cannot be current-membership authority for the Trust Kernel. The system reads versioned tenant membership/location tables with revocation state from Postgres. Daph and BKK-HQ-01 are onboarding data; a migration test proves that tenant 002 can coexist without source-code changes.</p>
+<h3>7.2 Verified action context and service-role boundary</h3>
+<p>After JWT verification, the Edge calls <code>create_verified_action_context</code> with the user-scoped bearer token, never the service role. Postgres uses <code>auth.uid()</code> and current membership to create immutable short-lived <code>VerifiedActionContextV1</code> containing action-context ID, tenant/org/site, actor user ID, roles, AAL, membership version, permitted action, candidate hash, release authorization hash, request hash, issuedAt, expiresAt, and nonce, then stores it as an authoritative database record. A service role cannot create an action context.</p>
+<p>An authoritative mutation RPC accepts only the action-context ID and business identifiers bound by that context, then locks and consumes the record and rechecks scope, membership version, expiry, nonce, candidate, and release authorization hash inside its transaction. It never accepts actor role/name/tenant/site from the request body as authority. A service-role client performs downstream outbox work only after the user-authorized commit and cannot create human approval, bypass SoD, or select an object path from client input.</p>
+<h3>7.3 Role responsibilities</h3>
+<div class="tablewrap"><table><thead><tr><th>Role</th><th>Allowed actions</th></tr></thead><tbody>
+<tr><td><code>DESIGNER</code></td><td>Edit DRAFT, run validation, freeze, and submit a candidate</td></tr>
+<tr><td><code>RELEASE_APPROVER</code></td><td>Approve/reject a candidate and initiate release when not the freezer</td></tr>
+<tr><td><code>FACTORY</code></td><td>Consume only ACTIVE + verifier PASS + environment-policy-approved artifacts</td></tr>
+<tr><td><code>SAFETY_REVOKER</code></td><td>Immediately revoke an ACTIVE release with a reason</td></tr>
+<tr><td><code>ADMIN</code></td><td>Manage membership and policy; release requires a separate <code>RELEASE_APPROVER</code> role</td></tr>
+<tr><td><code>QA_EVIDENCE</code></td><td>Receive only hashes, reports, and evidence for a sealed shadow artifact; P2 plaintext and raw storage URLs are denied</td></tr>
+</tbody></table></div>
+<h3>7.4 Four-eyes invariant</h3>
+<p><code>freezeActorUserId != releaseApproverUserId</code> is enforced by database constraint or transaction logic, not by the UI. An approval binds candidate hash, release authorization hash, tenant scope, approver user ID, membership version, AAL, decision time, and reason.</p>
+<p>Shadow evidence records the AAL used. Production distribution remains disabled until a production policy requires and proves AAL2.</p>
+<h3>7.5 Tenant isolation</h3>
+<ul>
+<li>Every authoritative table carries <code>tenant_id</code>; child records use tenant-bound foreign keys</li>
+<li>A job/project identifier alone is never global authority</li>
+<li>RLS checks membership and tenant/site scope; product data cannot use <code>using (true)</code></li>
+<li>Object paths reside under <code>tenantId/siteId/releaseRevisionId/contentHash</code></li>
+<li>The signed manifest and release certificate bind tenant/org/site</li>
+<li>Any content-addressed physical deduplication remains behind logical tenant authorization and cannot expose an existence side channel</li>
+<li>A service role does not waive tenant authorization; every mutation transaction binds action context, tenant foreign key, and candidate</li>
+</ul>
+<h2>8. Component contracts</h2>
+<div class="tablewrap"><table><thead><tr><th>Component</th><th>Input</th><th>Output</th><th>Responsibility boundary</th></tr></thead><tbody>
+<tr><td><code>AuthContextResolver</code></td><td>Verified JWT/request</td><td><code>ActorContextV1</code></td><td>Identity, membership, scope, roles, AAL</td></tr>
+<tr><td><code>ActionContextBroker</code></td><td>Actor + permitted action + request hash</td><td><code>VerifiedActionContextV1</code></td><td>Short-lived immutable authority handoff; one-time consumption</td></tr>
+<tr><td><code>ReleaseAuthority</code></td><td>Actor, action, expected candidate, idempotency</td><td>Transition/result/event</td><td>State, SoD, CAS, ledger; never builds a packet</td></tr>
+<tr><td><code>SnapshotService</code></td><td>Frozen working revision</td><td><code>ReleaseSnapshotV3</code></td><td>Immutable canonical input</td></tr>
+<tr><td><code>ProfileAttestationRegistry</code></td><td>Profile/tool/postprocessor governance</td><td>Signed <code>MachineProfileAttestationV1</code></td><td>Scope, validity, approval, and revocation</td></tr>
+<tr><td><code>WarningExceptionAuthority</code></td><td>Eligible warning + two approvers</td><td>Signed <code>WarningExceptionGrantV1</code></td><td>Exact-scope expiring exception; hard blockers excluded</td></tr>
+<tr><td><code>CapabilityCompiler</code></td><td>Snapshot operations + attested <code>MachineCapabilityProfileV1</code></td><td>Capability report</td><td>Exhaustive support decision; no fallback</td></tr>
+<tr><td><code>PacketBuilderV3</code></td><td>Approved snapshot + capability report</td><td>Canonical unsigned payload</td><td>Pure deterministic construction</td></tr>
+<tr><td><code>ManagedSignerPort</code></td><td>Fixed digest/certificate + key ID</td><td>Ed25519 signature</td><td>Private key remains outside the application</td></tr>
+<tr><td><code>ArtifactRepository</code></td><td>Tenant-scoped bytes/reference</td><td><code>ArtifactRecordV1</code></td><td>Private write, quarantine, hash verification, availability; no release authority</td></tr>
+<tr><td><code>TrustBundleManager</code></td><td>Key/revocation governance</td><td>Signed bundles</td><td>Trust roots, key validity, expiry, sequence</td></tr>
+<tr><td><code>OfflineVerifier</code></td><td>Packet + external bundles</td><td><code>VerificationReportV1</code></td><td>Independent validation; no builder import</td></tr>
+<tr><td><code>EvidenceRecorder</code></td><td>Run context/results/artifacts</td><td>Evidence bundle</td><td>Exact source/environment/result traceability</td></tr>
+</tbody></table></div>
+<p>Contracts evolve independently: <code>ActorContextV1</code>, <code>VerifiedActionContextV1</code>, <code>TenantScopeV1</code>, <code>ReleaseSnapshotV3</code>, <code>MachineCapabilityProfileV1</code>, <code>MachineProfileAttestationV1</code>, <code>WarningExceptionGrantV1</code>, <code>CapabilityReportV1</code>, <code>FactoryPacketManifestV3</code>, <code>ReleaseCertificateV1</code>, <code>ArtifactRecordV1</code>, <code>TrustBundleV1</code>, <code>ReleaseStatusBundleV1</code>, <code>VerificationReportV1</code>, and <code>EvidenceAttestationV1</code>.</p>
+<h2>9. Artifact Class Matrix</h2>
+<div class="tablewrap"><table><thead><tr><th>Class</th><th>Examples</th><th align="right">DRAFT</th><th align="right">FROZEN</th><th align="right">Shadow ACTIVE release</th><th align="right">Production distribution</th></tr></thead><tbody>
+<tr><td><code>P0_PREVIEW</code></td><td>Interactive render, in-product simulation</td><td align="right">View</td><td align="right">View</td><td align="right">View</td><td align="right">Not applicable</td></tr>
+<tr><td><code>P1_REVIEW</code></td><td>Watermarked PDF/JSON without machine geometry</td><td align="right">Optional audited download</td><td align="right">Audited download</td><td align="right">Audited download</td><td align="right">Policy controlled</td></tr>
+<tr><td><code>P2_MANUFACTURING</code></td><td>Cut List CSV, DXF, CIX/G-code, full packet</td><td align="right">Deny</td><td align="right">Deny</td><td align="right">Build real bytes; sealed quarantine; isolated automated verifier only</td><td align="right">Deny in this phase</td></tr>
+<tr><td><code>P3_DISTRIBUTION</code></td><td>Factory/operator/machine delivery</td><td align="right">Deny</td><td align="right">Deny</td><td align="right">Deny</td><td align="right">Disabled until separate production authorization</td></tr>
+</tbody></table></div>
+<p>During the shadow phase, no human, including <code>QA_EVIDENCE</code>, receives P2 plaintext, a raw object locator, or a reusable signed URL. An isolated QA runner uses workload identity to read exact bytes from the private store and exports only hashes, reports, and evidence that cannot drive production. A safe extension is defense in depth, not access control. Human plaintext inspection is out of scope and requires a separately approved secure-workstation and one-time audited-proxy policy.</p>
+<h2>10. Release transaction choreography</h2>
+<h3>10.1 Freeze</h3>
+<ol>
+<li>Designer submits freeze intent with expected working-revision version</li>
+<li>Server resolves actor/membership and checks tenant scope</li>
+<li>Server compiles canonical snapshot inputs and gate inputs</li>
+<li>Database CAS changes DRAFT to FROZEN with candidate hash, freezer identity, and policy/profile versions</li>
+<li>Client receives a server projection; local state has no authority</li>
+</ol>
+<h3>10.2 Release</h3>
+<ol>
+<li><code>RELEASE_APPROVER</code> sends a release request with candidate hash, release authorization hash, idempotency key, and request hash; the Edge asks Postgres to create <code>VerifiedActionContextV1</code> under the user bearer token</li>
+<li>Authority consumes the action context and rechecks distinct user, membership version, tenant/site scope, candidate/release-authorization freshness, required gates, profile attestation, and exception grants</li>
+<li>The database locks or creates <code>ReleaseAttempt=PENDING</code> and allocates release revision ID, monotonic release sequence, and authoritative timestamp before signing</li>
+<li>Worker reads the immutable snapshot and runs the capability compiler; any blocker fails the whole attempt</li>
+<li>Worker creates the canonical unsigned payload and <code>ArtifactRecord=QUARANTINED</code> in the private tenant store</li>
+<li>Worker creates the deterministic release certificate from authority fields, requests a managed Ed25519 signature, assembles final packet bytes in memory with fixed packaging, and computes the expected final packet hash; no signed downloadable object exists</li>
+<li>One database transaction consumes the nonce, rechecks candidate CAS, membership, profile, and exception grants, then records approval, certificate, <code>ReleaseRevision=ACTIVE</code>, <code>ArtifactRecord=MATERIALIZING</code>, expected hash, ledger event, and outbox</li>
+<li>If the transaction fails, discard the in-memory signature/final bytes and end the flow at <code>VOID</code> attempt/artifact; release-revision creation and URL exposure occur only on the successful-commit branch</li>
+<li>After commit, the worker materializes exact final bytes reproducible from the persisted canonical payload and certificate, verifies the expected hash, then changes the artifact to <code>AVAILABLE</code> and attempt to <code>PUBLISHED</code>; a retry produces identical bytes</li>
+<li>Publication policy exposes only an opaque reference when <code>ReleaseRevision=ACTIVE</code> and <code>ArtifactRecord=AVAILABLE</code>; shadow policy still denies P2 human plaintext and Factory/P3</li>
+</ol>
+<h3>10.3 Failure rules</h3>
+<ul>
+<li>Automatically retry only transient signer/store failures under the same idempotency key</li>
+<li>Deterministic gate/capability/schema/auth/state failures cannot be retried while hiding the reason</li>
+<li>Store success + DB failure produces a private VOID artifact and VOID attempt; no release revision or signed downloadable packet exists</li>
+<li>If the DB commit response is lost, an idempotency lookup returns the existing release and certificate</li>
+<li>A concurrent release has one CAS winner; all others receive stable <code>STATE_CONFLICT</code></li>
+<li>Candidate change, unfreeze, or membership change invalidates the previous approval</li>
+<li>A crash after commit but before materialization is recovered by outbox retry producing the exact same bytes; Factory eligibility remains closed until artifact <code>AVAILABLE</code></li>
+</ul>
+<h3>10.4 Revoke and fork</h3>
+<ul>
+<li><code>SAFETY_REVOKER</code> may revoke an ACTIVE release immediately without a four-eyes delay</li>
+<li>Revocation records reason, actor, effective sequence/time, and emits a new release-status bundle</li>
+<li>The old artifact is neither edited nor deleted, but Factory consumption and verification reject it</li>
+<li>Correction begins as a new DRAFT WorkingRevision with parent lineage</li>
+</ul>
+<h3>10.5 Offline intent</h3>
+<p><code>RELEASE</code> cannot enter an offline queue and cannot auto-drain after reconnection. Freeze intent may be retained as draft UX, but the server re-evaluates every condition. An offline revoke intent must display “not yet enforced” until server confirmation succeeds.</p>
+<h2>11. Determinism and cryptography</h2>
+<h3>11.1 Determinism boundary</h3>
+<p>The same release revision means identical tenant scope, release snapshot, machine profile, policy versions, approval data, canonical release timestamp, signer key ID, and release-certificate data. It must yield:</p>
+<ul>
+<li>Identical canonical payload bytes</li>
+<li>Identical file ordering, paths, newlines, numeric precision, and Unicode normalization</li>
+<li>Fixed ZIP timestamp, compression profile, and implementation version</li>
+<li>Identical Ed25519 signature bytes for identical signable bytes</li>
+<li>Identical final FactoryPacket V3 bytes and SHA-256</li>
+</ul>
+<p>Runtime clock, <code>Date.now()</code>, random IDs, filesystem ordering, and locale cannot affect output. The release revision ID comes from authority and content binding, not client-generated randomness.</p>
+<h3>11.2 Signing profile</h3>
+<ul>
+<li>V3 production-shaped artifacts use an explicitly pinned managed Ed25519 profile</li>
+<li>The application or worker holds only a key ID and calls the signer port</li>
+<li>Development uses an ephemeral development key with an explicit marker</li>
+<li>Staging uses a managed non-production key</li>
+<li>The production signer remains disabled until key ceremony, custody, rotation, recovery, and incident drill succeed</li>
+<li>An existing release cannot be re-signed; the system returns its persisted certificate/signature</li>
+</ul>
+<h3>11.3 Trust and release-status bundles</h3>
+<p><code>TrustBundleV1</code> contains scope, sequence, issuedAt, expiresAt, trusted key IDs with key purpose (<code>RELEASE</code>, <code>PROFILE_ATTESTATION</code>, <code>WARNING_EXCEPTION</code>), algorithms, validity windows, key revocations, profile-attestation revocations, and warning-exception-grant revocations. Every revocation entry binds ID/hash, effectiveAt, and reason. A high-water mark is keyed by <code>(bundleType, trustScope)</code>.</p>
+<p><code>ReleaseStatusBundleV1</code> contains scope, sequence, issuedAt, expiresAt, and only the set of <code>REVOKED ReleaseRevision</code> IDs. <code>VOID</code> ends the flow at attempt or artifact before release-certificate/revision creation and is therefore excluded from this bundle. A valid release certificate proves that the authority issued the release; an acceptable status bundle must prove that the revision is outside the revoked set.</p>
+<p>Both are signed by a trust authority pinned by the verifier and are delivered separately from the packet. The verifier rejects expiry, sequence rollback, scope mismatch, invalid signature, or a trusted clock/clock policy that fails to prove time. A key revocation declares <code>revocationMode</code> as <code>ALL_SIGNATURES</code>, <code>SIGNED_AT_OR_AFTER</code>, or <code>ISSUANCE_DISABLED</code>, together with effectiveAt and reason; the explicit mode is the sole source of semantics.</p>
+<p>An offline verifier certifies status only within “valid as of bundle sequence/issuedAt.” Displaying “currently active” requires online-current authority. It persists a high-water mark per trust scope, rejects a sequence below one already accepted, and enforces <code>maxOfflineStaleness</code> from pinned environment policy. First-use bootstrap requires trusted online provisioning or a pinned minimum-sequence checkpoint. An unavailable checkpoint, state store, trusted clock, or policy-compliant freshness returns <code>TRUST_FRESHNESS_UNPROVEN</code>. Every Factory work start refreshes within the policy window and uses current authorization instead of an old verdict.</p>
+<h2>12. Capability safety</h2>
+<p><code>MachineCapabilityProfileV1</code> declares machine and dialect version, supported operation types, tool identities, ranges, faces, units, coordinate conventions, and postprocessor version.</p>
+<p>A profile participates in candidate, compiler, or verifier authority only with signed <code>MachineProfileAttestationV1</code> from a Profile Attestation Authority governed by Manufacturing Engineering. The attestation binds tenant/site/machine IDs, canonical profile hash, tool-library hash, postprocessor ID/version/binary hash, profile approver identity, issuedAt, validFrom, validUntil, status, and attestation sequence. Candidate and release certificate bind attestation ID/hash. The verifier checks signature, scope, validity, sequence, and revocation from external trust data. A local-storage profile, client override, or legacy schema passes through a read-only adapter into the canonical schema and acquires authority only after successful attestation.</p>
+<p><code>WarningExceptionGrantV1</code> binds warning code, exact entity IDs, tenant/site, candidate hash, reason, policy version, two distinct authenticated approvers, issuedAt, expiresAt, and signature from a <code>WARNING_EXCEPTION</code> authority. Only a warning declared <code>exceptionEligible=true</code> in the catalogue may receive a grant. Hard blockers and capability blockers are never eligible. The freezer and release approver may serve as the two grant approvers when both affirm the exception and are distinct users, so no additional humans are mandatory. Compiler and verifier reject an expired grant, mismatched scope/hash/entity, untrusted signer purpose, or duplicate approver. A grant change changes release authorization hash; an underlying input change requires a new candidate.</p>
+<p><code>CapabilityCompiler</code> enumerates every operation and returns a blocker when:</p>
+<ul>
+<li>Operation type is unsupported</li>
+<li>Tool ID is unknown or not bound to the machine profile</li>
+<li>A parameter is outside its range</li>
+<li>Face, orientation, or coordinate transformation is unsupported</li>
+<li>Postprocessor and profile versions do not match</li>
+<li>An operation would be dropped or transformed without a normative rule</li>
+</ul>
+<p>The builder cannot create a partial packet. A dialect such as CIX checks again and fails even if the upstream gate malfunctions. It cannot default an unknown tool to <code>TNO=1</code> or downgrade an unsupported operation to a warning.</p>
+<h2>13. Error model</h2>
+<p>Every service boundary uses typed <code>TrustResult&lt;T&gt;</code> and a stable reason-code registry.</p>
+<div class="tablewrap"><table><thead><tr><th>Namespace</th><th>Examples</th></tr></thead><tbody>
+<tr><td><code>AUTH</code></td><td><code>AUTH_REQUIRED</code>, <code>AUTH_ANON_NOT_ALLOWED</code>, <code>AUTH_MEMBERSHIP_REVOKED</code>, <code>AUTH_SCOPE_DENIED</code>, <code>AUTH_SOD_VIOLATION</code>, <code>AUTH_ACTION_CONTEXT_INVALID</code>, <code>AUTH_ACTION_CONTEXT_EXPIRED</code></td></tr>
+<tr><td><code>STATE</code></td><td><code>STATE_CANDIDATE_STALE</code>, <code>STATE_RELEASE_AUTHORIZATION_STALE</code>, <code>STATE_CONFLICT</code>, <code>STATE_RELEASE_REVOKED</code>, <code>STATE_IDEMPOTENCY_MISMATCH</code></td></tr>
+<tr><td><code>GATE</code></td><td><code>GATE_HARD_BLOCKER</code>, <code>GATE_WARNING_EXCEPTION_EXPIRED</code>, <code>GATE_WARNING_EXCEPTION_MISMATCH</code></td></tr>
+<tr><td><code>CAP</code></td><td><code>CAP_UNKNOWN_TOOL</code>, <code>CAP_UNSUPPORTED_OPERATION</code>, <code>CAP_PROFILE_MISMATCH</code>, <code>CAP_PROFILE_ATTESTATION_INVALID</code>, <code>CAP_PROFILE_ATTESTATION_EXPIRED</code>, <code>CAP_PARAMETER_RANGE</code></td></tr>
+<tr><td><code>PACKET</code></td><td><code>PACKET_SCHEMA_UNSUPPORTED</code>, <code>PACKET_HASH_MISMATCH</code>, <code>PACKET_EXTRA_FILE</code>, <code>PACKET_RESOURCE_LIMIT</code></td></tr>
+<tr><td><code>CRYPTO</code></td><td><code>CRYPTO_SIGNER_UNAVAILABLE</code>, <code>CRYPTO_SIGNATURE_INVALID</code>, <code>CRYPTO_ALGORITHM_DENIED</code></td></tr>
+<tr><td><code>TRUST</code></td><td><code>TRUST_BUNDLE_EXPIRED</code>, <code>TRUST_SEQUENCE_ROLLBACK</code>, <code>TRUST_SCOPE_MISMATCH</code>, <code>TRUST_CLOCK_UNAVAILABLE</code>, <code>TRUST_CHECKPOINT_REQUIRED</code>, <code>TRUST_FRESHNESS_UNPROVEN</code></td></tr>
+<tr><td><code>STORE</code></td><td><code>STORE_QUARANTINE_FAILED</code>, <code>STORE_HASH_MISMATCH</code>, <code>STORE_ARTIFACT_UNAVAILABLE</code>, <code>STORE_PLAINTEXT_ACCESS_DENIED</code></td></tr>
+</tbody></table></div>
+<p>HTTP mapping: 401 for no verified human identity, 403 for scope/role/SoD denial, 409 for stale/CAS/idempotency conflict, 422 for a deterministic blocker, and 503 for a transient signer/store dependency.</p>
+<p>Logs cannot contain raw JWTs, private keys, full packet contents, or unnecessary PII. UI, API, CI, and verifier use the same reason codes.</p>
+<h2>14. Standalone offline verifier</h2>
+<p>The verifier accepts only:</p>
+<ol>
+<li>FactoryPacket V3</li>
+<li><code>TrustBundleV1</code></li>
+<li><code>ReleaseStatusBundleV1</code></li>
+<li>Pinned verifier policy/configuration</li>
+<li>Persistent verifier state containing a trusted bootstrap checkpoint and per-scope high-water marks</li>
+</ol>
+<p>It validates:</p>
+<ul>
+<li>Envelope/schema/version and resource limits before deep parsing</li>
+<li>Path traversal, duplicate paths, extra/missing files, decompression ratio, and maximum sizes</li>
+<li>Per-file bytes/hash and canonical manifest binding</li>
+<li>Release-certificate signature and key/trust validity</li>
+<li>Tenant/org/site, candidate, machine-profile, and artifact-class binding</li>
+<li>A valid release certificate and absence of the release revision from an acceptable status bundle's revoked entries</li>
+<li>Machine-profile attestation, release authorization hash, and warning-exception grant hashes bound into the certificate</li>
+<li>Trust/release bundle scope, signature, sequence, expiry, key-revocation mode, persistent high-water mark, bootstrap checkpoint, <code>maxOfflineStaleness</code>, and trusted-clock policy</li>
+<li>Gate and capability-report hashes</li>
+<li><code>NOT_FOR_PRODUCTION</code> and environment policy</li>
+</ul>
+<p>It emits <code>VerificationReportV1</code> containing verdict, stable reason codes, checked hashes, bundle sequences, verifier build hash, <code>validAsOf</code>, freshness age/checkpoint, and a human summary. Displaying “currently active” requires online-current authority.</p>
+<p>Independence is proven through a separate executable/package dependency graph. Avoiding imports alone is insufficient. Both implementations pass the same normative protocol and golden vectors.</p>
+<h2>15. Legacy migration and containment</h2>
+<h3>15.1 Canonicalization-first migration</h3>
+<ol>
+<li>Add tenant-aware Postgres authority and contracts</li>
+<li>Make client state a server projection</li>
+<li>Move packet construction to the deterministic V3 worker</li>
+<li>Convert V1/V2 to read-only history adapters</li>
+<li>Block legacy production-shaped downloads before enabling the V3 shadow path</li>
+<li>Remove filesystem state authority after migration evidence passes</li>
+</ol>
+<h3>15.2 Route disposition ledger</h3>
+<p>Every reachable build/export/download surface, together with authority-input surfaces such as machine/profile schemas, tool libraries, hardware presets, gate policies, JWT/site helpers, and storage-signing routes, appears in a machine-readable ledger with owner, artifact class, current behavior, target disposition, and negative test:</p>
+<ul>
+<li><code>REUSE</code>: pure non-authoritative primitive, such as a canonical hash helper</li>
+<li><code>ADAPT</code>: implementation reused under the V3 contract, such as deterministic ZIP after removal of runtime time</li>
+<li><code>READ_ONLY</code>: V1/V2 history and inspection with no production-shaped output</li>
+<li><code>BLOCK</code>: client download, FROZEN manufacturing export, legacy direct CNC, duplicate state mutation, or any authority bypass</li>
+</ul>
+<p>“Block or route” without a complete inventory does not satisfy Definition of Done.</p>
+<h2>16. Verification and evidence design</h2>
+<h3>16.1 Test layers</h3>
+<ol>
+<li>Contract/schema/version and reason-code tests</li>
+<li>JWT, membership, verified-action-context, service-role-misuse, SoD, and cross-tenant negative tests</li>
+<li>State, CAS, idempotency, concurrency, revocation, artifact-materialization, and fork tests</li>
+<li>Machine-profile-attestation, tool-library-binding, capability-compiler, and dialect defense-in-depth tests</li>
+<li>Warning-exception eligibility, scope, expiry, and two-person negative tests</li>
+<li>Canonicalization, property-based determinism, and mutation tests</li>
+<li>Managed signing, trust, first-use checkpoint, expiry, rollback, staleness, key-mode, and revocation golden vectors</li>
+<li>Hostile packet/ZIP/fuzz/resource-limit tests</li>
+<li>Builder/verifier cross-implementation conformance</li>
+<li>Two-person E2E release and revocation flow</li>
+<li>P2 human-plaintext/raw-URL denial and isolated-runner tests</li>
+<li>Legacy route/authority-input bypass tests for every ledger entry, including Daph compatibility and tenant-002 coexistence</li>
+</ol>
+<h3>16.2 Golden corpus</h3>
+<p>The corpus covers canonical JSON edge cases, Unicode, decimals, units, representative cabinet/panel/connector operations, supported machine profiles, boundary ranges, unknown tools, unsupported operations, corrupt packets, and trust failures.</p>
+<p>Each determinism vector runs at least 100 times on Windows and Linux with pinned runtimes and lockfiles. Canonical payload, signature envelope, and final packet must be 100% byte-identical. Repetition is a nondeterminism smoke test; representative corpus and property-based permutations provide the substantive coverage.</p>
+<h3>16.3 Transaction chaos cases</h3>
+<ul>
+<li>Signer timeout or unavailability</li>
+<li>Quarantine-store success followed by DB failure</li>
+<li>Lost DB-commit response</li>
+<li>Two approvers racing</li>
+<li>Candidate mutation after approval</li>
+<li>Membership revocation mid-flow</li>
+<li>Revocation racing with publication or download</li>
+<li>Crash after release commit but before artifact materialization</li>
+<li>Action-context replay/expiry and service-role RPC spoofing</li>
+<li>P2 raw URL or token already issued when revocation or policy change occurs</li>
+<li>Attempted offline queued release</li>
+<li>First-use verifier without a checkpoint and a stale-but-unexpired bundle</li>
+<li>Cross-tenant object/hash guessing</li>
+</ul>
+<p>Every case proves that no valid downloadable orphan exists, no unauthorized state transition occurs, and the reason code is correct.</p>
+<h3>16.4 Evidence bundle</h3>
+<p>The self-verifying evidence bundle contains:</p>
+<ul>
+<li>Signed <code>evidence-manifest.json</code>, <code>EvidenceAttestationV1</code>, and root hashes</li>
+<li>Git state of both roots: commit, branch, dirty files</li>
+<li>Dependency lock hashes and OS/runtime/compression/signer profiles</li>
+<li>Exact commands, exit codes, pass/fail/skip counts, and full machine-readable results</li>
+<li>Golden inputs, expected bytes/hashes, and mutations</li>
+<li>Standalone verifier binary/package hash and conformance report</li>
+<li>E2E actor/approval/release/revocation audit evidence</li>
+<li>Route disposition ledger and negative results</li>
+<li>Tenant isolation, hostile-packet, trust-freshness, and resource-limit reports</li>
+<li>Packet, trust, release-status, and evidence artifact hashes</li>
+</ul>
+<p><code>EvidenceAttestationV1</code> is signed by a CI/workload identity key separate from the release key and binds Git state of both roots, exact command/report digests, CI run/workflow identity, builder/verifier binary hashes, issuedAt, retention policy, and evidence root hash. Trust policy declares evidence-key owner, validity, rotation, and revocation.</p>
+<p>The CI artifact binds the exact commit and records dirty state. A truncated log or skipped test cannot support a passing claim.</p>
+<h2>17. Executive acceptance gates</h2>
+<h3>17.1 Shadow Trust-Ready PASS</h3>
+<p>All conditions must pass together:</p>
+<ul>
+<li>Critical and negative trust gates pass 100%</li>
+<li>No trust or security test is skipped</li>
+<li>Route disposition ledger covers 100% of reachable production-shaped surfaces</li>
+<li>Cross-platform golden outputs are 100% byte-identical</li>
+<li>Standalone verifier accepts the valid corpus and rejects the mutation corpus with specified reason codes</li>
+<li>Two distinct authenticated humans complete freeze/approve/release E2E</li>
+<li>Revocation, attempt/artifact VOID, stale candidate, action-context replay, membership revocation, service-role spoofing, and cross-tenant attacks are proven</li>
+<li>Profile attestation and warning exception are accepted or rejected by scope, expiry, revocation, and distinct-approver rules</li>
+<li>Offline verifier rejects first use without a checkpoint, sequence rollback, and a bundle beyond <code>maxOfflineStaleness</code></li>
+<li>P2 shadow artifacts remain in sealed quarantine; human plaintext/raw URL and Factory/P3 access are denied</li>
+<li>Daph tenant 001 and tenant 002 coexist through data/configuration without hardcoded authority</li>
+<li>Evidence bundle self-verifies, uses an evidence key separate from the release key, and binds exact source and environment</li>
+</ul>
+<h3>17.2 Production/GA remains NO-GO</h3>
+<p>Even after Shadow Trust-Ready passes, Production/GA remains prohibited until separately approved work proves:</p>
+<ul>
+<li>Production key ceremony, custody, rotation, and recovery</li>
+<li>AAL2 production approval policy</li>
+<li>Production operations, monitoring, backup/restore, and incident drills</li>
+<li>Authorized factory pilot and machine-specific safety acceptance</li>
+<li>P3 distribution authorization</li>
+<li>Evidence matching the exact deployed build</li>
+</ul>
+<h2>18. Observability and governance</h2>
+<p>Every security or release event carries tenant scope, event ID, actor user ID, membership version, candidate/release revision, artifact hash, reason code, and correlation ID.</p>
+<p>Metrics and alerts cover authentication denials, SoD violations, stale candidates, capability blockers, signer/store failures, VOID artifacts, verifier failures, stale trust bundles, revoked-release access, and attempts against blocked legacy routes.</p>
+<p>Audit events are append-only and exportable in machine-readable form. A human display name is supplementary data, never identity authority.</p>
+<h2>19. Ownership</h2>
+<div class="tablewrap"><table><thead><tr><th>Domain</th><th>Accountable owner</th></tr></thead><tbody>
+<tr><td>Identity, tenancy, RLS, signer custody, trust bundles</td><td>Security/IAM</td></tr>
+<tr><td>Working/release lifecycle, SoD, exceptions, revocation</td><td>Release Governance</td></tr>
+<tr><td>Operation semantics, capability profiles, machine ranges</td><td>Manufacturing Engineering</td></tr>
+<tr><td>Deterministic builder, artifact storage, outbox/workers</td><td>Platform Engineering</td></tr>
+<tr><td>Independent verifier, hostile corpus, evidence bundle</td><td>Independent QA/Safety</td></tr>
+</tbody></table></div>
+<p>An owner may evolve implementation inside the boundary, but cannot change a protocol or invariant without a versioned decision and migration.</p>
+<h2>20. Risks and controls</h2>
+<div class="tablewrap"><table><thead><tr><th>Risk</th><th>Control</th></tr></thead><tbody>
+<tr><td>V3 becomes another parallel stack</td><td>Canonical authority, route ledger, no dual write, V1/V2 read-only</td></tr>
+<tr><td>Signed orphan</td><td>Unsigned quarantine, final bytes/hash built in memory, atomic certificate/release/artifact commit, publication after materialization</td></tr>
+<tr><td>Cross-tenant leakage</td><td>Tenant-bound FK/RLS/object paths/manifest and negative matrix</td></tr>
+<tr><td>Service role bypasses RLS or SoD</td><td>Verified action context, DB recheck and nonce consumption, and no client-supplied authority fields</td></tr>
+<tr><td>Profile overstates capability</td><td>Signed profile attestation, tool/postprocessor hashes, validity/revocation, and canonical adapter</td></tr>
+<tr><td>Shadow artifact is used for production</td><td>Sealed private P2, isolated automated verifier only, deny human plaintext/raw URL, and no Factory/P3</td></tr>
+<tr><td>Determinism claim exceeds evidence</td><td>Golden bytes, property tests, cross-platform runs, pinned packaging and signing profile</td></tr>
+<tr><td>Verifier repeats the builder defect</td><td>Separate implementation graph plus common normative vectors, not common implementation</td></tr>
+<tr><td>Offline revocation is stale</td><td>High-water mark, trusted bootstrap checkpoint, maximum staleness, monotonic sequence, trusted clock, and freshness-unproven rejection</td></tr>
+<tr><td>Evidence signer becomes release authority</td><td>Separate CI/workload evidence key and separate trust policy</td></tr>
+<tr><td>A legacy bypass remains</td><td>Machine-readable inventory and a negative test per surface</td></tr>
+</tbody></table></div>
+<h2>21. Definition of Done for this design</h2>
+<p>This design is ready for implementation planning when:</p>
+<ul>
+<li>Thai and English Markdown/HTML editions are content-aligned</li>
+<li>No unresolved marker or ambiguous decision remains</li>
+<li>Architecture, component contracts, state, transaction, artifact policy, error model, and tests are internally consistent</li>
+<li>The user reviews and approves the written specification</li>
+</ul>
+<p>Approval of this design is not Production approval and does not authorize P3 distribution.</p>
+</main></body>
+</html>

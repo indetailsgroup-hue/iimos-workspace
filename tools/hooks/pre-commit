@@ -1,0 +1,70 @@
+#!/bin/sh
+# MONOLITH claim-guardrails — git pre-commit hook (Layer 2 of Decision 3).
+#
+# Lints ONLY the staged markdown under docs/. A commit that stages no such file
+# pays nothing and exits at once. This is fast feedback, not the authority: it is
+# bypassable with `git commit --no-verify`, and CI is the layer that cannot be.
+#
+# NEVER --deep. A commit hook that re-ran absence searches over the code tree
+# would be slow enough that the first person it annoyed would delete it.
+#
+# KNOWN LIMITATIONS, recorded by the final cross-vendor review rather than
+# fixed, because this layer is bypassable by design and CI is the authority:
+#   1. Partial staging: the linters read the WORKING-TREE file at each staged
+#      path, not the staged blob. Staging a bad version and then overwriting
+#      the working tree with a clean one commits the bad blob past this hook.
+#      CI lints the committed tree and catches it on push.
+#   2. A docs file written by any tool other than Claude Code's Write/Edit
+#      meets no guardrail before this hook. It only runs where
+#      tools/hooks/install-hooks.py has been run; the governance clone was
+#      activated 2026-07-23.
+#
+# Run from the repo root so the committed ledger `tools/.lint_allowlist` is the
+# authority. A grandfathered file staged unchanged stays green because it is
+# judged against its recorded per-file ceiling, whether it is linted alone or
+# with the whole corpus. `python` and `git` are expected on PATH; this repo's
+# committers use Git Bash on Windows, where /bin/sh runs this script directly.
+set -eu
+
+root=$(git rev-parse --show-toplevel) || exit 0
+cd "$root"
+
+# Staged, still-present markdown under docs/. --diff-filter=ACMR keeps Added,
+# Copied, Modified and Renamed (the new name) and drops Deleted — a removed file
+# cannot be linted. git pathspec wildcards match '/', so 'docs/*.md' is
+# recursive.
+staged=$(git diff --cached --name-only --diff-filter=ACMR -- 'docs/*.md')
+
+# Nothing under docs/ staged -> silent, fast pass. This is the common case and
+# must cost nothing.
+[ -z "$staged" ] && exit 0
+
+# Rebuild the list into positional parameters, splitting on newline only so
+# paths containing spaces survive. (Paths containing a literal newline are not
+# handled; git quotes those, and they do not occur in this corpus.)
+oldifs=$IFS
+IFS='
+'
+set --
+for f in $staged; do
+    set -- "$@" "$f"
+done
+IFS=$oldifs
+
+status=0
+
+if ! python tools/lint_claims.py "$@"; then
+    echo "pre-commit [claim-guardrails]: lint_claims found unevidenced absence claim(s) in staged docs." >&2
+    status=1
+fi
+
+if ! python tools/lint_certifications.py "$@"; then
+    echo "pre-commit [claim-guardrails]: lint_certifications found uncorroborated certification(s) in staged docs." >&2
+    status=1
+fi
+
+if [ "$status" -ne 0 ]; then
+    echo "pre-commit [claim-guardrails]: commit blocked. Attach evidence, or bypass deliberately with 'git commit --no-verify'." >&2
+fi
+
+exit $status

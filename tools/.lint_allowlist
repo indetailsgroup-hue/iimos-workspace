@@ -1,0 +1,42 @@
+# .lint_allowlist — shrinking-only grandfather ledger for the claim guardrails.
+#
+# Format: linter<TAB>path<TAB>accepted_hit_count  (path is repo-relative posix).
+# A listed file passes at or below its count and FAILS if the count rises;
+# an unlisted file must be clean. Counts may only shrink over time.
+#
+# Regenerate (adoption, or to tighten after fixing claims):
+#     python tools/lint_claims.py docs/ --write-allowlist
+#     python tools/lint_certifications.py docs/ --write-allowlist
+# Raising a count or grandfathering a new file needs --accept-regression.
+#
+# Every linter run prints: 'allowlisted debt: N hits across M files'.
+# adopted: lint_certifications
+lint_certifications	docs/engineering/2026-07-21-design-to-production-engineering-playbook.en.md	3
+lint_certifications	docs/reports/2026-07-21-ima-schelling-monolith-repository-scope-correction.th.md	1
+lint_certifications	docs/superpowers/plans/2026-07-19-kitchen-knowledge-kernel-bootstrap.en.md	1
+# adopted: lint_claims
+lint_claims	docs/engineering/2026-07-21-design-to-production-engineering-playbook.en.md	2
+lint_claims	docs/reports/2026-07-19-kitchen-kernel-bootstrap.th.md	3
+lint_claims	docs/reports/2026-07-21-ima-audit-independent-claim-verification.th.md	23
+lint_claims	docs/reports/2026-07-21-monolith-repository-production-readiness-baseline.en.md	1
+lint_claims	docs/reports/2026-07-21-monolith-repository-production-readiness-baseline.th.md	5
+lint_claims	docs/reports/2026-07-21-plans-review-worktree-review-pr31.th.md	15
+lint_claims	docs/reports/2026-07-22-monolith-platform-executive-deep-audit.th.md	1
+lint_claims	docs/research/2026-07-19-kitchen-master-gap-analysis.th.md	4
+lint_claims	docs/research/2026-07-21-imos-ix-capability-dna-and-monolith-gap-ledger.en.md	1
+lint_claims	docs/research/2026-07-21-imos-ix-capability-dna-and-monolith-gap-ledger.th.md	3
+lint_claims	docs/research/2026-07-21-monolith-vendor-standards-evidence-ledger.th.md	1
+lint_claims	docs/research/competitors/homag-a1-a9-evidence-ledger.en.md	1
+lint_claims	docs/research/competitors/homag-interop-contract.md	6
+lint_claims	docs/research/competitors/homag-official-product-reference.md	13
+lint_claims	docs/research/competitors/homag-reference-corrections.md	3
+lint_claims	docs/research/competitors/homag-smartwop-first-steps.md	8
+lint_claims	docs/research/competitors/pplx-corpus-errata.md	4
+lint_claims	docs/superpowers/plans/2026-07-19-kitchen-knowledge-kernel-bootstrap.en.md	1
+lint_claims	docs/superpowers/plans/2026-07-19-kitchen-knowledge-kernel-bootstrap.th.md	4
+lint_claims	docs/superpowers/plans/2026-07-21-agent-claim-guardrails.md	1
+lint_claims	docs/superpowers/reports/2026-07-07-home-construction-planner-release-copy-completion-th.md	1
+lint_claims	docs/superpowers/reports/2026-07-07-millwork-workflow-detail-completion-th.md	2
+lint_claims	docs/superpowers/reports/2026-07-09-interior-design-studio-system-full-project-audit-th.md	3
+lint_claims	docs/superpowers/reports/2026-07-09-interior-design-studio-system-full-project-audit.md	2
+lint_claims	docs/superpowers/specs/2026-07-21-biesse-wood-furniture-evidence-led-integration-audit-design.th.md	2

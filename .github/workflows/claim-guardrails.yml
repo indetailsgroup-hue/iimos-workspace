@@ -1,0 +1,72 @@
+# MONOLITH claim-guardrails — CI gate (Task 7, Decision 3).
+#
+# Of the three enforcement layers this is the ONLY one with actual authority:
+# the PostToolUse hook can be disabled in settings and the pre-commit hook can be
+# skipped with --no-verify, but a push or PR cannot dodge this job.
+#
+# =====================================================================
+#  STATUS: UNVERIFIED.
+#
+#  This workflow has NEVER been observed to run, and NEVER been observed to
+#  fail, because the repository has not been pushed with it. Per the plan,
+#  "a gate that has never been seen to fail has not been verified." This CI
+#  layer therefore remains UNVERIFIED until someone pushes a branch carrying a
+#  deliberate violation — an unevidenced negative claim in a docs/*.md file, or
+#  an uncorroborated certification — and watches THIS job go red.
+#
+#  The first person to push MUST do exactly that: push the violation, confirm
+#  the `lint` job fails, then remove it. Until that has happened, do not
+#  describe this gate as working. It is written, not verified.
+# =====================================================================
+#
+# The linters run against the committed ledger `tools/.lint_allowlist`. There is
+# deliberately NO --allowlist override anywhere below: a doctored ledger path was
+# identified as a bypass, so the committed default is the sole authority. Python
+# standard library only — no pip installs, by design.
+
+name: claim-guardrails
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # Nightly deep sweep (UTC). The deep job below gates itself on this event.
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    # Local mode: every negative claim carries evidence, every certification is
+    # corroborated, within the committed allowlist. Runs on every push and PR.
+    name: claim + certification linters (local mode)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: negative-claim linter
+        run: python tools/lint_claims.py docs/
+      - name: certification linter
+        run: python tools/lint_certifications.py docs/
+
+  deep:
+    # Deep re-verification is expensive (a full-tree walk per absence term), so
+    # it runs on the nightly schedule and on demand only — never on every push.
+    name: deep absence re-verification (schedule + on demand)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the deep sweep's git-grep / git-log searches are
+          # complete rather than shallow.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: deep re-verification of every recorded absence
+        run: python tools/lint_claims.py docs/ --deep

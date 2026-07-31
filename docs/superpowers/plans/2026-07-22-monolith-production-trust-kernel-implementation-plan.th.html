@@ -1,0 +1,866 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>แผนดำเนินงาน MONOLITH Production Trust Kernel</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>แผนดำเนินงาน MONOLITH Production Trust Kernel</h1>
+<blockquote><p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p></blockquote>
+<p><strong>เป้าหมาย:</strong> สร้าง Production Trust Kernel ระดับ Shadow Trust-Ready เพื่อให้ artifact ที่มีรูปร่างพร้อมผลิตทุกชิ้นผูกกับ tenant, deterministic, อนุมัติโดยบุคคลสองคน, ผ่าน capability safety, ตรวจจากภายนอกได้, revoke ได้ และถูกป้องกันทางเทคนิคไม่ให้ถึง Factory หรือมนุษย์ในรูป P2 plaintext</p>
+<p><strong>สถาปัตยกรรม:</strong> Supabase/Postgres เป็น release authority เพียงแห่งเดียว RPC ที่ใช้ user-scoped action context อนุญาต immutable release records; Node worker compile capability, สร้าง FactoryPacket V3 bytes แบบ deterministic, เรียก managed signers และ materialize private artifacts ส่วน workspace <code>tools/factory-packet-verifier</code> แยก implementation อิสระ ไม่ import builder code และใช้เพียง protocol vectors กับ external bundles</p>
+<p><strong>Tech Stack:</strong> PostgreSQL/Supabase migrations และ pgTAP, Supabase Edge Functions, TypeScript 5.x, Node.js 20/22, Vitest, fast-check, <code>yazl</code> สำหรับ builder packaging, <code>yauzl</code> กับ <code>@noble/ed25519</code> สำหรับ independent verifier, Playwright และ GitHub Actions</p>
+<p><strong>ขอบเขตแผน:</strong> 12 งานที่ review แยกได้แต่เป็น authority chain เดียว การแยกเป็นหลายแผนอิสระจะเพิ่มโอกาสให้ identity, release, artifact และ verifier contracts drift จึงใช้ phase gates ด้านล่างเป็นขอบเขต review แทน</p>
+<h2>ข้อจำกัดส่วนกลาง</h2>
+<ul>
+<li>Implementation paths ทั้งหมดด้านล่างอ้างอิงจาก nested product Git root <code>determined-williams/</code>; แผนนี้อยู่ใน parent governance root</li>
+<li>ก่อน implementation ให้อ่าน <code>CONTEXT.md</code> และ repository-scope correction วันที่ 21 กรกฎาคม 2026 และรายงาน Git status ของทั้งสอง roots ทุก checkpoint</li>
+<li>รักษา modified files เดิมใน nested root ได้แก่ <code>daph-second-brain/_inventory.json</code>, <code>_knowledge-export.json</code> และ <code>_move-log.md</code></li>
+<li>Phase ยังคงเป็น <code>NOT_FOR_PRODUCTION</code>; P3 distribution และการส่งจริงไป Factory/machine ยังปิด</li>
+<li>Daph เป็น fixture/onboarding data ของ tenant 001 ไม่ใช่ runtime constant และทุก coexistence suite ต้อง provision tenant 002 ด้วย</li>
+<li>Postgres สร้าง <code>VerifiedActionContextV1</code> ภายใต้ user bearer token Service role สร้าง human authority ไม่ได้ และรับ role, name, tenant, site หรือ object path จาก client ไม่ได้</li>
+<li>Freeze actor และ release approver ต้องเป็น authenticated users คนละคน Admin release ได้เมื่อมี <code>RELEASE_APPROVER</code> membership role แยกเท่านั้น</li>
+<li>Hard gate และ capability blocker ปฏิเสธเสมอ เฉพาะ warning ใน catalogue ที่ <code>exceptionEligible=true</code> จึงใช้ signed, expiring, two-person <code>WarningExceptionGrantV1</code> ได้</li>
+<li>Builder เป็น all-or-nothing Unknown tool, unsupported operation, range failure, invalid profile attestation หรือ stale trust state ต้องคืน stable reason code และ publishable output เป็นศูนย์</li>
+<li>Application เก็บเพียง signer key IDs ส่วน release, profile, warning-exception และ evidence private keys อยู่หลัง managed signer ports</li>
+<li>Independent verifier ห้าม import module จาก <code>server/src/trust-kernel</code>, <code>src/factory/packet</code> หรือ <code>src/core/manufacturing</code>; สิ่งที่ใช้ร่วมกันมีเพียง JSON schemas และ golden bytes</li>
+<li>Shadow P2 plaintext อ่านได้เฉพาะ isolated workload identity มนุษย์ได้รับ hash, report และ evidence; raw storage locator และ reusable signed URL ถูกห้าม</li>
+<li>RELEASE ห้าม offline queue และ auto-replay Offline verification รายงาน <code>validAsOf</code> และกล่าวว่า current active ได้เมื่อมี online-current authority เท่านั้น</li>
+<li>No dual write: V3 Postgres records เป็น mutable release authority เพียงแห่งเดียว ส่วน V1/V2 surfaces ต้องเป็น read-only projections หรือถูก deny/remove ตาม route disposition ledger</li>
+<li>Project-facing Markdown ใหม่ต้องมี <code>.en.md</code>, <code>.th.md</code>, <code>.en.html</code> และ <code>.th.html</code> ที่เนื้อหาตรงกัน</li>
+<li>ทุก task ที่แก้ production code ใช้ <code>superpowers:test-driven-development</code>: RED, GREEN, refactor, targeted verification และ commit</li>
+</ul>
+<h2>Phase Gates</h2>
+<div class="tablewrap"><table><thead><tr><th>Gate</th><th>Tasks</th><th>Exit criterion</th></tr></thead><tbody>
+<tr><td>A — Authority Foundation</td><td>1–4</td><td>Versioned contracts, tenant membership, action contexts, governance records และ release state machines ผ่าน unit/pgTAP negative suites</td></tr>
+<tr><td>B — Deterministic Release</td><td>5–9</td><td>User-authorized release สร้าง V3 bytes ที่ byte-identical ผ่าน managed signing และ private artifact materialization พร้อมออก revocation bundles</td></tr>
+<tr><td>C — Independent Proof</td><td>10–12</td><td>Independent verifier, P2 containment, legacy-route denial, hostile/E2E/chaos suites และ signed evidence ผ่านทั้งหมด</td></tr>
+</tbody></table></div>
+<h2>Crosswalk ความครอบคลุม Written Spec</h2>
+<div class="tablewrap"><table><thead><tr><th>หมวด Written Spec ที่อนุมัติ</th><th>ความครอบคลุมใน implementation</th></tr></thead><tbody>
+<tr><td>§§1–5 — executive decision, repository/evidence scope, locked decisions, architecture, authority rule และ no dual write</td><td>ข้อจำกัดส่วนกลาง; Tasks 2, 4, 5 และ 11</td></tr>
+<tr><td>§6 — <code>TenantScopeV1</code>, <code>WorkingRevision</code>, <code>ReleaseCandidate</code>, <code>ReleaseAttempt</code>, <code>ArtifactRecordV1</code>, <code>ReleaseRevision</code> และ concurrent history</td><td>Tasks 1, 4, 7, 8 และ 9</td></tr>
+<tr><td>§7 — actor resolution, verified action context, role boundaries, four-eyes invariant และ tenant isolation</td><td>Tasks 2–5 และ negative suites ใน Task 12</td></tr>
+<tr><td>§§8–9 — component contracts และ P0/P1/P2/P3 artifact matrix</td><td>Tasks 1, 3, 5–11</td></tr>
+<tr><td>§10 — freeze/release/failure/revoke/fork/offline transaction choreography</td><td>Tasks 4, 5, 8, 9 และ 12</td></tr>
+<tr><td>§11 — canonical determinism, signing profile, trust และ release-status bundles</td><td>Tasks 1 และ 7–10</td></tr>
+<tr><td>§§12–13 — capability safety และ stable error model</td><td>Tasks 1, 3, 6 และ 7</td></tr>
+<tr><td>§14 — standalone independent offline verifier</td><td>Task 10 พร้อม hostile/E2E proof ใน Task 12</td></tr>
+<tr><td>§15 — canonicalization-first legacy migration, route disposition ledger และ no parallel authority</td><td>Task 11</td></tr>
+<tr><td>§16 — unit/property/pgTAP/Edge/E2E/chaos layers, golden corpus, transaction chaos และ evidence bundle</td><td>RED/GREEN steps ใน Tasks 1–11 และ complete-output Task 12</td></tr>
+<tr><td>§§17–21 — Shadow Trust-Ready gate, Production/GA NO-GO, observability, governance, ownership, risks/controls และ definition of done</td><td>Task 12 และ Final MONOLITH Completion Gate</td></tr>
+</tbody></table></div>
+<h2>แผนผังไฟล์และความรับผิดชอบ</h2>
+<div class="tablewrap"><table><thead><tr><th>Area</th><th>Files</th><th>Responsibility</th></tr></thead><tbody>
+<tr><td>Server protocol</td><td><code>server/src/trust-kernel/contracts/*</code>, <code>canonical/*</code>, <code>reasonCodes.ts</code>, <code>result.ts</code></td><td>Builder-side versioned types, canonical hashing และ stable error vocabulary</td></tr>
+<tr><td>Database authority</td><td><code>supabase/migrations/0162_*</code> ถึง <code>0166_*</code></td><td>Tenant membership, action contexts, governance, release/artifact/outbox states, RLS และ RPCs</td></tr>
+<tr><td>Edge boundary</td><td><code>supabase/functions/factory-api/trustKernel.ts</code>, <code>index.ts</code>, <code>index.test.ts</code></td><td>User-token action context creation และ V3 transport โดยไม่รับ client authority fields</td></tr>
+<tr><td>Capability และ builder</td><td><code>server/src/trust-kernel/capability/*</code>, <code>snapshot/*</code>, <code>packet/*</code></td><td>Profile adaptation, exhaustive compilation และ deterministic unsigned/final packet bytes</td></tr>
+<tr><td>Signing และ worker</td><td><code>server/src/trust-kernel/signing/*</code>, <code>worker/*</code>, <code>artifacts/*</code></td><td>Managed signing, release choreography และ content-addressed private materialization</td></tr>
+<tr><td>Trust bundles</td><td><code>server/src/trust-kernel/trust/*</code></td><td>Signed trust/release-status snapshots, key purpose และ revocation semantics</td></tr>
+<tr><td>Independent verifier</td><td><code>tools/factory-packet-verifier/*</code></td><td>Parser, canonicalizer, signature/freshness/revocation verifier และ CLI ที่แยก implementation</td></tr>
+<tr><td>Protocol evidence</td><td><code>test-vectors/factory-packet-v3/*</code>, <code>supabase/tests/trust_kernel_*.sql</code>, <code>e2e/trust-kernel/*</code></td><td>Shared bytes, DB invariants, hostile vectors, cross-implementation และ E2E proof</td></tr>
+<tr><td>Containment</td><td><code>src/core/api/trustKernelApi.ts</code>, legacy export surfaces, route ledger</td><td>V3 projection และ denial/read-only disposition ของ authority paths เดิมทุกเส้น</td></tr>
+<tr><td>CI evidence</td><td><code>.github/workflows/trust-kernel-verify.yml</code>, <code>server/src/trust-kernel/evidence/*</code></td><td>Complete-output reports และ managed evidence attestation</td></tr>
+</tbody></table></div>
+<h2>ภาพรวม Tasks</h2>
+<ol>
+<li><strong>Protocol contracts และ canonical hashing</strong> — ไม่มี dependency</li>
+<li><strong>Tenant membership และ verified action contexts</strong> — รอ Task 1 reason codes</li>
+<li><strong>Machine-profile และ warning-exception governance</strong> — รอ Tasks 1–2</li>
+<li><strong>Release, artifact, ledger และ outbox authority</strong> — รอ Tasks 1–3</li>
+<li><strong>User-token Edge transport และ service-role containment</strong> — รอ Tasks 2 และ 4</li>
+<li><strong>Profile adapters และ exhaustive capability compiler</strong> — รอ Tasks 1 และ 3</li>
+<li><strong>Deterministic snapshot และ FactoryPacket V3 builder</strong> — รอ Tasks 1 และ 6</li>
+<li><strong>Managed signer, release worker และ artifact materialization</strong> — รอ Tasks 4 และ 7</li>
+<li><strong>Trust และ release-status bundle issuance</strong> — รอ Tasks 3, 4 และ 8</li>
+<li><strong>Standalone independent offline verifier</strong> — รอ Tasks 1, 7 และ 9 ผ่าน schemas/vectors เท่านั้น</li>
+<li><strong>P2 quarantine, client projection และ legacy-route containment</strong> — รอ Tasks 5, 8 และ 10</li>
+<li><strong>E2E chaos, signed evidence, CI และ executive acceptance gate</strong> — รอทุก task ก่อนหน้า</li>
+</ol>
+<hr>
+<h3>Task 1: Protocol contracts และ canonical hashing</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>server/src/trust-kernel/contracts/protocolV3.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/contracts/protocolV3.schema.json</code></li>
+<li>Create: <code>server/src/trust-kernel/canonical/canonicalJson.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/canonical/hash.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/reasonCodes.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/result.ts</code></li>
+<li>Test: <code>server/src/trust-kernel/test/protocolV3.test.ts</code></li>
+<li>Test: <code>server/src/trust-kernel/test/canonicalJson.property.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>canonicalJson(value: JsonValue): string</code>, <code>sha256Hex(value: Uint8Array | string): string</code>, <code>computeReleaseAuthorizationHash(candidateHash, sortedGrantHashes): string</code></li>
+<li>Produces: <code>TrustResult&lt;T&gt;</code>, stable <code>TrustReasonCode</code> และ approved protocol types ได้แก่ <code>ActorContextV1</code>, <code>VerifiedActionContextV1</code>, <code>TenantScopeV1</code>, <code>WorkingRevision</code>, <code>ReleaseCandidate</code>, <code>ReleaseAttempt</code>, <code>ReleaseSnapshotV3</code>, <code>MachineCapabilityProfileV1</code>, <code>MachineProfileAttestationV1</code>, <code>WarningExceptionGrantV1</code>, <code>CapabilityReportV1</code>, <code>FactoryPacketManifestV3</code>, <code>ReleaseCertificateV1</code>, <code>ArtifactRecordV1</code>, <code>ReleaseRevision</code>, <code>TrustBundleV1</code>, <code>ReleaseStatusBundleV1</code>, <code>VerificationReportV1</code> และ <code>EvidenceAttestationV1</code></li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน RED contract และ property tests</strong></li>
+</ul>
+<pre><code class="language-ts">expect(canonicalJson({ b: 1, a: "x" })).toBe('{"a":"x","b":1}');
+expect(() =&gt; canonicalJson({ n: Number.NaN })).toThrow("NON_CANONICAL_NUMBER");
+expect(computeReleaseAuthorizationHash("ab".repeat(32), [])).toBe(
+  sha256Hex('{"candidateHash":"' + "ab".repeat(32) + '","domain":"MONOLITH/ReleaseAuthorization/V1","sortedGrantHashes":[]}'),
+);
+expect(RELEASE_ATTEMPT_STATUSES).toEqual(["PENDING", "FAILED", "PUBLISHED", "VOID"]);
+expect(RELEASE_REVISION_STATUSES).toEqual(["ACTIVE", "REVOKED"]);</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: รัน RED</strong></li>
+</ul>
+<p>Run: <code>npm.cmd --prefix server test -- --run src/trust-kernel/test/protocolV3.test.ts src/trust-kernel/test/canonicalJson.property.test.ts</code></p>
+<p>Expected: FAIL เพราะ modules ยังไม่ถูกสร้าง และห้ามตีความ zero tests ว่าสำเร็จ</p>
+<ul>
+<li>[ ] <strong>Step 3: สร้าง canonical และ result contracts ขั้นต่ำ</strong></li>
+</ul>
+<pre><code class="language-ts">export type TrustResult&lt;T&gt; =
+  | { ok: true; value: T }
+  | { ok: false; code: TrustReasonCode; detail?: Readonly&lt;Record&lt;string, string&gt;&gt; };
+
+export const RELEASE_ATTEMPT_STATUSES = ["PENDING", "FAILED", "PUBLISHED", "VOID"] as const;
+export const ARTIFACT_STATUSES = ["QUARANTINED", "MATERIALIZING", "AVAILABLE", "VOID"] as const;
+export const RELEASE_REVISION_STATUSES = ["ACTIVE", "REVOKED"] as const;
+
+export function computeReleaseAuthorizationHash(candidateHash: string, grantHashes: readonly string[]): string {
+  assertSha256(candidateHash);
+  const sortedGrantHashes = [...grantHashes].sort();
+  sortedGrantHashes.forEach(assertSha256);
+  return sha256Hex(canonicalJson({
+    domain: "MONOLITH/ReleaseAuthorization/V1",
+    candidateHash,
+    sortedGrantHashes,
+  }));
+}</code></pre>
+<p><code>canonicalJson</code> sort object keys แบบ recursive, รักษาลำดับ array, รับ null/boolean/string/safe finite number, แปลง <code>-0</code> เป็น <code>0</code> และ reject undefined, non-finite number, bigint, function, symbol, sparse array และ cyclic input ส่วน <code>protocolV3.schema.json</code> ใช้ <code>additionalProperties:false</code> ทุก signed boundary</p>
+<ul>
+<li>[ ] <strong>Step 4: รัน GREEN และ server build</strong></li>
+</ul>
+<p>Run targeted test เดิม แล้วรัน <code>npm.cmd --prefix server run build</code></p>
+<p>Expected: ทั้งสอง exit 0 และ property suite ครอบ key-order permutations, Unicode, <code>-0</code>, unsafe numbers และ cyclic rejection</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add server/src/trust-kernel
+git commit -m "feat(trust-kernel): define protocol v3 contracts"</code></pre>
+<hr>
+<h3>Task 2: Tenant membership และ verified action contexts</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>supabase/migrations/0162_trust_kernel_tenancy_action_context.sql</code></li>
+<li>Create: <code>supabase/tests/trust_kernel_tenancy.sql</code></li>
+<li>Modify: <code>.github/workflows/db-verify.yml</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces tables: <code>monolith_tenant</code>, <code>monolith_site</code>, <code>monolith_membership</code>, <code>monolith_membership_role</code>, <code>monolith_membership_site</code>, <code>verified_action_context</code></li>
+<li>Produces RPC: <code>create_verified_action_context(action, tenant_id, site_id, resource_type, resource_id, request_hash, candidate_hash default null, release_authorization_hash default null) returns uuid</code></li>
+<li>Produces internal function: <code>consume_verified_action_context(context_id, expected_action) returns verified_action_context</code></li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน RED pgTAP assertions</strong></li>
+</ul>
+<pre><code class="language-sql">select throws_ok(
+  $$select public.create_verified_action_context('RELEASE', :'tenant_001', :'site_001', 'RELEASE_CANDIDATE', :'candidate_id', repeat('c',64), repeat('a',64), repeat('b',64))$$,
+  '42501', null, 'service role cannot create human action context'
+);
+select is(
+  (select count(*) from public.monolith_membership_role where tenant_id = :'tenant_001' and role = 'RELEASE_APPROVER'),
+  1::bigint, 'tenant 001 approver remains tenant scoped'
+);
+select is(
+  (select count(*) from public.monolith_site where tenant_id = :'tenant_002'),
+  1::bigint, 'tenant 002 coexists without source changes'
+);
+select throws_ok(
+  $$select public.consume_verified_action_context(:'context_id', 'RELEASE')$$,
+  'P0001', 'AUTH_ACTION_CONTEXT_INVALID', 'nonce is one-time'
+);</code></pre>
+<p>Suite สร้างสอง tenants/sites ภายใน transaction เดียว สร้าง authenticated users/memberships, จำลอง user JWT ผ่าน <code>request.jwt.claim.sub</code> และ rollback</p>
+<ul>
+<li>[ ] <strong>Step 2: รัน RED บน local Supabase</strong></li>
+</ul>
+<p>Run: <code>supabase start</code></p>
+<p>Run: <code>psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -tA -v ON_ERROR_STOP=1 -f supabase/tests/trust_kernel_tenancy.sql</code></p>
+<p>Expected: FAIL เพราะ <code>monolith_tenant</code> และ RPCs ยังไม่อยู่</p>
+<ul>
+<li>[ ] <strong>Step 3: สร้าง tenant-bound schema และ RLS</strong></li>
+</ul>
+<pre><code class="language-sql">create table public.monolith_tenant (
+  id uuid primary key, slug text not null unique, display_name text not null,
+  status text not null check (status in ('ACTIVE','SUSPENDED'))
+);
+create table public.monolith_site (
+  id uuid not null, tenant_id uuid not null references public.monolith_tenant(id),
+  code text not null, display_name text not null, status text not null check (status in ('ACTIVE','INACTIVE')),
+  primary key (tenant_id,id), unique (tenant_id,code)
+);
+create table public.monolith_membership (
+  id uuid not null, tenant_id uuid not null references public.monolith_tenant(id),
+  user_id uuid not null references auth.users(id), version bigint not null default 1,
+  status text not null check (status in ('ACTIVE','REVOKED')),
+  primary key (tenant_id,id), unique (tenant_id,user_id)
+);</code></pre>
+<p>Role/site join tables ใช้ <code>(tenant_id,membership_id)</code> composite foreign keys ทั้งหก tables เปิด RLS และ deny direct writes Context bind resource type/ID กับ request hash <code>FREEZE</code> ต้องใช้ working-revision resource และ candidate hashes เป็น null; <code>RELEASE</code> ต้องมี candidate/release-authorization hashes; <code>REVOKE</code> ต้องใช้ release-revision resource <code>create_verified_action_context</code> ต้องมี <code>auth.role()='authenticated'</code>, derive <code>auth.uid()</code>, อ่าน current membership/AAL, ตั้ง <code>expires_at=clock_timestamp()+interval '5 minutes'</code> และไม่รับ actor/role/name ส่วน <code>consume_verified_action_context</code> lock row, เทียบ action/resource/expiry/membership version, ตั้ง <code>consumed_at</code> และคืน stable auth errors</p>
+<ul>
+<li>[ ] <strong>Step 4: ขยาย DB CI โดยไม่ลดความเข้ม suite เดิม</strong></li>
+</ul>
+<p>แก้ <code>db-verify.yml</code> ให้รัน SQL สองไฟล์แยกเป็น <code>workflow-db.tap</code> และ <code>trust-kernel-tenancy.tap</code>, reject <code>not ok</code>, reject empty suite และใส่ per-suite counts ใน <code>db-verify-evidence.json</code></p>
+<ul>
+<li>[ ] <strong>Step 5: รัน GREEN</strong></li>
+</ul>
+<p>รัน pgTAP command ใหม่และ original <code>supabase/tests/workflow_db_invariants.sql</code> Expected: ทั้งคู่ exit 0 และมี <code>ok</code> อย่างน้อยหนึ่งบรรทัด Tenant 001 แบบ Daph กับ tenant 002 ยัง isolate กัน</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add supabase/migrations/0162_trust_kernel_tenancy_action_context.sql supabase/tests/trust_kernel_tenancy.sql .github/workflows/db-verify.yml
+git commit -m "feat(trust-kernel): add tenant action authority"</code></pre>
+<hr>
+<h3>Task 3: Machine-profile และ warning-exception governance</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>supabase/migrations/0163_trust_kernel_profile_exception.sql</code></li>
+<li>Create: <code>supabase/tests/trust_kernel_governance.sql</code></li>
+<li>Create: <code>server/src/trust-kernel/contracts/profileGovernance.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/governance/verifyGovernanceSignature.ts</code></li>
+<li>Test: <code>server/src/trust-kernel/test/profileGovernance.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces <code>MachineProfileAttestationV1</code> และ <code>WarningExceptionGrantV1</code></li>
+<li>Produces <code>verifyProfileAttestation(attestation, trust): TrustResult&lt;MachineProfileAttestationV1&gt;</code> และ <code>verifyWarningGrant(grant, candidateHash, trust): TrustResult&lt;WarningExceptionGrantV1&gt;</code></li>
+<li>Produces DB functions <code>assert_profile_attestation_current</code> และ <code>assert_warning_grants_current</code> สำหรับ release transaction</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน RED unit และ pgTAP tests</strong></li>
+</ul>
+<pre><code class="language-ts">expect(verifyProfileAttestation(attestation({ toolLibraryHash: badHash }), trust).ok).toBe(false);
+expect(verifyWarningGrant(grant({ approverUserIds: [userA, userA] }), candidateHash, trust)).toMatchObject({
+  ok: false, code: "GATE_WARNING_EXCEPTION_MISMATCH",
+});
+expect(verifyWarningGrant(grant({ warningCode: "CAP_UNKNOWN_TOOL" }), candidateHash, trust)).toMatchObject({
+  ok: false, code: "GATE_HARD_BLOCKER",
+});</code></pre>
+<pre><code class="language-sql">select throws_ok(
+  $$select public.assert_profile_attestation_current(:'tenant_002', :'attestation_tenant_001', clock_timestamp())$$,
+  'P0001', 'CAP_PROFILE_ATTESTATION_INVALID', 'cross-tenant profile rejected'
+);</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: รัน RED</strong></li>
+</ul>
+<p>Run server targeted test และ governance pgTAP Expected: ทั้งสองคืน non-zero พร้อม stable module-resolution และ SQLSTATE assertion codes</p>
+<ul>
+<li>[ ] <strong>Step 3: สร้าง governance records แบบ exact</strong></li>
+</ul>
+<p><code>MachineProfileAttestationV1</code> มี <code>id</code>, tenant/site/machine IDs, canonical profile hash, tool-library hash, postprocessor ID/version/binary hash, profile approver user ID, key ID ที่มี purpose <code>PROFILE_ATTESTATION</code>, issued/valid-from/valid-until, sequence, status และ signature</p>
+<p><code>WarningExceptionGrantV1</code> มี <code>id</code>, tenant/site, candidate hash, warning code, sorted entity IDs, reason, policy version, approver user IDs สองคนที่ต่างกัน, issued/expires, key ID purpose <code>WARNING_EXCEPTION</code> และ signature Database constraints บังคับ distinct approvers และ <code>expires_at&gt;issued_at</code>; catalogue table เป็นเจ้าของ <code>exception_eligible</code> และกำหนด <code>CAP_*</code> ทุก code เป็น false</p>
+<ul>
+<li>[ ] <strong>Step 4: สร้าง managed-key-purpose verification</strong></li>
+</ul>
+<pre><code class="language-ts">export type KeyPurpose = "RELEASE" | "TRUST_BUNDLE" | "PROFILE_ATTESTATION" | "WARNING_EXCEPTION" | "EVIDENCE";
+export function requireKeyPurpose(key: TrustedKeyV1, expected: KeyPurpose): TrustResult&lt;TrustedKeyV1&gt; {
+  return key.purpose === expected
+    ? { ok: true, value: key }
+    : { ok: false, code: "CRYPTO_ALGORITHM_DENIED", detail: { expected, actual: key.purpose } };
+}</code></pre>
+<p>Verification canonicalize unsigned record, ตรวจ Ed25519 ผ่าน injected public-key verifier, ตรวจ scope/time/sequence/revocation แล้วคืน record ส่วน database functions ตรวจ scope/time/status ซ้ำตอน release commit</p>
+<ul>
+<li>[ ] <strong>Step 5: รัน GREEN และ commit</strong></li>
+</ul>
+<p>รัน server tests, server build และ governance pgTAP Expected: expired, revoked, wrong-purpose, duplicate-approver, hard-blocker และ cross-tenant cases ถูก reject</p>
+<pre><code class="language-bash">git add supabase/migrations/0163_trust_kernel_profile_exception.sql supabase/tests/trust_kernel_governance.sql server/src/trust-kernel
+git commit -m "feat(trust-kernel): govern profiles and warning exceptions"</code></pre>
+<hr>
+<h3>Task 4: Release, artifact, ledger และ outbox authority</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>supabase/migrations/0164_trust_kernel_release_authority.sql</code></li>
+<li>Create: <code>supabase/tests/trust_kernel_release.sql</code></li>
+<li>Create: <code>server/src/trust-kernel/contracts/releasePorts.ts</code></li>
+<li>Test: <code>server/src/trust-kernel/test/releaseStateModel.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces tables: <code>release_working_revision</code>, <code>release_candidate</code>, <code>release_attempt</code>, <code>release_approval</code>, <code>release_revision</code>, <code>release_artifact</code>, <code>release_event</code>, <code>release_outbox</code></li>
+<li>Produces RPCs: <code>rpc_trust_freeze</code>, <code>rpc_trust_begin_release</code>, <code>rpc_trust_commit_release</code>, <code>rpc_trust_mark_artifact_available</code>, <code>rpc_trust_void_artifact</code>, <code>rpc_trust_revoke</code></li>
+<li>Produces <code>ReleaseAuthorityPort</code> สำหรับ Task 8</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน RED state/concurrency/idempotency tests</strong></li>
+</ul>
+<pre><code class="language-sql">select throws_ok($$select public.rpc_trust_begin_release(:'freezer_context', :'candidate', :'auth_hash', 'idem-1', :'request')$$,
+  'P0001', 'AUTH_SOD_VIOLATION', 'freezer cannot approve own release');
+select is((public.rpc_trust_begin_release(:'approver_context', :'candidate', :'auth_hash', 'idem-1', :'request')).attempt_id,
+          (public.rpc_trust_begin_release(:'retry_context', :'candidate', :'auth_hash', 'idem-1', :'request')).attempt_id,
+          'same idempotency request returns same attempt');
+select throws_ok($$select public.rpc_trust_begin_release(:'new_context', :'candidate', :'auth_hash', 'idem-1', repeat('f',64))$$,
+  'P0001', 'STATE_IDEMPOTENCY_MISMATCH', 'same key with changed request rejects');</code></pre>
+<p>เพิ่ม assertions ว่า <code>VOID</code> ใช้ได้เฉพาะ attempt/artifact, release revision รับเฉพาะ <code>ACTIVE|REVOKED</code>, มี CAS winner เดียว และ <code>ACTIVE</code> revision consume ได้เมื่อ artifact <code>AVAILABLE</code> เท่านั้น</p>
+<ul>
+<li>[ ] <strong>Step 2: รัน RED กับ local Supabase</strong></li>
+</ul>
+<p>Expected: FAIL เพราะ release authority tables/RPCs ยังไม่อยู่</p>
+<ul>
+<li>[ ] <strong>Step 3: สร้าง state tables และ constraints</strong></li>
+</ul>
+<p>ทุก table มี <code>tenant_id</code>; child tables ใช้ composite tenant-bound foreign keys <code>release_attempt</code> มี unique <code>(tenant_id,actor_user_id,candidate_hash,idempotency_key)</code> และเก็บ request hash <code>release_revision</code> เก็บ candidate hash, release authorization hash, sorted grant hashes, certificate, expected packet hash, profile-attestation binding, sequence และ authority timestamps <code>release_artifact</code> เก็บ internal locator ภายใต้ <code>tenantId/siteId/releaseRevisionId/contentHash</code> เท่านั้น</p>
+<ul>
+<li>[ ] <strong>Step 4: สร้าง transaction choreography</strong></li>
+</ul>
+<p><code>rpc_trust_begin_release</code> consume fresh action context, recheck SoD/current membership/profile/grants, lock candidate และ allocate attempt/revision ID, sequence, authority time ส่วน <code>rpc_trust_commit_release</code> เรียกได้เฉพาะ worker role, lock attempt, recheck current membership version/candidate CAS, เก็บ certificate พร้อม <code>ACTIVE</code> revision กับ <code>MATERIALIZING</code> artifact แล้ว append event/outbox แบบ atomic Failed commit ต้องจบก่อนสร้าง release revision Availability และ revocation เป็น append-only transitions</p>
+<ul>
+<li>[ ] <strong>Step 5: รัน GREEN, race tests และ commit</strong></li>
+</ul>
+<p>รัน release pgTAP ปกติและสอง concurrent <code>psql</code> sessions บน candidate เดียว Expected: success หนึ่ง, <code>STATE_CONFLICT</code> หนึ่ง และ active revision ไม่ซ้ำ</p>
+<pre><code class="language-bash">git add supabase/migrations/0164_trust_kernel_release_authority.sql supabase/tests/trust_kernel_release.sql server/src/trust-kernel/contracts/releasePorts.ts server/src/trust-kernel/test/releaseStateModel.test.ts
+git commit -m "feat(trust-kernel): add canonical release authority"</code></pre>
+<hr>
+<h3>Task 5: User-token Edge transport และ service-role containment</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>supabase/functions/factory-api/trustKernel.ts</code></li>
+<li>Create: <code>supabase/functions/factory-api/index.test.ts</code></li>
+<li>Modify: <code>supabase/functions/factory-api/index.ts</code></li>
+<li>Modify: <code>.github/workflows/edge-fn-verify.yml</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces <code>handleTrustKernelRequest(req, deps): Promise&lt;Response&gt;</code></li>
+<li>V3 endpoints: <code>POST /v3/factory/jobs/:id/freeze</code>, <code>/release</code>, <code>/revoke</code>; <code>GET /v3/factory/releases/:id/status</code></li>
+<li>เรียก action-context creation ด้วย incoming bearer + anon key; service role จำกัดไว้สำหรับ outbox/storage worker calls</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน RED transport tests</strong></li>
+</ul>
+<pre><code class="language-ts">expect((await handleTrustKernelRequest(post("/release", {}, {}), deps)).status).toBe(401);
+expect((await handleTrustKernelRequest(post("/release", body, {
+  authorization: userBearer, "x-actor-role": "ADMIN", "x-actor-name": "spoof",
+}), deps)).status).toBe(202);
+expect(deps.createActionContext).toHaveBeenCalledWith(expect.objectContaining({ bearer: userBearer }));
+expect(deps.createActionContext).not.toHaveBeenCalledWith(expect.objectContaining({ bearer: serviceBearer }));
+expect(JSON.stringify(deps.createActionContext.mock.calls)).not.toContain("spoof");</code></pre>
+<p>เพิ่ม invalid JSON, wrong method, candidate mismatch, offline replay header, expired context และ service-role spoof พร้อม stable HTTP/reason-code mapping</p>
+<ul>
+<li>[ ] <strong>Step 2: รัน RED</strong></li>
+</ul>
+<p>Run: <code>npx vitest run supabase/functions/factory-api/index.test.ts --reporter=verbose</code></p>
+<p>Expected: FAIL เพราะ injectable V3 handler ยังไม่อยู่</p>
+<ul>
+<li>[ ] <strong>Step 3: แยก pure transport จาก environment adapters</strong></li>
+</ul>
+<pre><code class="language-ts">export type TrustKernelDeps = Readonly&lt;{
+  createActionContext(input: UserActionInput): Promise&lt;TrustResult&lt;{ contextId: string }&gt;&gt;;
+  invokeAuthority(input: AuthorityRequest): Promise&lt;TrustResult&lt;AuthorityResponse&gt;&gt;;
+}&gt;;</code></pre>
+<p><code>createActionContext</code> forward incoming Authorization header และ <code>SUPABASE_ANON_KEY</code> และ filter request body ให้เหลือ candidate/release-authorization/idempotency/request hashes Existing service-role helpers ต้องเข้าถึง function นี้ไม่ได้และ reject user-authority operation</p>
+<ul>
+<li>[ ] <strong>Step 4: รัน GREEN และ Edge suite</strong></li>
+</ul>
+<p>รัน targeted test แล้ว <code>npx vitest run supabase/functions --reporter=default --reporter=json --outputFile=edge-fn-report.json</code></p>
+<p>Expected: exit 0, <code>numPassedTests&gt;0</code>, <code>numFailedTests=0</code></p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add supabase/functions/factory-api .github/workflows/edge-fn-verify.yml
+git commit -m "feat(trust-kernel): enforce user-authorized edge actions"</code></pre>
+<hr>
+<h3>Task 6: Profile adapters และ exhaustive capability compiler</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>server/src/trust-kernel/capability/canonicalProfile.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/capability/adaptLegacyProfile.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/capability/compileCapabilities.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/contracts/capability.ts</code></li>
+<li>Modify: <code>server/src/post/machineProfiles.ts</code></li>
+<li>Test: <code>server/src/trust-kernel/test/compileCapabilities.property.test.ts</code></li>
+<li>Test: <code>server/src/trust-kernel/test/profileAdapter.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces <code>adaptLegacyProfile(input): TrustResult&lt;MachineCapabilityProfileV1&gt;</code></li>
+<li>Produces <code>compileCapabilities(snapshot, profile, attestation): TrustResult&lt;CapabilityReportV1&gt;</code></li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน RED exhaustive failure tests</strong></li>
+</ul>
+<pre><code class="language-ts">expect(compileCapabilities(snapshotWithTool("UNKNOWN"), profile, attestation)).toMatchObject({
+  ok: false, code: "CAP_UNKNOWN_TOOL",
+});
+expect(compileCapabilities(snapshotWithOperation("FIVE_AXIS_SWARF"), profile, attestation)).toMatchObject({
+  ok: false, code: "CAP_UNSUPPORTED_OPERATION",
+});
+expect(compileCapabilities(snapshotWithDepth(41), profileWithDepthMax(40), attestation)).toMatchObject({
+  ok: false, code: "CAP_PARAMETER_RANGE",
+});</code></pre>
+<p>Property tests generate operation permutations และยืนยันว่า <code>checkedOperationIds</code> เท่ากับ sorted set ของ operation IDs ทุกตัวเมื่อ PASS; ID ที่หายทำให้ test fail</p>
+<ul>
+<li>[ ] <strong>Step 2: รัน RED</strong></li>
+</ul>
+<p>Run: <code>npm.cmd --prefix server test -- --run src/trust-kernel/test/compileCapabilities.property.test.ts src/trust-kernel/test/profileAdapter.test.ts</code></p>
+<ul>
+<li>[ ] <strong>Step 3: สร้าง canonical profile schema เพียงหนึ่งชุด</strong></li>
+</ul>
+<p>Canonical profile มี machine/dialect versions, operation catalogue, tool IDs/machine numbers, parameter ranges, faces, units, coordinate convention, postprocessor ID/version/binary hash Legacy server/client shapes เป็น read-only input ของ <code>adaptLegacyProfile</code>; local storage และ arbitrary overrides ตั้ง attestation status ไม่ได้</p>
+<p>ตัด <code>unknown tool -&gt; 1</code> ออกจาก V3 path Legacy <code>PostContext</code> อาจอ่านประวัติเดิมต่อ แต่ V3 invocation ต้องได้รับ <code>TrustResult</code> failure ก่อนเกิด dialect output</p>
+<ul>
+<li>[ ] <strong>Step 4: รัน GREEN และ dialect defense tests</strong></li>
+</ul>
+<p>เพิ่ม CIX/G-code tests ที่พิสูจน์ว่า dialect layer reject unknown tool/unsupported operation ซ้ำ แม้ forged upstream capability report ระบุ PASS</p>
+<p>Expected: targeted tests และ server build exit 0 และไม่คืน partial file list เมื่อ fail</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add server/src/trust-kernel server/src/post/machineProfiles.ts
+git commit -m "feat(trust-kernel): compile attested machine capabilities"</code></pre>
+<hr>
+<h3>Task 7: Deterministic snapshot และ FactoryPacket V3 builder</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>server/src/trust-kernel/snapshot/buildReleaseSnapshot.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/packet/buildUnsignedPayloadV3.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/packet/packageFactoryPacketV3.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/packet/fixedZipProfile.ts</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/input.json</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/expected-manifest.json</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/packet.zip</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/expected-packet.sha256</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/mutations/index.json</code></li>
+<li>Test: <code>server/src/trust-kernel/test/packetV3.determinism.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces <code>buildReleaseSnapshot(input): TrustResult&lt;ReleaseSnapshotV3&gt;</code></li>
+<li>Produces <code>buildUnsignedPayloadV3(snapshot, capabilityReport): TrustResult&lt;UnsignedPacketV3&gt;</code></li>
+<li>Produces <code>packageFactoryPacketV3(unsigned, certificate): Promise&lt;Uint8Array&gt;</code></li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน RED byte-determinism tests</strong></li>
+</ul>
+<pre><code class="language-ts">const runs = await Promise.all(Array.from({ length: 100 }, () =&gt; buildFixturePacket()));
+expect(new Set(runs.map(sha256Hex)).size).toBe(1);
+expect(runs.every(bytes =&gt; Buffer.from(bytes).equals(Buffer.from(runs[0])))).toBe(true);
+expect(listZipPaths(runs[0])).toEqual([...listZipPaths(runs[0])].sort());</code></pre>
+<p>ทดสอบ snapshot permutation, Unicode, Windows/Linux path normalization, fixed decimals/units, extra-file rejection และ identical empty optional collections</p>
+<ul>
+<li>[ ] <strong>Step 2: รัน RED</strong></li>
+</ul>
+<p>Expected: missing builder modules</p>
+<ul>
+<li>[ ] <strong>Step 3: สร้าง deterministic construction</strong></li>
+</ul>
+<p>Snapshot ครอบ tenant scope, candidate/profile/policy hashes, sorted operation/entity references และ required artifact definitions Unsigned manifest ระบุทุก file path, byte length, SHA-256, media type, artifact class และ <code>NOT_FOR_PRODUCTION</code> marker</p>
+<p><code>fixedZipProfile.ts</code> บังคับ sorted POSIX paths, fixed timestamp <code>1980-01-01T00:00:00Z</code>, UTF-8 names, fixed compression level, fixed permissions และ exact file allowlist โดย output เป็น pure function ของ declared bytes/constants ซึ่งเป็นอิสระจาก runtime locale, clock และ randomness Final packet content คือ unsigned payload + persisted certificate เท่านั้น</p>
+<ul>
+<li>[ ] <strong>Step 4: Materialize และ pin golden vectors</strong></li>
+</ul>
+<p>Run ใน PowerShell: <code>$env:UPDATE_TRUST_VECTORS='1'; npm.cmd --prefix server test -- --run src/trust-kernel/test/packetV3.determinism.test.ts --update; Remove-Item Env:UPDATE_TRUST_VECTORS</code></p>
+<p>Update mode สร้าง expected bytes ได้เมื่อ <code>UPDATE_TRUST_VECTORS=1</code> เท่านั้น Normal tests เทียบ byte-for-byte และ reject silent vector update</p>
+<ul>
+<li>[ ] <strong>Step 5: Cross-platform verification และ commit</strong></li>
+</ul>
+<p>รัน targeted tests และ server build บน Windows; CI รันซ้ำ Ubuntu Expected: 100/100 byte-identical runs และ pinned SHA-256 หนึ่งค่า</p>
+<pre><code class="language-bash">git add server/src/trust-kernel test-vectors/factory-packet-v3
+git commit -m "feat(trust-kernel): build deterministic factory packet v3"</code></pre>
+<hr>
+<h3>Task 8: Managed signer, release worker และ artifact materialization</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>server/src/trust-kernel/signing/managedSignerPort.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/signing/httpManagedSignerClient.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/artifacts/artifactRepository.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/authority/supabaseReleaseAuthority.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/worker/releaseWorker.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/worker/materializeArtifact.ts</code></li>
+<li>Modify: <code>server/src/worker/index.ts</code></li>
+<li>Test: <code>server/src/trust-kernel/test/releaseWorker.chaos.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces <code>ManagedSignerPort.sign({ keyId, purpose, digest }): Promise&lt;TrustResult&lt;ManagedSignature&gt;&gt;</code></li>
+<li>Produces <code>executeReleaseAttempt(attemptId, ports): Promise&lt;TrustResult&lt;ReleaseWorkerResult&gt;&gt;</code></li>
+<li>Produces <code>materializeArtifact(outboxEvent, ports): Promise&lt;TrustResult&lt;ArtifactRecordV1&gt;&gt;</code></li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน RED failure-injection tests</strong></li>
+</ul>
+<pre><code class="language-ts">await expect(runWith({ signer: timeoutSigner })).resolves.toMatchObject({ ok: false, code: "CRYPTO_SIGNER_UNAVAILABLE" });
+expect(db.commitRelease).not.toHaveBeenCalled();
+
+await runWith({ db: commitFailureDb });
+expect(store.markVoid).toHaveBeenCalledOnce();
+expect(store.exposeUrl).not.toHaveBeenCalled();
+
+const retry = await runMaterializerTwice(committedAttempt);
+expect(retry.firstHash).toBe(retry.secondHash);
+expect(retry.records).toHaveLength(1);</code></pre>
+<p>ครอบ signer timeout, store failure, DB commit loss, crash after commit/before materialization, hash mismatch, outbox duplicate และ membership revoked ก่อน final commit</p>
+<ul>
+<li>[ ] <strong>Step 2: รัน RED</strong></li>
+</ul>
+<p>รัน chaos suite Expected: missing ports/worker</p>
+<ul>
+<li>[ ] <strong>Step 3: สร้าง managed signer โดยไม่มี local private-key API</strong></li>
+</ul>
+<pre><code class="language-ts">export interface ManagedSignerPort {
+  sign(input: Readonly&lt;{ keyId: string; purpose: KeyPurpose; digestSha256: string }&gt; ):
+    Promise&lt;TrustResult&lt;Readonly&lt;{ algorithm: "Ed25519"; keyId: string; signatureBase64: string }&gt;&gt;&gt;;
+}</code></pre>
+<p><code>HttpManagedSignerClient</code> รับ endpoint, key ID, workload credential provider, timeout และ fetch dependency ตรวจ algorithm/key ID และไม่รับ private key bytes หรือ seed material</p>
+<ul>
+<li>[ ] <strong>Step 4: สร้าง exact sign/commit/materialize order</strong></li>
+</ul>
+<p>Worker อ่าน immutable attempt allocation, compile, สร้าง unsigned payload, ขอ signature, assemble final bytes ใน memory, คำนวณ expected hash แล้วจึง atomic commit หลัง commit outbox materializer สร้าง bytes เดิมจาก persisted payload/certificate, เก็บใต้ DB-provided internal locator, ตรวจ hash และ mark <code>AVAILABLE</code> Precommit failure จบที่ <code>FAILED</code>/<code>VOID</code>; postcommit retry ห้ามสร้าง certificate ใบที่สอง</p>
+<ul>
+<li>[ ] <strong>Step 5: รัน GREEN, build และ commit</strong></li>
+</ul>
+<p>Expected: chaos cases ทุกกรณีมี stable reason code, ไม่มี downloadable orphan และไม่มี signature ใบที่สอง</p>
+<pre><code class="language-bash">git add server/src/trust-kernel server/src/worker/index.ts
+git commit -m "feat(trust-kernel): sign and materialize releases safely"</code></pre>
+<hr>
+<h3>Task 9: Trust และ release-status bundle issuance</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>supabase/migrations/0165_trust_kernel_bundles_publication.sql</code></li>
+<li>Create: <code>supabase/tests/trust_kernel_bundles.sql</code></li>
+<li>Create: <code>server/src/trust-kernel/trust/buildTrustBundle.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/trust/buildReleaseStatusBundle.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/trust/issueSignedBundle.ts</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/trust-bundle.json</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/release-status-bundle.json</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/policy.json</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/checkpoint.json</code></li>
+<li>Test: <code>server/src/trust-kernel/test/trustBundles.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces signed <code>TrustBundleV1</code> และ <code>ReleaseStatusBundleV1</code> ที่มี independent <code>(bundleType,trustScope)</code> sequences</li>
+<li>Key revocation modes: <code>ALL_SIGNATURES</code>, <code>SIGNED_AT_OR_AFTER</code>, <code>ISSUANCE_DISABLED</code></li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน RED bundle tests</strong></li>
+</ul>
+<pre><code class="language-ts">expect(buildReleaseStatusBundle(rowsWithVoidAttempt)).not.toContain("VOID");
+expect(buildReleaseStatusBundle(rowsWithRevokedRevision).revokedReleaseRevisionIds).toEqual([revokedId]);
+expect(buildTrustBundle(keyRevocation({ mode: "SIGNED_AT_OR_AFTER" })).keyRevocations[0]).toMatchObject({
+  mode: "SIGNED_AT_OR_AFTER", effectiveAt, reason: "COMPROMISE",
+});</code></pre>
+<p>เพิ่ม sequence monotonicity, scope mismatch, expired attestation/grant revocation, wrong signer-purpose และ packet/bundle self-authorized trust-root rejection tests</p>
+<ul>
+<li>[ ] <strong>Step 2: รัน RED</strong></li>
+</ul>
+<p>Expected: missing bundle builders และ DB tables</p>
+<ul>
+<li>[ ] <strong>Step 3: สร้าง bundle authority</strong></li>
+</ul>
+<p>DB tables เก็บ trusted public keys พร้อม purpose/validity, key revocations, profile-attestation revocations, warning-grant revocations, release revocations, per-scope bundle sequence, issued/expiry, canonical hash และ signature Public key ที่ authenticate <code>TrustBundleV1</code> ต้อง pin ใน verifier policy และห้าม bundle ใบเดียวกันเพิ่มหรือ authorize key นี้เอง Bundle issuance ทำ transaction ที่ increment sequence และ snapshot effective entries ทั้งหมด</p>
+<ul>
+<li>[ ] <strong>Step 4: Sign ด้วย purpose-bound managed keys</strong></li>
+</ul>
+<p><code>issueSignedBundle</code> canonicalize unsigned bundle, hash, เรียก <code>ManagedSignerPort</code> ด้วย configured trust-bundle key และ persist exact bytes/signature Existing sequence immutable และ retry คืน persisted bundle เดิม</p>
+<p>Export valid-minimal trust/status bundles, pinned-root policy และ bootstrap checkpoint ลง shared corpus โดย corpus policy ต้อง pin trust-bundle public key จากนอก bundle, ระบุ permitted <code>trustScope</code> และมี freshness/archive limits แบบ explicit การ regenerate ต้อง opt-in และ test ต้อง byte-compare JSON ที่ regenerate กับ committed vectors</p>
+<ul>
+<li>[ ] <strong>Step 5: รัน GREEN และ commit</strong></li>
+</ul>
+<p>รัน server tests, bundle pgTAP และ server build Expected: <code>VOID</code> ไม่เข้า release status, monotonic sequence ทน concurrent issuers และ purpose/scope/expiry failures ถูก deny</p>
+<pre><code class="language-bash">git add supabase/migrations/0165_trust_kernel_bundles_publication.sql supabase/tests/trust_kernel_bundles.sql server/src/trust-kernel/trust server/src/trust-kernel/test/trustBundles.test.ts
+git commit -m "feat(trust-kernel): issue signed trust status bundles"</code></pre>
+<hr>
+<h3>Task 10: Standalone independent offline verifier</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>tools/factory-packet-verifier/package.json</code></li>
+<li>Create: <code>tools/factory-packet-verifier/tsconfig.json</code></li>
+<li>Create: <code>tools/factory-packet-verifier/vitest.config.ts</code></li>
+<li>Create: <code>tools/factory-packet-verifier/src/types.ts</code></li>
+<li>Create: <code>tools/factory-packet-verifier/src/canonical.ts</code></li>
+<li>Create: <code>tools/factory-packet-verifier/src/packetReader.ts</code></li>
+<li>Create: <code>tools/factory-packet-verifier/src/freshnessStore.ts</code></li>
+<li>Create: <code>tools/factory-packet-verifier/src/verify.ts</code></li>
+<li>Create: <code>tools/factory-packet-verifier/src/cli.ts</code></li>
+<li>Create: <code>tools/factory-packet-verifier/src/verify.test.ts</code></li>
+<li>Modify: <code>package.json</code></li>
+<li>Modify: <code>package-lock.json</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>CLI: <code>factory-packet-verify --packet &lt;zip&gt; --trust &lt;json&gt; --status &lt;json&gt; --policy &lt;json&gt; --state &lt;json&gt; --report &lt;json&gt;</code></li>
+<li>Produces <code>VerificationReportV1</code> ที่มี verdict, codes, hashes, sequences, verifier build hash, <code>validAsOf</code>, freshness age, checkpoint และ summary</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน RED corpus tests</strong></li>
+</ul>
+<pre><code class="language-ts">expect(await verifyFixture("valid-minimal", stateWithCheckpoint())).toMatchObject({ verdict: "PASS" });
+expect(await verifyMutation("unknown-extra-file")).toMatchObject({ verdict: "FAIL", codes: ["PACKET_EXTRA_FILE"] });
+expect(await verifyWithState(noCheckpoint())).toMatchObject({ verdict: "FAIL", codes: ["TRUST_CHECKPOINT_REQUIRED"] });
+expect(await verifyWithBundle(sequence(9), stateAtSequence(10))).toMatchObject({ verdict: "FAIL", codes: ["TRUST_SEQUENCE_ROLLBACK"] });</code></pre>
+<p>Mutation corpus ครอบ path traversal, duplicate path, corrupt hash, signature mutation, wrong key purpose, scope mismatch, expired bundle, stale-but-unexpired bundle, revoked release/profile/grant, zip bomb ratio, oversize file และ untrusted clock</p>
+<ul>
+<li>[ ] <strong>Step 2: สร้าง isolated workspace และรัน RED</strong></li>
+</ul>
+<p><code>tools/factory-packet-verifier/package.json</code> declare เฉพาะ <code>@noble/ed25519</code>, <code>yauzl</code>, TypeScript, Vitest และ Node types และไม่ depend on root app/server package</p>
+<pre><code class="language-json">{
+  "name": "@monolith/factory-packet-verifier",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "bin": { "factory-packet-verify": "dist/cli.js" },
+  "scripts": { "test": "vitest", "build": "tsc -p tsconfig.json" },
+  "dependencies": { "@noble/ed25519": "^3.0.0", "yauzl": "^3.3.0" },
+  "devDependencies": { "@types/node": "^20.10.0", "@types/yauzl": "^2.10.3", "typescript": "^5.3.2", "vitest": "^3.0.0" }
+}</code></pre>
+<p><code>tools/factory-packet-verifier/tsconfig.json</code> ใช้ค่าตายตัวต่อไปนี้เพื่อให้ emitted CLI paths คงที่:</p>
+<pre><code class="language-json">{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"]
+}</code></pre>
+<p>Run: <code>npm.cmd install</code></p>
+<p>Run: <code>npm.cmd test -w tools/factory-packet-verifier -- --run</code></p>
+<p>Expected: FAIL เพราะ verifier modules ยังไม่อยู่</p>
+<ul>
+<li>[ ] <strong>Step 3: สร้าง independent parsing และ canonicalization</strong></li>
+</ul>
+<p>สร้าง canonical JSON ภายใน workspace จาก protocol text เป็น implementation ที่เขียนแยกอิสระ <code>packetReader</code> บังคับ safe unique paths และ exact allowlisted file set จากนั้น reject declared/actual size mismatch, compression ratio เกิน policy และ total size เกิน policy ก่อน deep parse</p>
+<ul>
+<li>[ ] <strong>Step 4: สร้าง signature, revocation และ freshness state</strong></li>
+</ul>
+<pre><code class="language-ts">export type VerifierStateV1 = Readonly&lt;{
+  bootstrapCheckpoint: Readonly&lt;Record&lt;string, number&gt;&gt;;
+  highWaterMarks: Readonly&lt;Record&lt;string, number&gt;&gt;;
+}&gt;;</code></pre>
+<p>State keys ใช้ <code>${bundleType}:${trustScope}</code> Verification ต้องมี pinned minimum sequence เมื่อ first use, reject rollback, บังคับ <code>maxOfflineStalenessSeconds</code>, ใช้ explicit key-revocation mode, update high-water marks หลัง full PASS เท่านั้น และรายงาน <code>validAsOf</code> CLI เขียน state แบบ atomic ผ่าน temp-file + rename</p>
+<ul>
+<li>[ ] <strong>Step 5: พิสูจน์ dependency independence</strong></li>
+</ul>
+<p>เพิ่ม test/script เดิน verifier imports และ fail ถ้า resolved path เข้า <code>server/src</code>, <code>src/factory/packet</code> หรือ <code>src/core/manufacturing</code></p>
+<p>รัน verifier tests และ <code>npm.cmd run build -w tools/factory-packet-verifier</code> Expected: exit 0, valid corpus ผ่าน และทุก mutation fail ด้วย assigned code</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add tools/factory-packet-verifier package.json package-lock.json test-vectors/factory-packet-v3
+git commit -m "feat(trust-kernel): add independent packet verifier"</code></pre>
+<hr>
+<h3>Task 11: P2 quarantine, client projection และ legacy-route containment</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>src/core/api/trustKernelApi.ts</code></li>
+<li>Create: <code>src/factory/packet/trustKernelProjection.ts</code></li>
+<li>Create: <code>scripts/trust-kernel/verify-route-ledger.mjs</code></li>
+<li>Create: <code>docs/governance/trust-kernel-route-disposition.json</code></li>
+<li>Create: <code>supabase/migrations/0166_trust_kernel_legacy_containment.sql</code></li>
+<li>Create: <code>supabase/tests/trust_kernel_containment.sql</code></li>
+<li>Create: <code>server/src/trust-kernel/artifacts/isolatedVerifierRunner.ts</code></li>
+<li>Modify: <code>src/core/api/stateApi.ts</code></li>
+<li>Modify: <code>src/factory/packet/useFactoryPacket.ts</code></li>
+<li>Modify: <code>src/components/ui/ExportPanel.tsx</code></li>
+<li>Modify: <code>src/export/cutList/download.ts</code></li>
+<li>Modify: <code>src/core/export/downloadArtifacts.ts</code></li>
+<li>Modify: <code>supabase/functions/factory-api/index.ts</code></li>
+<li>Test: <code>src/factory/packet/__tests__/trustKernelContainment.test.ts</code></li>
+<li>Test: <code>supabase/functions/factory-api/index.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Client เห็นเฉพาะ server projections: candidate, attempt, release, artifact status และ report/evidence references</li>
+<li>Route ledger dispositions: <code>REUSE</code>, <code>ADAPT</code>, <code>READ_ONLY</code>, <code>BLOCK</code> พร้อม owner, class, current behavior, target และ negative-test ID</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน RED containment tests</strong></li>
+</ul>
+<pre><code class="language-ts">expect(await requestLegacyManufacturingDownload("FROZEN")).toMatchObject({ ok: false, code: "STATE_CANDIDATE_STALE" });
+expect(await requestShadowP2AsHuman(activeRelease)).toMatchObject({ ok: false, code: "STORE_PLAINTEXT_ACCESS_DENIED" });
+expect(await requestShadowP2AsIsolatedRunner(activeRelease)).toMatchObject({ ok: true, value: { mode: "WORKLOAD_STREAM" } });
+expect(routeLedgerCoverage(reachableSurfaces)).toEqual({ missing: [], duplicateAuthority: [] });</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: รัน RED</strong></li>
+</ul>
+<p>รัน targeted root Vitest และ Edge test Expected: browser download/signed-URL routes ปัจจุบันทำ assertions fail</p>
+<ul>
+<li>[ ] <strong>Step 3: แทน client authority ด้วย V3 projections</strong></li>
+</ul>
+<p><code>trustKernelApi.ts</code> ส่ง bearer-authorized candidate/release intents และไม่ส่ง actor role/name UI hooks แสดง state/reason codes เท่านั้น DRAFT/FROZEN คง P0 preview และ P1 review ที่อนุญาต ส่วน P2 build/download buttons ถูกถอดหรือ disable พร้อมข้อความ <code>NOT_FOR_PRODUCTION</code></p>
+<ul>
+<li>[ ] <strong>Step 4: บังคับ P2 publication policy</strong></li>
+</ul>
+<p>Migration 0166 revoke authenticated execution บน legacy packet mutation/signing RPCs, เพิ่ม tenant-bound storage policies และให้ P2 read ผ่าน isolated workload role เท่านั้น Edge ไม่คืน raw locator หรือ reusable signed URL สำหรับ P2 <code>isolatedVerifierRunner.ts</code> authenticate ด้วย workload identity นี้, stream exact bytes เข้า verifier child processโดยไม่ import verifier code, emit report/hash/evidence และลบ transient local bytes พร้อม recheck revocation/status ตอนเริ่ม request</p>
+<ul>
+<li>[ ] <strong>Step 5: ทำ route ledger ให้ครบและ enforce</strong></li>
+</ul>
+<p>Inventory ทุก reachable build/export/download รวม profile/tool/policy/JWT/storage-signing authority input <code>verify-route-ledger.mjs</code> scan declared source globs และคืน non-zero เมื่อ discovered route set ต่างจาก ledgered route set, mutable authority ซ้ำ หรือยัง reach P2 human URL, client role header หรือ V1/V2 production-shaped output</p>
+<ul>
+<li>[ ] <strong>Step 6: รัน GREEN และ commit</strong></li>
+</ul>
+<p>รัน targeted containment tests, <code>trust_kernel_containment.sql</code>, route-ledger verifier, root typecheck และ Edge suite Expected: reachable legacy surfaces ทุกจุดมี disposition/negative test และมนุษย์รับ P2 plaintext ไม่ได้</p>
+<pre><code class="language-bash">git add src server/src/trust-kernel/artifacts/isolatedVerifierRunner.ts supabase/functions/factory-api supabase/migrations/0166_trust_kernel_legacy_containment.sql supabase/tests/trust_kernel_containment.sql scripts/trust-kernel docs/governance/trust-kernel-route-disposition.json
+git commit -m "feat(trust-kernel): contain shadow artifacts and legacy routes"</code></pre>
+<hr>
+<h3>Task 12: E2E chaos, signed evidence, CI และ executive acceptance gate</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>e2e/trust-kernel/release-shadow.spec.ts</code></li>
+<li>Create: <code>e2e/trust-kernel/revocation-race.spec.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/evidence/buildEvidenceManifest.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/evidence/issueEvidenceAttestation.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/test/evidenceAttestation.test.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/observability/securityEvents.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/observability/metrics.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/test/observability.test.ts</code></li>
+<li>Create: <code>docs/governance/trust-kernel-ownership.json</code></li>
+<li>Create: <code>.github/workflows/trust-kernel-verify.yml</code></li>
+<li>Create: <code>docs/runbooks/trust-kernel-shadow.en.md</code></li>
+<li>Create: <code>docs/runbooks/trust-kernel-shadow.th.md</code></li>
+<li>Create: <code>docs/runbooks/trust-kernel-shadow.en.html</code></li>
+<li>Create: <code>docs/runbooks/trust-kernel-shadow.th.html</code></li>
+<li>Modify: <code>package.json</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces signed <code>EvidenceAttestationV1</code> กับ <code>evidence-manifest.json</code> ที่ bind Git roots ทั้งสอง, commands, reports, binaries, run identity, retention และ root hash</li>
+<li>Produces CI gate เดียวที่ final machine-readable summary ระบุ pass/fail/skip counts ของทุก layer</li>
+<li>Produces append-only exportable <code>SecurityEventV1</code>, approved trust/release metrics/alerts และ machine-readable accountable-owner map</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน RED E2E และ evidence tests</strong></li>
+</ul>
+<pre><code class="language-ts">test("two distinct humans release while P2 remains unavailable to humans", async ({ page, request }) =&gt; {
+  await freezeAs(designerA, candidate);
+  await approveAndReleaseAs(approverB, candidate);
+  await expectReleaseState(request, "ACTIVE", "AVAILABLE");
+  await expectHumanP2Request(request).resolves.toMatchObject({ status: 403, code: "STORE_PLAINTEXT_ACCESS_DENIED" });
+});</code></pre>
+<p>เพิ่ม membership revocation mid-flow, two approver race, DB response loss, crash before materialization, revoke/download race, offline replay, tenant hash guessing, first-use verifier without checkpoint และ tenant-002 isolation</p>
+<ul>
+<li>[ ] <strong>Step 2: สร้าง evidence manifest และ managed evidence signing</strong></li>
+</ul>
+<pre><code class="language-ts">export type EvidenceAttestationV1 = Readonly&lt;{
+  schema: "EvidenceAttestationV1";
+  parentGit: GitState;
+  productGit: GitState;
+  commandReportDigests: readonly DigestRef[];
+  ciRunId: string;
+  workflowIdentity: string;
+  builderBinaryHash: string;
+  verifierBinaryHash: string;
+  evidenceRootHash: string;
+  issuedAt: string;
+  retentionDays: number;
+  keyId: string;
+  signatureBase64: string;
+}&gt;;</code></pre>
+<p><code>issueEvidenceAttestation</code> ใช้ managed signer จาก <code>EVIDENCE_SIGNER_URL</code> และ <code>EVIDENCE_SIGNER_KEY_ID</code> purpose <code>EVIDENCE</code> CI fail closed เมื่อ signer config/signature verification ไม่พร้อม และไม่เก็บ private key</p>
+<ul>
+<li>[ ] <strong>Step 3: สร้าง observability และ ownership enforcement</strong></li>
+</ul>
+<p><code>SecurityEventV1</code> ต้องมี tenant scope, event ID, actor user ID, membership version, candidate/release revision, artifact hash, reason code, correlation ID และ authority timestamp Recorder append immutable rows และ export canonical JSONL; display name เป็นข้อมูลเสริมและใช้แทน identity field ไม่ได้ Metrics/alert rules ครอบ authentication denials, SoD violations, stale candidates, capability blockers, signer/store failures, VOID artifacts, verifier failures, stale trust bundles, revoked-release access และ blocked-legacy-route attempts</p>
+<p><code>trust-kernel-ownership.json</code> map Identity/tenancy/RLS/signer custody/trust bundles ไป Security/IAM; lifecycle/SoD/exceptions/revocation ไป Release Governance; operation/profile/range semantics ไป Manufacturing Engineering; deterministic builder/storage/outbox/workers ไป Platform Engineering; verifier/hostile corpus/evidence bundle ไป Independent QA/Safety Tests reject domain ที่ไร้ owner และ protocol/invariant change record ที่ไม่มี versioned decision พร้อม migration reference</p>
+<ul>
+<li>[ ] <strong>Step 4: สร้าง complete-output CI</strong></li>
+</ul>
+<p>Workflow matrix รัน Windows/Ubuntu deterministic/server/verifier tests ตามด้วย Edge, local Supabase pgTAP, root typecheck/build, route ledger, Playwright shadow E2E, hostile corpus และ evidence self-verification ทุก noisy command เขียน JSON/TAP output และ final job อ่านไฟล์ครบแล้ว reject failures, cancellations, skips, report set ที่ต่างจาก declared matrix, empty suites หรือ hash mismatch</p>
+<ul>
+<li>[ ] <strong>Step 5: สร้าง bilingual standalone runbooks</strong></li>
+</ul>
+<p>Runbooks ระบุ local prerequisites, exact commands, environment variables ที่มีเฉพาะ key ID/endpoint, วิธี provision tenant fixtures, inspect reason codes, revoke, refresh verifier checkpoints, evidence retention และสถานะ <code>NOT_FOR_PRODUCTION</code>/P3-disabled อย่างชัดเจน Render HTML ด้วย repository renderer และตรวจ content alignment</p>
+<ul>
+<li>[ ] <strong>Step 6: รัน complete local acceptance sequence</strong></li>
+</ul>
+<p>รันตามลำดับ:</p>
+<pre><code class="language-text">npm.cmd --prefix server test -- --run src/trust-kernel
+npm.cmd --prefix server run build
+npm.cmd test -w tools/factory-packet-verifier -- --run
+npm.cmd run build -w tools/factory-packet-verifier
+npx vitest run supabase/functions/factory-api/index.test.ts
+npm.cmd run test:run -- src/factory/packet/__tests__/trustKernelContainment.test.ts
+node scripts/trust-kernel/verify-route-ledger.mjs
+npm.cmd run typecheck:all
+npm.cmd run build
+npm.cmd run e2e -- e2e/trust-kernel</code></pre>
+<p>จากนั้นรัน Trust Kernel pgTAP ทั้งห้า suites บน Supabase ที่เพิ่ง start ใหม่ Expected: ทุก command exit 0, ทุก suite มี non-zero assertions, skips เป็นศูนย์, P2 human access ถูก deny, valid vectors ผ่าน และ hostile vector ทุกตัว reject ด้วย assigned code</p>
+<ul>
+<li>[ ] <strong>Step 7: รัน independent review gates</strong></li>
+</ul>
+<p>ใช้ <code>superpowers:requesting-code-review</code> แล้วใช้ <code>scrutinize</code> ไล่ entry → action context → DB authority → worker → artifact → bundle → verifier → evidence ทั้งเส้น แก้ blocker/major ทุกข้อและรัน Step 6 ใหม่จาก clean process state</p>
+<ul>
+<li>[ ] <strong>Step 8: Commit final integration</strong></li>
+</ul>
+<pre><code class="language-bash">git add e2e/trust-kernel server/src/trust-kernel/evidence server/src/trust-kernel/observability server/src/trust-kernel/test/observability.test.ts .github/workflows/trust-kernel-verify.yml docs/runbooks docs/governance/trust-kernel-ownership.json package.json
+git commit -m "test(trust-kernel): prove shadow trust-ready acceptance"</code></pre>
+<h2>Final MONOLITH Completion Gate</h2>
+<p>ก่อนอ้าง Shadow Trust-Ready:</p>
+<ul>
+<li>[ ] Capture Git roots ทั้งสองและ dirty-file lists ใน evidence</li>
+<li>[ ] Tasks 1–12 ทุก task มี targeted RED/GREEN proof และ commit</li>
+<li>[ ] Critical/negative trust gates ผ่าน 100% และ skipped trust/security tests เท่ากับศูนย์</li>
+<li>[ ] Route ledger ครอบ 100% ของ reachable production-shaped และ authority-input surfaces</li>
+<li>[ ] Windows/Ubuntu golden packet hashes byte-identical</li>
+<li>[ ] Independent verifier accept valid corpus และ reject mutation ทุกตัวด้วย specified stable code</li>
+<li>[ ] Authenticated users สองคนทำ freeze/release สำเร็จ และ SoD, membership revocation, replay, cross-tenant attacks ถูก reject</li>
+<li>[ ] Profile attestation และ warning grants บังคับ scope, key purpose, expiry, revocation และ distinct approvers</li>
+<li>[ ] Offline verifier reject missing checkpoint, rollback, stale bundle, untrusted clock และ revoked records</li>
+<li>[ ] P2 plaintext/raw URL ถูก deny สำหรับมนุษย์ และ Factory/P3 ยัง disabled</li>
+<li>[ ] Evidence attestation verify ด้วย <code>EVIDENCE</code> key แยก และ bind exact source/reports/binaries</li>
+<li>[ ] Append-only security-event export, required metrics/alerts และ accountable-owner mapping ผ่าน contract tests</li>
+<li>[ ] Runbook TH/EN Markdown/HTML ตรงกันและระบุ <code>NOT_FOR_PRODUCTION</code></li>
+<li>[ ] Production/GA ยัง NO-GO จนผ่าน production key ceremony, AAL2 policy, operations drills, authorized factory pilot, machine acceptance และ separate P3 authorization</li>
+</ul>
+<h2>การส่งต่อเพื่อดำเนินงาน</h2>
+<p>แนะนำให้ execute ด้วย <code>superpowers:subagent-driven-development</code> ใน fresh isolated worktree ใช้ fresh subagent ต่อ task, review สองชั้นคือ specification แล้ว code quality และห้าม parallelize migrations หรือ tasks ที่ใช้ <code>factory-api</code>, <code>server/src/trust-kernel</code>, <code>package-lock.json</code> หรือ route-ledger files ร่วมกัน</p>
+<p>ทางเลือกคือ execute ใน session นี้ด้วย <code>superpowers:executing-plans</code> ทีละ phase gate พร้อม checkpoints หลัง Tasks 4, 9 และ 12</p>
+</main></body>
+</html>

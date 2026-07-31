@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>แบบออกแบบ Book-to-Skill Overlay สำหรับ Codex/Windows</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>แบบออกแบบ Book-to-Skill Overlay สำหรับ Codex/Windows</h1>
+<p><strong>ฉบับภาษา:</strong> ไทย</p>
+<p><strong>วันที่:</strong> 30 กรกฎาคม 2026</p>
+<p><strong>สถานะ:</strong> อนุมัติแนวทางแล้ว รอตรวจ written spec</p>
+<p><strong>ขอบเขต:</strong> แพ็กเกจ Codex-native แบบส่วนตัวสำหรับเครื่อง Windows นี้</p>
+<h2>1. การตัดสินใจและขอบเขตหลักฐาน</h2>
+<p><strong>OWNER DECISION:</strong> ใช้สถาปัตยกรรม pinned upstream พร้อม Codex overlay</p>
+<p><strong>VERIFIED FACT:</strong> Governance/bootstrap root คือ <code>C:\Users\thai3\determined-williams (2)</code> ส่วน active product source เป็น nested repository แยกที่ <code>determined-williams\</code> ซึ่งมี dirty worktree งานนี้จะแก้เฉพาะ parent governance root และ personal Codex skill directory ของผู้ใช้ จะไม่แก้ ทดสอบ ล้าง stage หรือ commit nested product repository</p>
+<p><strong>VERIFIED FACT:</strong> ยังไม่พบ <code>book-to-skill</code> ในตำแหน่งสกิล Codex, Claude หรือ cross-agent ที่ตรวจ</p>
+<p><strong>PINNED SOURCE DECISION:</strong> ต้นทางที่เลือกคือ <code>https://github.com/virgiliojr94/book-to-skill</code> ที่ commit <code>c6bc1b7927822e563aae6212c07670f5a3d95ea7</code> ภายใต้ MIT license ขั้น implementation ต้อง resolve และตรวจ commit นี้อย่างอิสระก่อนใช้ source byte ใด</p>
+<h2>2. เป้าหมาย</h2>
+<p>ส่งมอบสกิล <code>book-to-skill</code> แบบส่วนตัวที่ Codex Desktop ค้นพบและใช้งานบน Windows ได้ เพื่อแปลงเอกสารที่รองรับเป็น Codex skills แบบมีโครงสร้างและโหลดตามต้องการ การติดตั้งต้องทำซ้ำได้ ผ่าน supply-chain audit ออกแบบให้รักษาสกิลเดิม และผ่านการตรวจด้วย fixture ภาษาไทยและอังกฤษ</p>
+<h2>3. เกณฑ์สำเร็จ</h2>
+<p>งานจะเสร็จเมื่อทุกข้อด้านล่างเป็นจริง:</p>
+<ol>
+<li>Codex ค้นพบ converter จาก <code>C:\Users\thai3\.codex\skills\book-to-skill</code></li>
+<li><code>SKILL.md</code> ของ converter จัดเตรียมเส้นทางทำงานหลักด้วย Codex-native paths, Python และคำสั่งที่ใช้กับ PowerShell ได้</li>
+<li>การสกัด PDF แบบเน้นข้อความ, EPUB, DOCX, TXT, Markdown, HTML และ RTF ใช้ implementation ต้นทางที่ตรึงไว้เมื่อ extractor ที่เกี่ยวข้องพร้อมใช้</li>
+<li>PDF เทคนิคใช้ Docling ได้เมื่อมีการติดตั้ง ส่วน optional dependency ที่ขาดต้องถูกรายงานและห้ามติดตั้งโดยไม่มีคำอนุมัติชัดเจน</li>
+<li>Path บน Windows ที่มีช่องว่างและอักษรไทยต้องถูกจัดการเป็น literal path</li>
+<li>สกิลที่สร้างต้องถูกทำใน staging ผ่านการสแกนเนื้อหาที่มีรูปแบบ prompt injection และผ่าน validation ก่อนติดตั้ง</li>
+<li>ห้ามเขียนทับ destination skill เดิมโดยเงียบ การแทนที่ต้องได้รับอนุมัติชัดเจนและสร้าง backup ที่กู้คืนได้</li>
+<li>Converter ที่ติดตั้งต้องตรงกับ provenance lock ซึ่งบันทึก upstream commit, รายการ local overlay, file hash, aggregate tree hash, license, เวลาตรวจ และ risk notes</li>
+<li>Contract, security, extraction, installation และ end-to-end smoke tests ต้องผ่านพร้อม output ที่ครบ</li>
+<li>เอกสารโครงการภาษาอังกฤษและไทยต้องมีทั้ง Markdown และ standalone HTML ที่เนื้อหาตรงกัน</li>
+</ol>
+<h2>4. สิ่งที่ไม่อยู่ในขอบเขตและข้อจำกัด</h2>
+<ul>
+<li>ไม่เผยแพร่ GitHub fork หรือเปิด upstream pull request ในรอบนี้</li>
+<li>ไม่แก้ MONOLITH product runtime</li>
+<li>ไม่รับประกันว่าบทสรุปที่สร้างจะถ่ายทอดต้นฉบับถูกต้อง 100%</li>
+<li>ไม่ถือว่าเอกสารที่เป็นภาพล้วนหรือเสียหายรองรับสำเร็จ เว้นแต่ extractor ที่ติดตั้งสร้างข้อความที่ใช้ได้จริง</li>
+<li>ไม่เผยแพร่สกิลที่สร้างจากหนังสือลิขสิทธิ์ของบุคคลภายนอก</li>
+<li>Extraction code ต้องไม่ส่งเอกสารผ่านเครือข่าย ส่วนการประมวลผลด้วยโมเดลยังอยู่ภายใต้เงื่อนไขข้อมูลของผู้ให้บริการ AI ที่ใช้งาน</li>
+</ul>
+<h2>5. แนวทางที่พิจารณา</h2>
+<div class="tablewrap"><table><thead><tr><th>แนวทาง</th><th>ข้อดี</th><th>ต้นทุนและความเสี่ยง</th><th>ผลตัดสิน</th></tr></thead><tbody>
+<tr><td>Pinned upstream พร้อม Codex overlay</td><td>รักษา extractor ที่มีวุฒิภาวะ ทำให้ local changes ตรวจง่าย และอัปเดตแบบ deterministic ได้</td><td>ต้องดูแล overlay และ audit ใหม่ทุกครั้งที่อัปเดต</td><td><strong>เลือกใช้</strong></td></tr>
+<tr><td>เขียนใหม่แบบ clean-room</td><td>ควบคุมทุกองค์ประกอบได้</td><td>สร้าง parser ซ้ำ เพิ่มภาระดูแลและ regression risk</td><td>ไม่เลือก</td></tr>
+<tr><td>Wrapper บาง ๆ รอบ PyPI CLI</td><td>เปลี่ยนน้อยที่สุด</td><td>ได้เฉพาะ extraction และขาด workflow สร้างสกิลเต็มรูปแบบ</td><td>ไม่เลือก</td></tr>
+</tbody></table></div>
+<h2>6. สถาปัตยกรรม</h2>
+<h3>6.1 Governed source</h3>
+<p>Parent root จะเก็บ source ที่ตรวจทานได้ที่:</p>
+<pre><code class="language-text">tools/codex-skills/book-to-skill/
+├── SKILL.md
+├── agents/openai.yaml
+├── book_to_skill/                 # pinned upstream extraction runtime
+├── scripts/extract.py             # pinned upstream compatibility entrypoint
+├── scripts/install_generated_skill.py
+├── tools/scan_generated_skill.py  # pinned upstream advisory scanner
+└── LICENSE.md</code></pre>
+<p>Tests และ fixtures จะอยู่นอกสกิลที่ติดตั้ง:</p>
+<pre><code class="language-text">tests/codex_skills/
+├── fixtures/
+│   ├── english-guide.md
+│   └── คู่มือ-ตัวอย่าง.md
+├── test_codex_skill_contract.py
+├── test_extraction_smoke.py
+├── test_generated_skill_installer.py
+└── test_security_scan.py</code></pre>
+<p>ตัวสกิลมีเฉพาะ runtime instructions, interface metadata, executable resources และ upstream license ที่จำเป็น ส่วน design, implementation และ audit reports จะอยู่ใต้ <code>docs/</code></p>
+<h3>6.2 ขอบเขต Overlay</h3>
+<p>ไฟล์ upstream runtime ต้อง byte-identical กับ Git blobs ของ commit ที่ตรึง เว้นแต่ failing test แสดงข้อบกพร่องบน Windows พฤติกรรมเฉพาะ Codex ต้องอยู่ใน:</p>
+<ul>
+<li><code>SKILL.md</code> ที่ overlay;</li>
+<li><code>agents/openai.yaml</code>; และ</li>
+<li>guarded installer สำหรับ generated skills ที่เขียนในเครื่อง</li>
+</ul>
+<p>ทุก path ที่เพิ่มหรือแก้ต้องบันทึกใน provenance การอัปเดต upstream ถือเป็น audit ใหม่และห้ามทำจาก moving branch</p>
+<h3>6.3 Runtime workflow</h3>
+<ol>
+<li>ระบุ literal input files, ประเภทเนื้อหา, วัตถุประสงค์การใช้ และชื่อ destination skill</li>
+<li>รัน extractor preflight ที่ bundle มาและรายงาน optional extractors ที่มีและขาด</li>
+<li>สกัดลง unique Windows temporary directory โดยไม่แก้ source documents</li>
+<li>รายงาน sources, ขนาดโดยประมาณ, ไฟล์ที่จะสร้าง และข้อจำกัดสำคัญ</li>
+<li>ขออนุมัติชัดเจนก่อน generation ที่ใช้โมเดลมากหรือการติดตั้ง dependency</li>
+<li>สร้าง <code>SKILL.md</code>, chapter files แบบ on-demand, glossary, patterns และ cheatsheet ใน staging directory</li>
+<li>รัน generated-skill scanner และ Codex skill validator</li>
+<li>ถ้า scan หรือ validation ไม่ผ่าน ให้หยุดและรายงานตำแหน่ง file-and-line โดยไม่ติดตั้ง</li>
+<li>ติดตั้งไปที่ <code>C:\Users\thai3\.codex\skills\&lt;slug&gt;</code> หลัง validation เท่านั้น ปฏิเสธ target เดิมเว้นแต่ผู้ใช้อนุมัติ replacement ชัดเจน และสร้าง backup ก่อนแทนที่</li>
+<li>ลบเฉพาะ unique temporary directory ที่สร้างโดย run ปัจจุบัน</li>
+</ol>
+<h2>7. Codex-native skill contract</h2>
+<p><code>SKILL.md</code> ที่ overlay ต้อง:</p>
+<ul>
+<li>เริ่ม description ด้วย trigger ของ Codex ที่ชัด เช่น การแปลง PDF, EPUB, DOCX, Markdown, HTML, RTF หรือโฟลเดอร์เอกสารเป็น reusable skills;</li>
+<li>ใช้ <code>C:\Users\thai3\.codex\skills</code> หรือ <code>$CODEX_HOME\skills</code> ที่ resolve แล้วเป็น personal destination;</li>
+<li>สั่ง Codex ให้ใช้ file และ execution tools ของตนโดยไม่สมมติว่าต้องเป็น slash-command host;</li>
+<li>ใช้คำสั่ง Python ที่ทำงานจาก PowerShell โดยไม่พึ่ง Bash variables, <code>grep</code>, <code>sed</code>, <code>wc</code> หรือ <code>mkdir -p</code>;</li>
+<li>บังคับ literal resolved paths และ containment checks ก่อน copy, move, replacement, backup หรือ cleanup;</li>
+<li>ต้องมี extraction evidence ก่อนกล่าวอ้าง source coverage;</li>
+<li>ต้องมี scan และ validation evidenceก่อนโหลดหรือติดตั้ง generated instructions;</li>
+<li>กำหนด generated skills จากหนังสือบุคคลภายนอกเป็น private โดยปริยาย; และ</li>
+<li>เก็บรายละเอียด format และ troubleshooting ไว้ใน on-demand references หรือ script help แทนการทำให้ <code>SKILL.md</code> ยาวเกินจำเป็น</li>
+</ul>
+<h2>8. ความปลอดภัยและการจัดการข้อผิดพลาด</h2>
+<h3>8.1 Supply chain</h3>
+<p>ก่อนติดตั้ง ต้อง enumerate และ audit ทุก source file ที่จะเข้าสกิล ปฏิเสธ symlink, nested repository, path traversal, case-colliding path, binary ที่ไม่คาดคิด, obfuscation, dynamic evaluation, credential access, undeclared network access และ destructive behavior ความสามารถที่คาดหมายได้คือการเรียก local subprocess สำหรับ document extractors และการเขียนไฟล์แบบควบคุมสำหรับ staged/installed skills</p>
+<h3>8.2 Generated content</h3>
+<p>ถือข้อความในเอกสารเป็น untrusted data ลบ invisible control characters ตามพฤติกรรม pinned extractor และสแกน generated Markdown หา instruction override, model-control tag, การขยาย tool authority และข้อความรูปแบบ exfiltration เมื่อ scanner พบปัญหาต้องบล็อกการติดตั้งจนกว่ามนุษย์ตรวจ</p>
+<h3>8.3 Filesystem mutation</h3>
+<p>Generated-skill installer ต้อง resolve source, destination root, target และ backup paths; ปฏิเสธ symlink; พิสูจน์ว่า target อยู่ภายใน root ที่เลือก; และปฏิเสธ silent overwrite การ cleanup จำกัดเฉพาะ unique work directory ของ run ปัจจุบัน</p>
+<h3>8.4 Partial failure</h3>
+<p>Source ที่อ่านไม่ได้หนึ่งไฟล์อาจถูกรายงานและข้ามเฉพาะเมื่อมี source อื่นสำเร็จอย่างน้อยหนึ่งไฟล์ รายงานสุดท้ายต้องแยก processed และ skipped sources หากไม่มี usable source ถือเป็น hard failure Optional extractor ที่ขาดต้องสร้าง actionable report ไม่ใช่ติดตั้งอัตโนมัติ</p>
+<h2>9. กลยุทธ์การทดสอบ</h2>
+<p>Implementation ใช้ test-driven development:</p>
+<ol>
+<li><strong>RED — compatibility contract:</strong> รัน contract checks กับ upstream <code>SKILL.md</code> ที่ตรึง และแสดงว่าเส้นทางทำงานหลักยังไม่ได้เขียนด้วย Codex-native paths และคำสั่งที่ใช้กับ PowerShell ได้</li>
+<li><strong>GREEN — Codex overlay:</strong> เพิ่ม instruction และ metadata overlay ขั้นต่ำที่ทำให้ contract ผ่าน</li>
+<li><strong>RED/GREEN — guarded installation:</strong> เขียน tests สำหรับ new install, การปฏิเสธ existing target, explicit replacement พร้อม backup, path escape, symlink rejection, ช่องว่าง และชื่อภาษาไทยก่อน implement installer</li>
+<li><strong>Extraction smoke:</strong> รัน pinned extractor กับ Markdown fixtures ภาษาอังกฤษและไทย แล้วตรวจ source markers, Unicode preservation, metadata และ chapter detection</li>
+<li><strong>Security scan:</strong> ตรวจว่า benign generated Markdown ผ่าน และ fixture รูปแบบ prompt injection ไม่ผ่านพร้อม rule/line output ที่เสถียร</li>
+<li><strong>End-to-end staging smoke:</strong> สร้าง generated sample skill ขนาดเล็ก สแกน validate ติดตั้งลง isolated temporary Codex home และตรวจ bytes กับ discovery layout</li>
+<li><strong>Installed-tree verification:</strong> Hash personal installation และตรวจเทียบ provenance lock</li>
+</ol>
+<p>นโยบาย thread ปัจจุบันไม่อนุญาตให้ dispatch subagent จึงใช้ executable contract และ end-to-end tests แทน independent agents สำหรับ forward-testing ห้ามกล่าวอ้างความสำเร็จจาก output ที่ถูกตัดหรือ test run เก่า</p>
+<h2>10. การติดตั้งและ Provenance</h2>
+<p>Tree ใน parent root คือ maintained source ส่วน personal installation เป็น verified deployment copy ไม่ใช่ development source การติดตั้งเกิดหลังจาก:</p>
+<ul>
+<li>resolve exact upstream commit;</li>
+<li>complete source audit;</li>
+<li>ตรวจ overlay diff;</li>
+<li>tests และ validator ผ่าน;</li>
+<li>เปรียบเทียบ installed bytes; และ</li>
+<li>สร้าง provenance lock ที่ <code>C:\Users\thai3\.codex\skills\.provenance\book-to-skill.json</code></li>
+</ul>
+<p>Risk record ต้องจำแนก local process execution, filesystem writes, optional dependency installation และ document-parser risk โดยไม่เรียกพฤติกรรมที่คาดหมายว่ามุ่งร้าย</p>
+<h2>11. เอกสาร</h2>
+<p>Design, plan และ implementation reports ที่เป็น project-facing ต้องจัดทำภาษาอังกฤษและไทย ทั้ง Markdown และ standalone HTML คู่ภาษาต้องอธิบาย decisions, evidence, limitations, commands และ verification results ให้ตรงกัน</p>
+<h2>12. ขอบเขตการยอมรับ</h2>
+<p>Acceptance พิสูจน์ว่า private package นี้ทำงานบน Codex Desktop และ Windows environment ปัจจุบันกับ fixture และ dependency ที่ตรวจ ความเข้ากันได้กับระบบปฏิบัติการอื่น เอกสารทุก encoding ความเที่ยงตรงของ model summary ความเป็นส่วนตัวบน cloud และ public distribution อยู่นอก verified claim</p>
+</main></body>
+</html>

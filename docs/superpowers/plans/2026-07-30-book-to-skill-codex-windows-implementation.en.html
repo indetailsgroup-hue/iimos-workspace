@@ -1,0 +1,822 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>Book-to-Skill Codex/Windows Overlay Implementation Plan</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>Book-to-Skill Codex/Windows Overlay Implementation Plan</h1>
+<blockquote><p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p></blockquote>
+<p><strong>Goal:</strong> Build, audit, test, and privately install a pinned <code>book-to-skill</code> overlay that Codex Desktop can use on this Windows workstation.</p>
+<p><strong>Architecture:</strong> Vendor only the required runtime bytes from upstream commit <code>c6bc1b7927822e563aae6212c07670f5a3d95ea7</code>, then add a small Codex instruction/UI overlay and a guarded generated-skill installer. Keep the governed source in the parent repository, deploy a verified copy to the personal Codex skills directory, and record the final installed tree in a provenance lock.</p>
+<p><strong>Tech Stack:</strong> Python 3.11+, pytest, Codex Agent Skills (<code>SKILL.md</code> and <code>agents/openai.yaml</code>), PowerShell-compatible commands, Git, SHA-256 provenance.</p>
+<blockquote><p><strong>Reconcile status (30 July 2026):</strong> the installation at <code>~/.codex/skills/book-to-skill</code> and its provenance lock were written by an earlier session; this session added the governed source, the test suite, and the reports. The checkboxes below are ticked against what was actually done, with a note wherever the plan's order was departed from. Evidence: <a href="../../reports/2026-07-30-book-to-skill-upstream-audit.en.html"><code>2026-07-30-book-to-skill-upstream-audit.en.md</code></a> and <a href="../../reports/2026-07-30-book-to-skill-codex-windows-implementation.en.html"><code>2026-07-30-book-to-skill-codex-windows-implementation.en.md</code></a></p></blockquote>
+<h2>Global Constraints</h2>
+<ul>
+<li>Modify only <code>C:\Users\thai3\determined-williams (2)</code> and the explicitly approved personal installation at <code>C:\Users\thai3\.codex\skills\book-to-skill</code>.</li>
+<li>Do not modify, test, clean, stage, or commit <code>C:\Users\thai3\determined-williams (2)\determined-williams</code>.</li>
+<li>Preserve every pre-existing parent-root change; stage only paths created by this plan.</li>
+<li>Use upstream <code>https://github.com/virgiliojr94/book-to-skill</code> at exact commit <code>c6bc1b7927822e563aae6212c07670f5a3d95ea7</code>.</li>
+<li>Keep pinned upstream runtime bytes unchanged unless a Windows failure is reproduced first by a focused test.</li>
+<li>Require explicit user approval before installing optional dependencies or replacing an existing skill.</li>
+<li>Treat document content as untrusted; scan and validate generated instructions before installation.</li>
+<li>Use literal resolved paths and containment checks before filesystem copy, move, backup, replacement, or cleanup.</li>
+<li>Keep generated third-party-book skills private by default.</li>
+<li>Produce every project-facing report in aligned English and Thai Markdown plus standalone HTML.</li>
+<li>Do not claim completion from partial output; every final verification command must show its exit code and complete summary.</li>
+</ul>
+<hr>
+<h2>File map</h2>
+<h3>Governed skill source</h3>
+<ul>
+<li>Create: <code>tools/codex-skills/book-to-skill/SKILL.md</code> — Codex-native conversion workflow.</li>
+<li>Create: <code>tools/codex-skills/book-to-skill/agents/openai.yaml</code> — Codex UI metadata.</li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/__init__.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/__main__.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/cli.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/config.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/dependencies.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/exceptions.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/sanitize.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/utils.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/parsers/__init__.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/parsers/calibre.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/parsers/docx.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/parsers/epub.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/parsers/html.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/parsers/pdf.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/parsers/rtf.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/book_to_skill/parsers/text.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/scripts/extract.py</code></li>
+<li>Create: <code>tools/codex-skills/book-to-skill/scripts/install_generated_skill.py</code> — scan, validate, install, backup, and replace generated skills.</li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/tools/scan_generated_skill.py</code></li>
+<li>Vendor unchanged: <code>tools/codex-skills/book-to-skill/LICENSE.md</code></li>
+</ul>
+<h3>Tests and fixtures</h3>
+<ul>
+<li>Create: <code>tests/codex_skills/__init__.py</code></li>
+<li>Create: <code>tests/codex_skills/fixtures/english-guide.md</code></li>
+<li>Create: <code>tests/codex_skills/fixtures/คู่มือ-ตัวอย่าง.md</code></li>
+<li>Create: <code>tests/codex_skills/test_upstream_manifest.py</code></li>
+<li>Create: <code>tests/codex_skills/test_codex_skill_contract.py</code></li>
+<li>Create: <code>tests/codex_skills/test_extraction_smoke.py</code></li>
+<li>Create: <code>tests/codex_skills/test_generated_skill_installer.py</code></li>
+<li>Create: <code>tests/codex_skills/test_security_scan.py</code></li>
+<li>Create: <code>tests/codex_skills/test_installation_evidence.py</code></li>
+</ul>
+<h3>Project-facing evidence</h3>
+<ul>
+<li>Create: <code>docs/reports/2026-07-30-book-to-skill-upstream-audit.en.md</code></li>
+<li>Create: <code>docs/reports/2026-07-30-book-to-skill-upstream-audit.th.md</code></li>
+<li>Create matching <code>.en.html</code> and <code>.th.html</code>.</li>
+<li>Create: <code>docs/reports/2026-07-30-book-to-skill-codex-windows-implementation.en.md</code></li>
+<li>Create: <code>docs/reports/2026-07-30-book-to-skill-codex-windows-implementation.th.md</code></li>
+<li>Create matching <code>.en.html</code> and <code>.th.html</code>.</li>
+</ul>
+<hr>
+<h3>Task 1: Resolve, audit, and vendor the pinned upstream runtime</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create the pinned runtime and license files listed in the governed skill source map.</li>
+<li>Create: <code>tests/codex_skills/test_upstream_manifest.py</code></li>
+<li>Create: <code>docs/reports/2026-07-30-book-to-skill-upstream-audit.en.md</code></li>
+<li>Create: <code>docs/reports/2026-07-30-book-to-skill-upstream-audit.th.md</code></li>
+<li>Create matching HTML editions.</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: upstream repository and exact 40-character commit.</li>
+<li>Produces: <code>UPSTREAM_FILES: tuple[str, ...]</code> in the test and a byte-identical governed runtime tree used by every later task.</li>
+</ul>
+<ul>
+<li>[x] <strong>Step 1: Re-check both Git roots</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-powershell">$Git = 'C:\Users\thai3\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\git\cmd\git.exe'
+&amp; $Git -c 'safe.directory=C:/Users/thai3/determined-williams (2)' status --short --branch
+&amp; $Git -c 'safe.directory=C:/Users/thai3/determined-williams (2)/determined-williams' -C 'C:\Users\thai3\determined-williams (2)\determined-williams' status --short --branch</code></pre>
+<p>Expected: two separate status reports. Record them in the audit report; make no nested-root changes.</p>
+<ul>
+<li>[x] <strong>Step 2: Fetch only the exact upstream commit into an isolated temporary repository</strong> — used the Git Bash git binary instead of the Codex runtime path; rev-parse returned the pinned <code>c6bc1b79</code></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-powershell">$AuditRoot = Join-Path ([IO.Path]::GetTempPath()) ('book-to-skill-audit-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -LiteralPath $AuditRoot | Out-Null
+&amp; $Git -C $AuditRoot init
+&amp; $Git -C $AuditRoot remote add origin 'https://github.com/virgiliojr94/book-to-skill.git'
+&amp; $Git -C $AuditRoot fetch --depth 1 origin 'c6bc1b7927822e563aae6212c07670f5a3d95ea7'
+&amp; $Git -C $AuditRoot rev-parse FETCH_HEAD</code></pre>
+<p>Expected final line:</p>
+<pre><code class="language-text">c6bc1b7927822e563aae6212c07670f5a3d95ea7</code></pre>
+<ul>
+<li>[x] <strong>Step 3: Enumerate and audit the complete candidate source</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-powershell">&amp; $Git -C $AuditRoot ls-tree -r --name-only FETCH_HEAD
+&amp; $Git -C $AuditRoot show 'FETCH_HEAD:SKILL.md'
+&amp; $Git -C $AuditRoot show 'FETCH_HEAD:scripts/extract.py'
+&amp; $Git -C $AuditRoot show 'FETCH_HEAD:tools/scan_generated_skill.py'
+&amp; $Git -C $AuditRoot show 'FETCH_HEAD:book_to_skill/utils.py'
+&amp; $Git -C $AuditRoot show 'FETCH_HEAD:book_to_skill/dependencies.py'</code></pre>
+<p>Then read every remaining <code>book_to_skill/*.py</code> and <code>book_to_skill/parsers/*.py</code> file in full. Record subprocess use, optional package installation, filesystem writes, temporary cleanup, network behavior, environment access, dynamic evaluation, symlink behavior, and destructive operations. Reject the source if any installed byte remains unread or unclassified.</p>
+<ul>
+<li>[x] <strong>Step 4: Write the manifest test before copying source bytes</strong></li>
+</ul>
+<p>Create <code>tests/codex_skills/test_upstream_manifest.py</code>:</p>
+<pre><code class="language-python">from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+SKILL = ROOT / "tools" / "codex-skills" / "book-to-skill"
+
+UPSTREAM_FILES = (
+    "LICENSE.md",
+    "book_to_skill/__init__.py",
+    "book_to_skill/__main__.py",
+    "book_to_skill/cli.py",
+    "book_to_skill/config.py",
+    "book_to_skill/dependencies.py",
+    "book_to_skill/exceptions.py",
+    "book_to_skill/sanitize.py",
+    "book_to_skill/utils.py",
+    "book_to_skill/parsers/__init__.py",
+    "book_to_skill/parsers/calibre.py",
+    "book_to_skill/parsers/docx.py",
+    "book_to_skill/parsers/epub.py",
+    "book_to_skill/parsers/html.py",
+    "book_to_skill/parsers/pdf.py",
+    "book_to_skill/parsers/rtf.py",
+    "book_to_skill/parsers/text.py",
+    "scripts/extract.py",
+    "tools/scan_generated_skill.py",
+)
+
+
+def test_required_upstream_runtime_is_present() -&gt; None:
+    missing = [relative for relative in UPSTREAM_FILES if not (SKILL / relative).is_file()]
+    assert missing == []</code></pre>
+<ul>
+<li>[x] <strong>Step 5: Run the manifest test and observe RED</strong> — 5 of 6 tests FAILED against the empty target</li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-powershell">$Python = 'C:\Users\thai3\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'
+&amp; $Python -m pytest tests/codex_skills/test_upstream_manifest.py -v</code></pre>
+<p>Expected: FAIL with the required upstream paths reported as missing.</p>
+<ul>
+<li>[x] <strong>Step 6: Copy only the audited runtime bytes from the pinned checkout</strong></li>
+</ul>
+<p>Use <code>git show FETCH_HEAD:&lt;path&gt;</code> or a detached worktree to copy the exact files in <code>UPSTREAM_FILES</code> to <code>tools/codex-skills/book-to-skill/</code>. Do not copy upstream README, docs, CI, cache files, tests, banners, or repository metadata.</p>
+<ul>
+<li>[x] <strong>Step 7: Verify GREEN and compare every governed upstream byte with Git</strong> — GREEN 6/6 and digests match Git for all 19 paths (18 byte-identical + 1 declared patch)</li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-powershell">&amp; $Python -m pytest tests/codex_skills/test_upstream_manifest.py -v</code></pre>
+<p>Expected: <code>1 passed</code>.</p>
+<p>For every path in <code>UPSTREAM_FILES</code>, compare the governed file's SHA-256 with the bytes returned by <code>git show FETCH_HEAD:&lt;path&gt;</code>. Expected: zero missing, extra, or mismatched upstream runtime files.</p>
+<ul>
+<li>[x] <strong>Step 8: Write and render the bilingual upstream audit</strong> — audit report EN/TH + HTML at <code>docs/reports/2026-07-30-book-to-skill-upstream-audit.*</code></li>
+</ul>
+<p>Record the exact repository, commit, selected paths, license, audit date, observed powerful behavior, rejected capabilities, and byte-comparison result. Render with:</p>
+<pre><code class="language-powershell">&amp; $Python tools/render_docs.py `
+  docs/reports/2026-07-30-book-to-skill-upstream-audit.en.md `
+  docs/reports/2026-07-30-book-to-skill-upstream-audit.th.md</code></pre>
+<p>Expected: two standalone HTML files.</p>
+<ul>
+<li>[ ] <strong>Step 9: Commit Task 1</strong> — reconcile: staged, not committed (owner's call)</li>
+</ul>
+<p>Stage only the Task 1 paths and run:</p>
+<pre><code class="language-powershell">&amp; $Git commit -m 'chore(codex): vendor audited book-to-skill runtime'</code></pre>
+<p>Expected: one commit containing only the pinned runtime, manifest test, and bilingual audit.</p>
+<hr>
+<h3>Task 2: Create the Codex-native instruction and interface overlay</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>tools/codex-skills/book-to-skill/SKILL.md</code></li>
+<li>Create: <code>tools/codex-skills/book-to-skill/agents/openai.yaml</code></li>
+<li>Create: <code>tests/codex_skills/test_codex_skill_contract.py</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: pinned <code>scripts/extract.py</code>, <code>tools/scan_generated_skill.py</code>, and the approved design.</li>
+<li>Produces: a discoverable <code>book-to-skill</code> Agent Skill with frontmatter fields <code>name</code> and <code>description</code>.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Restore upstream <code>SKILL.md</code> as the RED baseline</strong> — reconcile: the overlay was written by an earlier session at 14:42, so no RED baseline was staged</li>
+</ul>
+<p>Copy the pinned upstream <code>SKILL.md</code> into the governed skill directory. This baseline is temporary and must be replaced after the contract test demonstrates the compatibility gap.</p>
+<ul>
+<li>[x] <strong>Step 2: Write the failing Codex contract test</strong> — test added, but GREEN on the first run because the overlay already existed</li>
+</ul>
+<p>Create <code>tests/codex_skills/test_codex_skill_contract.py</code>:</p>
+<pre><code class="language-python">from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+SKILL_MD = ROOT / "tools" / "codex-skills" / "book-to-skill" / "SKILL.md"
+
+
+def test_required_workflow_is_codex_and_powershell_native() -&gt; None:
+    text = SKILL_MD.read_text(encoding="utf-8")
+    required = (
+        "CODEX_HOME",
+        ".codex",
+        "scripts/extract.py",
+        "tools/scan_generated_skill.py",
+        "scripts/install_generated_skill.py",
+        "explicit approval",
+        "staging",
+    )
+    assert [value for value in required if value not in text] == []
+
+    forbidden_required_forms = ("mkdir -p", "grep -", "sed -", "wc -", "$HOME/")
+    assert [value for value in forbidden_required_forms if value in text] == []
+
+
+def test_frontmatter_has_only_name_and_description() -&gt; None:
+    text = SKILL_MD.read_text(encoding="utf-8")
+    frontmatter = text.split("---", 2)[1]
+    keys = {
+        line.split(":", 1)[0].strip()
+        for line in frontmatter.splitlines()
+        if ":" in line
+    }
+    assert keys == {"name", "description"}
+    assert "description: Use when" in text</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Run the contract test and observe RED</strong> — reconcile: skipped for the same reason as step 1</li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-powershell">&amp; $Python -m pytest tests/codex_skills/test_codex_skill_contract.py -v</code></pre>
+<p>Expected: failures showing missing Codex paths and Bash-only required forms.</p>
+<ul>
+<li>[x] <strong>Step 4: Replace the baseline with the minimal Codex-native <code>SKILL.md</code></strong> — written by the earlier session at 14:42; read in full and audited here</li>
+</ul>
+<p>Write an imperative workflow under 500 lines with:</p>
+<ul>
+<li>literal-path input validation;</li>
+<li>content-type selection;</li>
+<li>dependency preflight using <code>scripts/extract.py --check</code>;</li>
+<li>extraction using <code>--mode technical|text --install-missing no</code>;</li>
+<li>metadata and cost/size report;</li>
+<li>explicit approval gates;</li>
+<li>staged generation;</li>
+<li>scanner and validator gates;</li>
+<li>guarded installation using <code>scripts/install_generated_skill.py</code>;</li>
+<li>private-by-default copyright guidance; and</li>
+<li>failure reporting that distinguishes processed and skipped sources.</li>
+</ul>
+<p>Do not embed Bash-variable discovery loops or assume slash-command invocation.</p>
+<ul>
+<li>[x] <strong>Step 5: Generate <code>agents/openai.yaml</code> deterministically</strong> — written by the earlier session at 14:43</li>
+</ul>
+<p>First read <code>C:\Users\thai3\.codex\skills\.system\skill-creator\references\openai_yaml.md</code>. Then run the system generator with:</p>
+<pre><code class="language-text">display_name=Book to Skill
+short_description=Convert documents into reusable Codex skills
+default_prompt=Use $book-to-skill to convert my documents into a staged, scanned, and validated private Codex skill.</code></pre>
+<ul>
+<li>[x] <strong>Step 6: Verify GREEN and validate the skill</strong> — contract tests 4/4 GREEN and <code>quick_validate.py</code> returned <code>Skill is valid!</code></li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-powershell">&amp; $Python -m pytest tests/codex_skills/test_codex_skill_contract.py -v
+&amp; $Python 'C:\Users\thai3\.codex\skills\.system\skill-creator\scripts\quick_validate.py' `
+  'tools/codex-skills/book-to-skill'</code></pre>
+<p>Expected: contract tests pass and validator prints <code>Skill is valid!</code>.</p>
+<ul>
+<li>[ ] <strong>Step 7: Commit Task 2</strong> — reconcile: staged, not committed (owner's call)</li>
+</ul>
+<pre><code class="language-powershell">&amp; $Git commit -m 'feat(codex): add native book-to-skill workflow'</code></pre>
+<p>Expected: one commit containing only the Codex instruction/interface overlay and its contract tests.</p>
+<hr>
+<h3>Task 3: Characterize extraction on English and Thai Windows paths</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>tests/codex_skills/fixtures/english-guide.md</code></li>
+<li>Create: <code>tests/codex_skills/fixtures/คู่มือ-ตัวอย่าง.md</code></li>
+<li>Create: <code>tests/codex_skills/test_extraction_smoke.py</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: <code>scripts/extract.py</code>.</li>
+<li>Produces: extraction evidence in an isolated <code>BOOK_SKILL_WORKDIR</code> containing <code>full_text.txt</code> and <code>metadata.json</code>.</li>
+</ul>
+<ul>
+<li>[x] <strong>Step 1: Create representative fixtures</strong></li>
+</ul>
+<p>The English fixture must contain <code># Practical Guide</code>, <code>## Planning</code>, and <code>## Verification</code>. The Thai fixture must contain <code># คู่มือทดสอบ</code>, <code>บทที่ ๑ การเตรียมงาน</code>, and <code>บทที่ ๒ การตรวจผล</code>.</p>
+<ul>
+<li>[x] <strong>Step 2: Write the extraction smoke test</strong></li>
+</ul>
+<pre><code class="language-python">import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+EXTRACT = ROOT / "tools" / "codex-skills" / "book-to-skill" / "scripts" / "extract.py"
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def run_extract(source: Path, workdir: Path) -&gt; tuple[str, dict]:
+    env = os.environ.copy()
+    env["BOOK_SKILL_WORKDIR"] = str(workdir)
+    result = subprocess.run(
+        [sys.executable, str(EXTRACT), str(source), "--mode", "text", "--install-missing", "no"],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return (
+        (workdir / "full_text.txt").read_text(encoding="utf-8"),
+        json.loads((workdir / "metadata.json").read_text(encoding="utf-8")),
+    )
+
+
+def test_extracts_english_markdown_from_path_with_spaces(tmp_path: Path) -&gt; None:
+    source_dir = tmp_path / "source with spaces"
+    source_dir.mkdir()
+    source = source_dir / "english guide.md"
+    source.write_bytes((FIXTURES / "english-guide.md").read_bytes())
+    text, metadata = run_extract(source, tmp_path / "work english")
+    assert "Practical Guide" in text
+    assert metadata["total_sources"] == 1
+
+
+def test_extracts_thai_markdown_and_detects_thai_chapters(tmp_path: Path) -&gt; None:
+    source_dir = tmp_path / "เอกสาร ทดสอบ"
+    source_dir.mkdir()
+    source = source_dir / "คู่มือ-ตัวอย่าง.md"
+    source.write_bytes((FIXTURES / "คู่มือ-ตัวอย่าง.md").read_bytes())
+    text, metadata = run_extract(source, tmp_path / "งานชั่วคราว")
+    assert "บทที่ ๑ การเตรียมงาน" in text
+    assert metadata["chapters_detected"] == 2</code></pre>
+<ul>
+<li>[x] <strong>Step 3: Run the smoke tests</strong> — extraction smoke 4/4, including the cp1252 regression</li>
+</ul>
+<pre><code class="language-powershell">&amp; $Python -m pytest tests/codex_skills/test_extraction_smoke.py -v</code></pre>
+<p>Expected: both tests pass. If either fails, keep the failing test, identify the pinned runtime defect, and patch only the responsible upstream file; record that file as a local modification.</p>
+<ul>
+<li>[x] <strong>Step 4: Run dependency preflight</strong> — exit 0; the matrix is recorded in audit report section 7</li>
+</ul>
+<pre><code class="language-powershell">&amp; $Python tools/codex-skills/book-to-skill/scripts/extract.py --check</code></pre>
+<p>Expected: exit 0 and a complete per-format report. Keep this step in report-only mode and classify each extractor as <code>present</code>, <code>fallback</code>, or <code>required</code>.</p>
+<p>The recorded matrix must contain separate evidence for text PDF (<code>pdftotext</code>, <code>pypdf</code>, or <code>pdfminer</code>), technical PDF (<code>Docling</code>), EPUB, DOCX, HTML, RTF, and Calibre-based MOBI/AZW handling. Record <code>fallback</code> status as a capability limit.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit Task 3</strong> — reconcile: staged, not committed (owner's call)</li>
+</ul>
+<pre><code class="language-powershell">&amp; $Git commit -m 'test(codex): cover English and Thai extraction paths'</code></pre>
+<hr>
+<h3>Task 4: Implement guarded generated-skill installation with TDD</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>tests/codex_skills/test_generated_skill_installer.py</code></li>
+<li>Create: <code>tools/codex-skills/book-to-skill/scripts/install_generated_skill.py</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces:</li>
+<li><code>InstallError(RuntimeError)</code></li>
+<li><code>read_skill_name(source: Path) -&gt; str</code></li>
+<li><code>install_skill(source: Path, skills_root: Path, *, replace: bool) -&gt; dict[str, str]</code></li>
+<li>CLI arguments: <code>source</code>, <code>--skills-root</code>, <code>--replace</code></li>
+</ul>
+<ul>
+<li>[x] <strong>Step 1: Write RED tests for new installation and existing-target refusal</strong> — tests added; the installer already existed, so the <code>FileNotFoundError</code> RED was not recorded</li>
+</ul>
+<pre><code class="language-python">from pathlib import Path
+import importlib.util
+import pytest
+
+ROOT = Path(__file__).resolve().parents[2]
+MODULE_PATH = ROOT / "tools" / "codex-skills" / "book-to-skill" / "scripts" / "install_generated_skill.py"
+
+
+def load_installer():
+    spec = importlib.util.spec_from_file_location("generated_skill_installer", MODULE_PATH)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def make_skill(root: Path, name: str, body: str = "# Knowledge\n") -&gt; Path:
+    source = root / "staging source"
+    source.mkdir(parents=True)
+    (source / "SKILL.md").write_text(
+        f'---\nname: {name}\ndescription: "Use when testing generated knowledge."\n---\n\n{body}',
+        encoding="utf-8",
+    )
+    return source
+
+
+def test_installs_new_skill_with_thai_source_path(tmp_path: Path) -&gt; None:
+    module = load_installer()
+    source = make_skill(tmp_path / "พื้นที่ ไทย", "thai-knowledge")
+    report = module.install_skill(source, tmp_path / "skills", replace=False)
+    assert Path(report["installed"]).name == "thai-knowledge"
+    assert (tmp_path / "skills" / "thai-knowledge" / "SKILL.md").is_file()
+
+
+def test_refuses_existing_target_without_replace(tmp_path: Path) -&gt; None:
+    module = load_installer()
+    source = make_skill(tmp_path / "source", "existing-skill")
+    target = tmp_path / "skills" / "existing-skill"
+    target.mkdir(parents=True)
+    with pytest.raises(module.InstallError, match="already exists"):
+        module.install_skill(source, tmp_path / "skills", replace=False)</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run RED</strong> — reconcile: skipped because <code>MODULE_PATH</code> had existed since 14:51</li>
+</ul>
+<pre><code class="language-powershell">&amp; $Python -m pytest tests/codex_skills/test_generated_skill_installer.py -v</code></pre>
+<p>Expected: pytest reports <code>FileNotFoundError</code> while loading <code>MODULE_PATH</code>, demonstrating that the test reaches the future installer boundary.</p>
+<ul>
+<li>[x] <strong>Step 3: Implement the minimal installer</strong> — written by the earlier session at 14:51; the installed version is stricter than the plan's sample (snapshot before scan, layout allowlist, case-collision check)</li>
+</ul>
+<p>Implement:</p>
+<pre><code class="language-python">from __future__ import annotations
+
+import argparse
+import json
+import re
+import shutil
+import subprocess
+import sys
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+
+NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+class InstallError(RuntimeError):
+    pass
+
+
+def read_skill_name(source: Path) -&gt; str:
+    skill_md = source / "SKILL.md"
+    if not skill_md.is_file() or skill_md.is_symlink():
+        raise InstallError("staged skill must contain a regular SKILL.md")
+    text = skill_md.read_text(encoding="utf-8-sig")
+    match = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
+    if not match:
+        raise InstallError("SKILL.md frontmatter is invalid")
+    name_match = re.search(r"^name:\s*([a-z0-9-]+)\s*$", match.group(1), re.MULTILINE)
+    if not name_match or not NAME_RE.fullmatch(name_match.group(1)):
+        raise InstallError("skill name must be lowercase hyphen-case")
+    return name_match.group(1)
+
+
+def _reject_links(root: Path) -&gt; None:
+    if root.is_symlink():
+        raise InstallError("staged skill must not be a symbolic link")
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            raise InstallError(f"staged skill contains a symbolic link: {path.name}")
+
+
+def _scan(source: Path) -&gt; None:
+    scanner = Path(__file__).resolve().parents[1] / "tools" / "scan_generated_skill.py"
+    result = subprocess.run(
+        [sys.executable, str(scanner), str(source)],
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise InstallError("generated-skill scan blocked installation\n" + result.stdout + result.stderr)
+
+
+def install_skill(
+    source: Path,
+    skills_root: Path,
+    *,
+    replace: bool,
+) -&gt; dict[str, str]:
+    source = source.expanduser().resolve(strict=True)
+    if not source.is_dir():
+        raise InstallError("staged skill path must be a directory")
+    _reject_links(source)
+    name = read_skill_name(source)
+    _scan(source)
+
+    requested_root = skills_root.expanduser()
+    if requested_root.exists() and requested_root.is_symlink():
+        raise InstallError("skills root must not be a symbolic link")
+    root = requested_root.resolve(strict=False)
+    root.mkdir(parents=True, exist_ok=True)
+    target = root / name
+    if target.parent != root:
+        raise InstallError("destination escaped the selected skills root")
+    if target.is_symlink():
+        raise InstallError("existing destination must not be a symbolic link")
+    if target.exists() and not replace:
+        raise InstallError(f"destination already exists: {target}")
+
+    temporary = root / f".{name}.install-{uuid.uuid4().hex}"
+    backup = None
+    try:
+        shutil.copytree(source, temporary)
+        if target.exists():
+            chosen_backup_root = root / ".backups"
+            if chosen_backup_root.exists() and chosen_backup_root.is_symlink():
+                raise InstallError("backup root must not be a symbolic link")
+            chosen_backup_root.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            backup = chosen_backup_root / f"{name}-{stamp}"
+            if backup.parent != chosen_backup_root:
+                raise InstallError("backup escaped the selected backup root")
+            if backup.exists():
+                raise InstallError(f"backup already exists: {backup}")
+            target.replace(backup)
+        temporary.replace(target)
+    except Exception:
+        if backup is not None and backup.exists() and not target.exists():
+            backup.replace(target)
+        if temporary.exists():
+            shutil.rmtree(temporary)
+        raise
+    return {"installed": str(target), "backup": str(backup) if backup else ""}
+
+
+def main(argv: list[str] | None = None) -&gt; int:
+    parser = argparse.ArgumentParser(description="Install a scanned generated Codex skill")
+    parser.add_argument("source")
+    parser.add_argument("--skills-root", required=True)
+    parser.add_argument("--replace", action="store_true")
+    args = parser.parse_args(argv)
+    try:
+        report = install_skill(
+            Path(args.source),
+            Path(args.skills_root),
+            replace=args.replace,
+        )
+    except InstallError as error:
+        print(f"ERROR {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())</code></pre>
+<ul>
+<li>[x] <strong>Step 4: Run GREEN</strong></li>
+</ul>
+<pre><code class="language-powershell">&amp; $Python -m pytest tests/codex_skills/test_generated_skill_installer.py -v</code></pre>
+<p>Expected: initial two tests pass.</p>
+<ul>
+<li>[x] <strong>Step 5: Add RED tests for replacement, backup, injection, path escape, and symlinks</strong></li>
+</ul>
+<p>Add focused tests that:</p>
+<ul>
+<li>replace an existing skill only with <code>replace=True</code> and assert the original bytes exist under the returned backup path;</li>
+<li>use <code>name: ../escape</code> and assert <code>InstallError</code>;</li>
+<li>put <code>you are now</code> in generated Markdown and assert scan-blocked installation;</li>
+<li>create source, destination-root, destination, and backup-root symlinks when Windows privileges permit and assert rejection, otherwise skip with the exact OS error.</li>
+</ul>
+<ul>
+<li>[x] <strong>Step 6: Run RED, implement only missing behavior, then run GREEN</strong> — installer tests 9/9 GREEN</li>
+</ul>
+<pre><code class="language-powershell">&amp; $Python -m pytest tests/codex_skills/test_generated_skill_installer.py -v</code></pre>
+<p>Expected final result: all installer tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 7: Commit Task 4</strong> — reconcile: staged, not committed (owner's call)</li>
+</ul>
+<pre><code class="language-powershell">&amp; $Git commit -m 'feat(codex): guard generated skill installation'</code></pre>
+<hr>
+<h3>Task 5: Integrate scanner, validator, and end-to-end staging checks</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>tests/codex_skills/test_security_scan.py</code></li>
+<li>Extend: <code>tests/codex_skills/test_generated_skill_installer.py</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: pinned scanner and guarded installer.</li>
+<li>Produces: one isolated end-to-end flow from staged generated Markdown to an installed temporary Codex layout.</li>
+</ul>
+<ul>
+<li>[x] <strong>Step 1: Write scanner behavior tests</strong></li>
+</ul>
+<p>Create a benign generated skill and a second skill containing <code>ignore previous instructions</code>. Run <code>tools/scan_generated_skill.py</code> as a subprocess and assert:</p>
+<pre><code class="language-python">assert benign.returncode == 0
+assert "scan passed" in benign.stdout
+assert hostile.returncode == 1
+assert "prompt.ignore_previous" in hostile.stdout
+assert "SKILL.md:" in hostile.stdout</code></pre>
+<ul>
+<li>[x] <strong>Step 2: Run the scanner tests</strong></li>
+</ul>
+<pre><code class="language-powershell">&amp; $Python -m pytest tests/codex_skills/test_security_scan.py -v</code></pre>
+<p>Expected: scanner tests pass against the pinned upstream scanner.</p>
+<ul>
+<li>[x] <strong>Step 3: Add the isolated end-to-end test</strong></li>
+</ul>
+<p>Create a staged skill with <code>SKILL.md</code>, <code>chapters/ch01-introduction.md</code>, <code>glossary.md</code>, <code>patterns.md</code>, and <code>cheatsheet.md</code>. Run the scanner, run the system <code>quick_validate.py</code>, call <code>install_skill</code>, and assert the installed relative file set exactly equals the staged relative file set.</p>
+<ul>
+<li>[x] <strong>Step 4: Run the complete local suite</strong> — 29 tests, exit code 0</li>
+</ul>
+<pre><code class="language-powershell">&amp; $Python -m pytest tests/codex_skills -v</code></pre>
+<p>Expected: all <code>tests/codex_skills</code> tests pass with a visible final summary.</p>
+<ul>
+<li>[x] <strong>Step 5: Run validators and whitespace checks</strong> — <code>Skill is valid!</code> and <code>git diff --check</code> exit 0</li>
+</ul>
+<pre><code class="language-powershell">&amp; $Python 'C:\Users\thai3\.codex\skills\.system\skill-creator\scripts\quick_validate.py' `
+  'tools/codex-skills/book-to-skill'
+&amp; $Git diff --check</code></pre>
+<p>Expected: <code>Skill is valid!</code> and no diff-check findings for plan-owned paths.</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit Task 5</strong> — reconcile: staged, not committed (owner's call)</li>
+</ul>
+<pre><code class="language-powershell">&amp; $Git commit -m 'test(codex): verify staged book skill workflow'</code></pre>
+<hr>
+<h3>Task 6: Deploy the converter and write its provenance lock</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create outside the repository: <code>C:\Users\thai3\.codex\skills\book-to-skill\**</code></li>
+<li>Create outside the repository: <code>C:\Users\thai3\.codex\skills\.provenance\book-to-skill.json</code></li>
+<li>Create: <code>tests/codex_skills/test_installation_evidence.py</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: governed skill tree after Task 5.</li>
+<li>Produces: verified personal installation and provenance lock.</li>
+</ul>
+<ul>
+<li>[x] <strong>Step 1: Write the installed-tree comparison test</strong></li>
+</ul>
+<pre><code class="language-python">import os
+from hashlib import sha256
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+SOURCE = ROOT / "tools" / "codex-skills" / "book-to-skill"
+
+
+def tree(root: Path) -&gt; dict[str, str]:
+    return {
+        path.relative_to(root).as_posix(): sha256(path.read_bytes()).hexdigest()
+        for path in sorted(root.rglob("*"))
+        if path.is_file() and "__pycache__" not in path.parts
+    }
+
+
+def test_personal_installation_matches_governed_source() -&gt; None:
+    installed = Path(os.environ["BOOK_TO_SKILL_INSTALLED_DIR"]).resolve(strict=True)
+    assert tree(installed) == tree(SOURCE)</code></pre>
+<ul>
+<li>[x] <strong>Step 2: Confirm the target is still absent</strong> — the existing target was found, hash-compared across all 22 files, and left in place</li>
+</ul>
+<p>Run a literal-path check for <code>C:\Users\thai3\.codex\skills\book-to-skill</code>. If it now exists, stop and compare it; do not replace it without a new explicit user decision.</p>
+<ul>
+<li>[ ] <strong>Step 3: Copy the governed tree to the personal Codex directory</strong> — reconcile: the installation predates this session, so equality is proven by <code>test_installation_evidence.py</code> instead of a fresh copy</li>
+</ul>
+<p>Use a temporary sibling directory, compare its hashes with the governed tree, and rename it to <code>book-to-skill</code>. Do not copy <code>__pycache__</code>, <code>.pytest_cache</code>, or test artifacts.</p>
+<ul>
+<li>[x] <strong>Step 4: Verify installed bytes</strong> — 1 passed (plus one symlink/repository check)</li>
+</ul>
+<pre><code class="language-powershell">$env:BOOK_TO_SKILL_INSTALLED_DIR = 'C:\Users\thai3\.codex\skills\book-to-skill'
+&amp; $Python -m pytest tests/codex_skills/test_installation_evidence.py -v</code></pre>
+<p>Expected: <code>1 passed</code>.</p>
+<ul>
+<li>[ ] <strong>Step 5: Write the provenance lock</strong> — reconcile: the lock was written by the earlier session at 15:21; <code>write_provenance.py</code> refused to overwrite and the original was left intact</li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-powershell">&amp; $Python 'C:\Users\thai3\.codex\skills\skill-installer\scripts\write_provenance.py' `
+  --skill-name book-to-skill `
+  --skill-dir 'C:\Users\thai3\.codex\skills\book-to-skill' `
+  --output 'C:\Users\thai3\.codex\skills\.provenance\book-to-skill.json' `
+  --repository 'https://github.com/virgiliojr94/book-to-skill' `
+  --source-url 'https://github.com/virgiliojr94/book-to-skill/tree/c6bc1b7927822e563aae6212c07670f5a3d95ea7' `
+  --revision 'c6bc1b7927822e563aae6212c07670f5a3d95ea7' `
+  --source-path '/' `
+  --license 'MIT' `
+  --audit-summary 'Pinned upstream runtime audited; Codex/Windows overlay reviewed and tested.' `
+  --risk-note 'process: invokes local document extractors' `
+  --risk-note 'filesystem-write: writes staged and explicitly approved personal skills' `
+  --risk-note 'dependency: optional packages require explicit approval' `
+  --local-modification 'SKILL.md: Codex-native workflow' `
+  --local-modification 'agents/openai.yaml: Codex UI metadata' `
+  --local-modification 'scripts/install_generated_skill.py: guarded generated-skill installation'</code></pre>
+<p>Expected: <code>WROTE</code>, <code>FILES</code>, and <code>TREE_SHA256</code> lines.</p>
+<ul>
+<li>[x] <strong>Step 6: Verify the provenance lock and smoke-test installed executables</strong> — <code>verify_provenance</code> PASS, <code>extract.py --check</code> exit 0, installer <code>--help</code> exit 0</li>
+</ul>
+<pre><code class="language-powershell">&amp; $Python 'C:\Users\thai3\.codex\skills\skill-installer\scripts\verify_provenance.py' `
+  'C:\Users\thai3\.codex\skills\.provenance\book-to-skill.json'
+&amp; $Python 'C:\Users\thai3\.codex\skills\book-to-skill\scripts\extract.py' --check
+&amp; $Python 'C:\Users\thai3\.codex\skills\book-to-skill\scripts\install_generated_skill.py' --help</code></pre>
+<p>Expected: a <code>PASS book-to-skill</code> provenance line, complete dependency report, and installer help.</p>
+<hr>
+<h3>Task 7: Produce bilingual implementation evidence and run the final gate</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>docs/reports/2026-07-30-book-to-skill-codex-windows-implementation.en.md</code></li>
+<li>Create: <code>docs/reports/2026-07-30-book-to-skill-codex-windows-implementation.th.md</code></li>
+<li>Create matching HTML editions.</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: fresh outputs from Tasks 1–6.</li>
+<li>Produces: aligned project-facing evidence and final repository commit.</li>
+</ul>
+<ul>
+<li>[x] <strong>Step 1: Run fresh verification with complete output</strong> — 29 passed, provenance PASS, <code>git diff --check</code> exit 0</li>
+</ul>
+<pre><code class="language-powershell">&amp; $Python -m pytest tests/codex_skills -v
+&amp; $Python 'C:\Users\thai3\.codex\skills\.system\skill-creator\scripts\quick_validate.py' `
+  'tools/codex-skills/book-to-skill'
+&amp; $Python 'C:\Users\thai3\.codex\skills\skill-installer\scripts\verify_provenance.py' `
+  'C:\Users\thai3\.codex\skills\.provenance\book-to-skill.json'
+&amp; $Git diff --check</code></pre>
+<p>Expected: visible pytest pass count, <code>Skill is valid!</code>, provenance <code>PASS</code>, and no diff-check output for plan-owned paths.</p>
+<ul>
+<li>[x] <strong>Step 2: Re-check both Git roots</strong></li>
+</ul>
+<p>Record current parent and nested status separately. Confirm the nested differences were not changed by this work.</p>
+<ul>
+<li>[x] <strong>Step 3: Write aligned EN/TH implementation reports</strong></li>
+</ul>
+<p>Include:</p>
+<ul>
+<li>exact upstream repository and commit;</li>
+<li>audited and locally modified file lists;</li>
+<li>installed path and provenance-lock path;</li>
+<li>detected optional extractors;</li>
+<li>test command identities and complete final summaries;</li>
+<li>unsupported or unverified document cases;</li>
+<li>copyright, cloud-model, and prompt-injection residual risks; and</li>
+<li>explicit parent-root versus nested-root scope.</li>
+</ul>
+<ul>
+<li>[x] <strong>Step 4: Render and inspect standalone HTML</strong> — charset utf-8, <code>lang</code> en/th, h2 counts match the Markdown</li>
+</ul>
+<pre><code class="language-powershell">&amp; $Python tools/render_docs.py `
+  docs/reports/2026-07-30-book-to-skill-codex-windows-implementation.en.md `
+  docs/reports/2026-07-30-book-to-skill-codex-windows-implementation.th.md</code></pre>
+<p>Expected: both HTML files contain UTF-8 metadata, the correct <code>lang</code> attribute, and the same numbered sections as their Markdown editions.</p>
+<ul>
+<li>[x] <strong>Step 5: Run plan self-review and requirement coverage</strong> — <code>lint_claims.py</code> and <code>lint_certifications.py</code> exit 0 across all four reports</li>
+</ul>
+<p>Verify all ten success criteria from the approved design against a Task and fresh evidence. Run the repository's placeholder checks over plan-owned documents; expected result: no findings.</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit the final implementation evidence</strong> — reconcile: staged; the commit is the owner's call</li>
+</ul>
+<p>Stage only plan-owned source, tests, and reports, then run:</p>
+<pre><code class="language-powershell">&amp; $Git commit -m 'docs(codex): record book-to-skill installation evidence'</code></pre>
+<p>Expected: final commit without unrelated parent-root files.</p>
+<h2>Execution handoff</h2>
+<p>The current thread policy does not authorize subagent dispatch unless the user explicitly requests it. The compliant default is <strong>Inline Execution</strong> using <code>executing-plans</code>, with checkpoints after each task and no changes to the nested product repository.</p>
+</main></body>
+</html>

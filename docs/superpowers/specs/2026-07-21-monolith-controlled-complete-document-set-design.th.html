@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ชุดเอกสาร MONOLITH ฉบับสมบูรณ์แบบควบคุม — ข้อกำหนดการออกแบบ</title>
+  <style>:root{color-scheme:light;--ink:#17202a;--muted:#5b6470;--line:#d9e1ea;--paper:#fff;--soft:#f6f8fb;--accent:#0f766e;--accent-soft:#e9fbf7;--warn:#92400e;--warn-soft:#fff7ed}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#edf1f5;color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.62}main{max-width:1120px;min-height:100vh;margin:0 auto;padding:48px 58px 76px;background:var(--paper);box-shadow:0 24px 70px rgba(15,23,42,.08)}h1,h2,h3,h4{line-height:1.22}h1{margin:0 0 14px;font-size:clamp(1.65rem,3.2vw,2.45rem)}h2{margin-top:42px;padding-top:22px;border-top:1px solid var(--line);font-size:1.42rem}h3{margin-top:28px;font-size:1.13rem;color:var(--accent)}h4{margin-top:22px}p{margin:13px 0}a{color:#0b63ce}blockquote{margin:22px 0;padding:16px 20px;border-left:5px solid var(--accent);background:var(--accent-soft);font-weight:650}blockquote p{margin:6px 0}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#edf2f7;padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}pre{overflow:auto;padding:18px 20px;border-radius:8px;background:#17212b;color:#edf6ff;line-height:1.5}pre code{padding:0;background:transparent;color:inherit}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;margin:18px 0;font-size:.94rem}th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}th{background:var(--soft)}tr:nth-child(even) td{background:#fbfcfe}hr{border:0;border-top:1px solid var(--line);margin:26px 0}ol li,ul li{margin:7px 0}@media (max-width:760px){main{padding:26px 18px 50px}}@media print{body{background:#fff}main{box-shadow:none;padding:0}}</style>
+</head>
+<body>
+<main>
+<h1>ชุดเอกสาร MONOLITH ฉบับสมบูรณ์แบบควบคุม — ข้อกำหนดการออกแบบ</h1>
+<p><strong>ฉบับ:</strong> ภาษาไทย <strong>วันที่ออกแบบ:</strong> 21 กรกฎาคม 2026 <strong>สถานะ:</strong> สัญญาการออกแบบที่อนุมัติแล้ว <strong>แนวทางที่อนุมัติ:</strong> B — Controlled Complete Set <strong>เจ้าของการตัดสินใจ:</strong> คุณเดฟ / เจ้าของ MONOLITH</p>
+<blockquote><p><strong>มติการออกแบบ:</strong> รวมการตัดสินใจ การแก้ไข งานวิจัย วิธีวิศวกรรม สูตร ขอบเขตความปลอดภัย และ gate การดำเนินงานที่คุยกันใน session นี้เป็นเอกสาร authoritative 5 หมวด แต่ละหมวดมี Markdown ภาษาอังกฤษและภาษาไทยที่สอดคล้องกัน พร้อม HTML แบบ standalone ของแต่ละภาษา</p></blockquote>
+<h2>1. วัตถุประสงค์</h2>
+<p>ชุดเอกสารต้องทำให้ผู้บริหาร สถาปนิกระบบ นักออกแบบ วิศวกรการผลิต โปรแกรมเมอร์ CNC ผู้ตรวจสอบ ช่างติดตั้ง หรือ auditor สามารถระบุได้ว่า:</p>
+<ol><li>MONOLITH ต้องการพัฒนาไปเป็นอะไร;</li><li>ขณะนี้มีอะไร implement แล้วและอยู่ใน repository ใด;</li><li>เรื่องใดยังเป็นข้อเสนอ ไม่ทราบ ขัดแย้ง หรือยังไม่ผ่านการรับรอง production;</li><li>แบบออกแบบเปลี่ยนเป็น BOM, nesting input, CNC output, ชิ้นงานที่ตรวจสอบแล้ว และหลักฐาน as-installed อย่างไร;</li><li>ข้อกล่าวอ้างของผู้ขายและมาตรฐานข้อใดเป็นข้อเท็จจริงจากแหล่งปฐมภูมิ คำกล่าวของผู้ขาย การตัดสินใจของเจ้าของ หรือสมมติฐาน;</li><li>ต้องมีหลักฐานอะไรจึงจะเชื่อถือ capability หรือ output ใน production ได้</li></ol>
+<p>ชุดนี้ต้องทำให้ผู้อ่านไม่ต้องประกอบความจริงปัจจุบันเองจากรายงานเก่ากับ correction appendix ภายหลัง</p>
+<h2>2. ชุดแหล่งข้อมูล</h2>
+<p>ชุดควบคุมจะสังเคราะห์จากเอกสารและหลักฐานปัจจุบัน ซึ่งรวมถึงแต่ไม่จำกัดเพียง:</p>
+<ul><li><code>docs/superpowers/specs/2026-07-21-design-to-cnc-engineering-playbook-design.en.md</code> และฉบับไทย/HTML;</li><li><code>docs/research/competitors/homag-a1-a9-evidence-ledger.en.md</code> และฉบับไทย/HTML;</li><li><code>docs/reports/2026-07-21-ima-schelling-monolith-executive-deep-audit.en.md</code> และฉบับไทย/HTML;</li><li><code>docs/reports/2026-07-21-ima-schelling-monolith-repository-scope-correction.en.md</code>;</li><li><code>docs/research/2026-07-21-imos-ix-monolith-executive-deep-research.en.md</code> และฉบับไทย/HTML;</li><li><code>docs/prd/monolith-complete-prd.en.md</code> และฉบับไทย/HTML;</li><li>governance, ADR, component master และ verification artifacts ใน parent bootstrap;</li><li>source, tests, migrations, routes, factory packet, CNC, field, release และ shadow-mode controls ใน active nested product repository;</li><li>แหล่งทางการปัจจุบันของผู้ขาย องค์กรมาตรฐาน และหน่วยงานกำกับที่งานวิจัยอ้างถึง</li></ul>
+<p>เอกสารไม่กลายเป็น authoritative โดยอัตโนมัติเพียงเพราะมีความยาว render แล้ว ได้รับอนุมัติในฐานะแบบออกแบบ หรือเก็บอยู่ใน Git</p>
+<h2>3. แนวทางที่เลือก</h2>
+<p>แนวทางที่อนุมัติคือชุดเอกสารแบบ modular ที่ควบคุมได้ ไม่ใช่รายงานใหญ่ไฟล์เดียวหรือการ rewrite ไฟล์ประวัติทั้งหมดโดยไม่มีดัชนี</p>
+<h3>3.1 เหตุผล</h3>
+<ul><li>ผู้บริหารอ่านการตัดสินใจได้ง่ายโดยไม่เสีย traceability ทางวิศวกรรม</li><li>สูตรและตัวอย่างทางวิศวกรรมพัฒนาได้ภายใต้การตรวจสอบที่เข้มกว่าข้อความกลยุทธ์</li><li>คำกล่าวของผู้ขายแยกออกจากหลักฐาน runtime ของ MONOLITH</li><li>อัปเดตสถานะ repository ได้โดยไม่ต้อง rewrite กลยุทธ์ผลิตภัณฑ์ทั้งหมด</li><li>เก็บความผิดพลาดเดิมไว้ตรวจสอบย้อนหลัง แต่ทำให้ฉบับ authoritative ปัจจุบันไม่กำกวม</li></ul>
+<h3>3.2 ลำดับการพึ่งพาเอกสาร</h3>
+<p><code>Evidence Ledger -&gt; Repository Baseline -&gt; Engineering Playbook -&gt; Executive Blueprint -&gt; Implementation Roadmap</code></p>
+<p>Executive Blueprint เป็นดัชนีหลักและมุมมองการตัดสินใจ โดยต้องลิงก์ไปยังเอกสารสนับสนุนที่ตรงกับ load-bearing claim ทุกข้อ</p>
+<h2>4. ตาราง deliverable ที่เป็น authoritative</h2>
+<p>จะสร้างเอกสาร authoritative 5 หมวด แต่ละหมวดมี 4 ไฟล์ รวมเป็น deliverable ที่ควบคุม 20 ไฟล์</p>
+<div class="table-wrap"><table><thead><tr>
+<th>หมวด</th>
+<th>Markdown อังกฤษ</th>
+<th>Markdown ไทย</th>
+<th>วัตถุประสงค์</th>
+</tr></thead><tbody>
+<tr>
+<td>Executive Blueprint และ master index</td>
+<td><code>docs/reports/2026-07-21-monolith-integrated-executive-blueprint.en.md</code></td>
+<td><code>docs/reports/2026-07-21-monolith-integrated-executive-blueprint.th.md</code></td>
+<td>คำตัดสินระดับ Board ตำแหน่งเชิงกลยุทธ์ การตัดสินใจ สิทธิ ความเสี่ยง metric และทางไปสู่หลักฐาน</td>
+</tr>
+<tr>
+<td>Design-to-Production Engineering Playbook</td>
+<td><code>docs/engineering/2026-07-21-design-to-production-engineering-playbook.en.md</code></td>
+<td><code>docs/engineering/2026-07-21-design-to-production-engineering-playbook.th.md</code></td>
+<td>วิธี Design -&gt; BOM -&gt; Nesting -&gt; CNC -&gt; Verification -&gt; Installation พร้อมสูตร ตัวอย่าง gate และ deliverable contract</td>
+</tr>
+<tr>
+<td>Vendor and Standards Evidence Ledger</td>
+<td><code>docs/research/2026-07-21-monolith-vendor-standards-evidence-ledger.en.md</code></td>
+<td><code>docs/research/2026-07-21-monolith-vendor-standards-evidence-ledger.th.md</code></td>
+<td>HOMAG A1-A9, IMA Schelling, imos iX, มาตรฐาน provenance ของแหล่ง ข้อขัดแย้ง และขอบเขตการใช้</td>
+</tr>
+<tr>
+<td>Repository and Production-Readiness Baseline</td>
+<td><code>docs/reports/2026-07-21-monolith-repository-production-readiness-baseline.en.md</code></td>
+<td><code>docs/reports/2026-07-21-monolith-repository-production-readiness-baseline.th.md</code></td>
+<td>topology สอง repository หลักฐาน implementation ข้อจำกัด capability map และ readiness matrix</td>
+</tr>
+<tr>
+<td>Implementation and Qualification Roadmap</td>
+<td><code>docs/superpowers/plans/2026-07-21-monolith-implementation-qualification-roadmap.en.md</code></td>
+<td><code>docs/superpowers/plans/2026-07-21-monolith-implementation-qualification-roadmap.th.md</code></td>
+<td>การตัดสินใจ retain/refactor/retire/integrate แผนเป็นระยะ หลักฐาน qualification เจ้าของ acceptance และ stop condition</td>
+</tr>
+</tbody></table></div>
+<p>Markdown แต่ละไฟล์มีไฟล์ <code>.html</code> stem เดียวกัน ชื่อภาษาอังกฤษและไทยใช้ <code>.en</code> และ <code>.th</code> อย่างสม่ำเสมอ</p>
+<h2>5. โมเดล authority และ supersession</h2>
+<h3>5.1 Authority ปัจจุบัน</h3>
+<p>เอกสารควบคุม 5 หมวดจะเป็นการตีความแบบบูรณาการฉบับปัจจุบันหลังผ่าน acceptance check ทั้งหมด อย่างไรก็ตาม executable evidence โดยตรงและ normative record ที่ ratify แล้วยังคงมีลำดับสูงกว่ารายงาน derived สำหรับ claim type ที่เกี่ยวข้อง</p>
+<h3>5.2 เอกสารประวัติ</h3>
+<p>เก็บรายงานต้นทางไว้เป็นหลักฐานประวัติ ไม่ลบหรือ rewrite อย่างเงียบ ๆ เพื่อซ่อน audit trail</p>
+<p>IMA Schelling executive audit ฉบับเดิมต้องมีประกาศ superseded ที่มองเห็นได้ เพราะนำข้อค้นพบจาก parent root ไปสรุปกว้างเป็น MONOLITH ทั้งระบบ Repository-scope correction จะยังอยู่ในสายประวัติ ขณะที่ baseline และ blueprint ใหม่รวมการแก้ไขไว้ในตัวเอง</p>
+<h3>5.3 กฎเมื่อเอกสารขัดกัน</h3>
+<p>เมื่อ artifact สองชิ้นขัดกัน ให้:</p>
+<ol><li>เก็บ claim ทั้งสอง;</li><li>จำแนกข้อขัดแย้ง;</li><li>ระบุ repository, revision, environment และ authority ของแต่ละ claim;</li><li>เลือกแหล่งที่แข็งแรงกว่าสำหรับ claim type นั้น;</li><li>ทำเครื่องหมาย claim ที่แพ้เป็น <code>SUPERSEDED</code>, <code>STALE</code>, <code>DERIVED</code> หรือ <code>CONTRADICTED</code>;</li><li>ห้ามลบ claim ที่แพ้ออกจาก evidence trail</li></ol>
+<h2>6. สัญญาหลักฐาน</h2>
+<p>Material claim ทุกข้อใช้ class ที่ตรงตามรายการนี้:</p>
+<ul><li><code>VERIFIED FACT</code>: รองรับโดยหลักฐานปัจจุบันโดยตรง;</li><li><code>OWNER DECISION</code>: ตัดสินใจชัดเจนแล้ว แต่ไม่จำเป็นว่า implement หรือ ratify แล้ว;</li><li><code>INFERENCE</code>: ข้อสรุปเชิงเหตุผลจากหลักฐาน;</li><li><code>PROPOSAL</code>: สภาวะอนาคตที่ต้องการ;</li><li><code>UNKNOWN</code>: ยังไม่พิสูจน์;</li><li><code>CONTRADICTED</code>: เข้ากันไม่ได้กับหลักฐานปัจจุบันที่แข็งแรงกว่า</li></ul>
+<p>Source authority และ claim class เป็นคนละ field หน้าเว็บปัจจุบันของผู้ขายอาจเป็นหลักฐาน authoritative ว่าผู้ขายกล่าวอะไร แต่เนื้อหายังคงเป็น <code>VENDOR CLAIM</code> ไม่ใช่ผล production ของ MONOLITH ที่ตรวจสอบแล้ว</p>
+<p>Load-bearing claim ทุกข้อต้องระบุเท่าที่เกี่ยวข้อง:</p>
+<ul><li>ชื่อแหล่งและ URL ที่แน่นอนหรือ local path ที่คลิกได้;</li><li>section หรือบรรทัด;</li><li>publisher หรือ repository identity;</li><li>วันที่เข้าถึงหรือ source revision;</li><li>claim class และ confidence;</li><li>scope และ applicability;</li><li>สถานะ contradiction หรือ supersession;</li><li>หลักฐานที่ต้องมีเพื่อ upgrade claim</li></ul>
+<h2>7. สัญญา repository baseline</h2>
+<p>รายงานห้ามกล่าวเพียงว่า “MONOLITH repository” แต่ต้องแยกอย่างน้อย:</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Repository</th>
+<th>คำอธิบายที่ต้องใช้</th>
+</tr></thead><tbody>
+<tr>
+<td>Parent governance/bootstrap root</td>
+<td>Governance, research, bilingual records, target package layout, component-master seed และ reports</td>
+</tr>
+<tr>
+<td>Nested active product repository</td>
+<td>TypeScript/React/Supabase runtime, routes, migrations, workflows, factory packet, CNC/post-processors, field, release, tests และประวัติ CI</td>
+</tr>
+</tbody></table></div>
+<p>Baseline ใหม่ทุกฉบับต้องบันทึก:</p>
+<ul><li>absolute path;</li><li>branch และ full <code>HEAD</code> SHA;</li><li>upstream ถ้ามี;</li><li>dirty และ untracked state;</li><li>วันที่สังเกตและ timezone;</li><li>นิยาม inventory ของทุก count;</li><li>คำสั่งที่ใช้ทำซ้ำ count สำคัญ;</li><li>test command, environment, result และ limitation เมื่อกล่าวอ้างผลทดสอบ</li></ul>
+<p>Placeholder package ใน parent พิสูจน์การไม่มี capability ใน nested product ไม่ได้ และ source ใน nested พิสูจน์ deployment, customer use, machine qualification หรือ production safety ไม่ได้หากไม่มีหลักฐานตลอดสาย</p>
+<h2>8. สัญญาเนื้อหาวิศวกรรม</h2>
+<p>Engineering playbook ครอบคลุมเส้นทางควบคุมทั้งหมด:</p>
+<p><code>Approved requirements -&gt; canonical product contract -&gt; derived geometry -&gt; BOM -&gt; manufacturing operations -&gt; nesting/cutting plan -&gt; machine-neutral operation graph -&gt; post-processor output -&gt; simulation -&gt; coupon/first article -&gt; production release -&gt; inspection -&gt; installation -&gt; as-installed evidence</code></p>
+<h3>8.1 กลุ่มการคำนวณที่ต้องมี</h3>
+<p>Playbook ต้องมีนิยาม หน่วย coordinate frame สมมติฐาน domain limit สูตร tolerance ค่าตัวอย่าง failure condition และวิธีตรวจสอบสำหรับ:</p>
+<ul><li>cabinet envelope และ internal clearance;</li><li>ขนาดและ offset ของ panel;</li><li>reveal, gap, overlay, setback, scribe, filler และ installation allowance;</li><li>grain direction และ finish orientation;</li><li>การเลือก hardware และ supplier-specific drilling rules;</li><li>semantics ของ System 32 โดยไม่ถือค่า generic เป็น authority ของผู้ขายทุกราย;</li><li>เส้นผ่านศูนย์กลางรู ความลึก face, axis, การป้องกัน breakthrough และ tool reach;</li><li>groove, dado, rabbet, pocket, contour และ edge operation;</li><li>ปริมาณ BOM, ความยาว edge band, material yield, remnant policy และ costing;</li><li>nesting constraints, kerf, trim, part spacing, clamp/no-cut zone และ rotation;</li><li>coordinate transform จาก design ไป part และ machine;</li><li>การเลือก tool, feed/speed authority, post-processor mapping และ machine-profile constraints;</li><li>dimensional tolerance budget และ inspection sampling;</li><li>revision identity, checksum, traceability และ release authorization</li></ul>
+<h3>8.2 Worked chain ที่บังคับ</h3>
+<p>ต้องมีตัวอย่างตู้แบบ parameterized อย่างน้อยหนึ่งชุดที่เดินครบตั้งแต่สูตร panel schedule, BOM, operations, nesting input, machine-neutral graph, field ตัวอย่างของ CNC/MPR, verification, first article ไปจนถึง installed evidence</p>
+<p>ตัวอย่างนี้เป็นการสาธิตทางวิศวกรรม ไม่ใช่ production authority ค่าของผู้ขาย เครื่องมือ วัสดุ หรือเครื่องจักรที่ยังไม่ qualify ต้องถูก block หรือระบุชัดว่าเป็นสมมติฐาน</p>
+<h3>8.3 หลักความปลอดภัย</h3>
+<ul><li>มี implementation ไม่เท่ากับผ่าน production qualification</li><li>สร้าง CNC program ได้ไม่ใช่หลักฐานว่า machining ปลอดภัย</li><li>ไม่พบ parameter ในเอกสารสาธารณะไม่ใช่หลักฐานว่าผลิตภัณฑ์ไม่มี parameter ภายใน</li><li>Negative capability claim ต้องค้น documentation, source, production caller, schema, tests, runtime และขอบเขตที่ผู้ขายประกาศก่อนจะสรุปว่าไม่มี</li><li><code>NOT_FOR_PRODUCTION</code> หรือ shadow mode ที่เทียบเท่าต้องคงอยู่จนผ่าน machine, post-processor, security, coupon, first-article และ authority gates</li><li>AI หรือ optimization output ห้ามแทน human release authority อย่างเงียบ ๆ</li></ul>
+<h2>9. สัญญางานวิจัยผู้ขายและมาตรฐาน</h2>
+<p>Evidence ledger รวมงาน HOMAG, IMA Schelling และ imos iX ใน session โดยไม่แสร้งว่าเอกสารสาธารณะเปิดเผย proprietary schema หรือ parameter ภายในเครื่องทุกตัว</p>
+<h3>9.1 กฎแก้ไข HOMAG A1-A9</h3>
+<p>ห้ามใช้ claim แบบ A4 เดิมว่า “ไม่มีขนาดรูหรือความลึกอยู่ที่ใดเลย” เว้นแต่พิสูจน์การไม่มีได้ครบ ผลิตภัณฑ์ที่สร้าง CNC executable จำเป็นต้องรับหรือ derive machining parameter จากที่ใดที่หนึ่ง แต่เอกสารสาธารณะอาจไม่เปิดเผยตำแหน่งจัดเก็บ สูตร หรือ interface ที่แน่นอน</p>
+<h3>9.2 Vendor claim</h3>
+<p>ตัวเลข throughput, utilization, availability, service prediction, optimization yield และ productivity ยังคงเป็นคำกล่าวของผู้ขายจนกว่าจะทำซ้ำอย่างอิสระภายใต้ workload, configuration, environment และ measurement method ที่ระบุชื่อชัดเจน</p>
+<h3>9.3 Applicability ของมาตรฐาน</h3>
+<p>Ledger ต้องแยก:</p>
+<ul><li>การตรวจ publication/version;</li><li>applicability ทางกฎหมายหรือสัญญา;</li><li>test method;</li><li>acceptance criterion;</li><li>normative text ที่ต้องมี license เพื่อ implement;</li><li>หลักฐาน conformance ของ MONOLITH</li></ul>
+<p>มาตรฐานวิธีทดสอบไม่ได้ให้เกณฑ์ pass/fail โดยอัตโนมัติ และมาตรฐานสมัครใจไม่ได้อยู่เหนือกฎหมายหรือกลายเป็นข้อบังคับโดยไม่มีฐาน applicability</p>
+<h2>10. สัญญา Executive Blueprint</h2>
+<p>เอกสารผู้บริหารต้องมี:</p>
+<ul><li>คำตัดสินหนึ่งหน้า;</li><li>สรุปสถานะปัจจุบันที่ตรวจสอบแล้วและแยกตาม repository;</li><li>ตำแหน่ง vendor-neutral และขอบเขต integrate-before-replicate;</li><li>owner decision ที่แยกจากหลักฐาน;</li><li>สิทธิข้อมูลและ portability ของลูกค้า;</li><li>สิทธิใน platform IP, tenant data, OEM data, กฎที่ร่วมกันสร้าง และ aggregated benchmark;</li><li>tamper evidence ที่เข้ากับ privacy แทนคำว่า immutable แบบไม่กำหนดความหมาย;</li><li>สูตร business case ที่ใช้ input วัดจริงและมี uncertainty;</li><li>ความเสี่ยง kill/continue gate และข้อกำหนดการสาธิตอย่างอิสระ;</li><li>ลิงก์ไปยังเอกสารควบคุมสนับสนุนอีกสี่หมวด</li></ul>
+<p>เปลี่ยนถ้อยคำ “make every role love the system” เป็น outcome ที่วัดได้ด้าน usability, trust, safety, portability และ task success</p>
+<h2>11. สัญญา Roadmap</h2>
+<p>Roadmap ห้ามให้งบสร้างใหม่เพียงเพราะ parent bootstrap ไม่มี code แต่ละ capability ต้องได้รับ disposition หนึ่งรายการ:</p>
+<ul><li><code>RETAIN</code>: implementation ปัจจุบันเหมาะเก็บไว้ระหว่างรอ verification;</li><li><code>REFACTOR</code>: implementation มีคุณค่าแต่ต้องแก้ boundary หรือคุณภาพ;</li><li><code>RETIRE</code>: implementation ล้าสมัย ซ้ำ ไม่ปลอดภัย หรือถูกแทนที่;</li><li><code>INTEGRATE</code>: ควรเชื่อม specialist vendor หรือ external capability แทนการสร้างเอง;</li><li><code>BUILD</code>: verified gap ต้องการ implementation ใหม่</li></ul>
+<p>Roadmap item ทุกข้อระบุ:</p>
+<ul><li>current state ที่มีหลักฐาน;</li><li>intended outcome;</li><li>file หรือ system ที่ได้รับผล;</li><li>owner และ approving authority;</li><li>dependency และ prerequisite;</li><li>acceptance artifact;</li><li>stop/rollback condition;</li><li>readiness dimension ที่ได้รับผล;</li><li>claim ที่รองรับได้หลังเสร็จ</li></ul>
+<h2>12. ข้อกำหนดสองภาษาและ HTML</h2>
+<ul><li>ฉบับอังกฤษและไทยต้องมี decision, table, formula, warning และ evidence status เทียบเท่ากัน</li><li>การแปลปรับลำดับประโยคเพื่อความชัดเจนได้ แต่ห้ามเปลี่ยน scope หรือ authority</li><li>Markdown ทุกไฟล์มี standalone HTML stem เดียวกัน</li><li>HTML มี UTF-8, responsive layout, printable style, ตารางอ่านง่าย code block และลิงก์ทำงาน</li><li>ห้ามมี API key, credential, secret ส่วนบุคคล หรือข้อมูลปฏิบัติการอ่อนไหวที่ไม่ redact ในทุกฉบับ</li></ul>
+<h2>13. Workflow ผลิตเอกสาร</h2>
+<ol><li>Freeze evidence baseline และบันทึกทั้งสอง repository</li><li>สร้าง private claim ledger และแก้ duplicate/stale source</li><li>ร่าง Repository Baseline และ Evidence Ledger ก่อน</li><li>ร่าง Engineering Playbook จากแบบที่อนุมัติและหลักฐาน implementation ที่ตรวจแล้ว</li><li>ร่าง Executive Blueprint จากสามแหล่งข้างต้น</li><li>ร่าง Roadmap หลัง retain/refactor/retire/integrate/build decision มีหลักฐาน</li><li>แปล source อังกฤษแต่ละชุดเป็นฉบับไทยที่สอดคล้อง</li><li>Render standalone HTML จาก Markdown แต่ละไฟล์</li><li>ตรวจ link, parity, placeholder, contradiction, secret และ supersession</li><li>ตรวจ representative HTML ด้วยสายตา</li><li>บันทึก hash และผล verification สุดท้าย</li></ol>
+<h2>14. Acceptance criteria</h2>
+<p>ชุดเอกสารจะสมบูรณ์เมื่อผ่านทุกเงื่อนไข:</p>
+<ol><li>ไฟล์ที่คาดหวังครบ 20 ไฟล์;</li><li>Markdown ทุกไฟล์มี HTML ภาษาเดียวกัน;</li><li>Heading, table, formula, decision state และ warning ของอังกฤษ/ไทยสอดคล้องกันในสาระ;</li><li>ไม่มีเครื่องหมาย placeholder ที่ยังไม่แก้ citation ที่แต่งขึ้น section ว่าง หรือการละเนื้อหาอย่างเงียบ ๆ;</li><li>current-state claim ทุกข้อระบุ repository scope;</li><li>ไม่มี design artifact ถูกนำเสนอเป็น runtime fact;</li><li>ไม่มี runtime implementation ถูกนำเสนอเป็น production qualification;</li><li>ตัวเลข performance ของผู้ขายถูกระบุชัดว่าเป็น vendor claim;</li><li>รายการมาตรฐานแยก version, applicability, method และ acceptance criteria;</li><li>แก้ข้อขัดแย้ง A4 อย่างชัดเจนและแปลงเป็นกฎ negative claim ระยะยาว;</li><li>ยอมรับ active CNC/MPR path พร้อม exact source evidence;</li><li>machine safety และ release gate ยังคง fail-closed;</li><li>Executive Blueprint ลิงก์ไปยังเอกสารสนับสนุนทุกหมวด;</li><li>ภาษา legacy IMA current-state ถูกทำเครื่องหมาย superseded อย่างชัดเจน;</li><li>ไม่มี secret หรือ API key;</li><li>HTML เปิดเดี่ยวได้และรักษาเนื้อหาสาระจาก Markdown;</li><li>บันทึก hash และ verification command สุดท้าย</li></ol>
+<h2>15. สิ่งที่ไม่รวมในงาน</h2>
+<p>โครงการเอกสารนี้จะไม่:</p>
+<ul><li>รับรอง CNC program, เครื่องจักร วัสดุ hardware หรือตู้ใดสำหรับ production;</li><li>ratify ADR ที่ยัง proposed หรือสถาปัตยกรรม 15 contexts;</li><li>migrate tenant/site schema;</li><li>แก้ active product runtime หรือไฟล์ dirty tree ใน nested repository;</li><li>อ้าง vendor certification หรือ standards conformance;</li><li>เปิดเผยหรือบันทึก Perplexity API key;</li><li>commit การเปลี่ยนแปลงอื่นของผู้ใช้</li></ul>
+<h2>16. ผล self-review ของแบบ</h2>
+<ul><li>Placeholder scan: แบบนี้ไม่อนุญาต placeholder ที่ยังไม่แก้</li><li>Internal consistency: 5 หมวด x 4 ฉบับ = controlled deliverable 20 ไฟล์</li><li>Scope: รวม documentation consolidation และ qualification planning แต่ไม่รวม runtime implementation</li><li>Ambiguity: ระบุ authoritative edition, การเก็บประวัติ การแยก repository, evidence class และ production-safety limit อย่างชัดเจน</li></ul>
+</main>
+</body>
+</html>

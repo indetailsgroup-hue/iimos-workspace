@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>แผนดำเนินงาน Global Exact-SKU Connector Living Registry</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>แผนดำเนินงาน Global Exact-SKU Connector Living Registry</h1>
+<blockquote><p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p></blockquote>
+<p><strong>เป้าหมาย:</strong> สร้าง global cabinet-connector registry ที่มี governance รักษา exact commercial identity และหลักฐาน ตรวจ Complete System BOM ประเมิน cabinet/material configuration ทุกค่าแบบ fail-closed และส่งมอบ release ที่ reproducible/hash-pinned ให้ nested MONOLITH runtime</p>
+<p><strong>สถาปัตยกรรม:</strong> Parent governance repository เป็น canonical registry producer ด้วย Python 3.11: models, reviewed evidence assertions, compatibility graph, qualification engine, coverage ledger และ deterministic JSON release bundle ส่วน nested TypeScript product เป็น consumer: validate pinned release, resolve explicit connector intent โดยไม่มี family fallback, ใส่ provenance ใน shadow factory packet และคง production block จน configuration-specific evidence ผ่าน</p>
+<p><strong>Tech Stack:</strong> Python 3.11 standard library, dataclasses, Enum, JSON/JSONL, SHA-256, unittest; TypeScript 5, Zod 4, Vitest 3, fast-check, Connector OS และ factory-packet modules ที่มีอยู่; Markdown และ <code>tools/render_docs.py</code></p>
+<h2>ข้อกำหนดส่วนกลาง</h2>
+<ul>
+<li>Parent root เป็นเจ้าของ ontology, evidence policy, canonical identity, registry releases, qualification governance และ coverage reporting</li>
+<li>Nested product ใช้ pinned release และห้ามกลายเป็น product master ที่แข่งขันกัน</li>
+<li>Daph เป็นบริษัทลูกค้า/pilot ที่ให้คำปรึกษาหนึ่งราย; tenant overlay แก้ canonical facts ไม่ได้</li>
+<li>หนึ่ง orderable OEM identity เท่ากับหนึ่ง SKU record; geometry ที่ใช้ร่วมกันให้เชื่อม ไม่ใช่ merge</li>
+<li><code>Verified</code> แยกเป็น identity, geometry, BOM, tooling, material/thickness, structural, commercial, field, lifecycle และ rights</li>
+<li>Verified field ทุกค่ามี primary-source locator, source hash, edition/region และ reviewer</li>
+<li>AI หรือ automated extraction สร้างได้เฉพาะ pending candidate</li>
+<li>รับ W × D × H และ material thickness ได้ทุกค่า แต่ unsupported configuration ต้องได้ refusal</li>
+<li>ห้าม interpolation, extrapolation, nearest-neighbour selection หรือ silent family fallback หากไม่มี explicit qualified rule</li>
+<li>OEM assets อยู่นอก Git เว้นแต่มีสิทธิ์เผยแพร่ที่บันทึกไว้</li>
+<li>Historical/discontinued records ต้องยัง reproducible</li>
+<li>เปิด NOT-FOR-PRODUCTION ตลอดแผน</li>
+<li>Project-facing document ทุกชิ้นมี EN/TH Markdown ที่ตรงกันและ standalone HTML</li>
+<li>ตอน execute ให้ใช้ paired isolated worktrees และรักษา dirty entries ปัจจุบัน 144 รายการใน parent และ 67 รายการใน nested</li>
+</ul>
+<hr>
+<h2>Workstream และ file map</h2>
+<h3>Parent canonical producer</h3>
+<p>สร้าง:</p>
+<ul>
+<li><code>packages/component-master/src/monolith_component_master/registry_models.py</code> — immutable canonical types</li>
+<li><code>packages/component-master/src/monolith_component_master/evidence.py</code> — source snapshots และ field assertions</li>
+<li><code>packages/component-master/src/monolith_component_master/compatibility.py</code> — Complete BOM/typed graph validation</li>
+<li><code>packages/component-master/src/monolith_component_master/qualification.py</code> — material/thickness และ cabinet-joint evaluation</li>
+<li><code>packages/component-master/src/monolith_component_master/ingestion.py</code> — candidate, review และ quarantine</li>
+<li><code>packages/component-master/src/monolith_component_master/coverage.py</code> — denominator/coverage</li>
+<li><code>packages/component-master/src/monolith_component_master/releases.py</code> — deterministic bundle/manifest hash</li>
+<li><code>packages/component-master/src/monolith_component_master/tenant_overlays.py</code></li>
+<li><code>packages/component-master/src/monolith_component_master/adapters/__init__.py</code></li>
+<li><code>packages/component-master/src/monolith_component_master/adapters/reviewed_assertions.py</code></li>
+<li><code>tools/connector_registry/ingest_reviewed.py</code></li>
+<li><code>tools/connector_registry/build_release.py</code></li>
+<li><code>tools/connector_registry/check_coverage.py</code></li>
+<li>dataset ภายใต้ <code>data/component-master/registry/v1/</code> สำหรับ brand, source, evidence, model, SKU, BOM, compatibility, geometry, material, tooling, qualification, lifecycle, coverage และ release 0.1.0</li>
+<li>focused tests ภายใต้ <code>tests/component_master/registry/</code></li>
+</ul>
+<p>แก้:</p>
+<ul>
+<li><code>packages/component-master/src/monolith_component_master/__init__.py</code> เพื่อ export approved APIs</li>
+</ul>
+<h3>Nested release consumer</h3>
+<p>สร้าง:</p>
+<ul>
+<li><code>src/core/hardware/registry/registryTypes.ts</code></li>
+<li><code>src/core/hardware/registry/registryReleaseSchema.ts</code></li>
+<li><code>src/core/hardware/registry/loadRegistryRelease.ts</code></li>
+<li><code>src/core/hardware/registry/selectRegistryConnector.ts</code></li>
+<li><code>src/core/hardware/registry/firstCohortRelease.json</code></li>
+<li>tests ภายใต้ <code>src/core/hardware/registry/__tests__/</code></li>
+</ul>
+<p>แก้:</p>
+<ul>
+<li><code>src/core/connector/types.ts</code> ให้ carry exact SKU/release pin</li>
+<li><code>src/core/connector/catalog.ts:247-253</code> เพื่อลบ default-family resolution</li>
+<li><code>src/factory/packet/builders/buildConnectorOps.ts:53-54</code> ให้รับ explicit selection</li>
+<li><code>src/factory/packet/types.ts</code> ให้บันทึก pin/verdict/refusal</li>
+<li><code>src/factory/packet/verifyPacket.ts</code> ให้ verify hash/evidence gates</li>
+</ul>
+<p>Nested JSON เป็น materialized, hash-pinned release ที่ parent ผลิต ไม่ใช่ authority ใหม่</p>
+<h2>ลำดับดำเนินงาน</h2>
+<p>Tasks 1–8 สร้าง canonical engine; Tasks 9–12 นำเข้า first cohort สี่ waves; Task 13 พิสูจน์ tenant separation; Tasks 14–16 เชื่อม nested runtime ห้ามเริ่ม nested cutover ก่อน Task 8 สร้าง deterministic release</p>
+<h3>Task 1: สร้าง paired worktrees และ baseline gates</h3>
+<p><strong>ไฟล์:</strong></p>
+<ul>
+<li>อ่าน: <code>CONTEXT.md</code></li>
+<li>อ่าน: <code>docs/reports/2026-07-21-ima-schelling-monolith-repository-scope-correction.en.md</code></li>
+<li>อ่าน: design spec ที่อนุมัติ</li>
+<li>บันทึก: <code>.superpowers/sdd/global-connector-registry-progress.md</code></li>
+</ul>
+<p><strong>Interfaces:</strong> รับ parent commit ที่มีแผนนี้อยู่แล้ว โดยมี <code>92d67571</code> เป็น approved-design ancestor และรับ nested <code>ed036a2c</code>; ส่งออก clean worktree paths/baseline ledger</p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> ใช้ <code>superpowers:using-git-worktrees</code> สร้าง parent branch <code>codex/global-connector-registry</code> จาก checked-in commit ที่มีแผนนี้ และ nested branch <code>codex/global-connector-runtime</code> จาก <code>ed036a2c</code></li>
+<li>[ ] <strong>Step 2:</strong> บันทึก absolute paths, branches, HEAD, status, Python/Node/npm versions และ NFP state</li>
+<li>[ ] <strong>Step 3:</strong> รัน parent baseline</li>
+</ul>
+<pre><code class="language-powershell">python -m unittest discover -s tests/component_master -v
+python tools/verify_kitchen_kernel.py</code></pre>
+<p>Expected: exit 0 พร้อม final summaries; หาก fail ให้หยุดและบันทึกโดยไม่แก้ production code</p>
+<ul>
+<li>[ ] <strong>Step 4:</strong> รัน nested baseline</li>
+</ul>
+<pre><code class="language-powershell">npm.cmd run test:run -- src/core/connector src/core/hardware/catalog src/factory/packet
+npm.cmd run typecheck:all</code></pre>
+<p>Expected: exit 0; Minifix provenance ยังรายงาน recipe ว่าไม่ fully sourced อย่างซื่อสัตย์</p>
+<ul>
+<li>[ ] <strong>Step 5:</strong> commit เฉพาะ ledger</li>
+</ul>
+<pre><code class="language-powershell">git add .superpowers/sdd/global-connector-registry-progress.md
+git commit -m "chore(connectors): record paired registry baselines"</code></pre>
+<h3>Task 2: เพิ่ม canonical identity และ verification models</h3>
+<p><strong>ไฟล์:</strong> สร้าง <code>registry_models.py</code>, <code>test_registry_models.py</code>; แก้ <code>__init__.py</code></p>
+<p><strong>Interfaces:</strong> ส่งออก <code>CommercialSku</code>, <code>ProductModel</code>, <code>VerificationDimension</code>, <code>VerificationState</code>, <code>LifecycleState</code>, <code>Registry</code></p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> เขียน failing tests ว่า order code ต่างกันห้าม collapse และ verified ต้องแยกมิติ</li>
+</ul>
+<pre><code class="language-python">def make_sku(order_code: str, geometry: VerificationState) -&gt; CommercialSku:
+    states = {
+        dimension: VerificationState.PENDING
+        for dimension in VerificationDimension
+    }
+    states[VerificationDimension.IDENTITY] = VerificationState.VERIFIED
+    states[VerificationDimension.GEOMETRY] = geometry
+    return CommercialSku(
+        global_id=f"sku:hafele:{order_code}:EU",
+        brand_id="brand:hafele",
+        model_id="model:hafele:minifix-15",
+        oem_order_code=order_code,
+        region="EU",
+        pack_qty=1,
+        verification=states,
+    )
+
+def test_same_geometry_does_not_collapse_distinct_order_codes():
+    a = make_sku("262.26.033", VerificationState.VERIFIED)
+    b = make_sku("262.26.533", VerificationState.VERIFIED)
+    assert a.global_id != b.global_id
+
+def test_verified_is_dimension_specific():
+    item = make_sku("262.26.033", VerificationState.PENDING)
+    assert item.is_verified(VerificationDimension.IDENTITY) is True
+    assert item.is_verified(VerificationDimension.GEOMETRY) is False</code></pre>
+<ul>
+<li>[ ] <strong>Step 2:</strong> รัน <code>python -m unittest tests.component_master.registry.test_registry_models -v</code> และเห็น import failure</li>
+<li>[ ] <strong>Step 3:</strong> implement immutable types</li>
+</ul>
+<pre><code class="language-python">class VerificationDimension(str, Enum):
+    IDENTITY = "identity"
+    GEOMETRY = "geometry"
+    BOM = "bom"
+    TOOLING = "tooling"
+    MATERIAL_THICKNESS = "material_thickness"
+    STRUCTURAL = "structural"
+    COMMERCIAL = "commercial"
+    FIELD = "field"
+    LIFECYCLE = "lifecycle"
+    RIGHTS = "rights"
+
+@dataclass(frozen=True)
+class CommercialSku:
+    global_id: str
+    brand_id: str
+    model_id: str
+    oem_order_code: str
+    region: str
+    pack_qty: int
+    verification: Mapping[VerificationDimension, VerificationState]
+
+    def is_verified(self, dimension: VerificationDimension) -&gt; bool:
+        return self.verification.get(dimension) is VerificationState.VERIFIED</code></pre>
+<ul>
+<li>[ ] <strong>Step 4:</strong> รัน registry-model และ legacy seed tests ให้ exit 0</li>
+<li>[ ] <strong>Step 5:</strong> commit <code>feat(registry): add exact SKU identity model</code></li>
+</ul>
+<h3>Task 3: สร้าง evidence vault metadata และ field assertions</h3>
+<p><strong>ไฟล์:</strong> สร้าง <code>evidence.py</code>, <code>test_evidence.py</code>, registry <code>.gitignore</code>, <code>evidence-manifest.jsonl</code></p>
+<p><strong>Interfaces:</strong> ส่งออก <code>SourceSnapshot</code>, <code>FieldAssertion</code>, <code>EvidenceVault.register()</code>, <code>verify_source_hash()</code></p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> เขียน tests ที่ reject verified assertion เมื่อขาด publisher, edition/region, locator, SHA-256, access date, reviewer หรือ rights</li>
+<li>[ ] <strong>Step 2:</strong> รัน test และเห็น import failure</li>
+<li>[ ] <strong>Step 3:</strong> implement:</li>
+</ul>
+<pre><code class="language-python">@dataclass(frozen=True)
+class SourceSnapshot:
+    source_id: str
+    publisher: str
+    url: str
+    edition: str
+    region: str
+    accessed_at: str
+    sha256: str
+    rights_state: str
+
+@dataclass(frozen=True)
+class FieldAssertion:
+    assertion_id: str
+    entity_id: str
+    field_path: str
+    value: object
+    source_id: str
+    locator: str
+    reviewer: str
+    review_state: str</code></pre>
+<ul>
+<li>[ ] <strong>Step 4:</strong> รัน <code>test_evidence</code> ให้ tamper/rights/locator cases ผ่าน</li>
+<li>[ ] <strong>Step 5:</strong> commit <code>feat(registry): enforce field-level OEM evidence</code></li>
+</ul>
+<h3>Task 4: สร้าง Complete System BOM และ compatibility graph</h3>
+<p><strong>ไฟล์:</strong> สร้าง <code>compatibility.py</code>, test, <code>bom-edges.jsonl</code>, <code>compatibility-edges.jsonl</code></p>
+<p><strong>Interfaces:</strong> ส่งออก <code>BomEdge</code>, <code>CompatibilityEdge</code>, <code>CompatibilityGraph.validate_release_bom()</code></p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> เขียน tests สำหรับ cam+bolt+cap BOM ครบ, missing mating part, incompatibility contradiction, region/lifecycle mismatch และ required tool</li>
+<li>[ ] <strong>Step 2:</strong> รัน test และเห็น import failure</li>
+<li>[ ] <strong>Step 3:</strong> implement typed edges</li>
+</ul>
+<pre><code class="language-python">class EdgeType(str, Enum):
+    REQUIRES = "REQUIRES"
+    OPTIONAL = "OPTIONALLY_USES"
+    COMPATIBLE = "COMPATIBLE_WITH"
+    INCOMPATIBLE = "INCOMPATIBLE_WITH"
+    SUPERSEDES = "SUPERSEDES"
+    REGION_VARIANT = "REGION_VARIANT_OF"
+    GEOMETRY_VARIANT = "GEOMETRY_VARIANT_OF"
+    TOOLED_BY = "TOOLED_BY"
+    MACHINED_BY = "MACHINED_BY"</code></pre>
+<ul>
+<li>[ ] <strong>Step 4:</strong> รัน <code>test_compatibility</code> ให้ incomplete/contradictory BOM ถูก refuse</li>
+<li>[ ] <strong>Step 5:</strong> commit <code>feat(registry): validate complete connector BOM graphs</code></li>
+</ul>
+<h3>Task 5: สร้าง material/thickness envelopes และ joint qualification</h3>
+<p><strong>ไฟล์:</strong> สร้าง <code>qualification.py</code>, test, <code>materials.jsonl</code>, <code>qualification-envelopes.jsonl</code></p>
+<p><strong>Interfaces:</strong> ส่งออก <code>MaterialInstance</code>, <code>JointConfiguration</code>, <code>QualificationEnvelope</code>, <code>QualificationResult</code>, <code>qualify_joint()</code></p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> เขียน tests ว่า Panel A/B แยกกัน, 15/18 ไม่อนุมัติ 16 โดยอัตโนมัติ, core/facing แยก, density/moisture/orientation เดินทางกับ envelope และ no match คืน insufficient evidence</li>
+<li>[ ] <strong>Step 2:</strong> รัน test และเห็น import failure</li>
+<li>[ ] <strong>Step 3:</strong> implement:</li>
+</ul>
+<pre><code class="language-python">class Verdict(str, Enum):
+    QUALIFIED = "QUALIFIED"
+    CONDITIONALLY_QUALIFIED = "CONDITIONALLY_QUALIFIED"
+    UNQUALIFIED = "UNQUALIFIED"
+    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
+    DISCONTINUED_OR_UNORDERABLE = "DISCONTINUED_OR_UNORDERABLE"
+
+@dataclass(frozen=True)
+class MaterialInstance:
+    substrate: str
+    core: str
+    density_kg_m3: float
+    moisture_pct: float
+    orientation: str
+    nominal_thickness_mm: float
+    measured_thickness_mm: float
+    facing_thickness_mm: float</code></pre>
+<ul>
+<li>[ ] <strong>Step 4:</strong> รัน <code>test_qualification</code> และยืนยัน 16 มม. ที่ไม่มี rule ยังถูก refuse</li>
+<li>[ ] <strong>Step 5:</strong> commit <code>feat(registry): add configuration-specific qualification</code></li>
+</ul>
+<h3>Task 6: เพิ่ม arbitrary W × D × H cabinet evaluation</h3>
+<p><strong>ไฟล์:</strong> แก้ <code>qualification.py</code>; สร้าง <code>test_parametric_cabinets.py</code></p>
+<p><strong>Interfaces:</strong> ส่งออก <code>CabinetConfiguration</code>, <code>CabinetEvaluation</code>, <code>evaluate_cabinet()</code></p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> เขียน generated cases สำหรับ base/wall/tall/wardrobe/custom และ fractional dimensions; invalid/unsupported span ต้องไม่สร้าง rule เดา</li>
+<li>[ ] <strong>Step 2:</strong> รัน test และเห็น import/attribute failure ที่ระบุ <code>evaluate_cabinet</code> ก่อน implementation</li>
+<li>[ ] <strong>Step 3:</strong> implement:</li>
+</ul>
+<pre><code class="language-python">@dataclass(frozen=True)
+class CabinetConfiguration:
+    width_mm: float
+    depth_mm: float
+    height_mm: float
+    topology: str
+    joints: tuple[JointConfiguration, ...]
+    load_cases: tuple[str, ...]
+    mounting: str
+    wall_substrate: str | None
+
+def evaluate_cabinet(
+    cabinet: CabinetConfiguration,
+    registry: Registry,
+    machine_capabilities: frozenset[str],
+) -&gt; CabinetEvaluation:
+    """Normalize, qualify every joint, then aggregate refusals without fallback."""</code></pre>
+<ul>
+<li>[ ] <strong>Step 4:</strong> รัน parametric และ qualification tests ให้ deterministic/exit 0</li>
+<li>[ ] <strong>Step 5:</strong> commit <code>feat(registry): evaluate parametric cabinet configurations</code></li>
+</ul>
+<h3>Task 7: เพิ่ม reviewed ingestion และ quarantine</h3>
+<p><strong>ไฟล์:</strong> สร้าง <code>ingestion.py</code>, adapters package, <code>reviewed_assertions.py</code>, <code>ingest_reviewed.py</code>, test</p>
+<p><strong>Interfaces:</strong> ส่งออก <code>CandidateRecord</code>, <code>QuarantineRecord</code>, <code>ReviewedAssertionAdapter.ingest()</code></p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> เขียน tests สำหรับ unit conflict, OEM/distributor conflict, PDF/CAD conflict, unreviewed AI candidate, missing mating part และ uncertain rights</li>
+<li>[ ] <strong>Step 2:</strong> รัน test และเห็น import failure</li>
+<li>[ ] <strong>Step 3:</strong> implement:</li>
+</ul>
+<pre><code class="language-python">@dataclass(frozen=True)
+class CandidateRecord:
+    candidate_id: str
+    brand_id: str
+    entity_kind: str
+    assertions: tuple[FieldAssertion, ...]
+    extraction_method: str
+
+@dataclass(frozen=True)
+class QuarantineRecord:
+    candidate_id: str
+    reason_code: str
+    evidence_ids: tuple[str, ...]
+    owner_role: str</code></pre>
+<ul>
+<li>[ ] <strong>Step 4:</strong> รัน test และ CLI <code>--help</code>; ต้องมี <code>--brand</code>, <code>--source-manifest</code>, <code>--assertions</code>, <code>--out</code>, <code>--quarantine</code></li>
+<li>[ ] <strong>Step 5:</strong> commit <code>feat(registry): quarantine unreviewed connector evidence</code></li>
+</ul>
+<h3>Task 8: เพิ่ม coverage ledger และ deterministic release</h3>
+<p><strong>ไฟล์:</strong> สร้าง <code>coverage.py</code>, <code>releases.py</code>, coverage/release tools, test และ <code>coverage-snapshot.json</code></p>
+<p><strong>Interfaces:</strong> ส่งออก <code>CoverageSnapshot</code>, <code>RegistryRelease</code>, <code>build_release()</code> และ manifest SHA-256</p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> เขียน tests สำหรับ source-order-independent hash, no unclassified item, dimension counts, blocked sources และ verified-without-evidence</li>
+<li>[ ] <strong>Step 2:</strong> รัน test และเห็น import failure</li>
+<li>[ ] <strong>Step 3:</strong> implement canonical UTF-8 JSON, sorted keys/records, normalized line endings และไม่ใส่ wall-clock field ใน hashed payload</li>
+<li>[ ] <strong>Step 4:</strong> รัน:</li>
+</ul>
+<pre><code class="language-powershell">python -m unittest tests.component_master.registry.test_release -v
+python tools/connector_registry/build_release.py --root data/component-master/registry/v1 --version 0.1.0
+python tools/connector_registry/check_coverage.py --root data/component-master/registry/v1 --fail-on-unclassified</code></pre>
+<p>Expected: exit 0 และ rebuild สองครั้งได้ hash เดิม</p>
+<ul>
+<li>[ ] <strong>Step 5:</strong> commit <code>feat(registry): publish deterministic coverage releases</code></li>
+</ul>
+<h3>Task 9: ประกาศ first-cohort brand/source denominator</h3>
+<p><strong>ไฟล์:</strong> สร้าง <code>brand-universe.jsonl</code>, <code>source-denominator.jsonl</code>, <code>test_first_cohort_denominator.py</code></p>
+<p><strong>Interfaces:</strong> ส่งออก denominator 12 แบรนด์ใน Global/EU, US และ Thailand/ASEAN scopes</p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> เขียน exact-set test สำหรับ Häfele, Hettich, Titus, Lamello, Italiana Ferramenta, OVVO, Lockdowel, Välinge/Threespine, KNAPP, Festool DOMINO, Hoffmann และ Blum</li>
+<li>[ ] <strong>Step 2:</strong> รัน test และเห็น denominator absent</li>
+<li>[ ] <strong>Step 3:</strong> เพิ่ม official source roots เท่านั้น พร้อม publisher, URL, edition, region, language, access date, rights และ state:</li>
+</ul>
+<div class="tablewrap"><table><thead><tr><th>Brand</th><th>Official source root</th></tr></thead><tbody>
+<tr><td>Häfele</td><td><code>https://www.hafele.com/us/en/products/furniture-fittings-living-solutions/connectors-shelf-supports/connectors/50/</code></td></tr>
+<tr><td>Hettich</td><td><code>https://shop.hettich.com/us_EN/Further-products/Connecting-technology/Connecting-fittings-for-cabinet-bodies/c/group824491857740</code></td></tr>
+<tr><td>Titus</td><td><code>https://cabinet.titusplus.com/us/en/cabinet-connectors</code></td></tr>
+<tr><td>Lamello</td><td><code>https://lamello.com/products/p-system</code> และ current OEM catalog</td></tr>
+<tr><td>Italiana Ferramenta</td><td><code>https://www.italianaferramenta.it/en/catalog/connectings</code></td></tr>
+<tr><td>OVVO</td><td><code>https://ovvotech.com/furniture-connector-types/</code></td></tr>
+<tr><td>Lockdowel</td><td><code>https://lockdowel.com/cabinets/</code> และ <code>/downloads/</code></td></tr>
+<tr><td>Välinge/Threespine</td><td><code>https://valinge.com/threespine/this-is-threespine/</code></td></tr>
+<tr><td>KNAPP</td><td><code>https://knappconnectors.com/industries/cabinets-closets-and-case-goods/</code></td></tr>
+<tr><td>Festool DOMINO</td><td>OEM pages ของ D8 <code>576797---kv-sys-d8</code> และ D14 <code>576795---sv-sys-d14</code></td></tr>
+<tr><td>Hoffmann</td><td><code>https://hoffmann-usa.com/faq/</code> และ OEM documents ที่เชื่อมจากเว็บไซต์</td></tr>
+<tr><td>Blum</td><td><code>https://www.blum.com/eu/en/products/various-products/thin-fronts/assembly/</code></td></tr>
+</tbody></table></div>
+<ul>
+<li>[ ] <strong>Step 4:</strong> รัน denominator test และ <code>check_coverage --fail-on-unclassified</code> ให้ exit 0</li>
+<li>[ ] <strong>Step 5:</strong> commit <code>data(registry): declare first-cohort source denominator</code></li>
+</ul>
+<h3>Task 10: นำเข้า wave A — Häfele, Hettich และ Titus</h3>
+<p><strong>ไฟล์:</strong> สร้าง reviewed assertions ใต้ <code>vendors/hafele/</code>, <code>vendors/hettich/</code>, <code>vendors/titus/</code>; สร้าง <code>test_wave_a.py</code>; generate canonical datasets ผ่าน CLI</p>
+<p><strong>Interfaces:</strong> ส่งออก exact order codes, BOM edges และ evidence queues ของสามแบรนด์</p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> เขียน coverage equation ต่อทุก source table/page และ pin Häfele Minifix page-24 articles กับ ambiguous page-23 articles แยก record/state</li>
+<li>[ ] <strong>Step 2:</strong> รัน test และเห็น wave records absent</li>
+<li>[ ] <strong>Step 3:</strong> transcribe/review OEM assertions; preserve order code, region, pack, finish, mating/tool references; Rastex ห้ามตกเป็น Minifix</li>
+<li>[ ] <strong>Step 4:</strong> รัน wave test, brand-scoped coverage และ rebuild 0.1.0 ให้ exit 0</li>
+<li>[ ] <strong>Step 5:</strong> stage เฉพาะ wave A data/generated canonical changes/test และ commit <code>data(registry): ingest first-cohort wave A</code></li>
+</ul>
+<h3>Task 11: นำเข้า wave B — Lamello, Italiana Ferramenta และ OVVO</h3>
+<p><strong>ไฟล์:</strong> สร้าง vendor assertion files, <code>test_wave_b.py</code>; generate canonical datasets</p>
+<p><strong>Interfaces:</strong> ส่งออก P-System tool/groove dependencies, Target identities และ OVVO thickness/process variants</p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> tests ต้องแยก Lamello family/model, รักษา exact Italiana codes และแยก OVVO drilling/milling</li>
+<li>[ ] <strong>Step 2:</strong> รัน test และเห็น RED</li>
+<li>[ ] <strong>Step 3:</strong> ingest reviewed OEM assertions; marketing family name ใช้แทน exact order code ไม่ได้</li>
+<li>[ ] <strong>Step 4:</strong> รัน wave test, scoped coverage และ rebuild ให้ exit 0</li>
+<li>[ ] <strong>Step 5:</strong> commit <code>data(registry): ingest first-cohort wave B</code></li>
+</ul>
+<h3>Task 12: นำเข้า waves C และ D</h3>
+<p><strong>ไฟล์:</strong> reviewed assertions สำหรับ Lockdowel, Threespine, KNAPP, Festool, Hoffmann, Blum; <code>test_wave_c_d.py</code></p>
+<p><strong>Interfaces:</strong> ส่งออก snap/slide/profile/dovetail/loose-tenon/thin-front identities พร้อม licensing/tool/role constraints</p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> tests แยก Threespine licensing จาก SKU evidence, Festool D8/D14, Hoffmann machine requirement, Blum thin-front role และ classify Lockdowel/KNAPP models</li>
+<li>[ ] <strong>Step 2:</strong> รัน test และเห็น RED</li>
+<li>[ ] <strong>Step 3:</strong> ingest ทั้งหกแบรนด์; หาก primary evidence ไม่มี exact order code ให้คง model เป็น pending</li>
+<li>[ ] <strong>Step 4:</strong> รัน full-cohort coverage/rebuild ให้ exit 0 และ ledger แสดง pending/blocked</li>
+<li>[ ] <strong>Step 5:</strong> commit <code>data(registry): complete first-cohort classifications</code></li>
+</ul>
+<h3>Task 13: บังคับ tenant overlays โดยไม่เปลี่ยน canonical</h3>
+<p><strong>ไฟล์:</strong> สร้าง <code>tenant_overlays.py</code>, <code>test_tenant_overlays.py</code></p>
+<p><strong>Interfaces:</strong> ส่งออก <code>TenantCommercialOverlay</code>, <code>apply_tenant_overlay()</code></p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> tests พิสูจน์ Daph ตั้ง preference/price/stock/lead-time/approval ได้ แต่ canonical bytes ไม่เปลี่ยน และ tenant อื่นอ่าน overlay ไม่ได้</li>
+<li>[ ] <strong>Step 2:</strong> รัน test และเห็น RED</li>
+<li>[ ] <strong>Step 3:</strong> implement:</li>
+</ul>
+<pre><code class="language-python">@dataclass(frozen=True)
+class TenantCommercialOverlay:
+    tenant_id: str
+    sku_id: str
+    preferred: bool
+    price_minor: int | None
+    currency: str | None
+    local_stock: int | None
+    lead_time_days: int | None
+    approved_substitution_ref: str | None</code></pre>
+<ul>
+<li>[ ] <strong>Step 4:</strong> รัน test ให้ cross-tenant denial ผ่าน</li>
+<li>[ ] <strong>Step 5:</strong> commit <code>feat(registry): isolate tenant commercial overlays</code></li>
+</ul>
+<h3>Task 14: สร้าง nested hash-pinned release consumer</h3>
+<p><strong>ไฟล์:</strong> สร้าง registry types/schema/loader/JSON/test ใต้ <code>src/core/hardware/registry/</code></p>
+<p><strong>Interfaces:</strong> รับ parent release 0.1.0; ส่งออก <code>loadRegistryRelease(bytes, expectedSha256)</code></p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> copy exact parent release และเขียน tests สำหรับ valid load, one-byte tamper, wrong schema, duplicate SKU และ verified field ที่ขาด evidence</li>
+<li>[ ] <strong>Step 2:</strong> รัน Vitest และเห็น module import failure</li>
+<li>[ ] <strong>Step 3:</strong> implement:</li>
+</ul>
+<pre><code class="language-typescript">export type RegistryPin = {
+  releaseId: string;
+  version: string;
+  payloadSha256: string;
+};
+
+export async function loadRegistryRelease(
+  jsonText: string,
+  expectedSha256: string,
+): Promise&lt;RegistryRelease&gt; {
+  const bytes = new TextEncoder().encode(jsonText);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const actual = Array.from(new Uint8Array(digest))
+    .map((byte) =&gt; byte.toString(16).padStart(2, '0'))
+    .join('');
+  if (actual !== expectedSha256.toLowerCase()) {
+    throw new Error(`REGISTRY_HASH_MISMATCH expected=${expectedSha256} actual=${actual}`);
+  }
+  return RegistryReleaseSchema.parse(JSON.parse(jsonText));
+}</code></pre>
+<ul>
+<li>[ ] <strong>Step 4:</strong> รัน registry tests และ typecheck ให้ exit 0</li>
+<li>[ ] <strong>Step 5:</strong> commit ใน nested: <code>feat(hardware): consume pinned connector registry release</code></li>
+</ul>
+<h3>Task 15: แทน connector fallback ด้วย explicit registry resolution</h3>
+<p><strong>ไฟล์:</strong> สร้าง <code>selectRegistryConnector.ts</code>/test; แก้ <code>connector/types.ts</code>, <code>connector/catalog.ts:247-253</code></p>
+<p><strong>Interfaces:</strong> ส่งออก <code>ConnectorResolution</code>, <code>selectRegistryConnector(input, release)</code></p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> tests ครอบคลุม exact Minifix BOM, Rastex refusal, material/thickness out-of-envelope, region/lifecycle block และ live Minifix Ø10/17.5 เป็น shadow-only</li>
+<li>[ ] <strong>Step 2:</strong> รัน test และเห็น RED</li>
+<li>[ ] <strong>Step 3:</strong> implement discriminated result:</li>
+</ul>
+<pre><code class="language-typescript">export type ConnectorResolution =
+  | {
+      ok: true;
+      mode: 'QUALIFIED' | 'SHADOW_ONLY';
+      skuId: string;
+      connectorSpec: ConnectorSpec;
+      registryPin: RegistryPin;
+      evidenceAssertionIds: string[];
+    }
+  | {
+      ok: false;
+      reason:
+        | 'SKU_NOT_FOUND'
+        | 'BOM_INCOMPLETE'
+        | 'MATERIAL_THICKNESS_UNQUALIFIED'
+        | 'TOOL_CAPABILITY_MISSING'
+        | 'STRUCTURAL_EVIDENCE_INSUFFICIENT'
+        | 'LIFECYCLE_OR_REGION_BLOCKED';
+      message: string;
+    };</code></pre>
+<p>ขยาย family โดยไม่สร้าง closed list สี่ค่าอีก:</p>
+<pre><code class="language-typescript">export type LegacyConnectorFamily = 'MINIFIX' | 'TARGET_J' | 'RASTEX' | 'DOWEL';
+export type ConnectorFamily = LegacyConnectorFamily | `OEM:${string}`;</code></pre>
+<p>ลบพฤติกรรมที่ family อื่นตกเป็น Minifix; deprecated wrapper ต้องรับ exact SKU และจัดการ refusal</p>
+<ul>
+<li>[ ] <strong>Step 4:</strong> รัน registry/connector tests และ typecheck ให้ exit 0</li>
+<li>[ ] <strong>Step 5:</strong> commit <code>fix(connectors): resolve exact SKU without family fallback</code></li>
+</ul>
+<h3>Task 16: ต่อ registry truth เข้า shadow factory packets</h3>
+<p><strong>ไฟล์:</strong> แก้ <code>buildConnectorOps.ts</code>, packet types/verifier/callers; สร้าง <code>connectorRegistryPin.test.ts</code></p>
+<p><strong>Interfaces:</strong> รับ <code>ConnectorResolution</code>; ส่งออก registry pin, exact SKU/BOM, verdict, evidence IDs และ refusals</p>
+<ul>
+<li>[ ] <strong>Step 1:</strong> tests ต้องตรวจ pin/hash/SKU/BOM, determinism, tamper block, SHADOW_ONLY/NFP, no default Minifix และ parity เดิม</li>
+<li>[ ] <strong>Step 2:</strong> รัน test และเห็น RED</li>
+<li>[ ] <strong>Step 3:</strong> เปลี่ยน signature:</li>
+</ul>
+<pre><code class="language-typescript">export interface ConnectorSelectionContext {
+  resolution: ConnectorResolution;
+  materialAId: string;
+  materialBId: string;
+  measuredThicknessAMm: number;
+  measuredThicknessBMm: number;
+  machineCapabilityIds: string[];
+}
+
+export function buildConnectorOpsData(
+  drillMap: DrillMap | null,
+  context: ConnectorSelectionContext,
+): PacketConnectorOps</code></pre>
+<p><code>resolution.ok=false</code> ต้อง emit refusal/zero manufacturing ops; <code>SHADOW_ONLY</code> ใช้ comparison ops ได้แต่ต้องคง NFP</p>
+<ul>
+<li>[ ] <strong>Step 4:</strong> รัน:</li>
+</ul>
+<pre><code class="language-powershell">npm.cmd run test:run -- src/core/hardware/registry src/core/connector src/factory/packet
+npm.cmd run typecheck:all
+npm.cmd run build</code></pre>
+<p>Expected: exit 0 และ packets ยัง NOT-FOR-PRODUCTION</p>
+<ul>
+<li>[ ] <strong>Step 5:</strong> commit <code>feat(factory): pin exact connector registry evidence</code></li>
+</ul>
+<h2>Final reconciliation และ release gate</h2>
+<ul>
+<li>[ ] รัน parent component-master tests ทั้งหมดและ <code>verify_kitchen_kernel.py</code></li>
+<li>[ ] rebuild 0.1.0 สองครั้งและบันทึก SHA-256 ที่ตรงกัน</li>
+<li>[ ] รัน full nested Vitest, typecheck และ build พร้อม output ครบ</li>
+<li>[ ] diff parent SKU IDs กับ nested materialized release</li>
+<li>[ ] พิสูจน์ denominator ของ 12 แบรนด์และ classification ของทุกรายการที่ค้นพบ</li>
+<li>[ ] พิสูจน์ verified fields มี primary evidence/rights</li>
+<li>[ ] พิสูจน์ incomplete BOM, unsupported thickness, Rastex fallback และ tampered hash fail closed</li>
+<li>[ ] บันทึก Minifix geometry ที่ contradicted/unsourced เป็น blocker ห้ามเรียก qualified</li>
+<li>[ ] render implementation/coverage reports สองภาษาเป็น standalone HTML</li>
+<li>[ ] แยก parent/nested commits และห้าม push จน owner review histories/evidence</li>
+</ul>
+<h2>Execution checkpoints</h2>
+<ol>
+<li><strong>Foundation:</strong> หลัง Task 8 review schema, graph, qualification และ deterministic release</li>
+<li><strong>Cohort:</strong> หลัง Task 12 review source denominator, rights และ classifications</li>
+<li><strong>Runtime:</strong> หลัง Task 16 ทำ independent spec-conformance/code-quality review และ full gates</li>
+<li><strong>Production decision:</strong> อยู่นอกแผนนี้ ต้องมี physical qualification, machine/coupon/first-article evidence, security และ owner ratification; software completion ไม่ปลด NOT-FOR-PRODUCTION</li>
+</ol>
+<h2>Spec-coverage self-review</h2>
+<div class="tablewrap"><table><thead><tr><th>Approved requirement</th><th>Tasks</th></tr></thead><tbody>
+<tr><td>Global living brand registry/transparent denominator</td><td>8–12</td></tr>
+<tr><td>Exact model/order code/multidimensional verification</td><td>2, 3, 9–12</td></tr>
+<tr><td>Complete System BOM/tools/compatibility</td><td>4 และ cohort data tasks</td></tr>
+<tr><td>วัสดุตู้ทุกชนิด/ความหนาจริง</td><td>5</td></tr>
+<tr><td>Arbitrary W × D × H/ตู้สูง/fail-closed</td><td>6</td></tr>
+<tr><td>Primary evidence/immutable source/rights</td><td>3, 7, 9–12</td></tr>
+<tr><td>Ingestion/quarantine/lifecycle/coverage</td><td>7–12</td></tr>
+<tr><td>Daph/tenant commercial overlay</td><td>13</td></tr>
+<tr><td>Parent authority/nested pinned consumer</td><td>1, 8, 14</td></tr>
+<tr><td>ไม่มี Rastex/unknown-family fallback</td><td>15</td></tr>
+<tr><td>Factory-packet provenance/NFP</td><td>16</td></tr>
+<tr><td>Physical qualification แยกจาก software proof</td><td>Final gate/production checkpoint</td></tr>
+</tbody></table></div>
+</main></body>
+</html>

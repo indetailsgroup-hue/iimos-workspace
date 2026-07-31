@@ -1,0 +1,203 @@
+# Book-to-Skill on Codex/Windows — Implementation and Reconciliation Evidence
+
+**Edition:** English
+**Report date:** 30 July 2026, Asia/Bangkok (UTC+7)
+**Governing design:** [`docs/superpowers/specs/2026-07-30-book-to-skill-codex-windows-design.en.md`](../superpowers/specs/2026-07-30-book-to-skill-codex-windows-design.en.md)
+**Implementation plan:** [`docs/superpowers/plans/2026-07-30-book-to-skill-codex-windows-implementation.en.md`](../superpowers/plans/2026-07-30-book-to-skill-codex-windows-implementation.en.md)
+**Companion report:** [`2026-07-30-book-to-skill-upstream-audit.en.md`](2026-07-30-book-to-skill-upstream-audit.en.md)
+**Scope:** parent governance root `C:\Users\thai3\determined-williams (2)` and the personal Codex skills directory
+
+> **Root rule:** the nested product repository `determined-williams\` was not written by this work. Its worktree was already carrying unrelated changes on branch `fix/dxf-truth-chain` before and after this session.
+
+---
+
+## 1. What this session actually did
+
+The plan describes a build that runs in order: vendor the audited runtime, write the overlay, add tests, then deploy and lock. On this machine the deployment already existed when this session started — an earlier Codex session had written the personal installation and its provenance lock — while the branch this session works on, `guardrails/claim-linters`, carried none of the source, tests, or reports the plan owns. (The earlier session's own commits live on a separate branch; see §1.3.)
+
+This session reconciled that split: it re-derived the pinned bytes independently, vendored them into the repository, wrote the test suite the plan specifies, and proved that the tree Codex loads equals the tree the repository now governs.
+
+### 1.1 Observed timeline (local time, 30 July 2026)
+
+| Time | Event | Origin |
+|---|---|---|
+| 28 Jul | `book_to_skill/`, `tools/` written into the personal skills directory | earlier session |
+| 14:27 | `LICENSE.md`, `scripts/extract.py` in place | earlier session |
+| 14:42–14:43 | overlay `SKILL.md` and `agents/openai.yaml` | earlier session |
+| 14:51 | `scripts/install_generated_skill.py` | earlier session |
+| 15:21 | provenance lock `~/.codex/skills/.provenance/book-to-skill.json` (`auditedAt` `2026-07-30T08:21:20Z`) | earlier session |
+| 19:17–19:42 | governed source `tools/codex-skills/book-to-skill/`, `tests/codex_skills/`, byte comparison, reproduction of the patched defect | this session |
+| 19:47 | `verify_provenance.py` → `PASS` | this session |
+| 20:2x | second declared patch (`pdftotext -enc UTF-8`), its fixture and regression test, deployment sync, provenance lock rewritten | this session |
+
+### 1.2 One correction to this session's own opening status report
+
+The opening status table stated that no provenance lock covered the installed converter. That was wrong: the lock had been written at 15:21, more than four hours before the check, and a re-listing of `~/.codex/skills/.provenance/` shows `book-to-skill.json` as its first entry. The corrected row is in §4. Nothing was overwritten as a result of the error — `write_provenance.py` refuses an existing output path, and that refusal is what surfaced the mistake.
+
+### 1.3 A parallel implementation on another branch
+
+The earlier session did commit its work — to `codex/book-to-skill-codex-windows`, checked out at `C:\tmp\book-to-skill-codex-windows`. That branch and this one both start from the plan commit `3ba3b8e5` and have since diverged. It carries the same 22-file skill tree, its own `tests/codex_skills/`, and the same four report paths.
+
+The two vendored skill trees agree byte for byte:
+
+```
+$ git diff --name-only HEAD codex/book-to-skill-codex-windows -- tools/codex-skills/book-to-skill
+$ echo $?
+0
+```
+
+Two independent passes over the same pinned commit produced the same 22 files, which is stronger evidence for the vendored bytes than either pass alone. The test suites are where the branches differ: that branch's installer tests are substantially longer, this branch's manifest test records per-path digests and the declared patch instead, and `tools/codex-skills/.gitattributes` exists only here — so the line-ending hazard described in §2.3 is still open on that branch. Which suite survives, and whether the two branches merge, is the owner's decision rather than something this reconciliation settled.
+
+## 2. Files this session created
+
+### 2.1 Governed skill source — `tools/codex-skills/book-to-skill/`
+
+22 files: the 19 audited upstream paths (two carrying declared patches) plus three local overlay files.
+
+| Path | Origin |
+|---|---|
+| `book_to_skill/` (17 files) | pinned upstream `c6bc1b79`; `utils.py` and `parsers/pdf.py` carry the declared patches |
+| `scripts/extract.py` | pinned upstream |
+| `tools/scan_generated_skill.py` | pinned upstream |
+| `LICENSE.md` | pinned upstream (MIT) |
+| `SKILL.md` | local overlay — Codex-native workflow |
+| `agents/openai.yaml` | local overlay — Codex UI metadata |
+| `scripts/install_generated_skill.py` | local overlay — guarded generated-skill installation |
+
+### 2.2 Tests — `tests/codex_skills/`
+
+| File | What it pins |
+|---|---|
+| `test_upstream_manifest.py` | per-path digests against the pinned commit, both declared patches (upstream and local digests), the exact file set of the skill tree, symbolic-link rejection |
+| `test_codex_skill_contract.py` | Codex/PowerShell-native workflow strings, frontmatter limited to `name` + `description`, gate ordering (scanner introduced before installer), UI metadata fields |
+| `test_extraction_smoke.py` | extraction from a path with spaces, extraction from a Thai path with Thai chapter detection, the cp1252 regression, the pdftotext non-ASCII regression, `--check` reporting every format |
+| `test_generated_skill_installer.py` | new install, refusal of an existing target, explicit replacement with recoverable backup, rejection of a name that could escape the root, rejection of unexpected staged paths, scanner-blocked injection content, snapshot cleanup after refusal, symbolic-link refusal, CLI exit codes |
+| `test_security_scan.py` | scanner exit codes 0/1/2 with rule id and line number, and a staged skill walked through scan → Codex validator → guarded install with a byte comparison |
+| `test_installation_evidence.py` | the personal installation equals the governed source, tree-hash by tree-hash |
+| `fixtures/english-guide.md`, `fixtures/คู่มือ-ตัวอย่าง.md`, `fixtures/non-ascii-winansi.pdf` | the three extraction inputs |
+
+### 2.3 A line-ending guard the plan did not anticipate
+
+Staging the vendored tree surfaced a defect that would have made the byte pinning fail on the next clone. The pinned blobs are CRLF — and three lines of `book_to_skill/utils.py` are not, so the tree is not safely normalizable in either direction. This repository runs with `core.autocrlf=true` and carried no `.gitattributes`, so Git stored an LF-normalized copy and would restore CRLF on checkout:
+
+```
+$ git config core.autocrlf
+true
+$ git check-attr text eol -- tools/codex-skills/book-to-skill/book_to_skill/utils.py
+…: text: unspecified
+…: eol: unspecified
+```
+
+A fresh clone would then disagree with every digest recorded in the manifest test, and a redeploy from that clone would ship bytes other than the audited ones. `tools/codex-skills/.gitattributes` now freezes the tree with `book-to-skill/** -text`, and the index was rebuilt so the stored blobs are the audited bytes:
+
+```
+$ git check-attr text -- tools/codex-skills/book-to-skill/book_to_skill/utils.py
+…: text: unset
+$ git cat-file blob :tools/codex-skills/book-to-skill/book_to_skill/utils.py | sha256sum
+368ef866089300bd…   (the declared patched digest)
+$ git cat-file blob :tools/codex-skills/book-to-skill/tools/scan_generated_skill.py | sha256sum
+1c075d1de29e4c15…   (the pinned upstream digest)
+```
+
+## 3. Test evidence
+
+Command and complete summary, run from the parent root:
+
+```
+$ export BOOK_TO_SKILL_INSTALLED_DIR="C:/Users/thai3/.codex/skills/book-to-skill"
+$ python -m pytest tests/codex_skills -v --basetemp="<scratch>/pytest-tmp"
+
+platform win32 -- Python 3.14.2, pytest-8.4.2, pluggy-1.6.0
+rootdir: C:\Users\thai3\determined-williams (2)
+configfile: pyproject.toml
+collected 30 items
+... 30 PASSED ...
+============================== 30 passed in 2.43s ==============================
+EXIT=0
+```
+
+No test was skipped: the Codex validator was found at `~/.codex/skills/.system/skill-creator/scripts/quick_validate.py`, symbolic-link creation is permitted for this account, and `BOOK_TO_SKILL_INSTALLED_DIR` was supplied, so the three conditional tests all executed.
+
+Red-before-green was recorded for the two claims where a passing test could otherwise be vacuous:
+
+| Test | Recorded failure before the fix |
+|---|---|
+| `test_upstream_manifest.py` (5 of 6 tests) | ran against an empty target directory before vendoring |
+| `test_thai_metadata_survives_a_non_utf8_locale` | ran against the pinned upstream `utils.py`; `UnicodeEncodeError: 'charmap' codec` at `utils.py:686`, returncode 1 |
+| `test_pdftotext_path_preserves_non_ascii_characters` | ran against the pinned upstream `parsers/pdf.py`; the extracted text came back as `H\ufffdfele Minifix\ufffd`, `Drill hole \ufffd 15 mm` |
+
+## 4. Provenance and deployment equality
+
+| Field | Value |
+|---|---|
+| Lock path | `C:\Users\thai3\.codex\skills\.provenance\book-to-skill.json` |
+| `auditedAt` | rewritten on 30 July 2026 after the second patch; the first lock recorded `2026-07-30T08:21:20.191044Z` |
+| Revision | `c6bc1b7927822e563aae6212c07670f5a3d95ea7` |
+| License | MIT |
+| Files recorded | 22 |
+| `treeSha256` | `c1a55b520642d9a83bb8a09dc4da18ed58c3abf976bbf2a6758dee8008b06d63` (`0abcf03b…` before the second patch) |
+| Local modifications recorded | 5 (the three overlay files and both declared patches, each with the upstream digest it deviates from) |
+| Risk notes recorded | 5 (process, filesystem-write, network-on-approval, destructive replacement, parser exposure) |
+
+```
+$ python ~/.codex/skills/skill-installer/scripts/verify_provenance.py \
+    'C:\Users\thai3\.codex\skills\.provenance\book-to-skill.json'
+PASS book-to-skill files=22 tree=c1a55b520642d9a83bb8a09dc4da18ed58c3abf976bbf2a6758dee8008b06d63
+EXIT=0
+```
+
+Two independent facts now hold together: the lock matches the installed tree (`verify_provenance.py`), and the installed tree matches the governed source (`test_personal_installation_matches_governed_source`). The lock was written before any test existed, so its summary line — "Pinned upstream runtime audited; Codex/Windows overlay reviewed and tested" — was ahead of its evidence at the time; the test suite in §3 is what now stands behind the word "tested".
+
+The earlier session's lock stood untouched until the second declared patch changed the installed bytes and `test_personal_installation_matches_governed_source` went red — the guard doing its job. The lock was then rewritten with `--replace`, and now carries both patches together with the upstream digest each one deviates from, which the first lock did not record.
+
+## 5. Deviations from the plan
+
+| Plan step | What was done instead | Why |
+|---|---|---|
+| Run tests with the Codex runtime interpreter (`…\codex-primary-runtime\dependencies\python\python.exe`) | Ran with the system interpreter, Python 3.14.2 | pytest is not installed in the Codex runtime, and installing it would be an unapproved dependency change. The system interpreter already carries pytest 8.4.2, and its locale codec is cp1252 — the same condition the regression test needs. |
+| Default pytest temporary directory | Passed `--basetemp` into the session scratch directory | the sandbox denies access to `%LOCALAPPDATA%\Temp\pytest-of-thai3`, which aborts collection before any test runs |
+| Task 1–5 order (test, then source, then deploy) | Source and tests written after a deployment that already existed | reconciliation of the pre-existing install; red-before-green was still recorded for both claims in §3 |
+| Task 6 step 5 — write the provenance lock | Verified the existing lock and left it in place, then rewrote it after the second patch | while the bytes still matched, overwriting another session's audit record would have destroyed evidence to gain nothing; once `parsers/pdf.py` changed, the recorded digests were stale and a rewrite was the only honest option |
+| Commit per task | Nothing committed; paths staged only | committing is the owner's call |
+
+## 6. Success criteria from the design
+
+| # | Criterion | Status |
+|---|---|---|
+| 1 | Codex discovers the converter from `~/.codex/skills/book-to-skill` | layout satisfied — 22 files in place with `SKILL.md` frontmatter and `agents/openai.yaml`; discovery inside the Codex UI was not exercised from this session |
+| 2 | `SKILL.md` provides Codex-native paths and PowerShell-usable commands | covered by `test_codex_skill_contract.py` (4 tests) |
+| 3 | Extraction for PDF/EPUB/DOCX/TXT/Markdown/HTML/RTF uses the pinned implementation | partially verified — Markdown in both languages and PDF (a 699-byte fixture plus a 17-page Häfele catalogue) were exercised end to end; EPUB, DOCX, RTF, and MOBI were audited as source only |
+| 4 | Technical PDF uses Docling when installed; absent optional dependencies are reported, never auto-installed | verified for the reporting half (`--check`, exit 0, Docling shown as fallback); the Docling path itself was not exercised because the package is not installed |
+| 5 | Windows paths with spaces and Thai characters are handled as literal paths | covered by three extraction tests and the Thai-path installer test |
+| 6 | Generated skills are staged, scanned, and validated before installation | covered by `test_security_scan.py`, including the Codex validator returning `Skill is valid!` |
+| 7 | No silent overwrite; replacement requires approval and leaves a recoverable backup | covered by two installer tests; approval itself is a workflow instruction, not a code gate |
+| 8 | The installed converter matches a provenance lock | verified — `PASS`, 22 files, tree `0abcf03b…` |
+| 9 | Contract, security, extraction, installation, and end-to-end tests pass with complete output | verified — 30 tests, exit code 0, summary in §3 |
+| 10 | English and Thai documentation in Markdown and standalone HTML | delivered — this report, the audit report, and their Thai and HTML counterparts |
+
+## 7. Repository state
+
+```
+$ git status --short --branch        # parent governance root
+## guardrails/claim-linters
+ M docs/superpowers/specs/2026-07-21-monolith-controlled-complete-document-set-design.en.md
+?? tools/codex-skills/
+?? tests/codex_skills/
+… (pre-existing untracked entries omitted)
+
+$ git -C determined-williams status --short --branch    # nested product root
+## fix/dxf-truth-chain...origin/fix/dxf-truth-chain
+ M daph-second-brain/_inventory.json
+… (pre-existing changes, untouched by this work)
+```
+
+The nested root's modifications predate this session and none of the paths this session wrote fall inside it.
+
+## 8. What remains unproven
+
+- **Codex UI discovery and end-to-end use.** The skill directory has the right shape and passes the validator; nobody has yet run a real conversion through Codex Desktop on this machine.
+- **Formats other than Markdown and PDF.** EPUB, DOCX, RTF, and MOBI extraction paths were read and hash-pinned, not executed against real documents. The PDF path has since been exercised on a real 17-page catalogue through the `pdftotext` branch only; `pypdf` and `pdfminer` remain fallbacks that no test drives.
+- **Docling and Calibre paths.** Neither is installed, so `--mode technical` and MOBI/AZW conversion stay untested here.
+- **Generated-skill fidelity.** Whether a generated skill faithfully represents its source book is a property of the summarizing model, and no test in this suite measures it.
+- **Portability.** Every result above was produced on Windows 11 with Python 3.14.2 and cp1252 as the locale codec.
+- **Third-party publication.** Generated skills from copyrighted books stay private by default; nothing here licenses distributing them.

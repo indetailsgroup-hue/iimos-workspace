@@ -28,3 +28,10 @@ daph-second-brain/**/*.zip
 *.patch
 ธุระกิจ/
 .env.local
+
+# Python bytecode and test cache — from the governance tooling under tools/ and
+# tests/, which is Python. Union of both sides of the unrelated-history merge;
+# nothing from main was dropped.
+__pycache__/
+*.py[cod]
+.pytest_cache/

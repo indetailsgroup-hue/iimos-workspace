@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>Evidence block — pasted verify_absence proof</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>Evidence block — pasted <code>verify_absence</code> proof</h1>
+<p>Attach one of these to every sentence that claims a named artifact is absent. A negative claim about a named thing — a backticked identifier, a file path, an ADR id — is not publishable in this repository without one.</p>
+<p>The block has two parts that must stay together:</p>
+<ol>
+<li><strong>An HTML comment</strong> carrying the machine-readable term and date. Linters read this and only this. It never appears in rendered output.</li>
+<li><strong>A fenced code block</strong> carrying the human-readable proof: the exact command you ran, followed by the <code>verify_absence</code> output pasted unedited.</li>
+</ol>
+<p>Prose is not evidence. A linter will never parse your sentence, so anything you assert outside these two parts is unverified by construction.</p>
+<h2>Comment grammar</h2>
+<p>The comment records exactly one term and one date:</p>
+<pre><code>&lt;!-- verify_absence: TERM @ YYYY-MM-DD --&gt;</code></pre>
+<p>The parser is this regular expression:</p>
+<pre><code>&lt;!--\s*verify_absence:\s*(?P&lt;term&gt;\S.*?)\s+@\s+(?P&lt;date&gt;\d{4}-\d{2}-\d{2})\s*--&gt;</code></pre>
+<p>Rules that follow from it:</p>
+<ul>
+<li><strong>One term per comment.</strong> Two absent artifacts need two blocks. Writing <code>TERM_A, TERM_B</code> captures the literal string <code>TERM_A, TERM_B</code> as the term, which then matches neither claim — the block fails closed rather than silently covering both.</li>
+<li><strong>The date is ISO 8601 <code>YYYY-MM-DD</code>,</strong> the date you ran the search. Any other ordering does not match and the block counts as missing.</li>
+<li><strong>Whitespace is required on both sides of the <code>@</code>.</strong> This is what lets a term begin with <code>@</code>, as package names do.</li>
+<li><strong>The term must not contain <code>&lt;</code>, <code>&gt;</code>, or <code>--</code>.</strong> Those cannot survive an HTML comment.</li>
+<li><strong>The recorded term must be the artifact the sentence actually claims is absent,</strong> written the same way. A block whose term differs from the claimed artifact is a <em>mismatched</em> block: it is detected and rejected exactly like a missing one. Pasting a real block for a different term is not evidence.</li>
+</ul>
+<p>Place the comment immediately before its fenced block, separated by one blank line, and put the pair directly after the paragraph making the claim.</p>
+<h2>Worked example</h2>
+<p><code>sampleEdgebandAllowance</code> was not located in 2 root(s) by filename, content, git-tracked, and git-history search on 2026-07-23.</p>
+<!-- verify_absence: sampleEdgebandAllowance @ 2026-07-23 -->
+<pre><code>$ python tools/verify_absence.py sampleEdgebandAllowance --root docs --root tools
+
+# verify_absence — sampleEdgebandAllowance
+
+variants searched (5): SAMPLEEDGEBANDALLOWANCE, sample-edgeband-allowance, sampleEdgebandAllowance, sample_edgeband_allowance, sampleedgebandallowance
+roots: 2
+  - docs
+  - tools
+content extensions: all text types
+excluded directories: .cache, .git, .next, .pytest_cache, .venv, __pycache__, build, coverage, dist, node_modules, venv
+encoding: utf-8 (Thai comments and identifiers are in scope)
+
+## docs
+
+### filename / directory-name matches: 0
+
+### content matches: 0
+
+### git grep (tracked files only): 0 — searched, nothing tracked matches
+### git history (commits adding/removing the term): 0
+
+## tools
+
+### filename / directory-name matches: 0
+
+### content matches: 0
+
+### git grep (tracked files only): 0 — searched, nothing tracked matches
+### git history (commits adding/removing the term): 0
+
+========================================================================
+RESULT: NOT LOCATED by any method above.
+
+This still does NOT license the words "does not exist".
+The only wording this output supports is:
+
+    "sampleEdgebandAllowance was not located in 2 root(s) by filename,
+     content, git-tracked, and git-history search on &lt;date&gt;."
+
+Absence remains UNKNOWN until a search of the places this tool cannot
+reach also comes back empty: binary assets, licensed or paywalled vendor
+documentation, external services, other branches, and anything stored
+under a name that shares no substring with the term.</code></pre>
+<p>Note that the pasted output names its own roots. A block produced with narrowed <code>--root</code> or <code>--ext</code> flags supports a correspondingly narrower claim, and the reader can see that without trusting the sentence.</p>
+<p>On a Windows console, set <code>PYTHONIOENCODING=utf-8</code> before running the tool. The default code page cannot encode the em dash or the Thai text the output can contain, so the tool either mangles those characters or aborts mid-run — and a truncated paste is not proof of an empty search.</p>
+<h2>What this block proves — and what it does not</h2>
+<p>It proves that on the recorded date, the four search methods over the listed roots returned nothing for that term and its spelling variants.</p>
+<p>It does <strong>not</strong> prove the artifact does not exist. It says nothing about places the tool cannot reach — binary assets, vendor documentation, external services, other branches, names sharing no substring with the term — and nothing about the repository as it stands today, since an artifact added after the search date makes a correct block describe a claim that is now false.</p>
+<h2>Wording</h2>
+<p><code>verify_absence</code> deliberately refuses to license the words "does not exist" on a negative result. This block does not restore that licence, and neither does any number of blocks. Use the tool's own sentence — this is the licensed <em>format</em>, with <code>TERM</code>, <code>N</code> and the date filled in from your own run:</p>
+<pre><code>TERM was not located in N root(s) by filename, content, git-tracked, and
+git-history search on YYYY-MM-DD.</code></pre>
+<p><code>not located</code> is a linted phrase: written about a real artifact outside a fence, it is a negative claim and needs its own evidence block, exactly like the worked example above. Do not upgrade it to "does not exist", "there is no <code>TERM</code>", "<code>TERM</code> is not implemented anywhere", or "confirmed absent". Each of those asserts something the search did not establish. If you need the stronger claim, you need a stronger method than this tool — searching harder in the same places cannot produce it.</p>
+</main></body>
+</html>

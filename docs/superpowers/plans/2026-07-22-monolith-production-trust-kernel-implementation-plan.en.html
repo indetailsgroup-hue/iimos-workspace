@@ -1,0 +1,870 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>MONOLITH Production Trust Kernel Implementation Plan</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>MONOLITH Production Trust Kernel Implementation Plan</h1>
+<blockquote><p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p></blockquote>
+<p><strong>Goal:</strong> Build the Shadow Trust-Ready Production Trust Kernel so every production-shaped artifact is tenant-bound, deterministic, two-person authorized, capability-safe, externally verifiable, revocable, and technically prevented from reaching Factory or a human as P2 plaintext.</p>
+<p><strong>Architecture:</strong> Supabase/Postgres is the only release authority. A user-scoped action-context RPC authorizes immutable release records; a Node worker compiles capabilities, constructs deterministic FactoryPacket V3 bytes, calls managed signers, and materializes private artifacts. A separate <code>tools/factory-packet-verifier</code> workspace implements packet/trust verification without importing builder code and consumes only protocol vectors and external bundles.</p>
+<p><strong>Tech Stack:</strong> PostgreSQL/Supabase migrations and pgTAP, Supabase Edge Functions, TypeScript 5.x, Node.js 20/22, Vitest, fast-check, <code>yazl</code> for builder packaging, <code>yauzl</code> plus <code>@noble/ed25519</code> for the independent verifier, Playwright, GitHub Actions.</p>
+<p><strong>Plan scope:</strong> 12 reviewable tasks in one authority chain. Splitting this into independent plans would allow identity, release, artifact, and verifier contracts to drift; phase gates below provide the review boundaries instead.</p>
+<h2>Global Constraints</h2>
+<ul>
+<li>All implementation paths below are relative to the nested product Git root <code>determined-williams/</code>; this plan remains in the parent governance root.</li>
+<li>Read <code>CONTEXT.md</code> and the 21 July 2026 repository-scope correction before implementation; inspect and report Git status in both roots at every checkpoint.</li>
+<li>Preserve the existing modified nested files <code>daph-second-brain/_inventory.json</code>, <code>_knowledge-export.json</code>, and <code>_move-log.md</code>.</li>
+<li>The phase remains <code>NOT_FOR_PRODUCTION</code>. P3 distribution and real Factory/machine delivery remain disabled.</li>
+<li>Daph is fixture/onboarding data for tenant 001, never a runtime constant. Every coexistence suite also provisions tenant 002.</li>
+<li>Postgres creates <code>VerifiedActionContextV1</code> under the caller's user bearer token. A service role cannot create human authority or accept client-supplied role, name, tenant, site, or object path.</li>
+<li>Freeze actor and release approver are distinct authenticated users. Admin gains release authority only through a separate <code>RELEASE_APPROVER</code> membership role.</li>
+<li>Hard gates and capability blockers always deny. Only catalogue warnings with <code>exceptionEligible=true</code> can use signed, expiring, two-person <code>WarningExceptionGrantV1</code>.</li>
+<li>Builder output is all-or-nothing. Unknown tools, unsupported operations, range failures, invalid profile attestations, or stale trust state produce stable reason codes and zero publishable output.</li>
+<li>The application stores signer key IDs only. Release, profile, warning-exception, and evidence private keys remain behind managed signer ports.</li>
+<li>The independent verifier imports no module from <code>server/src/trust-kernel</code>, <code>src/factory/packet</code>, or <code>src/core/manufacturing</code>; shared inputs are JSON schemas and golden bytes only.</li>
+<li>Shadow P2 plaintext is readable only by an isolated workload identity. Humans receive hashes, reports, and evidence; raw storage locators and reusable signed URLs are prohibited.</li>
+<li>RELEASE is never queued offline or auto-replayed. Offline verification reports <code>validAsOf</code>; it cannot claim current activity without online-current authority.</li>
+<li>No dual write: V3 Postgres records are the sole mutable release authority; V1/V2 surfaces become read-only projections or are denied/removed through the route disposition ledger.</li>
+<li>New project-facing Markdown documentation is emitted in aligned <code>.en.md</code>, <code>.th.md</code>, <code>.en.html</code>, and <code>.th.html</code> editions.</li>
+<li>Every production-code task uses <code>superpowers:test-driven-development</code>: RED, GREEN, refactor, targeted verification, commit.</li>
+</ul>
+<h2>Phase Gates</h2>
+<div class="tablewrap"><table><thead><tr><th>Gate</th><th>Tasks</th><th>Exit criterion</th></tr></thead><tbody>
+<tr><td>A — Authority Foundation</td><td>1–4</td><td>Versioned contracts, tenant membership, action contexts, governance records, and release state machines pass unit and pgTAP negative suites</td></tr>
+<tr><td>B — Deterministic Release</td><td>5–9</td><td>User-authorized release produces byte-identical V3 bytes through managed signing and private artifact materialization; revocation bundles are issued</td></tr>
+<tr><td>C — Independent Proof</td><td>10–12</td><td>Independent verifier, P2 containment, legacy-route denial, hostile/E2E/chaos suites, and signed evidence all pass</td></tr>
+</tbody></table></div>
+<h2>Written Spec Coverage Crosswalk</h2>
+<div class="tablewrap"><table><thead><tr><th>Approved Written Spec sections</th><th>Implementation coverage</th></tr></thead><tbody>
+<tr><td>§§1–5 — executive decision, repository/evidence scope, locked decisions, architecture, authority rule, no dual write</td><td>Global Constraints; Tasks 2, 4, 5, and 11</td></tr>
+<tr><td>§6 — <code>TenantScopeV1</code>, <code>WorkingRevision</code>, <code>ReleaseCandidate</code>, <code>ReleaseAttempt</code>, <code>ArtifactRecordV1</code>, <code>ReleaseRevision</code>, concurrent history</td><td>Tasks 1, 4, 7, 8, and 9</td></tr>
+<tr><td>§7 — actor resolution, verified action context, role boundaries, four-eyes invariant, tenant isolation</td><td>Tasks 2–5 and Task 12 negative suites</td></tr>
+<tr><td>§§8–9 — component contracts and P0/P1/P2/P3 artifact matrix</td><td>Tasks 1, 3, 5–11</td></tr>
+<tr><td>§10 — freeze/release/failure/revoke/fork/offline transaction choreography</td><td>Tasks 4, 5, 8, 9, and 12</td></tr>
+<tr><td>§11 — canonical determinism, signing profile, trust and release-status bundles</td><td>Tasks 1 and 7–10</td></tr>
+<tr><td>§§12–13 — capability safety and stable error model</td><td>Tasks 1, 3, 6, and 7</td></tr>
+<tr><td>§14 — standalone independent offline verifier</td><td>Task 10 plus Task 12 hostile/E2E proof</td></tr>
+<tr><td>§15 — canonicalization-first legacy migration, route disposition ledger, no parallel authority</td><td>Task 11</td></tr>
+<tr><td>§16 — unit/property/pgTAP/Edge/E2E/chaos layers, golden corpus, transaction chaos, evidence bundle</td><td>RED/GREEN steps in Tasks 1–11 and complete-output Task 12</td></tr>
+<tr><td>§§17–21 — Shadow Trust-Ready gate, Production/GA NO-GO, observability, governance, ownership, risks/controls, definition of done</td><td>Task 12 and Final MONOLITH Completion Gate</td></tr>
+</tbody></table></div>
+<h2>File and Responsibility Map</h2>
+<div class="tablewrap"><table><thead><tr><th>Area</th><th>Files</th><th>Responsibility</th></tr></thead><tbody>
+<tr><td>Server protocol</td><td><code>server/src/trust-kernel/contracts/*</code>, <code>canonical/*</code>, <code>reasonCodes.ts</code>, <code>result.ts</code></td><td>Builder-side versioned types, canonical hashing, stable error vocabulary</td></tr>
+<tr><td>Database authority</td><td><code>supabase/migrations/0162_*</code> through <code>0166_*</code></td><td>Tenant membership, action contexts, governance, release/artifact/outbox states, RLS and RPCs</td></tr>
+<tr><td>Edge boundary</td><td><code>supabase/functions/factory-api/trustKernel.ts</code>, <code>index.ts</code>, <code>index.test.ts</code></td><td>User-token action context creation and V3 transport; no client authority fields</td></tr>
+<tr><td>Capability and builder</td><td><code>server/src/trust-kernel/capability/*</code>, <code>snapshot/*</code>, <code>packet/*</code></td><td>Profile adaptation, exhaustive compilation, deterministic unsigned/final packet bytes</td></tr>
+<tr><td>Signing and worker</td><td><code>server/src/trust-kernel/signing/*</code>, <code>worker/*</code>, <code>artifacts/*</code></td><td>Managed signing, release choreography, content-addressed private materialization</td></tr>
+<tr><td>Trust bundles</td><td><code>server/src/trust-kernel/trust/*</code></td><td>Signed trust/release-status snapshots, purpose and revocation semantics</td></tr>
+<tr><td>Independent verifier</td><td><code>tools/factory-packet-verifier/*</code></td><td>Separate parser, canonicalizer, signature/freshness/revocation verifier and CLI</td></tr>
+<tr><td>Protocol evidence</td><td><code>test-vectors/factory-packet-v3/*</code>, <code>supabase/tests/trust_kernel_*.sql</code>, <code>e2e/trust-kernel/*</code></td><td>Shared bytes, DB invariants, hostile vectors, cross-implementation and E2E proof</td></tr>
+<tr><td>Containment</td><td><code>src/core/api/trustKernelApi.ts</code>, legacy export surfaces, route ledger</td><td>V3 projection plus denial/read-only disposition of every old authority path</td></tr>
+<tr><td>CI evidence</td><td><code>.github/workflows/trust-kernel-verify.yml</code>, <code>server/src/trust-kernel/evidence/*</code></td><td>Complete-output reports and managed evidence attestation</td></tr>
+</tbody></table></div>
+<h2>Task Overview</h2>
+<ol>
+<li><strong>Protocol contracts and canonical hashing</strong> — no dependencies.</li>
+<li><strong>Tenant membership and verified action contexts</strong> — depends on Task 1 reason codes.</li>
+<li><strong>Machine-profile and warning-exception governance</strong> — depends on Tasks 1–2.</li>
+<li><strong>Release, artifact, ledger, and outbox authority</strong> — depends on Tasks 1–3.</li>
+<li><strong>User-token Edge transport and service-role containment</strong> — depends on Tasks 2 and 4.</li>
+<li><strong>Profile adapters and exhaustive capability compiler</strong> — depends on Tasks 1 and 3.</li>
+<li><strong>Deterministic snapshot and FactoryPacket V3 builder</strong> — depends on Tasks 1 and 6.</li>
+<li><strong>Managed signer, release worker, and artifact materialization</strong> — depends on Tasks 4 and 7.</li>
+<li><strong>Trust and release-status bundle issuance</strong> — depends on Tasks 3, 4, and 8.</li>
+<li><strong>Standalone independent offline verifier</strong> — depends on Tasks 1, 7, and 9 only through schemas/vectors.</li>
+<li><strong>P2 quarantine, client projection, and legacy-route containment</strong> — depends on Tasks 5, 8, and 10.</li>
+<li><strong>E2E chaos, signed evidence, CI, and executive acceptance gate</strong> — depends on all prior tasks.</li>
+</ol>
+<hr>
+<h3>Task 1: Protocol contracts and canonical hashing</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>server/src/trust-kernel/contracts/protocolV3.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/contracts/protocolV3.schema.json</code></li>
+<li>Create: <code>server/src/trust-kernel/canonical/canonicalJson.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/canonical/hash.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/reasonCodes.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/result.ts</code></li>
+<li>Test: <code>server/src/trust-kernel/test/protocolV3.test.ts</code></li>
+<li>Test: <code>server/src/trust-kernel/test/canonicalJson.property.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>canonicalJson(value: JsonValue): string</code>, <code>sha256Hex(value: Uint8Array | string): string</code>, <code>computeReleaseAuthorizationHash(candidateHash, sortedGrantHashes): string</code>.</li>
+<li>Produces: <code>TrustResult&lt;T&gt;</code>, stable <code>TrustReasonCode</code>, and the approved protocol types <code>ActorContextV1</code>, <code>VerifiedActionContextV1</code>, <code>TenantScopeV1</code>, <code>WorkingRevision</code>, <code>ReleaseCandidate</code>, <code>ReleaseAttempt</code>, <code>ReleaseSnapshotV3</code>, <code>MachineCapabilityProfileV1</code>, <code>MachineProfileAttestationV1</code>, <code>WarningExceptionGrantV1</code>, <code>CapabilityReportV1</code>, <code>FactoryPacketManifestV3</code>, <code>ReleaseCertificateV1</code>, <code>ArtifactRecordV1</code>, <code>ReleaseRevision</code>, <code>TrustBundleV1</code>, <code>ReleaseStatusBundleV1</code>, <code>VerificationReportV1</code>, and <code>EvidenceAttestationV1</code>.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write RED contract and property tests</strong></li>
+</ul>
+<pre><code class="language-ts">expect(canonicalJson({ b: 1, a: "x" })).toBe('{"a":"x","b":1}');
+expect(() =&gt; canonicalJson({ n: Number.NaN })).toThrow("NON_CANONICAL_NUMBER");
+expect(computeReleaseAuthorizationHash("ab".repeat(32), [])).toBe(
+  sha256Hex('{"candidateHash":"' + "ab".repeat(32) + '","domain":"MONOLITH/ReleaseAuthorization/V1","sortedGrantHashes":[]}'),
+);
+expect(RELEASE_ATTEMPT_STATUSES).toEqual(["PENDING", "FAILED", "PUBLISHED", "VOID"]);
+expect(RELEASE_REVISION_STATUSES).toEqual(["ACTIVE", "REVOKED"]);</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run RED</strong></li>
+</ul>
+<p>Run: <code>npm.cmd --prefix server test -- --run src/trust-kernel/test/protocolV3.test.ts src/trust-kernel/test/canonicalJson.property.test.ts</code></p>
+<p>Expected: FAIL because the modules do not exist; zero tests may not be reported as success.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the minimal canonical and result contracts</strong></li>
+</ul>
+<pre><code class="language-ts">export type TrustResult&lt;T&gt; =
+  | { ok: true; value: T }
+  | { ok: false; code: TrustReasonCode; detail?: Readonly&lt;Record&lt;string, string&gt;&gt; };
+
+export const RELEASE_ATTEMPT_STATUSES = ["PENDING", "FAILED", "PUBLISHED", "VOID"] as const;
+export const ARTIFACT_STATUSES = ["QUARANTINED", "MATERIALIZING", "AVAILABLE", "VOID"] as const;
+export const RELEASE_REVISION_STATUSES = ["ACTIVE", "REVOKED"] as const;
+
+export function computeReleaseAuthorizationHash(candidateHash: string, grantHashes: readonly string[]): string {
+  assertSha256(candidateHash);
+  const sortedGrantHashes = [...grantHashes].sort();
+  sortedGrantHashes.forEach(assertSha256);
+  return sha256Hex(canonicalJson({
+    domain: "MONOLITH/ReleaseAuthorization/V1",
+    candidateHash,
+    sortedGrantHashes,
+  }));
+}</code></pre>
+<p><code>canonicalJson</code> recursively sorts object keys, preserves array order, accepts null/boolean/string/safe finite numbers, converts <code>-0</code> to <code>0</code>, and rejects undefined, non-finite numbers, bigint, functions, symbols, sparse arrays, and cyclic input. <code>protocolV3.schema.json</code> sets <code>additionalProperties:false</code> at every signed boundary.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run GREEN and server build</strong></li>
+</ul>
+<p>Run: <code>npm.cmd --prefix server test -- --run src/trust-kernel/test/protocolV3.test.ts src/trust-kernel/test/canonicalJson.property.test.ts</code></p>
+<p>Run: <code>npm.cmd --prefix server run build</code></p>
+<p>Expected: both exit 0; property suite covers key-order permutations, Unicode, <code>-0</code>, unsafe numbers, and cyclic rejection.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add server/src/trust-kernel
+git commit -m "feat(trust-kernel): define protocol v3 contracts"</code></pre>
+<hr>
+<h3>Task 2: Tenant membership and verified action contexts</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>supabase/migrations/0162_trust_kernel_tenancy_action_context.sql</code></li>
+<li>Create: <code>supabase/tests/trust_kernel_tenancy.sql</code></li>
+<li>Modify: <code>.github/workflows/db-verify.yml</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces tables: <code>monolith_tenant</code>, <code>monolith_site</code>, <code>monolith_membership</code>, <code>monolith_membership_role</code>, <code>monolith_membership_site</code>, <code>verified_action_context</code>.</li>
+<li>Produces RPC: <code>create_verified_action_context(action, tenant_id, site_id, resource_type, resource_id, request_hash, candidate_hash default null, release_authorization_hash default null) returns uuid</code>.</li>
+<li>Produces internal function: <code>consume_verified_action_context(context_id, expected_action) returns verified_action_context</code>.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write RED pgTAP assertions</strong></li>
+</ul>
+<pre><code class="language-sql">select throws_ok(
+  $$select public.create_verified_action_context('RELEASE', :'tenant_001', :'site_001', 'RELEASE_CANDIDATE', :'candidate_id', repeat('c',64), repeat('a',64), repeat('b',64))$$,
+  '42501', null, 'service role cannot create human action context'
+);
+select is(
+  (select count(*) from public.monolith_membership_role where tenant_id = :'tenant_001' and role = 'RELEASE_APPROVER'),
+  1::bigint, 'tenant 001 approver remains tenant scoped'
+);
+select is(
+  (select count(*) from public.monolith_site where tenant_id = :'tenant_002'),
+  1::bigint, 'tenant 002 coexists without source changes'
+);
+select throws_ok(
+  $$select public.consume_verified_action_context(:'context_id', 'RELEASE')$$,
+  'P0001', 'AUTH_ACTION_CONTEXT_INVALID', 'nonce is one-time'
+);</code></pre>
+<p>The suite creates two tenants and sites inside one transaction, creates authenticated users/memberships, exercises user-JWT claims through <code>request.jwt.claim.sub</code>, and rolls back.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run RED on local Supabase</strong></li>
+</ul>
+<p>Run: <code>supabase start</code></p>
+<p>Run: <code>psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -tA -v ON_ERROR_STOP=1 -f supabase/tests/trust_kernel_tenancy.sql</code></p>
+<p>Expected: FAIL with PostgreSQL <code>42P01</code> for the relation assertions and <code>42883</code> for the RPC assertions.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement tenant-bound schema and RLS</strong></li>
+</ul>
+<pre><code class="language-sql">create table public.monolith_tenant (
+  id uuid primary key, slug text not null unique, display_name text not null,
+  status text not null check (status in ('ACTIVE','SUSPENDED'))
+);
+create table public.monolith_site (
+  id uuid not null, tenant_id uuid not null references public.monolith_tenant(id),
+  code text not null, display_name text not null, status text not null check (status in ('ACTIVE','INACTIVE')),
+  primary key (tenant_id,id), unique (tenant_id,code)
+);
+create table public.monolith_membership (
+  id uuid not null, tenant_id uuid not null references public.monolith_tenant(id),
+  user_id uuid not null references auth.users(id), version bigint not null default 1,
+  status text not null check (status in ('ACTIVE','REVOKED')),
+  primary key (tenant_id,id), unique (tenant_id,user_id)
+);</code></pre>
+<p>Role/site join tables carry <code>(tenant_id,membership_id)</code> composite foreign keys. All six tables enable RLS; direct writes are denied. The context binds resource type/ID and request hash. <code>FREEZE</code> requires a working-revision resource and null candidate hashes; <code>RELEASE</code> requires candidate plus release-authorization hashes; <code>REVOKE</code> requires a release-revision resource. <code>create_verified_action_context</code> requires <code>auth.role()='authenticated'</code>, derives <code>auth.uid()</code>, reads current membership and AAL, sets <code>expires_at=clock_timestamp()+interval '5 minutes'</code>, and never accepts actor/role/name. <code>consume_verified_action_context</code> locks the row, compares action/resource/expiry/membership version, sets <code>consumed_at</code>, and returns stable auth errors.</p>
+<ul>
+<li>[ ] <strong>Step 4: Extend DB CI without weakening the existing suite</strong></li>
+</ul>
+<p>Change <code>db-verify.yml</code> to run both SQL files separately into <code>workflow-db.tap</code> and <code>trust-kernel-tenancy.tap</code>, reject <code>not ok</code>, reject an empty suite, and include per-suite counts in <code>db-verify-evidence.json</code>.</p>
+<ul>
+<li>[ ] <strong>Step 5: Run GREEN</strong></li>
+</ul>
+<p>Run the pgTAP command again, then run the original <code>supabase/tests/workflow_db_invariants.sql</code> command.</p>
+<p>Expected: both exit 0 with at least one <code>ok</code> line; Daph-like tenant 001 and tenant 002 remain isolated.</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add supabase/migrations/0162_trust_kernel_tenancy_action_context.sql supabase/tests/trust_kernel_tenancy.sql .github/workflows/db-verify.yml
+git commit -m "feat(trust-kernel): add tenant action authority"</code></pre>
+<hr>
+<h3>Task 3: Machine-profile and warning-exception governance</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>supabase/migrations/0163_trust_kernel_profile_exception.sql</code></li>
+<li>Create: <code>supabase/tests/trust_kernel_governance.sql</code></li>
+<li>Create: <code>server/src/trust-kernel/contracts/profileGovernance.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/governance/verifyGovernanceSignature.ts</code></li>
+<li>Test: <code>server/src/trust-kernel/test/profileGovernance.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces <code>MachineProfileAttestationV1</code> and <code>WarningExceptionGrantV1</code>.</li>
+<li>Produces <code>verifyProfileAttestation(attestation, trust): TrustResult&lt;MachineProfileAttestationV1&gt;</code> and <code>verifyWarningGrant(grant, candidateHash, trust): TrustResult&lt;WarningExceptionGrantV1&gt;</code>.</li>
+<li>Produces DB functions <code>assert_profile_attestation_current</code> and <code>assert_warning_grants_current</code> for release transactions.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write RED unit and pgTAP tests</strong></li>
+</ul>
+<pre><code class="language-ts">expect(verifyProfileAttestation(attestation({ toolLibraryHash: badHash }), trust).ok).toBe(false);
+expect(verifyWarningGrant(grant({ approverUserIds: [userA, userA] }), candidateHash, trust)).toMatchObject({
+  ok: false, code: "GATE_WARNING_EXCEPTION_MISMATCH",
+});
+expect(verifyWarningGrant(grant({ warningCode: "CAP_UNKNOWN_TOOL" }), candidateHash, trust)).toMatchObject({
+  ok: false, code: "GATE_HARD_BLOCKER",
+});</code></pre>
+<pre><code class="language-sql">select throws_ok(
+  $$select public.assert_profile_attestation_current(:'tenant_002', :'attestation_tenant_001', clock_timestamp())$$,
+  'P0001', 'CAP_PROFILE_ATTESTATION_INVALID', 'cross-tenant profile rejected'
+);</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run RED</strong></li>
+</ul>
+<p>Run: <code>npm.cmd --prefix server test -- --run src/trust-kernel/test/profileGovernance.test.ts</code></p>
+<p>Run the governance pgTAP file against local Supabase.</p>
+<p>Expected: missing modules/tables fail both suites.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement exact governance records</strong></li>
+</ul>
+<p><code>MachineProfileAttestationV1</code> contains <code>id</code>, tenant/site/machine IDs, canonical profile hash, tool-library hash, postprocessor ID/version/binary hash, approver user ID, key ID with purpose <code>PROFILE_ATTESTATION</code>, issued/valid-from/valid-until, sequence, status, signature.</p>
+<p><code>WarningExceptionGrantV1</code> contains <code>id</code>, tenant/site, candidate hash, warning code, sorted entity IDs, reason, policy version, two distinct approver user IDs, issued/expires, key ID with purpose <code>WARNING_EXCEPTION</code>, signature. Database constraints enforce two distinct approvers and <code>expires_at&gt;issued_at</code>; the catalogue table owns <code>exception_eligible</code> and marks every <code>CAP_*</code> code false.</p>
+<ul>
+<li>[ ] <strong>Step 4: Implement managed-key-purpose verification</strong></li>
+</ul>
+<pre><code class="language-ts">export type KeyPurpose = "RELEASE" | "TRUST_BUNDLE" | "PROFILE_ATTESTATION" | "WARNING_EXCEPTION" | "EVIDENCE";
+export function requireKeyPurpose(key: TrustedKeyV1, expected: KeyPurpose): TrustResult&lt;TrustedKeyV1&gt; {
+  return key.purpose === expected
+    ? { ok: true, value: key }
+    : { ok: false, code: "CRYPTO_ALGORITHM_DENIED", detail: { expected, actual: key.purpose } };
+}</code></pre>
+<p>Verification canonicalizes the unsigned record, checks Ed25519 through an injected public-key verifier, checks scope/time/sequence/revocation, then returns the record. Database functions repeat scope/time/status checks at release commit.</p>
+<ul>
+<li>[ ] <strong>Step 5: Run GREEN and commit</strong></li>
+</ul>
+<p>Run server tests, server build, and governance pgTAP. Expected: exit 0; expired, revoked, wrong-purpose, duplicate-approver, hard-blocker, and cross-tenant cases reject.</p>
+<pre><code class="language-bash">git add supabase/migrations/0163_trust_kernel_profile_exception.sql supabase/tests/trust_kernel_governance.sql server/src/trust-kernel
+git commit -m "feat(trust-kernel): govern profiles and warning exceptions"</code></pre>
+<hr>
+<h3>Task 4: Release, artifact, ledger, and outbox authority</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>supabase/migrations/0164_trust_kernel_release_authority.sql</code></li>
+<li>Create: <code>supabase/tests/trust_kernel_release.sql</code></li>
+<li>Create: <code>server/src/trust-kernel/contracts/releasePorts.ts</code></li>
+<li>Test: <code>server/src/trust-kernel/test/releaseStateModel.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces tables: <code>release_working_revision</code>, <code>release_candidate</code>, <code>release_attempt</code>, <code>release_approval</code>, <code>release_revision</code>, <code>release_artifact</code>, <code>release_event</code>, <code>release_outbox</code>.</li>
+<li>Produces RPCs: <code>rpc_trust_freeze</code>, <code>rpc_trust_begin_release</code>, <code>rpc_trust_commit_release</code>, <code>rpc_trust_mark_artifact_available</code>, <code>rpc_trust_void_artifact</code>, <code>rpc_trust_revoke</code>.</li>
+<li>Produces <code>ReleaseAuthorityPort</code> consumed by Task 8.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write RED state/concurrency/idempotency tests</strong></li>
+</ul>
+<pre><code class="language-sql">select throws_ok($$select public.rpc_trust_begin_release(:'freezer_context', :'candidate', :'auth_hash', 'idem-1', :'request')$$,
+  'P0001', 'AUTH_SOD_VIOLATION', 'freezer cannot approve own release');
+select is((public.rpc_trust_begin_release(:'approver_context', :'candidate', :'auth_hash', 'idem-1', :'request')).attempt_id,
+          (public.rpc_trust_begin_release(:'retry_context', :'candidate', :'auth_hash', 'idem-1', :'request')).attempt_id,
+          'same idempotency request returns same attempt');
+select throws_ok($$select public.rpc_trust_begin_release(:'new_context', :'candidate', :'auth_hash', 'idem-1', repeat('f',64))$$,
+  'P0001', 'STATE_IDEMPOTENCY_MISMATCH', 'same key with changed request rejects');</code></pre>
+<p>Also assert <code>VOID</code> is accepted only for attempt/artifact, release revision accepts only <code>ACTIVE|REVOKED</code>, one CAS winner exists, and a committed <code>ACTIVE</code> revision can be consumed only with <code>AVAILABLE</code> artifact.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run RED against local Supabase</strong></li>
+</ul>
+<p>Expected: FAIL because release authority tables/RPCs are absent.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement state tables and constraints</strong></li>
+</ul>
+<p>Every table carries <code>tenant_id</code>; child tables use composite tenant-bound foreign keys. <code>release_attempt</code> has a unique <code>(tenant_id,actor_user_id,candidate_hash,idempotency_key)</code> and stored request hash. <code>release_revision</code> stores candidate hash, release authorization hash, sorted grant hashes, certificate, expected packet hash, profile-attestation binding, sequence, and authority timestamps. <code>release_artifact</code> stores only an internal locator under <code>tenantId/siteId/releaseRevisionId/contentHash</code>.</p>
+<ul>
+<li>[ ] <strong>Step 4: Implement transaction choreography</strong></li>
+</ul>
+<p><code>rpc_trust_begin_release</code> consumes a fresh action context, rechecks SoD/current membership/profile/grants, locks the candidate, allocates attempt/revision ID, sequence, and authority time. <code>rpc_trust_commit_release</code> is callable only by the worker role, locks the attempt, rechecks current membership version and candidate CAS, stores certificate plus <code>ACTIVE</code> revision and <code>MATERIALIZING</code> artifact, then appends event/outbox atomically. Failed commit creates no release revision. Availability and revocation are append-only transitions.</p>
+<ul>
+<li>[ ] <strong>Step 5: Run GREEN, race tests, and commit</strong></li>
+</ul>
+<p>Run the release pgTAP file twice: once normally and once with two concurrent <code>psql</code> sessions invoking the same candidate. Expected: one success, one <code>STATE_CONFLICT</code>, no duplicate active revision.</p>
+<pre><code class="language-bash">git add supabase/migrations/0164_trust_kernel_release_authority.sql supabase/tests/trust_kernel_release.sql server/src/trust-kernel/contracts/releasePorts.ts server/src/trust-kernel/test/releaseStateModel.test.ts
+git commit -m "feat(trust-kernel): add canonical release authority"</code></pre>
+<hr>
+<h3>Task 5: User-token Edge transport and service-role containment</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>supabase/functions/factory-api/trustKernel.ts</code></li>
+<li>Create: <code>supabase/functions/factory-api/index.test.ts</code></li>
+<li>Modify: <code>supabase/functions/factory-api/index.ts</code></li>
+<li>Modify: <code>.github/workflows/edge-fn-verify.yml</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces <code>handleTrustKernelRequest(req, deps): Promise&lt;Response&gt;</code>.</li>
+<li>V3 endpoints: <code>POST /v3/factory/jobs/:id/freeze</code>, <code>/release</code>, <code>/revoke</code>; <code>GET /v3/factory/releases/:id/status</code>.</li>
+<li>Calls action-context creation with incoming bearer plus anon key; service role is reserved for outbox/storage worker calls.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write RED transport tests</strong></li>
+</ul>
+<pre><code class="language-ts">expect((await handleTrustKernelRequest(post("/release", {}, {}), deps)).status).toBe(401);
+expect((await handleTrustKernelRequest(post("/release", body, {
+  authorization: userBearer, "x-actor-role": "ADMIN", "x-actor-name": "spoof",
+}), deps)).status).toBe(202);
+expect(deps.createActionContext).toHaveBeenCalledWith(expect.objectContaining({ bearer: userBearer }));
+expect(deps.createActionContext).not.toHaveBeenCalledWith(expect.objectContaining({ bearer: serviceBearer }));
+expect(JSON.stringify(deps.createActionContext.mock.calls)).not.toContain("spoof");</code></pre>
+<p>Add invalid JSON, wrong method, candidate mismatch, offline replay header, expired context, and service-role spoof cases with stable HTTP/reason-code mapping.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run RED</strong></li>
+</ul>
+<p>Run: <code>npx vitest run supabase/functions/factory-api/index.test.ts --reporter=verbose</code></p>
+<p>Expected: FAIL because the injectable V3 handler is absent.</p>
+<ul>
+<li>[ ] <strong>Step 3: Split pure transport from environment adapters</strong></li>
+</ul>
+<pre><code class="language-ts">export type TrustKernelDeps = Readonly&lt;{
+  createActionContext(input: UserActionInput): Promise&lt;TrustResult&lt;{ contextId: string }&gt;&gt;;
+  invokeAuthority(input: AuthorityRequest): Promise&lt;TrustResult&lt;AuthorityResponse&gt;&gt;;
+}&gt;;</code></pre>
+<p><code>createActionContext</code> forwards the incoming Authorization header and <code>SUPABASE_ANON_KEY</code>. It filters the request body to candidate/release-authorization/idempotency/request hashes. Existing service-role helpers remain inaccessible to this function and reject any user-authority operation.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run GREEN and Edge suite</strong></li>
+</ul>
+<p>Run the targeted test, then <code>npx vitest run supabase/functions --reporter=default --reporter=json --outputFile=edge-fn-report.json</code>.</p>
+<p>Expected: exit 0, <code>numPassedTests&gt;0</code>, <code>numFailedTests=0</code>.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add supabase/functions/factory-api .github/workflows/edge-fn-verify.yml
+git commit -m "feat(trust-kernel): enforce user-authorized edge actions"</code></pre>
+<hr>
+<h3>Task 6: Profile adapters and exhaustive capability compiler</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>server/src/trust-kernel/capability/canonicalProfile.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/capability/adaptLegacyProfile.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/capability/compileCapabilities.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/contracts/capability.ts</code></li>
+<li>Modify: <code>server/src/post/machineProfiles.ts</code></li>
+<li>Test: <code>server/src/trust-kernel/test/compileCapabilities.property.test.ts</code></li>
+<li>Test: <code>server/src/trust-kernel/test/profileAdapter.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces <code>adaptLegacyProfile(input): TrustResult&lt;MachineCapabilityProfileV1&gt;</code>.</li>
+<li>Produces <code>compileCapabilities(snapshot, profile, attestation): TrustResult&lt;CapabilityReportV1&gt;</code>.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write RED exhaustive failure tests</strong></li>
+</ul>
+<pre><code class="language-ts">expect(compileCapabilities(snapshotWithTool("UNKNOWN"), profile, attestation)).toMatchObject({
+  ok: false, code: "CAP_UNKNOWN_TOOL",
+});
+expect(compileCapabilities(snapshotWithOperation("FIVE_AXIS_SWARF"), profile, attestation)).toMatchObject({
+  ok: false, code: "CAP_UNSUPPORTED_OPERATION",
+});
+expect(compileCapabilities(snapshotWithDepth(41), profileWithDepthMax(40), attestation)).toMatchObject({
+  ok: false, code: "CAP_PARAMETER_RANGE",
+});</code></pre>
+<p>Property tests generate operation permutations and assert <code>checkedOperationIds</code> equals the sorted set of all input operation IDs on PASS; any dropped ID fails.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run RED</strong></li>
+</ul>
+<p>Run: <code>npm.cmd --prefix server test -- --run src/trust-kernel/test/compileCapabilities.property.test.ts src/trust-kernel/test/profileAdapter.test.ts</code></p>
+<ul>
+<li>[ ] <strong>Step 3: Implement one canonical profile schema</strong></li>
+</ul>
+<p>Canonical profile contains machine/dialect versions, operation catalogue, tool IDs and machine numbers, parameter ranges, faces, units, coordinate convention, postprocessor ID/version/binary hash. Legacy server/client shapes are read-only inputs to <code>adaptLegacyProfile</code>; local storage and arbitrary overrides never set attestation status.</p>
+<p>Remove the <code>unknown tool -&gt; 1</code> behavior from the V3 path. The legacy <code>PostContext</code> may retain historical reading, but any V3 invocation receives a <code>TrustResult</code> failure before dialect output.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run GREEN and dialect defense tests</strong></li>
+</ul>
+<p>Add CIX/G-code tests proving the dialect layer independently rejects unknown tool and unsupported operation even when a forged upstream capability report says PASS.</p>
+<p>Expected: targeted tests and server build exit 0; no partial file list is returned on failure.</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add server/src/trust-kernel server/src/post/machineProfiles.ts
+git commit -m "feat(trust-kernel): compile attested machine capabilities"</code></pre>
+<hr>
+<h3>Task 7: Deterministic snapshot and FactoryPacket V3 builder</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>server/src/trust-kernel/snapshot/buildReleaseSnapshot.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/packet/buildUnsignedPayloadV3.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/packet/packageFactoryPacketV3.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/packet/fixedZipProfile.ts</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/input.json</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/expected-manifest.json</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/packet.zip</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/expected-packet.sha256</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/mutations/index.json</code></li>
+<li>Test: <code>server/src/trust-kernel/test/packetV3.determinism.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces <code>buildReleaseSnapshot(input): TrustResult&lt;ReleaseSnapshotV3&gt;</code>.</li>
+<li>Produces <code>buildUnsignedPayloadV3(snapshot, capabilityReport): TrustResult&lt;UnsignedPacketV3&gt;</code>.</li>
+<li>Produces <code>packageFactoryPacketV3(unsigned, certificate): Promise&lt;Uint8Array&gt;</code>.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write RED byte-determinism tests</strong></li>
+</ul>
+<pre><code class="language-ts">const runs = await Promise.all(Array.from({ length: 100 }, () =&gt; buildFixturePacket()));
+expect(new Set(runs.map(sha256Hex)).size).toBe(1);
+expect(runs.every(bytes =&gt; Buffer.from(bytes).equals(Buffer.from(runs[0])))).toBe(true);
+expect(listZipPaths(runs[0])).toEqual([...listZipPaths(runs[0])].sort());</code></pre>
+<p>Test snapshot permutation, Unicode, Windows/Linux path normalization, fixed decimals/units, extra-file rejection, and identical empty optional collections.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run RED</strong></li>
+</ul>
+<p>Expected: missing builder modules.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement deterministic construction</strong></li>
+</ul>
+<p>The snapshot owns tenant scope, candidate/profile/policy hashes, sorted operation/entity references, and required artifact definitions. The unsigned manifest lists every file path, byte length, SHA-256, media type, artifact class, and <code>NOT_FOR_PRODUCTION</code> marker.</p>
+<p><code>fixedZipProfile.ts</code> sets sorted POSIX paths, fixed timestamp <code>1980-01-01T00:00:00Z</code>, UTF-8 names, fixed compression level, fixed permissions, and an exact file allowlist. Its output is a pure function of declared bytes and constants, independent of runtime locale, clock, or randomness. Final packet content is unsigned payload plus persisted certificate only.</p>
+<ul>
+<li>[ ] <strong>Step 4: Materialize and pin golden vectors</strong></li>
+</ul>
+<p>Run in PowerShell: <code>$env:UPDATE_TRUST_VECTORS='1'; npm.cmd --prefix server test -- --run src/trust-kernel/test/packetV3.determinism.test.ts --update; Remove-Item Env:UPDATE_TRUST_VECTORS</code></p>
+<p>The update mode may create expected bytes only when <code>UPDATE_TRUST_VECTORS=1</code>; normal tests compare byte-for-byte and reject silent vector updates.</p>
+<ul>
+<li>[ ] <strong>Step 5: Cross-platform verification and commit</strong></li>
+</ul>
+<p>Run targeted tests and server build on Windows. CI later repeats on Ubuntu. Expected: 100/100 byte-identical runs and one pinned SHA-256.</p>
+<pre><code class="language-bash">git add server/src/trust-kernel test-vectors/factory-packet-v3
+git commit -m "feat(trust-kernel): build deterministic factory packet v3"</code></pre>
+<hr>
+<h3>Task 8: Managed signer, release worker, and artifact materialization</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>server/src/trust-kernel/signing/managedSignerPort.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/signing/httpManagedSignerClient.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/artifacts/artifactRepository.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/authority/supabaseReleaseAuthority.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/worker/releaseWorker.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/worker/materializeArtifact.ts</code></li>
+<li>Modify: <code>server/src/worker/index.ts</code></li>
+<li>Test: <code>server/src/trust-kernel/test/releaseWorker.chaos.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces <code>ManagedSignerPort.sign({ keyId, purpose, digest }): Promise&lt;TrustResult&lt;ManagedSignature&gt;&gt;</code>.</li>
+<li>Produces <code>executeReleaseAttempt(attemptId, ports): Promise&lt;TrustResult&lt;ReleaseWorkerResult&gt;&gt;</code>.</li>
+<li>Produces <code>materializeArtifact(outboxEvent, ports): Promise&lt;TrustResult&lt;ArtifactRecordV1&gt;&gt;</code>.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write RED failure-injection tests</strong></li>
+</ul>
+<pre><code class="language-ts">await expect(runWith({ signer: timeoutSigner })).resolves.toMatchObject({ ok: false, code: "CRYPTO_SIGNER_UNAVAILABLE" });
+expect(db.commitRelease).not.toHaveBeenCalled();
+
+await runWith({ db: commitFailureDb });
+expect(store.markVoid).toHaveBeenCalledOnce();
+expect(store.exposeUrl).not.toHaveBeenCalled();
+
+const retry = await runMaterializerTwice(committedAttempt);
+expect(retry.firstHash).toBe(retry.secondHash);
+expect(retry.records).toHaveLength(1);</code></pre>
+<p>Cover signer timeout, store failure, DB commit loss, crash after commit/before materialization, hash mismatch, outbox duplicate, and membership revoked before final commit.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run RED</strong></li>
+</ul>
+<p>Run the chaos suite; expected missing ports/worker failure.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement managed signer without local private-key APIs</strong></li>
+</ul>
+<pre><code class="language-ts">export interface ManagedSignerPort {
+  sign(input: Readonly&lt;{ keyId: string; purpose: KeyPurpose; digestSha256: string }&gt;):
+    Promise&lt;TrustResult&lt;Readonly&lt;{ algorithm: "Ed25519"; keyId: string; signatureBase64: string }&gt;&gt;&gt;;
+}</code></pre>
+<p><code>HttpManagedSignerClient</code> accepts endpoint, key ID, workload credential provider, timeout, and fetch dependency. It validates algorithm/key ID and never accepts private key bytes or seed material.</p>
+<ul>
+<li>[ ] <strong>Step 4: Implement exact sign/commit/materialize order</strong></li>
+</ul>
+<p>Worker reads immutable attempt allocation, compiles, builds unsigned payload, requests signature, assembles final bytes in memory, computes expected hash, then calls atomic commit. After commit, outbox materializer reconstructs identical bytes from persisted payload/certificate, stores them under the DB-provided internal locator, verifies hash, and marks <code>AVAILABLE</code>. Any precommit failure ends at <code>FAILED</code>/<code>VOID</code>; a postcommit retry never creates another certificate.</p>
+<ul>
+<li>[ ] <strong>Step 5: Run GREEN, build, and commit</strong></li>
+</ul>
+<p>Expected: all chaos cases have stable reason codes, no downloadable orphan, and no second signature.</p>
+<pre><code class="language-bash">git add server/src/trust-kernel server/src/worker/index.ts
+git commit -m "feat(trust-kernel): sign and materialize releases safely"</code></pre>
+<hr>
+<h3>Task 9: Trust and release-status bundle issuance</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>supabase/migrations/0165_trust_kernel_bundles_publication.sql</code></li>
+<li>Create: <code>supabase/tests/trust_kernel_bundles.sql</code></li>
+<li>Create: <code>server/src/trust-kernel/trust/buildTrustBundle.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/trust/buildReleaseStatusBundle.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/trust/issueSignedBundle.ts</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/trust-bundle.json</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/release-status-bundle.json</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/policy.json</code></li>
+<li>Create: <code>test-vectors/factory-packet-v3/valid-minimal/checkpoint.json</code></li>
+<li>Test: <code>server/src/trust-kernel/test/trustBundles.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces signed <code>TrustBundleV1</code> and <code>ReleaseStatusBundleV1</code> with independent <code>(bundleType,trustScope)</code> sequences.</li>
+<li>Key revocation modes: <code>ALL_SIGNATURES</code>, <code>SIGNED_AT_OR_AFTER</code>, <code>ISSUANCE_DISABLED</code>.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write RED bundle tests</strong></li>
+</ul>
+<pre><code class="language-ts">expect(buildReleaseStatusBundle(rowsWithVoidAttempt)).not.toContain("VOID");
+expect(buildReleaseStatusBundle(rowsWithRevokedRevision).revokedReleaseRevisionIds).toEqual([revokedId]);
+expect(buildTrustBundle(keyRevocation({ mode: "SIGNED_AT_OR_AFTER" })).keyRevocations[0]).toMatchObject({
+  mode: "SIGNED_AT_OR_AFTER", effectiveAt, reason: "COMPROMISE",
+});</code></pre>
+<p>Add sequence monotonicity, scope mismatch, expired attestation/grant revocation, wrong signer-purpose, and packet/bundle self-authorized trust-root rejection tests.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run RED</strong></li>
+</ul>
+<p>Expected: missing bundle builders and DB tables.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement bundle authority</strong></li>
+</ul>
+<p>DB tables store trusted public keys with purpose/validity, key revocations, profile-attestation revocations, warning-grant revocations, release revocations, per-scope bundle sequence, issued/expiry, canonical hash, and signature. The public key that authenticates a <code>TrustBundleV1</code> is pinned in verifier policy and cannot be introduced or authorized by that same bundle. Bundle issuance runs in a transaction that increments sequence and snapshots all effective entries.</p>
+<ul>
+<li>[ ] <strong>Step 4: Sign with purpose-bound managed keys</strong></li>
+</ul>
+<p><code>issueSignedBundle</code> canonicalizes unsigned bundle, hashes it, calls <code>ManagedSignerPort</code> with the configured trust-bundle key, and persists exact bytes/signature. Existing sequences are immutable; retry returns the persisted bundle.</p>
+<p>Export the valid-minimal trust/status bundles, pinned-root policy, and bootstrap checkpoint into the shared corpus. The corpus policy pins the trust-bundle public key outside the bundle, identifies the permitted <code>trustScope</code>, and carries explicit freshness and archive limits. Regeneration is opt-in and the test must byte-compare regenerated JSON against the committed vectors.</p>
+<ul>
+<li>[ ] <strong>Step 5: Run GREEN and commit</strong></li>
+</ul>
+<p>Run server tests, bundle pgTAP, and server build. Expected: <code>VOID</code> never enters release status, monotonic sequence survives concurrent issuers, and purpose/scope/expiry failures deny.</p>
+<pre><code class="language-bash">git add supabase/migrations/0165_trust_kernel_bundles_publication.sql supabase/tests/trust_kernel_bundles.sql server/src/trust-kernel/trust server/src/trust-kernel/test/trustBundles.test.ts
+git commit -m "feat(trust-kernel): issue signed trust status bundles"</code></pre>
+<hr>
+<h3>Task 10: Standalone independent offline verifier</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>tools/factory-packet-verifier/package.json</code></li>
+<li>Create: <code>tools/factory-packet-verifier/tsconfig.json</code></li>
+<li>Create: <code>tools/factory-packet-verifier/vitest.config.ts</code></li>
+<li>Create: <code>tools/factory-packet-verifier/src/types.ts</code></li>
+<li>Create: <code>tools/factory-packet-verifier/src/canonical.ts</code></li>
+<li>Create: <code>tools/factory-packet-verifier/src/packetReader.ts</code></li>
+<li>Create: <code>tools/factory-packet-verifier/src/freshnessStore.ts</code></li>
+<li>Create: <code>tools/factory-packet-verifier/src/verify.ts</code></li>
+<li>Create: <code>tools/factory-packet-verifier/src/cli.ts</code></li>
+<li>Create: <code>tools/factory-packet-verifier/src/verify.test.ts</code></li>
+<li>Modify: <code>package.json</code></li>
+<li>Modify: <code>package-lock.json</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>CLI: <code>factory-packet-verify --packet &lt;zip&gt; --trust &lt;json&gt; --status &lt;json&gt; --policy &lt;json&gt; --state &lt;json&gt; --report &lt;json&gt;</code>.</li>
+<li>Produces <code>VerificationReportV1</code> with verdict, codes, hashes, sequences, verifier build hash, <code>validAsOf</code>, freshness age, checkpoint, and summary.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write RED corpus tests</strong></li>
+</ul>
+<pre><code class="language-ts">expect(await verifyFixture("valid-minimal", stateWithCheckpoint())).toMatchObject({ verdict: "PASS" });
+expect(await verifyMutation("unknown-extra-file")).toMatchObject({ verdict: "FAIL", codes: ["PACKET_EXTRA_FILE"] });
+expect(await verifyWithState(noCheckpoint())).toMatchObject({ verdict: "FAIL", codes: ["TRUST_CHECKPOINT_REQUIRED"] });
+expect(await verifyWithBundle(sequence(9), stateAtSequence(10))).toMatchObject({ verdict: "FAIL", codes: ["TRUST_SEQUENCE_ROLLBACK"] });</code></pre>
+<p>Mutation corpus includes path traversal, duplicate path, corrupt hash, signature mutation, wrong key purpose, scope mismatch, expired bundle, stale-but-unexpired bundle, revoked release/profile/grant, zip bomb ratio, oversize file, and untrusted clock.</p>
+<ul>
+<li>[ ] <strong>Step 2: Create isolated workspace and run RED</strong></li>
+</ul>
+<p><code>tools/factory-packet-verifier/package.json</code> declares only <code>@noble/ed25519</code>, <code>yauzl</code>, TypeScript, Vitest, and Node types. It does not depend on the root app or server package.</p>
+<pre><code class="language-json">{
+  "name": "@monolith/factory-packet-verifier",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "bin": { "factory-packet-verify": "dist/cli.js" },
+  "scripts": { "test": "vitest", "build": "tsc -p tsconfig.json" },
+  "dependencies": { "@noble/ed25519": "^3.0.0", "yauzl": "^3.3.0" },
+  "devDependencies": { "@types/node": "^20.10.0", "@types/yauzl": "^2.10.3", "typescript": "^5.3.2", "vitest": "^3.0.0" }
+}</code></pre>
+<p><code>tools/factory-packet-verifier/tsconfig.json</code> is exact and keeps emitted CLI paths stable:</p>
+<pre><code class="language-json">{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"]
+}</code></pre>
+<p>Run: <code>npm.cmd install</code></p>
+<p>Run: <code>npm.cmd test -w tools/factory-packet-verifier -- --run</code></p>
+<p>Expected: FAIL because verifier modules are absent.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement independent parsing and canonicalization</strong></li>
+</ul>
+<p>Implement canonical JSON again in this workspace from the protocol text as a separately authored implementation. <code>packetReader</code> requires safe unique paths and the exact allowlisted file set, then rejects declared/actual size mismatch, compression ratio above policy, and total size above policy before deep parsing.</p>
+<ul>
+<li>[ ] <strong>Step 4: Implement signature, revocation, and freshness state</strong></li>
+</ul>
+<pre><code class="language-ts">export type VerifierStateV1 = Readonly&lt;{
+  bootstrapCheckpoint: Readonly&lt;Record&lt;string, number&gt;&gt;;
+  highWaterMarks: Readonly&lt;Record&lt;string, number&gt;&gt;;
+}&gt;;</code></pre>
+<p>State keys are <code>${bundleType}:${trustScope}</code>. Verification requires a pinned minimum sequence on first use, rejects rollback, applies <code>maxOfflineStalenessSeconds</code>, uses explicit key-revocation mode, updates high-water marks only after full PASS, and reports <code>validAsOf</code>. CLI writes state atomically through temp-file plus rename.</p>
+<ul>
+<li>[ ] <strong>Step 5: Prove dependency independence</strong></li>
+</ul>
+<p>Add a test/script that walks verifier imports and fails if any resolved path enters <code>server/src</code>, <code>src/factory/packet</code>, or <code>src/core/manufacturing</code>.</p>
+<p>Run verifier tests and <code>npm.cmd run build -w tools/factory-packet-verifier</code>. Expected: exit 0; valid corpus passes and every mutation fails with its specified code.</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add tools/factory-packet-verifier package.json package-lock.json test-vectors/factory-packet-v3
+git commit -m "feat(trust-kernel): add independent packet verifier"</code></pre>
+<hr>
+<h3>Task 11: P2 quarantine, client projection, and legacy-route containment</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>src/core/api/trustKernelApi.ts</code></li>
+<li>Create: <code>src/factory/packet/trustKernelProjection.ts</code></li>
+<li>Create: <code>scripts/trust-kernel/verify-route-ledger.mjs</code></li>
+<li>Create: <code>docs/governance/trust-kernel-route-disposition.json</code></li>
+<li>Create: <code>supabase/migrations/0166_trust_kernel_legacy_containment.sql</code></li>
+<li>Create: <code>supabase/tests/trust_kernel_containment.sql</code></li>
+<li>Create: <code>server/src/trust-kernel/artifacts/isolatedVerifierRunner.ts</code></li>
+<li>Modify: <code>src/core/api/stateApi.ts</code></li>
+<li>Modify: <code>src/factory/packet/useFactoryPacket.ts</code></li>
+<li>Modify: <code>src/components/ui/ExportPanel.tsx</code></li>
+<li>Modify: <code>src/export/cutList/download.ts</code></li>
+<li>Modify: <code>src/core/export/downloadArtifacts.ts</code></li>
+<li>Modify: <code>supabase/functions/factory-api/index.ts</code></li>
+<li>Test: <code>src/factory/packet/__tests__/trustKernelContainment.test.ts</code></li>
+<li>Test: <code>supabase/functions/factory-api/index.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Client sees server projections only: candidate, attempt, release, artifact status, report/evidence references.</li>
+<li>Route ledger dispositions: <code>REUSE</code>, <code>ADAPT</code>, <code>READ_ONLY</code>, <code>BLOCK</code> with owner, class, current behavior, target, and negative-test ID.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write RED containment tests</strong></li>
+</ul>
+<pre><code class="language-ts">expect(await requestLegacyManufacturingDownload("FROZEN")).toMatchObject({ ok: false, code: "STATE_CANDIDATE_STALE" });
+expect(await requestShadowP2AsHuman(activeRelease)).toMatchObject({ ok: false, code: "STORE_PLAINTEXT_ACCESS_DENIED" });
+expect(await requestShadowP2AsIsolatedRunner(activeRelease)).toMatchObject({ ok: true, value: { mode: "WORKLOAD_STREAM" } });
+expect(routeLedgerCoverage(reachableSurfaces)).toEqual({ missing: [], duplicateAuthority: [] });</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run RED</strong></li>
+</ul>
+<p>Run the targeted root Vitest and Edge test. Expected: current browser download/signed-URL routes violate assertions.</p>
+<ul>
+<li>[ ] <strong>Step 3: Replace client authority with V3 projections</strong></li>
+</ul>
+<p><code>trustKernelApi.ts</code> sends bearer-authorized candidate/release intents and never sends actor role/name. UI hooks render state/reason codes only. DRAFT/FROZEN keep P0 preview and eligible P1 review; P2 build/download buttons are removed or disabled with <code>NOT_FOR_PRODUCTION</code> explanation.</p>
+<ul>
+<li>[ ] <strong>Step 4: Enforce P2 publication policy</strong></li>
+</ul>
+<p>Migration 0166 revokes authenticated execution on legacy packet mutation/signing RPCs, adds tenant-bound storage policies, and permits P2 reads only through the isolated workload role. Edge returns no raw locator or reusable signed URL for P2. <code>isolatedVerifierRunner.ts</code> authenticates with that workload identity, streams exact bytes into the verifier child process without importing verifier code, emits report/hash/evidence, and removes transient local bytes. Revocation/status is rechecked at request start.</p>
+<ul>
+<li>[ ] <strong>Step 5: Complete and enforce route ledger</strong></li>
+</ul>
+<p>Inventory every reachable build/export/download plus profile/tool/policy/JWT/storage-signing authority input. <code>verify-route-ledger.mjs</code> scans declared source globs and exits non-zero when discovered and ledgered route sets differ, mutable authority is duplicated, or P2 human URLs, client role headers, or V1/V2 production-shaped output are reachable.</p>
+<ul>
+<li>[ ] <strong>Step 6: Run GREEN and commit</strong></li>
+</ul>
+<p>Run targeted containment tests, <code>trust_kernel_containment.sql</code>, the route-ledger verifier, root typecheck, and Edge suite. Expected: all reachable legacy surfaces have a disposition and negative test; P2 human plaintext remains impossible.</p>
+<pre><code class="language-bash">git add src server/src/trust-kernel/artifacts/isolatedVerifierRunner.ts supabase/functions/factory-api supabase/migrations/0166_trust_kernel_legacy_containment.sql supabase/tests/trust_kernel_containment.sql scripts/trust-kernel docs/governance/trust-kernel-route-disposition.json
+git commit -m "feat(trust-kernel): contain shadow artifacts and legacy routes"</code></pre>
+<hr>
+<h3>Task 12: E2E chaos, signed evidence, CI, and executive acceptance gate</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>e2e/trust-kernel/release-shadow.spec.ts</code></li>
+<li>Create: <code>e2e/trust-kernel/revocation-race.spec.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/evidence/buildEvidenceManifest.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/evidence/issueEvidenceAttestation.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/test/evidenceAttestation.test.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/observability/securityEvents.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/observability/metrics.ts</code></li>
+<li>Create: <code>server/src/trust-kernel/test/observability.test.ts</code></li>
+<li>Create: <code>docs/governance/trust-kernel-ownership.json</code></li>
+<li>Create: <code>.github/workflows/trust-kernel-verify.yml</code></li>
+<li>Create: <code>docs/runbooks/trust-kernel-shadow.en.md</code></li>
+<li>Create: <code>docs/runbooks/trust-kernel-shadow.th.md</code></li>
+<li>Create: <code>docs/runbooks/trust-kernel-shadow.en.html</code></li>
+<li>Create: <code>docs/runbooks/trust-kernel-shadow.th.html</code></li>
+<li>Modify: <code>package.json</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces signed <code>EvidenceAttestationV1</code> and <code>evidence-manifest.json</code> tied to both Git roots, commands, reports, binaries, run identity, retention, and root hash.</li>
+<li>Produces one CI gate whose final machine-readable summary records pass/fail/skip counts for every layer.</li>
+<li>Produces append-only exportable <code>SecurityEventV1</code>, the approved trust/release metrics and alerts, and a machine-readable accountable-owner map.</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: Write RED E2E and evidence tests</strong></li>
+</ul>
+<pre><code class="language-ts">test("two distinct humans release while P2 remains unavailable to humans", async ({ page, request }) =&gt; {
+  await freezeAs(designerA, candidate);
+  await approveAndReleaseAs(approverB, candidate);
+  await expectReleaseState(request, "ACTIVE", "AVAILABLE");
+  await expectHumanP2Request(request).resolves.toMatchObject({ status: 403, code: "STORE_PLAINTEXT_ACCESS_DENIED" });
+});</code></pre>
+<p>Add membership revocation mid-flow, two approver race, DB response loss, crash before materialization, revoke/download race, offline replay, tenant hash guessing, first-use verifier without checkpoint, and tenant-002 isolation.</p>
+<ul>
+<li>[ ] <strong>Step 2: Implement evidence manifest and managed evidence signing</strong></li>
+</ul>
+<pre><code class="language-ts">export type EvidenceAttestationV1 = Readonly&lt;{
+  schema: "EvidenceAttestationV1";
+  parentGit: GitState;
+  productGit: GitState;
+  commandReportDigests: readonly DigestRef[];
+  ciRunId: string;
+  workflowIdentity: string;
+  builderBinaryHash: string;
+  verifierBinaryHash: string;
+  evidenceRootHash: string;
+  issuedAt: string;
+  retentionDays: number;
+  keyId: string;
+  signatureBase64: string;
+}&gt;;</code></pre>
+<p><code>issueEvidenceAttestation</code> uses a managed signer configured by <code>EVIDENCE_SIGNER_URL</code> and <code>EVIDENCE_SIGNER_KEY_ID</code> with purpose <code>EVIDENCE</code>. CI fails closed when signer configuration or signature verification is unavailable; it never stores a private key.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement observability and ownership enforcement</strong></li>
+</ul>
+<p><code>SecurityEventV1</code> requires tenant scope, event ID, actor user ID, membership version, candidate/release revision, artifact hash, reason code, correlation ID, and authority timestamp. The recorder appends immutable rows and exports canonical JSONL; a display name is supplementary and cannot satisfy an identity field. Metrics and alert rules cover authentication denials, SoD violations, stale candidates, capability blockers, signer/store failures, VOID artifacts, verifier failures, stale trust bundles, revoked-release access, and blocked-legacy-route attempts.</p>
+<p><code>trust-kernel-ownership.json</code> maps Identity/tenancy/RLS/signer custody/trust bundles to Security/IAM; lifecycle/SoD/exceptions/revocation to Release Governance; operation/profile/range semantics to Manufacturing Engineering; deterministic builder/storage/outbox/workers to Platform Engineering; and verifier/hostile corpus/evidence bundle to Independent QA/Safety. Tests reject an unowned domain and any protocol/invariant change record that lacks a versioned decision plus migration reference.</p>
+<ul>
+<li>[ ] <strong>Step 4: Build complete-output CI</strong></li>
+</ul>
+<p>Workflow matrix runs Windows and Ubuntu deterministic/server/verifier tests, then Edge, local Supabase pgTAP, root typecheck/build, route ledger, Playwright shadow E2E, hostile corpus, and evidence self-verification. Every noisy command writes JSON/TAP output; the final job reads complete files and rejects failures, cancellations, skips, missing reports, empty suites, or hash mismatch.</p>
+<ul>
+<li>[ ] <strong>Step 5: Create bilingual standalone runbooks</strong></li>
+</ul>
+<p>Runbooks define local prerequisites, exact commands, environment variables by key ID/endpoint only, how to provision tenant fixtures, how to inspect reason codes, how to revoke, how to refresh verifier checkpoints, evidence retention, and explicit <code>NOT_FOR_PRODUCTION</code>/P3-disabled status. Render HTML with the repository renderer and verify content alignment.</p>
+<ul>
+<li>[ ] <strong>Step 6: Run the complete local acceptance sequence</strong></li>
+</ul>
+<p>Run, in order:</p>
+<pre><code class="language-text">npm.cmd --prefix server test -- --run src/trust-kernel
+npm.cmd --prefix server run build
+npm.cmd test -w tools/factory-packet-verifier -- --run
+npm.cmd run build -w tools/factory-packet-verifier
+npx vitest run supabase/functions/factory-api/index.test.ts
+npm.cmd run test:run -- src/factory/packet/__tests__/trustKernelContainment.test.ts
+node scripts/trust-kernel/verify-route-ledger.mjs
+npm.cmd run typecheck:all
+npm.cmd run build
+npm.cmd run e2e -- e2e/trust-kernel</code></pre>
+<p>Then run all five Trust Kernel pgTAP suites against a freshly started Supabase instance. Expected: every command exits 0, every suite has non-zero assertions, skips are zero, P2 human access is denied, valid vectors pass, and every hostile vector rejects with its assigned code.</p>
+<ul>
+<li>[ ] <strong>Step 7: Run independent review gates</strong></li>
+</ul>
+<p>Use <code>superpowers:requesting-code-review</code>, then <code>scrutinize</code> the entire entry → action context → DB authority → worker → artifact → bundle → verifier → evidence path. Resolve every blocker/major finding and rerun Step 6 from a clean process state.</p>
+<ul>
+<li>[ ] <strong>Step 8: Commit final integration</strong></li>
+</ul>
+<pre><code class="language-bash">git add e2e/trust-kernel server/src/trust-kernel/evidence server/src/trust-kernel/observability server/src/trust-kernel/test/observability.test.ts .github/workflows/trust-kernel-verify.yml docs/runbooks docs/governance/trust-kernel-ownership.json package.json
+git commit -m "test(trust-kernel): prove shadow trust-ready acceptance"</code></pre>
+<h2>Final MONOLITH Completion Gate</h2>
+<p>Before claiming Shadow Trust-Ready:</p>
+<ul>
+<li>[ ] Both Git roots and dirty-file lists are captured in evidence.</li>
+<li>[ ] Tasks 1–12 each have their targeted RED/GREEN proof and commit.</li>
+<li>[ ] Critical and negative trust gates pass 100%; skipped trust/security tests equal zero.</li>
+<li>[ ] Route ledger covers 100% of reachable production-shaped and authority-input surfaces.</li>
+<li>[ ] Windows and Ubuntu golden packet hashes are byte-identical.</li>
+<li>[ ] Independent verifier accepts valid corpus and rejects every mutation with the specified stable code.</li>
+<li>[ ] Two authenticated users complete freeze and release; SoD, membership revocation, replay, and cross-tenant attacks reject.</li>
+<li>[ ] Profile attestation and warning grants enforce scope, key purpose, expiry, revocation, and distinct approvers.</li>
+<li>[ ] Offline verifier rejects missing checkpoint, rollback, stale bundle, untrusted clock, and revoked records.</li>
+<li>[ ] P2 plaintext/raw URL is denied to humans and Factory/P3 remains disabled.</li>
+<li>[ ] Evidence attestation verifies under a separate <code>EVIDENCE</code> key and binds exact source, reports, and binaries.</li>
+<li>[ ] Append-only security-event export, required metrics/alerts, and accountable-owner mapping pass their contract tests.</li>
+<li>[ ] Runbook TH/EN Markdown and HTML editions are aligned and explicitly state <code>NOT_FOR_PRODUCTION</code>.</li>
+<li>[ ] Production/GA remains NO-GO pending production key ceremony, AAL2 policy, operations drills, authorized factory pilot, machine acceptance, and separate P3 authorization.</li>
+</ul>
+<h2>Execution Handoff</h2>
+<p>Recommended: execute with <code>superpowers:subagent-driven-development</code> in a fresh isolated worktree. Use one fresh subagent per task, specification review followed by code-quality review, and do not parallelize migrations or tasks sharing <code>factory-api</code>, <code>server/src/trust-kernel</code>, <code>package-lock.json</code>, or route-ledger files.</p>
+<p>Alternative: execute in this session with <code>superpowers:executing-plans</code>, one phase gate at a time with checkpoints after Tasks 4, 9, and 12.</p>
+</main></body>
+</html>
