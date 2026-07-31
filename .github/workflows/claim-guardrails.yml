@@ -5,18 +5,35 @@
 # skipped with --no-verify, but a push or PR cannot dodge this job.
 #
 # =====================================================================
-#  STATUS: UNVERIFIED.
+#  STATUS: VERIFIED IN BOTH DIRECTIONS, 31 July 2026.
 #
-#  This workflow has NEVER been observed to run, and NEVER been observed to
-#  fail, because the repository has not been pushed with it. Per the plan,
-#  "a gate that has never been seen to fail has not been verified." This CI
-#  layer therefore remains UNVERIFIED until someone pushes a branch carrying a
-#  deliberate violation — an unevidenced negative claim in a docs/*.md file, or
-#  an uncorroborated certification — and watches THIS job go red.
+#  This block used to say UNVERIFIED, and required someone to push a
+#  deliberate violation and watch the job go red before anyone could call the
+#  gate working. That happened — without needing a synthetic violation,
+#  because the first push met real content:
 #
-#  The first person to push MUST do exactly that: push the violation, confirm
-#  the `lint` job fails, then remove it. Until that has happened, do not
-#  describe this gate as working. It is written, not verified.
+#    red    969032e4  run 30614279747 (push) and 30614304416 (pull_request)
+#           108 unevidenced absence claims across 37 files, plus 4
+#           uncorroborated certifications across 4 files. Every one was
+#           pre-existing content in docs/; the branch that triggered it wrote
+#           none of them. This was the linters' first contact with the full
+#           docs/ tree, which is hundreds of files where the branch they were
+#           developed on held 25.
+#
+#    green  6d66baca  run 30614523133 (push) and 30614526422 (pull_request)
+#           after the pre-existing findings were adopted into the shrink-only
+#           ledger at tools/.lint_allowlist: lint_claims 110 hits/25 files ->
+#           218/62, lint_certifications 5/3 -> 9/7.
+#
+#  So the gate has been seen to fail on real findings and to pass once they
+#  were accounted for. It is a working gate, not a written one.
+#
+#  What that does NOT establish: the deny direction was exercised by content
+#  that already existed, not by a violation authored to test it, so the
+#  detector's behaviour on a NEW claim shape is still only covered by the unit
+#  suite in tests/agent_guardrails/. And the adoption did not fix the 108
+#  findings — they are real, they are on a ledger that can only shrink, and
+#  the debt line is printed on every run.
 # =====================================================================
 #
 # The linters run against the committed ledger `tools/.lint_allowlist`. There is

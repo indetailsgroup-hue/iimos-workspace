@@ -25,19 +25,31 @@
 # =====================================================================
 #
 # =====================================================================
-#  STATUS: UNVERIFIED.
+#  STATUS: RUNS, BUT STILL UNVERIFIED. Updated 31 July 2026.
 #
-#  Written, not observed. This workflow has never run, because the branch
-#  carrying it has not been pushed. Per the same rule claim-guardrails.yml
-#  states: a gate that has never been seen to fail has not been verified.
+#  Half of the original caveat is closed and half is not, and the two must not
+#  be run together.
 #
-#  The first person to push MUST make it go red on purpose before describing it
-#  as working. Two cheap violations, either one is enough:
+#  Closed — "this workflow has never run" is no longer true. Nine runs on push
+#  and pull_request across 2dae18f7, 969032e4, 6d66baca, 86d5c557, c7f229c7 and
+#  24cfb737, including on main after merge.
+#
+#  NOT closed — every one of those nine runs passed. **This job has never been
+#  observed to fail.** A gate that has never been seen to fail has not been
+#  verified, and nine greens in a row are also exactly what a job that silently
+#  tests nothing would produce.
+#
+#  So the instruction below stands, unchanged. Two cheap violations, either one
+#  is enough:
 #    1. delete tools/codex-skills/.gitattributes in a commit and push — expect
 #       the digest tests, both pin tests, and the ls-files test to fail;
 #    2. change one byte of tools/codex-skills/book-to-skill/scripts/extract.py
 #       and push — expect test_unpatched_upstream_bytes_... to fail.
 #  Confirm red, then revert. Until that has happened, this gate is written only.
+#
+#  Do NOT borrow its sibling's evidence. claim-guardrails.yml IS verified in
+#  both directions — red on 108 real findings at 969032e4, green at 6d66baca.
+#  Different workflow, different suite, different evidence.
 # =====================================================================
 #
 # Expected skips in CI, visible in the log because of `-ra` below. These are the
