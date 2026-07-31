@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MONOLITH Controlled Complete Document Set — Design Specification</title>
+  <style>:root{color-scheme:light;--ink:#17202a;--muted:#5b6470;--line:#d9e1ea;--paper:#fff;--soft:#f6f8fb;--accent:#0f766e;--accent-soft:#e9fbf7;--warn:#92400e;--warn-soft:#fff7ed}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#edf1f5;color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.62}main{max-width:1120px;min-height:100vh;margin:0 auto;padding:48px 58px 76px;background:var(--paper);box-shadow:0 24px 70px rgba(15,23,42,.08)}h1,h2,h3,h4{line-height:1.22}h1{margin:0 0 14px;font-size:clamp(1.65rem,3.2vw,2.45rem)}h2{margin-top:42px;padding-top:22px;border-top:1px solid var(--line);font-size:1.42rem}h3{margin-top:28px;font-size:1.13rem;color:var(--accent)}h4{margin-top:22px}p{margin:13px 0}a{color:#0b63ce}blockquote{margin:22px 0;padding:16px 20px;border-left:5px solid var(--accent);background:var(--accent-soft);font-weight:650}blockquote p{margin:6px 0}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#edf2f7;padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}pre{overflow:auto;padding:18px 20px;border-radius:8px;background:#17212b;color:#edf6ff;line-height:1.5}pre code{padding:0;background:transparent;color:inherit}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;margin:18px 0;font-size:.94rem}th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}th{background:var(--soft)}tr:nth-child(even) td{background:#fbfcfe}hr{border:0;border-top:1px solid var(--line);margin:26px 0}ol li,ul li{margin:7px 0}@media (max-width:760px){main{padding:26px 18px 50px}}@media print{body{background:#fff}main{box-shadow:none;padding:0}}</style>
+</head>
+<body>
+<main>
+<h1>MONOLITH Controlled Complete Document Set — Design Specification</h1>
+<p><strong>Edition:</strong> English <strong>Design date:</strong> 21 July 2026 <strong>Status:</strong> Approved design contract <strong>Approved approach:</strong> B — Controlled Complete Set <strong>Decision owner:</strong> Dave / MONOLITH owner</p>
+<blockquote><p><strong>Design decision:</strong> consolidate the decisions, corrections, research, engineering method, formulas, safety boundaries, and implementation gates discussed in this session into five authoritative document families. Each family has aligned English and Thai Markdown editions and matching standalone HTML editions.</p></blockquote>
+<h2>1. Purpose</h2>
+<p>The document set must let an executive, architect, designer, production engineer, CNC programmer, verifier, installer, or auditor determine:</p>
+<ol><li>what MONOLITH is trying to become;</li><li>what is implemented now and in which repository;</li><li>what remains proposed, unknown, contradicted, or not production-qualified;</li><li>how a design becomes a BOM, nesting input, CNC output, verified part, and installed evidence record;</li><li>which vendor and standards claims are primary-source facts, vendor claims, owner decisions, or hypotheses;</li><li>what evidence is required before a capability or output may be trusted in production.</li></ol>
+<p>The set replaces the need to reconstruct current truth from a dated executive report plus later correction appendices.</p>
+<h2>2. Source corpus</h2>
+<p>The controlled set is derived from, but not limited to, these current artifacts:</p>
+<ul><li><code>docs/superpowers/specs/2026-07-21-design-to-cnc-engineering-playbook-design.en.md</code> and its Thai/HTML companions;</li><li><code>docs/research/competitors/homag-a1-a9-evidence-ledger.en.md</code> and its Thai/HTML companions;</li><li><code>docs/reports/2026-07-21-ima-schelling-monolith-executive-deep-audit.en.md</code> and its Thai/HTML companions;</li><li><code>docs/reports/2026-07-21-ima-schelling-monolith-repository-scope-correction.en.md</code>;</li><li><code>docs/research/2026-07-21-imos-ix-monolith-executive-deep-research.en.md</code> and its Thai/HTML companions;</li><li><code>docs/prd/monolith-complete-prd.en.md</code> and its Thai/HTML companions;</li><li>parent-bootstrap governance, ADR, component-master, and verification artifacts;</li><li>the active nested product repository source, tests, migrations, routes, factory packet, CNC, field, release, and shadow-mode controls;</li><li>current official vendor, standards-body, and regulator sources cited by the research.</li></ul>
+<p>No source document is automatically authoritative merely because it is long, rendered, approved as a design, or stored in Git.</p>
+<h2>3. Chosen approach</h2>
+<p>The approved approach is a controlled modular set rather than one monolithic report or an unindexed rewrite of every historical file.</p>
+<h3>3.1 Why this approach</h3>
+<ul><li>Executive decisions stay readable without losing engineering traceability.</li><li>Engineering formulas and examples can evolve under stronger verification controls than the narrative strategy.</li><li>Vendor claims remain separated from MONOLITH runtime evidence.</li><li>Repository state can be refreshed without rewriting the complete product strategy.</li><li>Historical errors remain auditable while the authoritative current edition is unambiguous.</li></ul>
+<h3>3.2 Document dependency flow</h3>
+<p><code>Evidence Ledger -&gt; Repository Baseline -&gt; Engineering Playbook -&gt; Executive Blueprint -&gt; Implementation Roadmap</code></p>
+<p>The Executive Blueprint is the master index and decision view. It must link to the exact supporting family for every load-bearing claim.</p>
+<h2>4. Authoritative deliverable matrix</h2>
+<p>Exactly five authoritative document families will be produced. Every family has four files, for a total of twenty controlled deliverables.</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Family</th>
+<th>English Markdown</th>
+<th>Thai Markdown</th>
+<th>Purpose</th>
+</tr></thead><tbody>
+<tr>
+<td>Executive Blueprint and master index</td>
+<td><code>docs/reports/2026-07-21-monolith-integrated-executive-blueprint.en.md</code></td>
+<td><code>docs/reports/2026-07-21-monolith-integrated-executive-blueprint.th.md</code></td>
+<td>Board verdict, strategic position, decisions, rights, risks, metrics, and navigation to evidence.</td>
+</tr>
+<tr>
+<td>Design-to-Production Engineering Playbook</td>
+<td><code>docs/engineering/2026-07-21-design-to-production-engineering-playbook.en.md</code></td>
+<td><code>docs/engineering/2026-07-21-design-to-production-engineering-playbook.th.md</code></td>
+<td>Design -&gt; BOM -&gt; nesting -&gt; CNC -&gt; verification -&gt; installation method, formulas, worked examples, gates, and deliverable contracts.</td>
+</tr>
+<tr>
+<td>Vendor and Standards Evidence Ledger</td>
+<td><code>docs/research/2026-07-21-monolith-vendor-standards-evidence-ledger.en.md</code></td>
+<td><code>docs/research/2026-07-21-monolith-vendor-standards-evidence-ledger.th.md</code></td>
+<td>HOMAG A1-A9, IMA Schelling, imos iX, standards, source provenance, contradictions, and applicability limits.</td>
+</tr>
+<tr>
+<td>Repository and Production-Readiness Baseline</td>
+<td><code>docs/reports/2026-07-21-monolith-repository-production-readiness-baseline.en.md</code></td>
+<td><code>docs/reports/2026-07-21-monolith-repository-production-readiness-baseline.th.md</code></td>
+<td>Two-repository topology, implementation evidence, current limitations, capability map, and readiness matrix.</td>
+</tr>
+<tr>
+<td>Implementation and Qualification Roadmap</td>
+<td><code>docs/superpowers/plans/2026-07-21-monolith-implementation-qualification-roadmap.en.md</code></td>
+<td><code>docs/superpowers/plans/2026-07-21-monolith-implementation-qualification-roadmap.th.md</code></td>
+<td>Retain/refactor/retire/integrate decisions, phased execution, qualification evidence, owners, acceptance, and stop conditions.</td>
+</tr>
+</tbody></table></div>
+<p>Each Markdown path has a same-stem <code>.html</code> companion. English and Thai filenames use <code>.en</code> and <code>.th</code> consistently.</p>
+<h2>5. Authority and supersession model</h2>
+<h3>5.1 Current authority</h3>
+<p>The five controlled families become the current integrated interpretation after they pass all acceptance checks. Direct executable evidence and ratified normative records still outrank derived reports for their respective claim types.</p>
+<h3>5.2 Historical material</h3>
+<p>Existing source reports remain available as historical evidence. They are not silently deleted or rewritten to conceal the audit trail.</p>
+<p>The original IMA Schelling executive audit must receive a visible supersession notice because its parent-root findings were generalized to MONOLITH as a whole. The repository-scope correction remains part of the historical chain, while the new baseline and blueprint incorporate the correction directly.</p>
+<h3>5.3 Conflict rule</h3>
+<p>When two artifacts conflict:</p>
+<ol><li>preserve both claims;</li><li>classify the contradiction;</li><li>identify the repository, revision, environment, and authority applicable to each;</li><li>select the stronger source for that claim type;</li><li>mark the losing claim <code>SUPERSEDED</code>, <code>STALE</code>, <code>DERIVED</code>, or <code>CONTRADICTED</code>;</li><li>never erase the losing claim from the evidence trail.</li></ol>
+<h2>6. Evidence contract</h2>
+<p>Every material claim uses one of these exact classes:</p>
+<ul><li><code>VERIFIED FACT</code>: directly supported by current evidence;</li><li><code>OWNER DECISION</code>: explicitly decided, but not necessarily implemented or ratified;</li><li><code>INFERENCE</code>: a reasoned conclusion from evidence;</li><li><code>PROPOSAL</code>: a desired future state;</li><li><code>UNKNOWN</code>: not established;</li><li><code>CONTRADICTED</code>: incompatible with stronger current evidence.</li></ul>
+<p>Source authority and claim class are separate fields. A current primary vendor page can be authoritative evidence of what the vendor claims while the claim itself remains a <code>VENDOR CLAIM</code>, not a verified MONOLITH production result.</p>
+<p>Every load-bearing claim must include, where applicable:</p>
+<ul><li>source title and exact URL or clickable local path;</li><li>section or line reference;</li><li>publisher or repository identity;</li><li>access date or source revision;</li><li>claim class and confidence;</li><li>scope and applicability;</li><li>contradiction or supersession status;</li><li>evidence required to upgrade the claim.</li></ul>
+<h2>7. Repository baseline contract</h2>
+<p>No report may refer only to “the MONOLITH repository.” It must distinguish at least:</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Repository</th>
+<th>Required description</th>
+</tr></thead><tbody>
+<tr>
+<td>Parent governance/bootstrap root</td>
+<td>Governance, research, bilingual records, target package layout, component-master seed, and reports.</td>
+</tr>
+<tr>
+<td>Nested active product repository</td>
+<td>TypeScript/React/Supabase runtime, routes, migrations, workflows, factory packet, CNC/post-processors, field, release, tests, and CI history.</td>
+</tr>
+</tbody></table></div>
+<p>Every new baseline records:</p>
+<ul><li>absolute path;</li><li>branch and full <code>HEAD</code> SHA;</li><li>upstream when present;</li><li>dirty and untracked state;</li><li>observation date and timezone;</li><li>inventory definition for every count;</li><li>commands used to reproduce material counts;</li><li>test command, environment, result, and limitation when tests are claimed.</li></ul>
+<p>Parent package placeholders cannot prove absence from the nested product. Nested source cannot prove deployment, customer use, machine qualification, or production safety without the corresponding evidence chain.</p>
+<h2>8. Engineering content contract</h2>
+<p>The engineering playbook covers the complete controlled path:</p>
+<p><code>Approved requirements -&gt; canonical product contract -&gt; derived geometry -&gt; BOM -&gt; manufacturing operations -&gt; nesting/cutting plan -&gt; machine-neutral operation graph -&gt; post-processor output -&gt; simulation -&gt; coupon/first article -&gt; production release -&gt; inspection -&gt; installation -&gt; as-installed evidence</code></p>
+<h3>8.1 Required calculation families</h3>
+<p>The playbook must provide definitions, units, coordinate frames, assumptions, domain limits, formulas, tolerances, worked values, failure conditions, and verification methods for:</p>
+<ul><li>cabinet envelope and internal clearances;</li><li>panel dimensions and offsets;</li><li>reveals, gaps, overlays, setbacks, scribes, fillers, and installation allowances;</li><li>grain direction and finish orientation;</li><li>hardware selection and supplier-specific drilling rules;</li><li>System 32 pitch semantics without treating generic values as universal supplier authority;</li><li>hole diameter, depth, face, axis, breakthrough prevention, and tool reach;</li><li>grooves, dados, rabbets, pockets, contours, and edge operations;</li><li>BOM quantities, edge-band lengths, material yield, remnant policy, and costing;</li><li>nesting constraints, kerf, trim, part spacing, clamp/no-cut zones, and rotation;</li><li>coordinate transforms from design to part to machine coordinates;</li><li>tool selection, feed/speed authority, post-processor mapping, and machine-profile constraints;</li><li>dimensional tolerance budgets and inspection sampling;</li><li>revision identity, checksum, traceability, and release authorization.</li></ul>
+<h3>8.2 Mandatory worked chain</h3>
+<p>At least one parameterized cabinet example must travel end to end through formulas, panel schedule, BOM, operations, nesting input, machine-neutral graph, representative CNC/MPR output fields, verification, first article, and installed evidence.</p>
+<p>The example is an engineering demonstration, not production authority. Any supplier, tool, material, or machine value that is not qualified remains blocked or explicitly hypothetical.</p>
+<h3>8.3 Safety doctrine</h3>
+<ul><li>Existing implementation is not the same as production qualification.</li><li>CNC program generation is not proof of safe machining.</li><li>A missing public parameter is not proof that the vendor product lacks the parameter internally.</li><li>A negative capability claim requires search across documentation, source, production caller, schema, tests, runtime, and explicit vendor scope before it can be stated as absence.</li><li><code>NOT_FOR_PRODUCTION</code> or equivalent shadow mode remains active until machine, post-processor, security, coupon, first-article, and authority gates pass.</li><li>Human release authority cannot be silently replaced by AI or optimization output.</li></ul>
+<h2>9. Vendor and standards research contract</h2>
+<p>The evidence ledger integrates the session's HOMAG, IMA Schelling, and imos iX work without pretending that public material reveals proprietary internal schemas or every machine parameter.</p>
+<h3>9.1 HOMAG A1-A9 correction rule</h3>
+<p>The prior A4-style claim “there is no hole diameter or depth anywhere” is prohibited unless complete absence is proven. A product that outputs executable CNC necessarily obtains or derives machining parameters somewhere, but public documentation may not expose the exact storage location, formula, or interface.</p>
+<h3>9.2 Vendor claims</h3>
+<p>Throughput, utilization, availability, service prediction, optimization yield, and productivity figures remain vendor claims until independently reproduced under a named workload, configuration, environment, and measurement method.</p>
+<h3>9.3 Standards applicability</h3>
+<p>The ledger separates:</p>
+<ul><li>publication/version verification;</li><li>legal or contractual applicability;</li><li>test method;</li><li>acceptance criterion;</li><li>licensed normative text required for implementation;</li><li>MONOLITH conformance evidence.</li></ul>
+<p>A test-method standard does not automatically supply a pass/fail threshold. A voluntary standard does not automatically outrank law or become mandatory without an applicability basis.</p>
+<h2>10. Executive blueprint contract</h2>
+<p>The executive document includes:</p>
+<ul><li>a one-page decision;</li><li>verified current-state summary split by repository;</li><li>vendor-neutral positioning and integrate-before-replicate boundary;</li><li>owner decisions separated from evidence;</li><li>customer data and portability rights;</li><li>platform IP, tenant data, OEM data, jointly derived rules, and aggregated benchmark rights;</li><li>privacy-compatible tamper evidence rather than undefined literal immutability;</li><li>business-case formulas with measured inputs and uncertainty;</li><li>risks, kill/continue gates, and independent demonstration requirements;</li><li>links to the four supporting controlled families.</li></ul>
+<p>Language such as “make every role love the system” is replaced with measurable usability, trust, safety, portability, and task-success outcomes.</p>
+<h2>11. Roadmap contract</h2>
+<p>The roadmap does not fund greenfield rebuilding merely because the parent bootstrap lacks code. Each capability receives one disposition:</p>
+<ul><li><code>RETAIN</code>: current implementation is suitable to preserve pending verification;</li><li><code>REFACTOR</code>: current implementation is valuable but requires boundary or quality correction;</li><li><code>RETIRE</code>: current implementation is obsolete, duplicative, unsafe, or superseded;</li><li><code>INTEGRATE</code>: specialist vendor or external capability should be connected rather than rebuilt;</li><li><code>BUILD</code>: a verified gap requires new implementation.</li></ul>
+<p>Every roadmap item names:</p>
+<ul><li>evidence-backed current state;</li><li>intended outcome;</li><li>files or systems affected;</li><li>owner and approving authority;</li><li>dependency and prerequisite;</li><li>acceptance artifact;</li><li>stop/rollback condition;</li><li>readiness dimension affected;</li><li>claim that becomes supportable after completion.</li></ul>
+<h2>12. Bilingual and HTML requirements</h2>
+<ul><li>English and Thai editions must carry equivalent decisions, tables, formulas, warnings, and evidence status.</li><li>Translation may adapt sentence order for clarity but may not change scope or authority.</li><li>Every Markdown file has a matching same-stem standalone HTML file.</li><li>HTML includes UTF-8 metadata, responsive layout, printable styling, readable tables, code blocks, and working links.</li><li>No API key, credential, personal secret, or unredacted sensitive operational data may appear in any edition.</li></ul>
+<h2>13. Production workflow for the documents</h2>
+<ol><li>Freeze the evidence baseline and record both repositories.</li><li>Build the private claim ledger and resolve duplicate/stale sources.</li><li>Draft the Repository Baseline and Evidence Ledger first.</li><li>Draft the Engineering Playbook from the approved design and verified implementation evidence.</li><li>Draft the Executive Blueprint from those three sources.</li><li>Draft the Roadmap only after retain/refactor/retire/integrate/build decisions are evidence-backed.</li><li>Translate each English source into an aligned Thai edition.</li><li>Render standalone HTML from each Markdown source.</li><li>run link, parity, placeholder, contradiction, secret, and supersession checks;</li><li>inspect representative HTML pages visually;</li><li>record hashes and final verification results.</li></ol>
+<h2>14. Acceptance criteria</h2>
+<p>The set is complete only when all conditions below pass:</p>
+<ol><li>all twenty expected files exist;</li><li>every Markdown file has its same-language HTML companion;</li><li>English and Thai headings, tables, formulas, decision states, and warnings are materially aligned;</li><li>no unresolved placeholder marker, invented citation, empty section, or silent omission remains;</li><li>every current-state claim states its repository scope;</li><li>no design artifact is presented as runtime fact;</li><li>no runtime implementation is presented as production qualification;</li><li>vendor performance numbers are visibly classified as vendor claims;</li><li>standards entries distinguish version, applicability, method, and acceptance criteria;</li><li>the A4 contradiction is explicitly corrected and converted into a durable negative-claim rule;</li><li>the active CNC/MPR path is acknowledged with exact source evidence;</li><li>machine safety and release gates remain fail-closed;</li><li>the Executive Blueprint links to every supporting family;</li><li>legacy IMA current-state language is visibly superseded;</li><li>no secret or API key is present;</li><li>HTML files open independently and preserve the Markdown's substantive content;</li><li>final file hashes and verification commands are recorded.</li></ol>
+<h2>15. Non-goals</h2>
+<p>This documentation project does not:</p>
+<ul><li>certify any CNC program, machine, material, hardware item, or cabinet for production;</li><li>ratify proposed ADRs or the 15-context architecture;</li><li>migrate the tenant/site schema;</li><li>change active product runtime or nested dirty-tree files;</li><li>claim vendor certification or standards conformance;</li><li>expose or store the Perplexity API key;</li><li>commit unrelated user changes.</li></ul>
+<h2>16. Design self-review result</h2>
+<ul><li>Placeholder scan: no unresolved placeholder is permitted by the design.</li><li>Internal consistency: five families x four editions equals twenty controlled deliverables.</li><li>Scope: documentation consolidation and qualification planning are included; runtime implementation is excluded.</li><li>Ambiguity: authoritative current editions, historical retention, repository split, evidence classes, and production-safety limits are explicit.</li></ul>
+</main>
+</body>
+</html>

@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Biesse Wood/Furniture Evidence-Led Integration Audit — Design Specification</title>
+  <style>:root{color-scheme:light;--ink:#17202a;--muted:#5b6470;--line:#d9e1ea;--paper:#fff;--soft:#f6f8fb;--accent:#0f766e;--accent-soft:#e9fbf7;--danger:#991b1b;--danger-soft:#fff1f2}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#edf1f5;color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",sans-serif;line-height:1.62}main{max-width:1120px;min-height:100vh;margin:0 auto;padding:48px 58px 76px;background:var(--paper);box-shadow:0 24px 70px rgba(15,23,42,.08)}h1,h2,h3,h4{line-height:1.22}h1{margin:0 0 14px;font-size:clamp(1.65rem,3.2vw,2.45rem)}h2{margin-top:42px;padding-top:22px;border-top:1px solid var(--line);font-size:1.42rem}h3{margin-top:28px;font-size:1.13rem;color:var(--accent)}p{margin:13px 0}a{color:#0b63ce;overflow-wrap:anywhere}blockquote{margin:22px 0;padding:16px 20px;border-left:5px solid var(--accent);background:var(--accent-soft);font-weight:650}blockquote p{margin:6px 0}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#edf2f7;padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}pre{overflow:auto;padding:18px 20px;border-radius:8px;background:#17212b;color:#edf6ff;line-height:1.5}pre code{padding:0;background:transparent;color:inherit}table{display:block;width:100%;overflow-x:auto;border-collapse:collapse;margin:18px 0;font-size:.94rem}th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}th{background:var(--soft)}tr:nth-child(even) td{background:#fbfcfe}ol li,ul li{margin:7px 0}@media (max-width:760px){main{padding:26px 18px 50px}}@media print{body{background:#fff}main{box-shadow:none;padding:0}}</style>
+</head>
+<body>
+<main>
+<h1>Biesse Wood/Furniture Evidence-Led Integration Audit — Design Specification</h1>
+<p><strong>Edition:</strong> English<br><strong>Design date:</strong> 21 July 2026<br><strong>Status:</strong> Approved design contract<br><strong>Approved approach:</strong> B — Evidence-led integration audit<br><strong>Decision owner:</strong> Dave / MONOLITH owner  </p>
+<blockquote>
+<p><strong>Design decision:</strong> audit the Biesse wood/furniture software and machine-integration stack against current official evidence and the actual MONOLITH product source. The audit must distinguish a vendor capability statement, a verified local implementation, and a production-qualified result. It must convert unresolved CIX, tooling, controller, data, and release questions into explicit fail-closed qualification gates.</p>
+</blockquote>
+<h2>1. Purpose</h2>
+<p>The audit must answer five decision questions:</p>
+<ol>
+<li>What does the current Biesse wood/furniture stack publicly claim to do, and which official source supports each claim?</li>
+<li>What Biesse/CIX/Biesse ISO integration is implemented in MONOLITH today, in which Git root, branch, revision, callers, tests, and release mode?</li>
+<li>Which local paths are incomplete, ambiguous, unsafe, or unsupported by OEM evidence?</li>
+<li>What should MONOLITH retain, refactor, integrate, build, or retire?</li>
+<li>What evidence is required before any Biesse output may progress from shadow mode to an authorized machine run?</li>
+</ol>
+<p>The audit is a decision and qualification instrument. It is not marketing copy, OEM certification, legal advice, or permission to cut a real workpiece.</p>
+<h2>2. Scope</h2>
+<h3>2.1 Included Biesse wood/furniture stack</h3>
+<p>The audit covers the following functional chain where current evidence supports it:</p>
+<p><code>iX by imos -&gt; B_NEST / B_OPTI / B_EDGE -&gt; B_SOLID -&gt; SmartConnection -&gt; configured Biesse CNC cell -&gt; Sophia / service and data feedback</code></p>
+<p>The chain is a functional model, not a claim that every named product is required, bundled, mutually compatible in every version, or deployed in MONOLITH.</p>
+<p>Included topics are:</p>
+<ul>
+<li>parametric furniture design and process planning through iX by imos;</li>
+<li>3D CAD/CAM, programming, simulation, virtual-machine checks, tool data, and time estimation through B_SOLID where officially documented;</li>
+<li>nesting through B_NEST and cutting optimization through B_OPTI;</li>
+<li>edgebanding preparation through B_EDGE/B_SUITE;</li>
+<li>job-order scheduling, machine linking, and production startup through SmartConnection;</li>
+<li>CIX and Biesse ISO boundaries, including provenance, grammar, controller, firmware, software version, and postprocessor selection;</li>
+<li>machine profile, work envelope, tool magazine, tools, feeds, speeds, faces, axes, coordinate frames, clamps, and no-cut zones;</li>
+<li>labels, part identity, BOM and operation reconciliation;</li>
+<li>Sophia/customer-care telemetry and the connected-product data contract;</li>
+<li>EU Data Act access, sharing, export, retention, and integration implications, without providing legal advice;</li>
+<li>MONOLITH code, tests, callers, release controls, and production-qualification gaps.</li>
+</ul>
+<h3>2.2 Excluded from this audit</h3>
+<p>The following are excluded from this first Biesse audit:</p>
+<ul>
+<li>glass and stone software, including IC, ICAM, and Easystone;</li>
+<li>unsupported assumptions about proprietary Biesse schemas or internal algorithms;</li>
+<li>a blanket certification for all Biesse machines or controllers;</li>
+<li>live machine configuration changes, CNC execution, or removal of <code>NOT_FOR_PRODUCTION</code> controls;</li>
+<li>purchasing, licensing, contractual, or legal conclusions not supported by the applicable documents and responsible authority;</li>
+<li>implementation fixes. Remediation will require a separate approved implementation plan.</li>
+</ul>
+<h2>3. Approved approach and deliverables</h2>
+<p>The selected approach is the middle of three considered levels:</p>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Result</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Catalog summary</td>
+<td>Describes public product capabilities but cannot establish local integration or production safety.</td>
+<td>Rejected as insufficient.</td>
+</tr>
+<tr>
+<td>Evidence-led integration audit</td>
+<td>Joins official sources, two-root source tracing, safety analysis, Data Act boundaries, and qualification gates.</td>
+<td><strong>Approved for this phase.</strong></td>
+</tr>
+<tr>
+<td>OEM qualification dossier</td>
+<td>Adds licensed manuals, named controller/version evidence, B_SOLID fixtures, physical dry runs, coupons, first-article inspection, and OEM/factory sign-off.</td>
+<td>Required later for production authority.</td>
+</tr>
+</tbody></table>
+<p>The authoritative audit family will contain four aligned files:</p>
+<ul>
+<li><code>docs/research/2026-07-21-biesse-wood-furniture-monolith-evidence-led-integration-audit.en.md</code></li>
+<li><code>docs/research/2026-07-21-biesse-wood-furniture-monolith-evidence-led-integration-audit.th.md</code></li>
+<li>matching <code>.en.html</code> and <code>.th.html</code> standalone editions.</li>
+</ul>
+<p>After the standalone audit passes acceptance, a concise Biesse section will be integrated into the controlled Vendor and Standards Evidence Ledger. The shared ledger must not be overwritten while another process is modifying it; integration starts with a fresh status and diff check.</p>
+<h2>4. Evidence contract</h2>
+<h3>4.1 Claim classification</h3>
+<p>Every material conclusion uses the controlled MONOLITH claim classes:</p>
+<ul>
+<li><code>VERIFIED FACT</code></li>
+<li><code>OWNER DECISION</code></li>
+<li><code>INFERENCE</code></li>
+<li><code>PROPOSAL</code></li>
+<li><code>UNKNOWN</code></li>
+<li><code>CONTRADICTED</code></li>
+</ul>
+<p>Source authority is recorded separately. For example, an official Biesse page can verify the fact that <strong>Biesse states</strong> a capability, but it does not prove that the capability is licensed, configured, interoperable with MONOLITH, or production-qualified at the user&#39;s factory.</p>
+<h3>4.2 Source priority</h3>
+<p>Material vendor and regulatory claims use this order of preference:</p>
+<ol>
+<li>current Biesse product pages, technical documents, release notes, manuals, and signed OEM/factory correspondence;</li>
+<li>applicable legislation or official regulator text;</li>
+<li>current local source, tests, schemas, runtime callers, configuration, generated fixtures, and release evidence;</li>
+<li>independent technical sources used only where primary material is unavailable and clearly labelled;</li>
+<li>search and Perplexity Research as discovery and adversarial synthesis, never as the final authority for a load-bearing claim.</li>
+</ol>
+<p>Every load-bearing claim records the title, URL or local path, publisher or Git root, revision/access date, applicable product/version, claim class, confidence, limitation, contradiction status, and evidence required for upgrade.</p>
+<h3>4.3 Negative-claim rule</h3>
+<p>The audit must not repeat the earlier A4-style error of converting “not found in public documentation” into “does not exist.” A product capable of producing or executing CNC work necessarily obtains or derives machining parameters somewhere, but the public source may not reveal the storage model, formula, interface, or controller-specific representation.</p>
+<p>Any absence claim requires a search across official documentation, licensed material when available, local schema, source, production caller, tests, generated artifact, runtime behavior, and explicit vendor scope. Otherwise the result is <code>UNKNOWN</code> or “not established in the reviewed evidence.”</p>
+<h2>5. Initial official source corpus</h2>
+<p>The audit begins with, but is not limited to, these current official sources:</p>
+<ul>
+<li><a href="https://biesse.com/th/th/software/">Biesse software catalog</a></li>
+<li><a href="https://biesse.com/th/th/software/b_solid/">B_SOLID</a></li>
+<li><a href="https://biesse.com/th/th/software/b_nest/">B_NEST</a></li>
+<li><a href="https://biesse.com/th/th/software/b_edge/">B_EDGE</a></li>
+<li><a href="https://biesse.com/th/th/software/smartconnection/">SmartConnection</a></li>
+<li><a href="https://biesse.com/us/en/software/ix-by-imos/">iX by imos</a></li>
+<li><a href="https://biesse.com/it/it/novita/il-software-di-simulazione-della-replica-digitale-assicura-vantaggi-concreti-agli-utenti-cnc/">B_SOLID digital-replica simulation article</a></li>
+<li><a href="https://biesse.com/th/th/news/b-nest-software-for-the-optimisation-of-nesting-projects/">B_NEST optimization article</a></li>
+<li><a href="https://biesse.com/ww/en/customer-care/">Biesse Customer Care and Sophia</a></li>
+<li><a href="https://biesse.com/us/en/data-act/">Biesse Data Act page</a></li>
+<li>the Biesse connected-product information document linked from the Data Act page, observed as updated December 2025;</li>
+<li><a href="https://eur-lex.europa.eu/eli/reg/2023/2854/oj">Regulation (EU) 2023/2854 — Data Act</a>.</li>
+</ul>
+<p>Public pages are discovery anchors. The audit must identify any required licensed Biesse technical documentation, machine-specific manuals, controller references, postprocessor specifications, and sample files that are not publicly available.</p>
+<h2>6. Repository and runtime audit contract</h2>
+<h3>6.1 Mandatory two-root baseline</h3>
+<p>Every current-state statement distinguishes:</p>
+<table>
+<thead>
+<tr>
+<th>Root</th>
+<th>Observed role</th>
+<th>Design-time snapshot</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>C:\Users\thai3\determined-williams (2)</code></td>
+<td>Governance/bootstrap, research, controlled evidence, reports, and specifications.</td>
+<td><code>master</code>, HEAD <code>acdbc36f5ecaeb63ef192da108cd2185b13711f3</code>; dirty with pre-existing and concurrent work.</td>
+</tr>
+<tr>
+<td><code>C:\Users\thai3\determined-williams (2)\determined-williams</code></td>
+<td>Active MONOLITH TypeScript/React/Supabase product and CNC/factory implementation.</td>
+<td><code>fix/drillmap-bolt-and-brun-dowels</code>, HEAD <code>59f61e5785d2a1215a74687fe0def91e9400c75d</code>; pre-existing modified Daph exports and untracked temporary trace tests.</td>
+</tr>
+</tbody></table>
+<p>This is a volatile observation at design time, not a permanent product metric. The implementation audit must record a fresh branch, full SHA, upstream, status, test environment, and observation timestamp.</p>
+<h3>6.2 Required local trace</h3>
+<p>The audit must trace the actual execution and data path, not only filenames:</p>
+<ol>
+<li>canonical design/BOM/part and drilling inputs;</li>
+<li>operation-graph construction and validation;</li>
+<li>machine-profile selection;</li>
+<li>postprocessor resolution and dialect normalization;</li>
+<li>CIX and Biesse ISO emitters;</li>
+<li>production callers, bundle construction, status propagation, warnings, filenames, checksums, and release packet;</li>
+<li>factory export paths that may implement a competing Biesse output;</li>
+<li>tests for supported, unsupported, invalid, and unknown-tool cases;</li>
+<li>shadow-mode and release-authority controls;</li>
+<li>any runtime route, API, import, simulator, or machine feedback path.</li>
+</ol>
+<p>The initial trace must include at least:</p>
+<ul>
+<li><code>src/cnc/machine/presets/biesse.ts</code></li>
+<li><code>src/cnc/post/postProcessor.ts</code></li>
+<li><code>src/cnc/post/dialects/cix.ts</code></li>
+<li><code>src/cnc/post/dialects/biesseIso.ts</code></li>
+<li><code>src/cnc/buildGcodeBundle.ts</code></li>
+<li><code>src/cnc/mapping/validateOperationGraph.ts</code></li>
+<li><code>src/factory/cnc/generateGcodeForJob.ts</code></li>
+<li><code>src/factory/server/export/zipBundle.ts</code></li>
+<li><code>src/cnc/post/dialects/__tests__/cix.test.ts</code></li>
+<li><code>src/cnc/__tests__/buildGcodeBundle.test.ts</code></li>
+<li><code>src/core/config/shadowMode.ts</code></li>
+<li><code>src/factory/packet/__tests__/notForProduction.test.ts</code>.</li>
+</ul>
+<p>Source presence proves implementation, not deployment, machine compatibility, factory acceptance, or safe production.</p>
+<h2>7. Safety findings that the audit must resolve</h2>
+<p>The following are preliminary <code>VERIFIED FACT</code> findings about the reviewed source snapshot. The audit must reproduce, bound, and grade them; it must not silently normalize them.</p>
+<h3>B0 — unsupported operations can be omitted while output remains OK</h3>
+<p>The current CIX emitter handles <code>DRILL</code> and <code>BORE</code>; unsupported types add a warning and return no operation element. The existing POCKET test expects <code>status</code> to remain <code>OK</code> with <code>operationCount</code> equal to zero. The bundle builder aggregates warnings and can return <code>status: &#39;OK&#39;</code> after postprocessing.</p>
+<p>Required production rule:</p>
+<p><code>input manufacturing operations = emitted operations + explicitly authorized non-machining operations</code></p>
+<p>Any unexplained difference must fail the release. Warning-only omission is prohibited for production-authority output.</p>
+<h3>B0 — unknown tools can default to tool number 1</h3>
+<p>The current CIX emitter warns and defaults an unknown tool to <code>TNO=1</code>; the test asserts the OK path. Production output must never guess a physical tool. Tool identity, magazine position, diameter, usable cutting length, holder, rotation, speed/feed authority, life state, and machine/controller applicability must be resolved and signed, or the output must fail closed.</p>
+<h3>B1 — CIX conformance and provenance are not established</h3>
+<p>The local source describes its output as Biesse-compatible CIX XML and cites a third-party Autodesk forum. Current official Biesse material confirms that CIX files can participate in Biesse workflows, but the reviewed public evidence does not establish the grammar implemented by MONOLITH. The audit must not label the emitter OEM-conformant without a versioned OEM specification, accepted golden fixture, or equivalent signed evidence.</p>
+<h3>B1 — two Biesse output paths may represent different contracts</h3>
+<p>The postprocessor registry normalizes generic <code>BIESSE</code> to CIX while retaining <code>BIESSE_ISO</code>; a separate factory ZIP path emits a Biesse ISO-style program. The audit must identify every caller and decide whether these are controller-specific adapters, legacy paths, test fixtures, or competing sources of truth.</p>
+<h3>B1 — the generic Biesse machine preset is not production authority</h3>
+<p>The local Rover B FT preset contains numeric envelope, axis, spindle, magazine, tool, and process values. Each value must be tied to the exact machine model, serial/configuration, controller, firmware, installed options, tooling, material, setup, and approved source. A generic preset cannot authorize a real machine run.</p>
+<p>Because the nested product is explicitly in <code>NOT_FOR_PRODUCTION</code> shadow mode, these B0 items are production-release blockers, not evidence that an unsafe real cut occurred.</p>
+<h2>8. Target integration boundary</h2>
+<p>MONOLITH should own canonical business and manufacturing intent while Biesse software and controllers retain OEM-native responsibilities.</p>
+<p><code>Approved MONOLITH job/revision -&gt; canonical BOM and part identity -&gt; machine-neutral operation graph -&gt; versioned Biesse adapter package -&gt; CIX or controller-specific output -&gt; B_SOLID import/simulation -&gt; human release -&gt; configured machine cell -&gt; inspection and feedback -&gt; MONOLITH evidence record</code></p>
+<p>The adapter package must name and bind:</p>
+<ul>
+<li>machine model and asset identity;</li>
+<li>controller and firmware;</li>
+<li>B_SOLID/B_NEST/other relevant software versions;</li>
+<li>output dialect and grammar revision;</li>
+<li>coordinate frame, faces, datum, units, and orientation;</li>
+<li>tool library and magazine snapshot;</li>
+<li>clamps, pods, vacuum zones, spoilboard, work envelope, and no-cut zones;</li>
+<li>supported operation matrix and explicit rejection rules;</li>
+<li>material/process recipe authority;</li>
+<li>postprocessor version and checksum;</li>
+<li>test-fixture, simulator, coupon, and first-article evidence;</li>
+<li>signer, validity period, and revocation state.</li>
+</ul>
+<p>MONOLITH must not replicate proprietary machine control, safety PLC logic, or opaque OEM optimization where a governed integration provides the required outcome. Biesse-native identifiers and payloads must be retained losslessly alongside canonical mappings.</p>
+<h2>9. Error handling and release doctrine</h2>
+<p>A production-candidate Biesse package must fail closed when any of these conditions occurs:</p>
+<ul>
+<li>an operation has no qualified mapping;</li>
+<li>a tool or tool position is unknown, inferred, stale, or incompatible;</li>
+<li>controller, firmware, software, machine, or adapter version is missing or mismatched;</li>
+<li>coordinate frame, face, datum, units, thickness, or orientation is ambiguous;</li>
+<li>tool reach, holder clearance, clamp/vacuum zone, envelope, or collision evidence is absent;</li>
+<li>the output cannot be parsed or imported by the named Biesse software/version;</li>
+<li>operation reconciliation, checksum, revision, signature, or human authorization fails;</li>
+<li>required simulator, dry-run, coupon, or first-article evidence has expired or is absent.</li>
+</ul>
+<p>Warnings may inform engineering review, but a warning must not silently downgrade a mandatory release failure. Every override must name the authorized role, reason, scope, evidence, timestamp, and expiry; safety-critical unknowns are non-overridable.</p>
+<h2>10. Qualification and test design</h2>
+<p>The audit must define a staged evidence ladder:</p>
+<ol>
+<li><strong>Source and contract review:</strong> official versioned documents, supported-operation matrix, controller/software compatibility, and data rights.</li>
+<li><strong>Static conformance:</strong> schemas, parsers, units, coordinate frames, deterministic output, operation reconciliation, tool resolution, and fail-closed tests.</li>
+<li><strong>Golden fixtures:</strong> representative drill, bore, groove, pocket, profile, edge, aggregate, and orientation cases with expected artifacts and rejection cases.</li>
+<li><strong>Differential import:</strong> import the exact artifact into the named B_SOLID environment and reconcile geometry, tools, operations, warnings, and estimated sequence.</li>
+<li><strong>Virtual-machine simulation:</strong> collision, travel, tool/holder, setup, clamp/vacuum, and time checks with retained evidence.</li>
+<li><strong>Controlled dry run:</strong> named machine/controller/configuration, no cutting, authorized operator, and recorded results.</li>
+<li><strong>Material coupon:</strong> controlled tool/material/setup, metrology plan, acceptance limits, NCR handling, and traceability.</li>
+<li><strong>First article:</strong> released job revision, full dimensional/feature inspection, sign-off, and rollback criteria.</li>
+<li><strong>Production authorization:</strong> time-limited adapter/machine/material envelope with monitoring, change control, and revocation.</li>
+</ol>
+<p>The audit must include a qualification matrix keyed by machine asset, controller/firmware, software version, postprocessor, operation family, tool library, material class, thickness range, setup, evidence artifact, owner, result, validity, and expiry.</p>
+<p>The previous attempt to run the focused CIX tests did not execute because <code>vitest</code> was unavailable in that environment. The audit must record this as an environment limitation, install or resolve dependencies only with authorization, and rerun the exact tests before making a passing or failing test claim.</p>
+<h2>11. Data, Sophia, and EU Data Act contract</h2>
+<p>The audit must separate:</p>
+<ul>
+<li>raw connected-product data;</li>
+<li>user/business data and personal data;</li>
+<li>Biesse service data and derived analytics;</li>
+<li>MONOLITH canonical operational evidence;</li>
+<li>export format, semantics, frequency, latency, access method, retention, and deletion;</li>
+<li>first-party access and third-party sharing rights;</li>
+<li>cybersecurity, trade-secret, contract, and competitive-use restrictions;</li>
+<li>the difference between legal rights, contractual rights, technical availability, and implemented MONOLITH ingestion.</li>
+</ul>
+<p>The reviewed Biesse information document indicates, among other items, user access through Sophia for two years, Biesse storage for five years, export in at least TXT, and potentially continuous or real-time generation depending on product/service. These are inputs to be reverified against the exact current document and applicable configuration; they are not proof of a deployed MONOLITH data connector or legal advice.</p>
+<p>The target data contract must define stable identifiers, timestamps and timezone, units, quality flags, schema/version, pagination/stream behavior, retry and idempotency, consent/authority, retention, export, deletion, audit, and fallback when Sophia or a direct protocol is unavailable.</p>
+<h2>12. Audit document structure</h2>
+<p>The final audit must contain:</p>
+<ol>
+<li>executive verdict and decision summary;</li>
+<li>scope, method, evidence classes, snapshot, and limitations;</li>
+<li>Biesse wood/furniture stack map;</li>
+<li>product capability and claim ledger;</li>
+<li>CIX/Biesse ISO/interface and provenance analysis;</li>
+<li>two-root MONOLITH current-state trace with exact callers and tests;</li>
+<li>findings graded B0 through B3;</li>
+<li>target integration architecture and system-of-record boundaries;</li>
+<li>Sophia/Data Act/data-governance assessment;</li>
+<li>qualification ladder, matrix, stop conditions, and evidence templates;</li>
+<li><code>Retain / Refactor / Integrate / Build / Retire</code> decision table;</li>
+<li>prioritized remediation and dependency sequence;</li>
+<li>source register, contradictions, unknowns, and evidence-request list.</li>
+</ol>
+<h2>13. Acceptance criteria</h2>
+<p>The audit family is acceptable only when:</p>
+<ul>
+<li>English and Thai Markdown editions are semantically aligned;</li>
+<li>each Markdown edition has a readable standalone HTML companion;</li>
+<li>every material Biesse claim cites a current official source or is explicitly bounded as non-primary;</li>
+<li>every MONOLITH implementation claim names the correct Git root, branch, full SHA, file, caller, and relevant line or symbol;</li>
+<li>source presence is never promoted into deployment, compatibility, qualification, or production evidence;</li>
+<li>the operation-loss and unknown-tool B0 findings are reproduced, bounded, and not softened into ordinary warnings;</li>
+<li>CIX and Biesse ISO are mapped to explicit controller/software/version contracts or remain blocked as <code>UNKNOWN</code>;</li>
+<li>every numeric machine or process value carries a source and applicability envelope or is excluded from production authority;</li>
+<li>official vendor claims and independently demonstrated results are visibly distinct;</li>
+<li>the Data Act section cites the exact current Biesse and EU sources and clearly states its non-legal-advice boundary;</li>
+<li>test commands, environment, output, and limitations are recorded without inventing a result;</li>
+<li>no secret, API key, credential, licensed manual text, personal data, or proprietary customer payload is committed;</li>
+<li>the nested dirty worktree and unrelated parent changes remain untouched;</li>
+<li>the audit does not authorize production and keeps shadow-mode gates intact.</li>
+</ul>
+<h2>14. Implementation sequence after written-spec approval</h2>
+<p>After the owner reviews this written specification, the implementation plan will sequence:</p>
+<ol>
+<li>refresh official Biesse and EU sources, using Perplexity Research for discovery/adversarial checking and primary sources for final authority;</li>
+<li>freeze a reproducible two-root snapshot and evidence inventory;</li>
+<li>trace the complete local Biesse path and reproduce safety findings;</li>
+<li>build the claim, compatibility, operation-coverage, and qualification matrices;</li>
+<li>draft and self-review the English audit;</li>
+<li>produce the aligned Thai edition;</li>
+<li>render and verify both standalone HTML editions;</li>
+<li>run citation, link, parity, secret, contradiction, and Git-scope checks;</li>
+<li>integrate the accepted summary into the shared Vendor and Standards Evidence Ledger without overwriting concurrent changes.</li>
+</ol>
+<p>No runtime remediation begins under this document-writing authorization.</p>
+<h2>15. Design self-review result</h2>
+<ul>
+<li><strong>Placeholder scan:</strong> no unresolved <code>TBD</code> or <code>TODO</code> remains.</li>
+<li><strong>Consistency:</strong> scope, evidence rules, architecture, findings, test design, and acceptance gates all preserve the distinction between public capability, local implementation, and production qualification.</li>
+<li><strong>Scope:</strong> wood/furniture is included; glass/stone is explicitly excluded.</li>
+<li><strong>Ambiguity:</strong> generic “Biesse compatibility” is prohibited. Compatibility must be a versioned machine/controller/software/adapter contract.</li>
+<li><strong>Safety:</strong> unsupported operations and unknown tools are fail-closed production blockers; shadow mode remains in force.</li>
+</ul>
+</main>
+</body>
+</html>
