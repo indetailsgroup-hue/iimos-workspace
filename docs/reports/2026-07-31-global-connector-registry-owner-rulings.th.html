@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>Global Connector Registry — บันทึกคำตัดสินของเจ้าของ</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>Global Connector Registry — บันทึกคำตัดสินของเจ้าของ</h1>
+<p><strong>ขอบเขต:</strong> เลน <code>codex/global-connector-registry</code> ตั้งแต่งานที่ 8 เป็นต้นไป <strong>เริ่มบันทึก:</strong> 31 กรกฎาคม 2026</p>
+<h2>ทำไมจึงมีไฟล์นี้</h2>
+<p>การรีวิวอิสระของการปิดงานที่ 8 พบว่า ledger ติดป้าย commit สอง wave ว่า <strong>OWNER-RULED</strong> และระบุผลตัดสินของการรีวิวกับผู้เขียนไว้ในตารางลำดับเหตุการณ์ ขณะที่ <strong>ไม่มี artifact ใดใน repository บันทึกสิ่งเหล่านั้นไว้เลย</strong> ค้นด้วย <code>grep -rl -iE "owner ruling|owner ruled|owner-ruled" --exclude-dir=.git .</code> ครอบคลุมไฟล์ 263 ไฟล์ที่ไม่อยู่ใน <code>.git</code> ผลที่ได้มีเพียงสี่ฉบับของ ledger นี้เอง, รายงานกับ review package ของงานที่ 7 และ <code>tests/component_master/registry/test_ingestion.py</code> ไม่มีบันทึกคำตัดสินเจ้าของของงานที่ 8 อยู่ในนั้นเลย ข้อความ commit ของ <code>51c6428b</code> มีบรรทัดที่เขียนไว้ ณ เวลานั้นว่า <em>"Scope is this directory only, by owner ruling"</em> จริง แต่ข้อความของ <code>26d344e3</code> ไม่มีการอ้างถึงเจ้าของเลย metadata ผู้เขียนของ git ก็ยืนยันความต่างนี้ไม่ได้ เพราะทุก commit ในเลนนี้ใช้ อัตลักษณ์เดียวกันทั้งในฐานะ author และ committer</p>
+<p>อำนาจในการตัดสินคือแกนที่ ledger ของงานที่ 7 ระบุว่าต้องไม่เบลอ ผู้อ่านที่ต้องการ ตรวจว่าใครตัดสิน wave ใด ตอนนี้ทำไม่ได้ ไฟล์นี้คือการแก้ไข สำหรับงานต่อจากนี้ไป</p>
+<h2>ไฟล์นี้คืออะไร และไม่ใช่อะไร</h2>
+<ul>
+<li>มัน <strong>เป็น</strong> การถอดความที่ orchestrator บันทึกไว้ ณ เวลาที่ได้รับคำตัดสิน</li>
+</ul>
+<p>ของการตัดสินใจที่เจ้าของให้ไว้ในการทำงานร่วมกัน</p>
+<ul>
+<li>มัน <strong>ไม่ใช่</strong> ลายเซ็น ไม่ใช่บันทึกการอนุมัติ และไม่ใช่เอกสารที่ลงนามกำกับ</li>
+</ul>
+<p>ไม่มีข้อความใดในนี้ที่เจ้าของรับรอง หากถอดความผิด มีเพียงเจ้าของเท่านั้นที่บอกได้</p>
+<ul>
+<li>คำตัดสินก่อนงานที่ 8 ไม่ได้ถูกนำมากล่าวซ้ำที่นี่ มันถูกบันทึกอยู่ในการปิดงานที่ 1–7</li>
+</ul>
+<p>ใน <code>.superpowers/sdd/global-connector-registry-progress.md</code> และไม่ถูกย้าย</p>
+<ul>
+<li>คำตัดสินที่บันทึกไว้ที่นี่มีผลกับเลนนี้จนกว่าเจ้าของจะเปลี่ยน wave ใดที่อ้าง</li>
+</ul>
+<p>คำตัดสินต้องอ้างด้วยรหัสในคอลัมน์ซ้าย</p>
+<hr>
+<h2>OR-8.1 — การจัดการ end-of-line ที่รากของ registry</h2>
+<p><strong>วันที่:</strong> 30 กรกฎาคม 2026 <strong>กำกับ:</strong> <code>51c6428bf73fdeb41cc5faa5923f6143ad875633</code> <strong>คำถามที่เสนอต่อเจ้าของ:</strong> การ clone ใหม่บน Windows เขียน <code>coverage-snapshot.json</code> ที่ commit ไว้จาก LF เป็น CRLF ผู้อ่านจึงยืนยัน digest ที่เผยแพร่กับไฟล์ที่ได้รับ ไม่ได้ ควรตรึงการจัดการ end-of-line หรือไม่ และถ้าตรึง ขอบเขตแค่ไหน</p>
+<p><strong>คำตัดสิน:</strong> ตรึง <strong>ที่รากของ registry เท่านั้น</strong> ไม่ให้ renormalise ทั้ง repository ในการเปลี่ยนแปลงเดียวกัน</p>
+<p><strong>ผลที่บันทึกไว้:</strong> การตรึงเป็นราย glob (<code>*.json -text</code>, <code>*.jsonl -text</code>) ดังนั้น ไฟล์ภายในรากของ registry ที่ไม่ตรงกับ glob ใดเลย — <code>.gitattributes</code>, <code>.gitignore</code> — ยังคงถูกแปลงเมื่อ checkout ข้อนี้อยู่ในคำตัดสิน ไม่ใช่การเบี่ยงเบนจากคำตัดสิน</p>
+<p><strong>ยังเปิดอยู่ภายใต้คำตัดสินนี้:</strong> manifest baseline adoption ของงานที่ 1 เผยแพร่คู่ path กับ SHA-256 จำนวน 77 คู่ ซึ่งไม่มีคู่ใดทำซ้ำได้บน checkout ใหม่ ส่วนที่ว่า เรื่องนี้จะได้ wave ของตัวเองหรือไม่ <strong>ยังไม่ได้ตัดสิน</strong></p>
+<h2>OR-8.2 — allowlist ชื่อไฟล์ที่ระบุชัดสำหรับ input ที่ไม่ใช่ item</h2>
+<p><strong>วันที่:</strong> 30 กรกฎาคม 2026 <strong>กำกับ:</strong> <code>26d344e3edafb7a1e693c358087c001d51c0373b</code> <strong>คำถามที่เสนอต่อเจ้าของ:</strong> งานที่ 9 จะสร้าง <code>brand-universe.jsonl</code> และ <code>source-denominator.jsonl</code> ที่รากของ registry และทั้งสองจะล้มแรง เพราะทุก <code>*.jsonl</code> ถูกอ่านเป็นข้อมูล item ควรเพิ่ม allowlist หรือไม่</p>
+<p><strong>คำตัดสิน:</strong> เพิ่ม พร้อมข้อบังคับสองข้อที่เจ้าของระบุไว้เป็นส่วนหนึ่งของตัวเลือกที่เลือก:</p>
+<ol>
+<li>allowlist ต้องเป็น <strong>ชื่อไฟล์ที่ระบุชัด ไม่ใช่ pattern กว้าง ๆ</strong></li>
+<li><code>.jsonl</code> ที่ไม่รู้จักต้อง <strong>ยังล้มดังเหมือนเดิม</strong> ไม่ใช่ถูกข้ามเงียบ</li>
+</ol>
+<p><strong>ผลที่บันทึกไว้:</strong> เพราะยังไม่มี type ของ brand record แถวที่ไม่ว่างใน <code>brand-universe.jsonl</code> จึงถูกปฏิเสธ แทนที่จะถูกเดารูปแบบให้ schema ของแถวนั้น เป็นของงานที่ 9 ที่จะนิยาม</p>
+<p><strong>ช่องว่างที่บันทึกไว้ ซึ่งคำตัดสินนี้ไม่ครอบคลุม:</strong> การรับประกันเรื่องการล้มดัง ๆ มีขอบเขตอยู่ที่นามสกุล <code>.jsonl</code> ไฟล์ที่รากของ registry ซึ่งไม่ใช่ <code>*.jsonl</code> — เช่น item object ที่ถูกต้องแต่เขียนเป็น <code>items.json</code> — จะถูกข้ามเงียบและไม่มีข้อความใดบอก</p>
+<h2>OR-9.1 — แหล่งข้อมูลที่ระบุชื่อแล้วแต่ยังไม่ได้ดึง ควรมีหน้าตาอย่างไร</h2>
+<p><strong>วันที่:</strong> 31 กรกฎาคม 2026 <strong>กำกับ:</strong> งานที่ 9 ซึ่งยังไม่ได้ลงมือทำ <strong>คำถามที่เสนอต่อเจ้าของ:</strong> งานที่ 9 ประกาศ URL ต้นทางของ 12 แบรนด์ ซึ่ง <strong>ยังไม่มีใครไปดึงมาอ่าน</strong> แต่ทุก type ในโมดูลออกแบบมาสำหรับแหล่งที่อ่านและ hash แล้ว เสนอสามทางเลือก:</p>
+<ul>
+<li><strong>ก</strong> — ดึงและ hash จริงก่อน ที่ดึงไม่ได้กลายเป็น <code>BLOCKED</code> พร้อมเหตุผล ไม่แตะ</li>
+</ul>
+<p>code แต่งานที่ 9 กลายเป็นงานที่ต้องใช้ network และ rights review</p>
+<ul>
+<li><strong>ข</strong> — เพิ่มสถานะที่สามซึ่งหมายถึง <em>มีชื่อ ยังไม่ได้อ่าน</em> ไม่นับใน</li>
+</ul>
+<p><code>registered_source_count</code> และมีวรรคที่นับได้ของตัวเองใน <code>coverage_statement</code></p>
+<ul>
+<li><strong>ค</strong> — ประกาศทั้ง 12 เป็น <code>BLOCKED</code> เหตุผล "ยังไม่ได้ดึง" ไม่แตะ code</li>
+</ul>
+<p><strong>แนะนำว่าไม่ควรทำ</strong> เพราะ <code>BLOCKED</code> แปลว่า <em>อ่านไม่ได้</em> ไม่ใช่ <em>ยังไม่ได้ลอง</em> และการใช้ซ้ำแบบนั้นคือรูปแบบการ relabel เพื่อให้ผ่าน gate ที่เจ้าของห้ามไว้</p>
+<p><strong>คำตัดสิน:</strong> <strong>ข</strong></p>
+<p><strong>ข้อบังคับที่ส่งต่อไปยัง brief ของงานที่ 9:</strong> สถานะที่สามต้องไม่เงียบ <code>coverage_statement</code> ต้องเผยแพร่จำนวนแหล่งที่ประกาศแล้วแต่ยังไม่ได้อ่านออกมาเป็นคำ เพื่อไม่ให้ประโยคที่เผยแพร่ถูกอ่านว่าเป็น coverage สถานะที่สามที่เพียงถูกกันออกจาก จำนวน registered โดยไม่ถูกพูดออกมา คือการพองตัวเลขที่โมดูลนี้มีไว้เพื่อป้องกันพอดี</p>
+<hr>
+<p>ไม่มีคำตัดสินใดในไฟล์นี้ที่ให้อำนาจด้าน manufacturing, freeze, export หรือ production <code>NOT-FOR-PRODUCTION</code> ยังคงทำงานอยู่ Daph ยังคงเป็นเพียงหนึ่ง tenant และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data</p>
+</main></body>
+</html>
