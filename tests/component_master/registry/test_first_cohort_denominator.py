@@ -29,11 +29,14 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PACKAGE_SOURCE = REPOSITORY_ROOT / "packages" / "component-master" / "src"
 sys.path.insert(0, str(PACKAGE_SOURCE))
 
+from monolith_component_master import coverage as coverage_module  # noqa: E402
 from monolith_component_master.coverage import (  # noqa: E402
     EVIDENCE_GATE_REASONS,
     GATE_REASONS_DEMONSTRATED_THROUGH_DISCOVERY,
     SOURCE_DENOMINATOR_STATES,
+    BlockedSource,
     BrandUniverseEntry,
+    CoverageSnapshot,
     SourceDenominatorEntry,
     build_snapshot,
     discover_registry_root,
@@ -935,9 +938,9 @@ class DeterminismOverDeclaredInputTests(RootCase):
     # payload bytes built over the committed registry root, which is also
     # `data/component-master/registry/v1/coverage-snapshot.json` byte for byte.
     LIVE_PAYLOAD_SHA256 = (
-        "2aa4b50a9da685783efd8aa2c7e3023d90b094dfe9d7905ca1b9e5abd4e4e0fb"
+        "4e61581ceee3515d263d326fcb1fa011f44bfc85ed381833be10779b14cc0171"
     )
-    LIVE_PAYLOAD_BYTE_COUNT = 6895
+    LIVE_PAYLOAD_BYTE_COUNT = 8746
 
     def build_bytes(self, name: str, rows: list[Mapping[str, object]]) -> bytes:
         root = self.new_root(name)
@@ -1095,6 +1098,650 @@ class AuthorityBoundaryTests(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertNotIn("percent", key)
                 self.assertNotIn("score", key)
+
+
+# ---------------------------------------------------------------------------
+# F1/F2. The hashed payload must attest which cohort was declared, and must
+# publish a complete partition of its own source denominator.
+# ---------------------------------------------------------------------------
+
+
+# The exact key list `releases.snapshot_payload` publishes. Pinned so that a
+# key cannot be added or dropped without a reviewer seeing it in the diff: the
+# payload is what a release digest covers, and a silently removed key is a
+# silently narrowed attestation.
+EXPECTED_PAYLOAD_KEYS: tuple[str, ...] = (
+    "authority_state",
+    "blocked_source_count",
+    "blocked_sources",
+    "brand_universe",
+    "classification_counts",
+    "classified_item_count",
+    "coverage_statement",
+    "declared_unread_source_count",
+    "dimension_verified_counts",
+    "discovered_item_count",
+    "evidence_gate_findings",
+    "first_cohort_brand_count",
+    "items",
+    "registered_source_count",
+    "schema",
+    "source_denominator",
+    "unbacked_verified_item_count",
+    "unclassified",
+    "unclassified_item_count",
+)
+
+MEASURED_COUNT_KEYS = frozenset(
+    {"count", "denominator", "denominator_label", "label", "measured_by"}
+)
+
+
+class PayloadAttestsTheDeclaredCohortTests(RootCase):
+    """A published digest must change when the declared cohort changes.
+
+    Task 9 left `brand_universe` out of the hashed payload because
+    `releases.py` was outside its authorized scope. The consequence is not
+    cosmetic: two registry roots declaring **completely different** brands
+    against the same two sources produced a byte-identical payload and the
+    same digest, so no release could attest which cohort it was measured
+    against, and no brand name appeared anywhere in the published bytes.
+    """
+
+    def two_source_rows(self) -> list[dict[str, object]]:
+        return [
+            declared_row("source:a:index", "https://example.invalid/a"),
+            declared_row("source:b:index", "https://example.invalid/b"),
+        ]
+
+    def root_with_cohort(
+        self, name: str, cohort: tuple[tuple[str, str, str], ...]
+    ) -> Path:
+        root = self.new_root(name)
+        self.with_brands(
+            [
+                {
+                    "brand_id": brand_id,
+                    "brand_name": brand_name,
+                    "source_ids": [source_id],
+                }
+                for brand_id, brand_name, source_id in cohort
+            ],
+            root,
+        )
+        self.with_declared(self.two_source_rows(), root)
+        return root
+
+    def payload_bytes_for(self, root: Path) -> bytes:
+        return canonical_json_bytes(snapshot_payload(build_snapshot(root)))
+
+    def test_two_roots_differing_only_in_brands_produce_different_digests(
+        self,
+    ) -> None:
+        """The F1 proof. Without it the release digest attests nothing.
+
+        The two roots hold an identical two-source denominator and identical
+        item seeds. The **only** difference is the brand universe, and the
+        brand universe is the declaration `0 of 12` will be computed from.
+        """
+
+        real = self.root_with_cohort(
+            "cohort-real",
+            (
+                ("brand:hafele", "Häfele", "source:a:index"),
+                ("brand:blum", "Blum", "source:b:index"),
+            ),
+        )
+        other = self.root_with_cohort(
+            "cohort-other",
+            (
+                ("brand:acme-fasteners", "Acme Fasteners", "source:a:index"),
+                ("brand:zzz-ltd", "Zzz Ltd", "source:b:index"),
+            ),
+        )
+        real_bytes = self.payload_bytes_for(real)
+        other_bytes = self.payload_bytes_for(other)
+
+        # Control: the two source denominators really are identical, so the
+        # digest difference below can only come from the brand universe.
+        self.assertEqual(
+            json.loads(real_bytes)["source_denominator"],
+            json.loads(other_bytes)["source_denominator"],
+        )
+        self.assertNotEqual(real_bytes, other_bytes)
+        self.assertNotEqual(
+            hashlib.sha256(real_bytes).hexdigest(),
+            hashlib.sha256(other_bytes).hexdigest(),
+        )
+
+    def test_the_declared_brand_names_are_visible_in_the_published_bytes(
+        self,
+    ) -> None:
+        root = self.root_with_cohort(
+            "cohort-visible",
+            (
+                ("brand:hafele", "Häfele", "source:a:index"),
+                ("brand:blum", "Blum", "source:b:index"),
+            ),
+        )
+        raw = self.payload_bytes_for(root)
+        self.assertIn("Häfele".encode("utf-8"), raw)
+        self.assertIn(b"Blum", raw)
+
+    def test_a_brand_row_reaches_the_payload_in_its_exact_shape(self) -> None:
+        # Both brands are declared, because every DECLARED_UNREAD source must
+        # be claimed by exactly one brand.
+        root = self.root_with_cohort(
+            "cohort-shape",
+            (
+                ("brand:hafele", "Häfele", "source:a:index"),
+                ("brand:blum", "Blum", "source:b:index"),
+            ),
+        )
+        payload = json.loads(self.payload_bytes_for(root))
+        self.assertEqual(
+            [
+                {
+                    "brand_id": "brand:blum",
+                    "brand_name": "Blum",
+                    "source_ids": ["source:b:index"],
+                },
+                {
+                    "brand_id": "brand:hafele",
+                    "brand_name": "Häfele",
+                    "source_ids": ["source:a:index"],
+                },
+            ],
+            payload["brand_universe"],
+        )
+
+    def test_the_live_payload_carries_the_committed_twelve(self) -> None:
+        payload = json.loads(
+            canonical_json_bytes(
+                snapshot_payload(build_snapshot(LIVE_REGISTRY_ROOT))
+            )
+        )
+        self.assertEqual(
+            [
+                {
+                    "brand_id": brand_id,
+                    "brand_name": brand_name,
+                    "source_ids": sorted(source_ids_for(brand_id)),
+                }
+                for brand_id, brand_name in sorted(EXPECTED_FIRST_COHORT)
+            ],
+            payload["brand_universe"],
+        )
+        self.assertEqual(BRAND_COUNT, len(payload["brand_universe"]))
+
+    def test_the_payload_key_list_is_exactly_as_declared(self) -> None:
+        payload = json.loads(
+            canonical_json_bytes(
+                snapshot_payload(build_snapshot(LIVE_REGISTRY_ROOT))
+            )
+        )
+        self.assertEqual(list(EXPECTED_PAYLOAD_KEYS), sorted(payload))
+
+    # -- F2: the payload publishes a complete partition of its denominator --
+
+    def test_the_two_dropped_counts_are_published_as_measured_counts(
+        self,
+    ) -> None:
+        """Rule 1 of this module: every count carries its denominator.
+
+        Both counts exist as properties and both appear in `snapshot.counts`;
+        both were dropped on the way to the payload, so a consumer reading the
+        published bytes could not see them at all.
+        """
+
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        payload = json.loads(
+            canonical_json_bytes(snapshot_payload(snapshot))
+        )
+        for key, expected in (
+            ("declared_unread_source_count", snapshot.declared_unread_source_count),
+            ("first_cohort_brand_count", snapshot.first_cohort_brand_count),
+        ):
+            with self.subTest(key=key):
+                entry = payload[key]
+                self.assertEqual(MEASURED_COUNT_KEYS, set(entry))
+                self.assertEqual(expected.label, entry["label"])
+                self.assertEqual(expected.count, entry["count"])
+                self.assertEqual(expected.denominator, entry["denominator"])
+                self.assertEqual(
+                    expected.denominator_label, entry["denominator_label"]
+                )
+                self.assertEqual(expected.measured_by, entry["measured_by"])
+
+    def test_the_published_source_counts_partition_the_denominator(
+        self,
+    ) -> None:
+        """Enumerated from the payload, the way a consumer would read it.
+
+        Before this wave two of the three source states carried a count object
+        and the third carried none, so the enumerable counts summed to 0
+        against a denominator of 14.
+        """
+
+        root = self.new_root("partition")
+        self.with_brands([brand_row()], root)
+        self.with_declared([blocked_row(), declared_row()], root)
+        payload = json.loads(
+            canonical_json_bytes(snapshot_payload(build_snapshot(root)))
+        )
+        source_counts = {
+            key: value
+            for key, value in payload.items()
+            if isinstance(value, dict)
+            and set(value) == MEASURED_COUNT_KEYS
+            and value["denominator_label"] == "sources_in_denominator"
+        }
+        self.assertEqual(
+            {
+                "blocked_source_count",
+                "declared_unread_source_count",
+                "registered_source_count",
+            },
+            set(source_counts),
+        )
+        denominators = {entry["denominator"] for entry in source_counts.values()}
+        self.assertEqual({2}, denominators)
+        self.assertEqual(
+            2, sum(entry["count"] for entry in source_counts.values())
+        )
+        self.assertEqual(
+            len(payload["source_denominator"]),
+            sum(entry["count"] for entry in source_counts.values()),
+        )
+
+    def test_the_live_partition_is_complete_too(self) -> None:
+        payload = json.loads(
+            canonical_json_bytes(
+                snapshot_payload(build_snapshot(LIVE_REGISTRY_ROOT))
+            )
+        )
+        total = (
+            payload["registered_source_count"]["count"]
+            + payload["declared_unread_source_count"]["count"]
+            + payload["blocked_source_count"]["count"]
+        )
+        self.assertEqual(SOURCE_COUNT, total)
+        self.assertEqual(
+            SOURCE_COUNT, payload["declared_unread_source_count"]["denominator"]
+        )
+        self.assertEqual(
+            BRAND_COUNT, payload["first_cohort_brand_count"]["denominator"]
+        )
+        self.assertEqual(0, payload["first_cohort_brand_count"]["count"])
+
+
+# ---------------------------------------------------------------------------
+# F3. A declared URL must be built from characters a reviewer can see.
+# ---------------------------------------------------------------------------
+
+
+# Every one of these was **accepted** by the validator before this wave. Each
+# is named so a refusal cannot be reported for the wrong reason.
+INVISIBLE_URL_CASES: tuple[tuple[str, str, str], ...] = (
+    ("U+200B", "zero width space", "https://exam\u200bple.invalid/x"),
+    ("U+FEFF", "zero width no-break space", "https://exam\ufeffple.invalid/x"),
+    ("U+2060", "word joiner", "https://exam\u2060ple.invalid/x"),
+    ("U+00AD", "soft hyphen", "https://exam\u00adple.invalid/x"),
+    ("U+0000", "nul", "https://exam\x00ple.invalid/x"),
+    ("U+200E", "left-to-right mark", "https://exam\u200eple.invalid/x"),
+)
+
+# Accepted before this wave, and a separate decision from the invisible ones.
+HOMOGRAPH_URL_CASES: tuple[tuple[str, str, str], ...] = (
+    ("U+0430", "Cyrillic small letter a", "https://ex\u0430mple.invalid/x"),
+    ("U+0435", "Cyrillic small letter ie", "https://\u0435xample.invalid/x"),
+)
+
+# Refused before this wave and still refused. Kept so the suite cannot go
+# vacuous by refusing everything.
+ALREADY_REFUSED_URLS: tuple[tuple[str, str], ...] = (
+    ("bare scheme", "https://"),
+    ("ordinary space", "https://exam ple.invalid/x"),
+    ("U+00A0 nbsp", "https://exam\u00a0ple.invalid/x"),
+    ("http scheme", "http://example.invalid/x"),
+    ("no scheme", "example.invalid/x"),
+)
+
+# Must stay accepted. An ASCII allowlist that refused these would have broken
+# the fourteen committed rows.
+STILL_ADMITTED_URLS: tuple[tuple[str, str], ...] = (
+    ("plain", "https://example.invalid/x"),
+    ("query and fragment", "https://example.invalid/a?b=1&c=2#d"),
+    ("percent-encoded octet", "https://example.invalid/caf%C3%A9"),
+    ("IDN A-label", "https://xn--hfele-vqa.invalid/products"),
+    ("port and userless authority", "https://example.invalid:8443/a"),
+    ("sub-delims in path", "https://example.invalid/a$b&c'd(e)f*g+h,i;j=k"),
+    ("tilde and underscore", "https://example.invalid/~a_b-c.d"),
+)
+
+
+class DeclaredUrlCharacterSetTests(RootCase):
+    """A URL is fetched later by exactly what is written, byte for byte.
+
+    An invisible character makes the committed byte differ from the URL every
+    human reviewer read, and it survives a character-for-character
+    transcription check, which is the check this lane relies on.
+    """
+
+    def refuse_url(self, name: str, url: str) -> str:
+        root = self.new_root(f"url-{name}")
+        self.with_brands([brand_row()], root)
+        self.with_declared([declared_row(url=url)], root)
+        return self.assert_refused(
+            root, f"{SOURCE_DENOMINATOR_FILENAME}:1", "url"
+        )
+
+    def test_each_invisible_character_is_refused_and_named(self) -> None:
+        for index, (code_point, label, url) in enumerate(INVISIBLE_URL_CASES):
+            with self.subTest(code_point=code_point, label=label):
+                message = self.refuse_url(f"invisible-{index}", url)
+                # Naming the code point is the substance: a message saying
+                # only "bad character" for a character nobody can see is
+                # nearly as unhelpful as accepting it.
+                self.assertIn(code_point, message)
+
+    def test_the_type_refuses_them_too_not_only_the_file_reader(self) -> None:
+        for code_point, label, url in INVISIBLE_URL_CASES:
+            with self.subTest(code_point=code_point, label=label):
+                with self.assertRaises(ValueError) as caught:
+                    SourceDenominatorEntry(
+                        source_id=DECLARED_ID,
+                        sha256=None,
+                        state=DECLARED_UNREAD,
+                        url=url,
+                    )
+                self.assertIn(code_point, str(caught.exception))
+
+    def test_the_homograph_case_is_refused_by_the_same_rule(self) -> None:
+        """The recorded decision, asserted rather than described.
+
+        An explicit permitted character set was chosen over a
+        format-category refusal, so a Cyrillic homograph is refused for the
+        same reason a zero-width space is: it is not in the set. What that
+        excludes is stated in `_require_declared_url`'s docstring and in the
+        wave report; it is not left in neither place.
+        """
+
+        for index, (code_point, label, url) in enumerate(HOMOGRAPH_URL_CASES):
+            with self.subTest(code_point=code_point, label=label):
+                message = self.refuse_url(f"homograph-{index}", url)
+                self.assertIn(code_point, message)
+
+    def test_the_already_refused_controls_are_still_refused(self) -> None:
+        for index, (label, url) in enumerate(ALREADY_REFUSED_URLS):
+            with self.subTest(label=label):
+                self.refuse_url(f"control-{index}", url)
+
+    def test_the_admitted_controls_are_still_admitted(self) -> None:
+        """Non-vacuity. A rule that refused everything would pass every test
+        above and break the fourteen committed rows."""
+
+        for label, url in STILL_ADMITTED_URLS:
+            with self.subTest(label=label):
+                entry = SourceDenominatorEntry(
+                    source_id=DECLARED_ID,
+                    sha256=None,
+                    state=DECLARED_UNREAD,
+                    url=url,
+                )
+                self.assertEqual(url, entry.url)
+
+    def test_every_committed_url_is_still_admitted_unchanged(self) -> None:
+        """The fourteen URLs are unvisited and must stay exactly as transcribed."""
+
+        rows = read_jsonl(LIVE_REGISTRY_ROOT / SOURCE_DENOMINATOR_FILENAME)
+        self.assertEqual(SOURCE_COUNT, len(rows))
+        for row in rows:
+            with self.subTest(source_id=row["source_id"]):
+                url = row["url"]
+                self.assertEqual(url, url.encode("ascii").decode("ascii"))
+                entry = SourceDenominatorEntry(
+                    source_id=str(row["source_id"]),
+                    sha256=None,
+                    state=DECLARED_UNREAD,
+                    url=url,
+                )
+                self.assertEqual(url, entry.url)
+
+    def test_the_refusal_explains_why_an_invisible_character_matters(
+        self,
+    ) -> None:
+        message = self.refuse_url("explains", INVISIBLE_URL_CASES[0][2])
+        self.assertIn("U+200B", message)
+        # The rule is named, so a reader can look it up rather than guess.
+        self.assertIn("3986", message)
+
+
+# ---------------------------------------------------------------------------
+# F4. Every file this reader opens must resolve inside the registry root.
+# ---------------------------------------------------------------------------
+
+
+class RegistryRootAnchoringTests(RootCase):
+    """`content_path` has been root-anchored since Task 8; the entry points were not.
+
+    `Path.rglob` declines to descend into a symlinked **directory**, which is
+    why the recorded exposure only ever named directories. It lists a
+    symlinked **file** like any other, and this reader then followed it out of
+    the root. Task 9 added two contract-bearing entry points at that root, so
+    the exposure grew while the record did not.
+    """
+
+    def link_or_skip(self, link: Path, target: Path) -> None:
+        try:
+            os.symlink(target, link)
+        except (OSError, NotImplementedError) as error:  # pragma: no cover
+            self.skipTest(f"symlink creation unavailable on this host: {error}")
+
+    def outside_file(self, name: str, rows: list[Mapping[str, object]]) -> Path:
+        outside = self.workspace / "outside"
+        outside.mkdir(parents=True, exist_ok=True)
+        path = outside / name
+        write_jsonl(path, rows)
+        return path
+
+    def test_the_anchor_refuses_a_path_outside_the_root_without_a_symlink(
+        self,
+    ) -> None:
+        """Asserted directly, so the rule is covered on hosts that cannot symlink."""
+
+        root = self.new_root("anchor-direct")
+        outside = self.outside_file("elsewhere.jsonl", [])
+        with self.assertRaises(ValueError) as caught:
+            coverage_module._require_inside_root(
+                root, outside, "elsewhere.jsonl"
+            )
+        message = str(caught.exception)
+        self.assertIn("elsewhere.jsonl", message)
+        self.assertIn("outside the registry root", message)
+
+    def test_the_anchor_admits_a_path_inside_the_root(self) -> None:
+        root = self.new_root("anchor-inside")
+        inside = root / "materials.jsonl"
+        self.assertEqual(
+            inside.resolve(),
+            coverage_module._require_inside_root(
+                root, inside, "materials.jsonl"
+            ),
+        )
+
+    def test_a_symlinked_source_denominator_is_refused(self) -> None:
+        root = self.new_root("symlink-denominator")
+        target = self.outside_file(
+            "evil-denominator.jsonl",
+            [declared_row("source:evil:index", "https://evil.invalid/x")],
+        )
+        self.link_or_skip(root / SOURCE_DENOMINATOR_FILENAME, target)
+        self.assert_refused(
+            root, SOURCE_DENOMINATOR_FILENAME, "outside the registry root"
+        )
+
+    def test_a_symlinked_brand_universe_is_refused(self) -> None:
+        root = self.new_root("symlink-brands")
+        target = self.outside_file(
+            "evil-brands.jsonl",
+            [brand_row(brand_id="brand:evil", brand_name="Evil")],
+        )
+        self.link_or_skip(root / BRAND_UNIVERSE_FILENAME, target)
+        self.assert_refused(
+            root, BRAND_UNIVERSE_FILENAME, "outside the registry root"
+        )
+
+    def test_a_symlinked_item_file_is_refused(self) -> None:
+        """The same rule, applied to every file the reader opens.
+
+        Anchoring only the two new entry points would leave the item files and
+        the source manifest reachable through the same link, which is the
+        inconsistency this wave exists to stop repeating.
+        """
+
+        root = self.new_root("symlink-item")
+        target = self.outside_file("evil-items.jsonl", [item_row()])
+        (root / "materials.jsonl").unlink()
+        self.link_or_skip(root / "materials.jsonl", target)
+        self.assert_refused(
+            root, "materials.jsonl", "outside the registry root"
+        )
+
+    def test_a_symlinked_source_manifest_is_refused(self) -> None:
+        root = self.new_root("symlink-manifest")
+        target = self.outside_file("evil-manifest.jsonl", [])
+        (root / "evidence-manifest.jsonl").unlink()
+        self.link_or_skip(root / "evidence-manifest.jsonl", target)
+        self.assert_refused(
+            root, "evidence-manifest.jsonl", "outside the registry root"
+        )
+
+    def test_an_ordinary_root_is_still_measured(self) -> None:
+        """Non-vacuity: the anchor must not refuse the committed root."""
+
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        self.assertEqual(SOURCE_COUNT, len(snapshot.source_denominator))
+        self.assertEqual(BRAND_COUNT, len(snapshot.brand_universe))
+
+    def test_a_symlink_that_stays_inside_the_root_is_admitted(self) -> None:
+        """Anchored, not banned. The rule is about leaving the root."""
+
+        root = self.new_root("symlink-inside")
+        real = root / "real-brands.jsonl.txt"
+        write_jsonl(real, [brand_row()])
+        self.with_declared([declared_row()], root)
+        self.link_or_skip(root / BRAND_UNIVERSE_FILENAME, real)
+        snapshot = build_snapshot(root)
+        self.assertEqual(
+            ("brand:demo",),
+            tuple(entry.brand_id for entry in snapshot.brand_universe),
+        )
+
+
+# ---------------------------------------------------------------------------
+# F7. Nothing may collapse "declared but unread" and "blocked", in either
+# direction — including a hand-built record that names one source as both.
+# ---------------------------------------------------------------------------
+
+
+class BlockedStateAgreementTests(unittest.TestCase):
+    """`_require_backed_verified_claims` recorded this limit for `REGISTERED` only.
+
+    Task 9 added a third state and widened the uncross-checked pair without
+    widening the record. This wave cross-checks instead, because the module's
+    own principle is that an invariant living in one caller is a convention —
+    `_require_brand_source_agreement` was correctly enforced in two places and
+    this one was not enforced at all.
+    """
+
+    def snapshot_with(self, state: str) -> CoverageSnapshot:
+        entry = (
+            SourceDenominatorEntry(
+                source_id=DECLARED_ID,
+                sha256=None,
+                state=DECLARED_UNREAD,
+                url=DECLARED_URL,
+            )
+            if state == DECLARED_UNREAD
+            else SourceDenominatorEntry(
+                source_id=DECLARED_ID, sha256=DEMO_SHA256, state=state
+            )
+        )
+        brands = (
+            (
+                BrandUniverseEntry(
+                    brand_id="brand:demo",
+                    brand_name="Demo Brand",
+                    source_ids=(DECLARED_ID,),
+                ),
+            )
+            if state == DECLARED_UNREAD
+            else ()
+        )
+        return CoverageSnapshot(
+            discovered_item_count=0,
+            items=(),
+            unclassified=(),
+            blocked_sources=(
+                BlockedSource(source_id=DECLARED_ID, reason="PAYWALLED"),
+            ),
+            source_denominator=(entry,),
+            evidence_gate_findings=(),
+            brand_universe=brands,
+        )
+
+    def test_a_blocked_source_declared_unread_is_refused(self) -> None:
+        with self.assertRaises(ValueError) as caught:
+            self.snapshot_with(DECLARED_UNREAD)
+        message = str(caught.exception)
+        self.assertIn(DECLARED_ID, message)
+        self.assertIn(DECLARED_UNREAD, message)
+        self.assertIn("blocked_sources", message)
+
+    def test_a_blocked_source_registered_is_refused(self) -> None:
+        with self.assertRaises(ValueError) as caught:
+            self.snapshot_with("REGISTERED")
+        message = str(caught.exception)
+        self.assertIn(DECLARED_ID, message)
+        self.assertIn("REGISTERED", message)
+
+    def test_the_agreeing_shape_is_still_accepted(self) -> None:
+        """Non-vacuity control: the shape discovery itself produces."""
+
+        snapshot = self.snapshot_with("BLOCKED")
+        self.assertEqual(1, snapshot.blocked_source_count.count)
+        self.assertEqual(1, snapshot.blocked_source_count.denominator)
+
+    def test_a_blocked_source_the_denominator_does_not_name_is_refused(
+        self,
+    ) -> None:
+        with self.assertRaises(ValueError) as caught:
+            CoverageSnapshot(
+                discovered_item_count=0,
+                items=(),
+                unclassified=(),
+                blocked_sources=(
+                    BlockedSource(
+                        source_id="source:demo:ghost", reason="PAYWALLED"
+                    ),
+                ),
+                source_denominator=(
+                    SourceDenominatorEntry(
+                        source_id=DECLARED_ID,
+                        sha256=DEMO_SHA256,
+                        state="BLOCKED",
+                    ),
+                ),
+                evidence_gate_findings=(),
+            )
+        self.assertIn("source:demo:ghost", str(caught.exception))
+
+    def test_discovery_still_produces_the_agreeing_shape(self) -> None:
+        """The rule must not refuse anything `discover_registry_root` builds."""
+
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        self.assertEqual((), snapshot.blocked_sources)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual invocation

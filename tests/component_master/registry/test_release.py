@@ -35,6 +35,7 @@ from monolith_component_master.coverage import (  # noqa: E402
     GATE_REASONS_DEMONSTRATED_ONLY_BY_DIRECT_GATE_CALL,
     GATE_REASONS_DEMONSTRATED_THROUGH_DISCOVERY,
     BlockedSource,
+    BrandUniverseEntry,
     CoverageItem,
     CoverageSnapshot,
     EvidenceGateFinding,
@@ -1772,6 +1773,59 @@ class ReleaseRecordTests(unittest.TestCase):
             release.payload_sha256,
         )
 
+    def test_the_declared_cohort_is_inside_the_hashed_payload(self) -> None:
+        """`snapshot_payload` names its fields one by one, so a field it does
+        not name is unhashed and unattested.
+
+        Asserted here on the release surface, over a hand-built record rather
+        than a registry root, because this is `releases.py`'s contract: the
+        two records below differ only in `brand_universe` and must not produce
+        the same release digest.
+        """
+
+        def snapshot_for(brand_id: str, brand_name: str) -> CoverageSnapshot:
+            return CoverageSnapshot(
+                discovered_item_count=0,
+                items=(),
+                unclassified=(),
+                blocked_sources=(),
+                source_denominator=(
+                    SourceDenominatorEntry(
+                        source_id=SOURCE_ID,
+                        sha256=None,
+                        state="DECLARED_UNREAD",
+                        url="https://example.invalid/x",
+                    ),
+                ),
+                evidence_gate_findings=(),
+                brand_universe=(
+                    BrandUniverseEntry(
+                        brand_id=brand_id,
+                        brand_name=brand_name,
+                        source_ids=(SOURCE_ID,),
+                    ),
+                ),
+            )
+
+        one = build_release_from_snapshot(
+            snapshot_for("brand:hafele", "Häfele"),
+            version="0.1.0",
+            created_at_utc=CREATED_AT,
+        )
+        other = build_release_from_snapshot(
+            snapshot_for("brand:acme-fasteners", "Acme Fasteners"),
+            version="0.1.0",
+            created_at_utc=CREATED_AT,
+        )
+        self.assertIn("Häfele".encode("utf-8"), one.payload_bytes)
+        self.assertIn(b"Acme Fasteners", other.payload_bytes)
+        self.assertNotEqual(one.payload_sha256, other.payload_sha256)
+        # Control: the source denominator really is identical, so the digest
+        # difference can only be the declared cohort.
+        self.assertEqual(
+            one.source_denominator_sha256, other.source_denominator_sha256
+        )
+
     def test_creation_metadata_lives_outside_the_hashed_payload(self) -> None:
         early = build_release_from_snapshot(
             self.snapshot(), version="0.1.0", created_at_utc=CREATED_AT
@@ -2722,6 +2776,16 @@ class DenominatorInputFileTests(TemporaryRootTestCase):
         still refused by name otherwise. The full brand contract lives in
         `test_first_cohort_denominator.py`; what is pinned here is that the
         recognized file has not become a file that accepts anything.
+
+        The assertion is taken from the **head** of the message, before the
+        fixed `; a brand row holds exactly ...` tail. Task 9 asserted
+        `assertIn("name", message)` and `assertIn("source_ids", message)`
+        against the whole message during a rename, and both were close to
+        vacuous: that tail names `brand_name` and `source_ids` in *every*
+        brand-row refusal, including refusals about unrelated fields, so the
+        test would still have passed if the reader stopped naming the
+        offending field at all. Splitting the message is what makes it fail
+        in that case.
         """
 
         self.seed_root()
@@ -2733,8 +2797,16 @@ class DenominatorInputFileTests(TemporaryRootTestCase):
             discover_registry_root(self.root)
         message = str(caught.exception)
         self.assertIn(f"{BRAND_UNIVERSE_FILENAME}:1", message)
-        self.assertIn("name", message)
-        self.assertIn("source_ids", message)
+        tail_marker = "; a brand row holds exactly "
+        self.assertIn(tail_marker, message)
+        head, _, tail = message.partition(tail_marker)
+        # The offending field is named in the head, and the head cannot
+        # borrow the name from the schema list the tail publishes.
+        self.assertIn("name", head)
+        self.assertNotIn("brand_name", head)
+        self.assertNotIn("source_ids", head)
+        # The tail still tells the reader the full shape.
+        self.assertIn("brand_id, brand_name, source_ids", tail)
 
     # -- 6. determinism ----------------------------------------------------
 
@@ -2783,9 +2855,9 @@ class LiveEmptyRegistryTests(unittest.TestCase):
     # payload bytes over `data/component-master/registry/v1`, which is also
     # the committed `coverage-snapshot.json` byte for byte.
     EMPTY_ROOT_PAYLOAD_SHA256 = (
-        "2aa4b50a9da685783efd8aa2c7e3023d90b094dfe9d7905ca1b9e5abd4e4e0fb"
+        "4e61581ceee3515d263d326fcb1fa011f44bfc85ed381833be10779b14cc0171"
     )
-    EMPTY_ROOT_PAYLOAD_BYTE_COUNT = 6895
+    EMPTY_ROOT_PAYLOAD_BYTE_COUNT = 8746
     DECLARATION_FILENAMES = (
         BRAND_UNIVERSE_FILENAME,
         SOURCE_DENOMINATOR_FILENAME,

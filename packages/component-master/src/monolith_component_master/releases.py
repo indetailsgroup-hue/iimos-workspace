@@ -131,7 +131,33 @@ def _exact_snapshot(snapshot: object) -> CoverageSnapshot:
 
 
 def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
-    """The hashed payload. It contains no wall-clock value, by construction."""
+    """The hashed payload. It contains no wall-clock value, by construction.
+
+    Every field is named here one by one, so a field this function does not
+    name is outside :attr:`RegistryRelease.payload_sha256` and is therefore
+    attested by no release at all. Three were missing and are named now:
+
+    - ``brand_universe``. Without it two registry roots declaring **completely
+      different** brands against an identical source denominator produced a
+      byte-identical payload and the same digest, so no published digest could
+      attest which cohort it had been measured against, and no brand name
+      appeared anywhere in the released bytes. ``first_cohort_brand_count`` is
+      computed from this declaration and is a load-bearing invariant of
+      :class:`~monolith_component_master.coverage.CoverageSnapshot`.
+    - ``declared_unread_source_count`` and ``first_cohort_brand_count``. Two of
+      the three source states carried a
+      :class:`~monolith_component_master.coverage.MeasuredCount` here and the
+      third carried none, so a consumer enumerating the payload's count objects
+      saw ``0 + 0`` against a denominator of the whole declared denominator.
+      Rule 1 of the coverage module is that every count carries its denominator
+      together with the function that produced it; a count dropped on the way
+      to the payload does neither.
+
+    The brand rows follow ``source_denominator``'s convention exactly: the
+    record has already exact-type checked and deep-snapshotted them, and
+    ``as_payload`` is what is carried through. No new serialisation convention
+    is introduced.
+    """
 
     _exact_snapshot(snapshot)
     unbacked = set(snapshot.unbacked_item_ids)
@@ -142,6 +168,9 @@ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
             "blocked_sources": tuple(
                 record.as_payload() for record in snapshot.blocked_sources
             ),
+            "brand_universe": tuple(
+                entry.as_payload() for entry in snapshot.brand_universe
+            ),
             "classification_counts": MappingProxyType(
                 {
                     state: measured.as_payload()
@@ -150,6 +179,9 @@ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
             ),
             "classified_item_count": snapshot.classified_item_count.as_payload(),
             "coverage_statement": snapshot.coverage_statement,
+            "declared_unread_source_count": (
+                snapshot.declared_unread_source_count.as_payload()
+            ),
             "dimension_verified_counts": MappingProxyType(
                 {
                     dimension: measured.as_payload()
@@ -162,6 +194,9 @@ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
             "evidence_gate_findings": tuple(
                 finding.as_payload()
                 for finding in snapshot.evidence_gate_findings
+            ),
+            "first_cohort_brand_count": (
+                snapshot.first_cohort_brand_count.as_payload()
             ),
             "items": tuple(
                 item.as_payload(

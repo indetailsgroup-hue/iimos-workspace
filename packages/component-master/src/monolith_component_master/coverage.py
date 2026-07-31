@@ -119,15 +119,13 @@ Each is answered here rather than left silent:
   what is behind it.** Rights review of these publishers has not happened. It
   belongs in ``SourceSnapshot.rights_state``, set after that review.
 
-One recorded boundary of this contract: ``releases.snapshot_payload`` names the
-fields it publishes one by one, and it was outside the scope this module's
-brand and declared-source work was authorized to change. The release payload
-therefore carries every declared source row and the full rendered
-``coverage_statement`` — including the declared-but-unread and first-cohort
-clauses — but does **not** enumerate :attr:`CoverageSnapshot.brand_universe`,
-:attr:`CoverageSnapshot.declared_unread_source_count` or
-:attr:`CoverageSnapshot.first_cohort_brand_count` as payload entries of their
-own. That is a stated gap, not an oversight.
+``releases.snapshot_payload`` names the fields it publishes one by one, so a
+field it does not name is outside the hashed payload and is attested by no
+release. It previously omitted :attr:`CoverageSnapshot.brand_universe`,
+:attr:`CoverageSnapshot.declared_unread_source_count` and
+:attr:`CoverageSnapshot.first_cohort_brand_count`, which meant two roots
+declaring completely different brands over one denominator produced the same
+digest. All three are inside the payload now.
 
 Every other ``*.jsonl`` file under the root, **at any depth**, is a
 coverage-item file. Each nonblank line is an object with ``item_id``,
@@ -145,10 +143,19 @@ unmeasured file would be silence, and silence is not a classification. An
 ``evidence-manifest.jsonl`` anywhere other than the root is refused as
 ambiguous rather than guessed at.
 
-One recorded boundary of that recursion: ``Path.rglob`` does not follow
+Every file this reader opens must **resolve inside the registry root**. The
+source manifest, both denominator input files and every item file are anchored
+by :func:`_require_inside_root`, alongside the ``content_path`` anchoring
+:func:`_resolve_inside` has done since Task 8. A *file* symlink pointing out of
+the root is refused by name; one that stays inside the root is still read,
+because a root is defined by the bytes it holds.
+
+One recorded boundary of that recursion remains: ``Path.rglob`` does not follow
 directory symlinks on this Python, so item files reachable only through a
-symlinked subdirectory would go unmeasured. That case is unexplored, not
-handled.
+symlinked subdirectory still go unmeasured. That case is unexplored, not
+handled, and the anchor above does not close it — the anchor refuses files that
+are listed and lead outward, while an unfollowed directory is never listed at
+all.
 
 The four item seeds and the source manifest in
 ``data/component-master/registry/v1`` are zero-record, so the registry root
@@ -164,6 +171,7 @@ import json
 import math
 from pathlib import Path
 from types import MappingProxyType
+import unicodedata
 
 from .evidence import (
     EvidenceVault,
@@ -404,19 +412,99 @@ def _require_enum_text(
 
 _DECLARED_URL_SCHEME = "https://"
 
+# RFC 3986 section 2: a URI is built from this ASCII repertoire and nothing
+# else. Written as the four named groups rather than one opaque string, so a
+# reviewer can check each group against the RFC instead of against a blob.
+_URI_UNRESERVED = (
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "abcdefghijklmnopqrstuvwxyz"
+    "0123456789"
+    "-._~"
+)
+_URI_GEN_DELIMS = ":/?#[]@"
+_URI_SUB_DELIMS = "!$&'()*+,;="
+_URI_PERCENT = "%"
+_DECLARED_URL_PERMITTED = frozenset(
+    _URI_UNRESERVED + _URI_GEN_DELIMS + _URI_SUB_DELIMS + _URI_PERCENT
+)
+
+
+def _character_name(character: str) -> str:
+    """Name a character for a refusal message, or say plainly that it has none."""
+
+    try:
+        return unicodedata.name(character)
+    except ValueError:
+        return "no Unicode name"
+
 
 def _require_declared_url(value: object, field_name: str) -> str:
-    """Require a whitespace-free ``https://`` URL, and claim nothing more.
+    """Require an ``https://`` URL built only from RFC 3986 URI characters.
 
     This is a **declared location, not a visited one.** Nothing in this module
     fetches it, and recording it asserts no right to what is behind it. The
     shape rules exist so that the string is a locator somebody could act on,
     not so that it is a claim about reachability.
+
+    The character rule is load-bearing rather than cosmetic. The whole point of
+    a ``DECLARED_UNREAD`` row is that a later task fetches **exactly** what is
+    written here, and the only thing standing between the transcription and
+    that fetch is a human reading the committed line. A character that human
+    cannot see makes the committed bytes differ from the URL they approved, and
+    it survives a character-for-character transcription check. ``str.isspace()``
+    is what this function used to rely on, and it is false for every zero-width
+    and format character: U+200B, U+FEFF, U+2060, U+200E and U+00AD were all
+    admitted, and so was U+0000.
+
+    **The decision taken here, and the one not taken.** The admitted set is the
+    explicit RFC 3986 URI repertoire — unreserved, gen-delims, sub-delims and
+    the ``%`` that introduces an escape — which is ASCII and nothing else. The
+    alternative was to refuse the ``Cf`` and ``Cc`` categories plus
+    non-printables and to record the homograph case as a standing exposure. The
+    explicit set was chosen because a Cyrillic ``a`` (U+0430) in an otherwise
+    Latin host name is the *same* defect as a zero-width space — the committed
+    bytes differ from what every reviewer read — and refusing one spelling of a
+    single failure while merely recording the other would treat half of it as
+    acceptable.
+
+    **What this excludes, stated rather than left implicit:**
+
+    - An internationalised domain name written as a U-label — the host spelled
+      in its own script, the way a browser displays it. The **IDN itself is not
+      excluded**: its A-label form, ``https://xn--hfele-vqa.example``, is
+      admitted, is what DNS actually resolves, and is what RFC 3986 already
+      requires of a URI rather than an IRI. The cost is real — an A-label is
+      harder for a human to read than a U-label — and it is paid deliberately,
+      because a U-label is precisely the string a homograph hides in.
+    - A non-ASCII byte written literally in a path or query. It must be
+      percent-encoded, which RFC 3986 also requires.
+
+    **What this does not close, stated rather than claimed.** Confusables that
+    are *inside* the admitted set remain: ``1`` against ``l``, ``0`` against
+    ``O``, ``rn`` against ``m``. All are ASCII, all are admitted, and all can
+    still make a reviewer read one host while a fetcher reaches another. This
+    rule bounds the class where the character is invisible or has no ASCII
+    glyph at all. It does not bound the class where two admitted glyphs look
+    alike in some font, and nothing here should be read as if it did.
     """
 
     text = _require_string(value, field_name)
-    if any(character.isspace() for character in text):
-        raise ValueError(f"{field_name} must not contain whitespace")
+    # Checked before the scheme, so an invisible character is named even when
+    # the scheme is wrong too. This subsumes the previous whitespace refusal:
+    # U+0020 and U+00A0 are both outside the permitted set.
+    for index, character in enumerate(text):
+        if character in _DECLARED_URL_PERMITTED:
+            continue
+        raise ValueError(
+            f"{field_name} must be built from the RFC 3986 URI character set; "
+            f"position {index} holds U+{ord(character):04X} "
+            f"({_character_name(character)}), which is not in it. A declared "
+            "source is fetched later by exactly the bytes written here, so a "
+            "character a reviewer cannot see, or one that reads as a Latin "
+            "letter and is not, would make the committed URL differ from the "
+            "URL every human approved. Write an internationalised host as its "
+            "xn-- A-label and any other non-ASCII byte percent-encoded"
+        )
     if not text.startswith(_DECLARED_URL_SCHEME) or len(text) <= len(
         _DECLARED_URL_SCHEME
     ):
@@ -960,6 +1048,65 @@ def _require_brand_source_agreement(
         )
 
 
+def _require_blocked_source_agreement(
+    blocked: tuple["BlockedSource", ...],
+    denominator: tuple["SourceDenominatorEntry", ...],
+) -> None:
+    """Refuse a record that publishes one source as blocked and as something else.
+
+    ``BLOCKED`` means somebody tried to read a source and could not.
+    ``DECLARED_UNREAD`` means nobody has tried. ``REGISTERED`` means the bytes
+    were read and hash-verified. A record naming a source in
+    ``blocked_sources`` while its denominator row calls it ``DECLARED_UNREAD``
+    publishes *we tried and failed* and *we have not tried* about the same
+    source, which is exactly the collapse OR-9.1 forbids in either direction.
+
+    Task 9 added the third state and thereby widened the pair
+    :func:`_require_backed_verified_claims` had recorded as uncross-checked —
+    a record naming a source as both blocked and ``REGISTERED``. That record
+    named only the ``REGISTERED`` variant, so the exposure grew while the
+    limitation did not. Extending the recorded limit was the alternative;
+    cross-checking was chosen because this module's own principle is that an
+    invariant living in one caller is a convention, and both variants are
+    cheap to refuse in one place.
+
+    A blocked source the denominator does not name at all is refused too:
+    ``blocked_source_count`` publishes its count against
+    ``len(source_denominator)``, so such a source would be counted against a
+    denominator it is not a member of.
+
+    This is enforced on :class:`CoverageSnapshot` and nowhere else, on purpose.
+    :func:`discover_registry_root` writes a ``BLOCKED`` denominator row for
+    every blocked source it records, so the disagreement is unreachable
+    through it and a second call there would be a check that can never fire. A
+    hand-built record is the only way in, and the record is where the check
+    belongs.
+    """
+
+    states = {entry.source_id: entry.state for entry in denominator}
+    problems: list[str] = []
+    for record in blocked:
+        state = states.get(record.source_id)
+        if state is None:
+            problems.append(
+                f"{record.source_id} is named in blocked_sources but the "
+                "source denominator does not hold it, so blocked_source_count "
+                "would count it against a denominator it is not in"
+            )
+        elif state != "BLOCKED":
+            problems.append(
+                f"{record.source_id} is named in blocked_sources but the "
+                f"source denominator holds it as {state}; BLOCKED means "
+                "somebody tried to read a source and could not, and nothing "
+                "may collapse that with another state in either direction"
+            )
+    if problems:
+        raise ValueError(
+            "blocked_sources and source_denominator disagree: "
+            + "; ".join(sorted(problems))
+        )
+
+
 def _require_backed_verified_claims(
     items: tuple[CoverageItem, ...],
     denominator: tuple[SourceDenominatorEntry, ...],
@@ -994,10 +1141,10 @@ def _require_backed_verified_claims(
       :func:`evaluate_evidence_gate`, which re-hashes through
       :func:`~monolith_component_master.evidence.verify_source_hash`.
     - It does not cross-check ``blocked_sources`` against
-      ``source_denominator``: a hand-built denominator claiming ``REGISTERED``
-      for a source the blocked list also names is accepted. Unreachable through
-      :func:`discover_registry_root`, where a blocked source is always written
-      with state ``BLOCKED``.
+      ``source_denominator`` itself. That is no longer a gap in the record:
+      :func:`_require_blocked_source_agreement` now refuses the disagreement
+      on :class:`CoverageSnapshot`, for every state and not only for
+      ``REGISTERED``, and it runs before this floor does.
     - ``CoverageItem`` carries no mapping from an assertion to the dimension it
       backs, so "every assertion of a record claiming VERIFIED must itself be
       VERIFIED" is as fine-grained as this contract can express. A future task
@@ -1134,6 +1281,7 @@ class CoverageSnapshot:
             # than the denominator states.
             raise ValueError("duplicate brand_name")
         _require_brand_source_agreement(brands, denominator)
+        _require_blocked_source_agreement(blocked, denominator)
         unknown = sorted(
             {
                 finding.item_id
@@ -1505,6 +1653,41 @@ def _read_jsonl(
     return tuple(records)
 
 
+def _require_inside_root(root: Path, path: Path, origin: str) -> Path:
+    """Refuse a file this reader would open that resolves outside the root.
+
+    ``content_path`` has been root-anchored since Task 8 by
+    :func:`_resolve_inside`, and correctly refuses ``../../escape.bin``. The
+    JSONL entry points were not anchored at all, and a **file** symlink is what
+    separates the two cases. ``Path.rglob`` declines to descend into a
+    symlinked *directory*, which is why the boundary recorded in this module
+    named directories only; it lists a symlinked *file* like any other entry,
+    and this reader then followed it straight out of the root. Task 9 added two
+    contract-bearing entry points at that root — ``brand-universe.jsonl`` and
+    ``source-denominator.jsonl`` — so the exposure grew while the record did
+    not.
+
+    The rule is *anchored*, not *no symlinks*: a link that stays inside the
+    root is still read, because a registry root is defined by the bytes it
+    holds and such a link does not leave them.
+
+    Directory symlinks are still not followed, and that remains unhandled
+    rather than fixed: a subdirectory reached only through one goes unmeasured.
+    """
+
+    resolved = path.resolve()
+    resolved_root = root.resolve()
+    if not resolved.is_relative_to(resolved_root):
+        raise ValueError(
+            f"{origin}: this file resolves to {resolved}, outside the "
+            f"registry root {resolved_root}. A release measures the bytes its "
+            "root holds; following a link out of the root would let a release "
+            "publish content the root does not contain and a reader cannot "
+            "find"
+        )
+    return resolved
+
+
 def _resolve_inside(root: Path, relative: object, origin: str) -> Path:
     if type(relative) is not str or not relative.strip():
         raise ValueError(f"{origin}: content_path must be a nonblank string")
@@ -1529,6 +1712,7 @@ def _discover_sources(
         raise FileNotFoundError(
             f"source manifest not found: {manifest_path}"
         )
+    _require_inside_root(root, manifest_path, SOURCE_MANIFEST_FILENAME)
 
     vault = EvidenceVault()
     blocked: list[BlockedSource] = []
@@ -1799,6 +1983,11 @@ def discover_registry_root(root: object) -> DiscoveryResult:
             # source bytes `content_path` points at, and is declared in the
             # registry root's own .gitignore.
             continue
+        # Anchored here, after the two skips, so the rule covers exactly the
+        # files this reader goes on to open. The same anchor guards the source
+        # manifest inside `_discover_sources`, and `_resolve_inside` has
+        # guarded `content_path` since Task 8.
+        _require_inside_root(root_path, path, relative)
         if path.name == SOURCE_MANIFEST_FILENAME:
             raise ValueError(
                 f"{relative}: a source manifest is only recognized at the "
