@@ -135,7 +135,30 @@ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
 
     Every field is named here one by one, so a field this function does not
     name is outside :attr:`RegistryRelease.payload_sha256` and is therefore
-    attested by no release at all. Three were missing and are named now:
+    attested by no release at all. **Four** were missing and are named now.
+
+    The count is four rather than three because the previous version of this
+    docstring said three, having audited only the counts it had already
+    decided to add. That is the shape this docstring must not repeat: a fix
+    applied to the named instances while the prose generalises to the class.
+    The list below is therefore a record of what happened, not the guarantee.
+    The guarantee is
+    ``tests.component_master.registry.test_first_cohort_denominator.PayloadCountCompletenessTests``,
+    which compares ``{count.label for count in snapshot.counts}`` against every
+    count object reachable in this payload and fails if either side holds a
+    label the other does not. A hand-maintained key list cannot make that
+    check, because it can only freeze whatever was true when it was typed.
+
+    - ``verified_item_count``. The module's **headline coverage number** — the
+      clause ``coverage_statement`` speaks second — and the one that survived
+      the wave that added the other three. It is **not** substitutable by
+      ``classification_counts["VERIFIED"]``: different label, different
+      ``measured_by`` (``evaluate_evidence_gate`` against
+      ``discover_registry_root``), and a different number whenever a record
+      claims VERIFIED without backing. Nor is "a consumer can recompute it" a
+      defence, because that defence was already rejected for
+      ``declared_unread_source_count``, which was equally recomputable before
+      it was added.
 
     - ``brand_universe``. Without it two registry roots declaring **completely
       different** brands against an identical source denominator produced a
@@ -220,6 +243,7 @@ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
             "unclassified_item_count": (
                 snapshot.unclassified_item_count.as_payload()
             ),
+            "verified_item_count": snapshot.verified_item_count.as_payload(),
         }
     )
 

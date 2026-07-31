@@ -2855,9 +2855,9 @@ class LiveEmptyRegistryTests(unittest.TestCase):
     # payload bytes over `data/component-master/registry/v1`, which is also
     # the committed `coverage-snapshot.json` byte for byte.
     EMPTY_ROOT_PAYLOAD_SHA256 = (
-        "4e61581ceee3515d263d326fcb1fa011f44bfc85ed381833be10779b14cc0171"
+        "72ccc63ff4a3fd716adf7f3c10804d3ba7a5b179011134588b30bf68297fd788"
     )
-    EMPTY_ROOT_PAYLOAD_BYTE_COUNT = 8746
+    EMPTY_ROOT_PAYLOAD_BYTE_COUNT = 8930
     DECLARATION_FILENAMES = (
         BRAND_UNIVERSE_FILENAME,
         SOURCE_DENOMINATOR_FILENAME,

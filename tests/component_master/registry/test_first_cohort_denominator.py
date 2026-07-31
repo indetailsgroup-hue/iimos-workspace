@@ -22,6 +22,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import unittest
 
 
@@ -938,9 +939,9 @@ class DeterminismOverDeclaredInputTests(RootCase):
     # payload bytes built over the committed registry root, which is also
     # `data/component-master/registry/v1/coverage-snapshot.json` byte for byte.
     LIVE_PAYLOAD_SHA256 = (
-        "4e61581ceee3515d263d326fcb1fa011f44bfc85ed381833be10779b14cc0171"
+        "72ccc63ff4a3fd716adf7f3c10804d3ba7a5b179011134588b30bf68297fd788"
     )
-    LIVE_PAYLOAD_BYTE_COUNT = 8746
+    LIVE_PAYLOAD_BYTE_COUNT = 8930
 
     def build_bytes(self, name: str, rows: list[Mapping[str, object]]) -> bytes:
         root = self.new_root(name)
@@ -1110,6 +1111,14 @@ class AuthorityBoundaryTests(unittest.TestCase):
 # key cannot be added or dropped without a reviewer seeing it in the diff: the
 # payload is what a release digest covers, and a silently removed key is a
 # silently narrowed attestation.
+#
+# **This list records what is published; it cannot prove the list complete.**
+# It was accurate at `b7cd54ab` while `verified_items_with_backing_evidence` —
+# the module's headline coverage number — was still absent from the payload,
+# because a pinned list can only freeze whatever it was written from.
+# `PayloadCountCompletenessTests` below is what actually forbids a dropped
+# count, by comparing the payload against the record rather than against a
+# list a human typed.
 EXPECTED_PAYLOAD_KEYS: tuple[str, ...] = (
     "authority_state",
     "blocked_source_count",
@@ -1130,11 +1139,34 @@ EXPECTED_PAYLOAD_KEYS: tuple[str, ...] = (
     "unbacked_verified_item_count",
     "unclassified",
     "unclassified_item_count",
+    "verified_item_count",
 )
 
 MEASURED_COUNT_KEYS = frozenset(
     {"count", "denominator", "denominator_label", "label", "measured_by"}
 )
+
+
+def payload_count_labels(node: object) -> set[str]:
+    """Every ``MeasuredCount`` label reachable anywhere inside a payload.
+
+    A recursive walk rather than a lookup over known keys, because the defect
+    being guarded against is precisely a count nobody remembered to look for.
+    A walk finds counts nested inside ``classification_counts`` and
+    ``dimension_verified_counts`` as readily as top-level ones, and it does not
+    have to be updated when a count moves.
+    """
+
+    found: set[str] = set()
+    if isinstance(node, Mapping):
+        if MEASURED_COUNT_KEYS <= set(node):
+            found.add(str(node["label"]))
+        for value in node.values():
+            found |= payload_count_labels(value)
+    elif isinstance(node, (list, tuple)):
+        for item in node:
+            found |= payload_count_labels(item)
+    return found
 
 
 class PayloadAttestsTheDeclaredCohortTests(RootCase):
@@ -1742,6 +1774,902 @@ class BlockedStateAgreementTests(unittest.TestCase):
 
         snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
         self.assertEqual((), snapshot.blocked_sources)
+
+
+# ---------------------------------------------------------------------------
+# G1. Every MeasuredCount the record holds must reach the hashed payload.
+#
+# A class-level assertion on purpose. The previous wave named three missing
+# counts, added those three, and wrote a docstring saying the audit was
+# complete while a fourth was still absent. A pinned key list and a
+# denominator-filtered partition test both read as authorities and neither
+# could see it. Comparing the record against the payload can.
+# ---------------------------------------------------------------------------
+
+
+class PayloadCountCompletenessTests(RootCase):
+    """No count on the record may be absent from what a release attests.
+
+    ``CoverageSnapshot.counts`` is the record's own enumeration of every
+    ``MeasuredCount`` it holds. ``snapshot_payload`` names its fields one by
+    one, so a count it does not name is outside ``payload_sha256`` and is
+    attested by no release at all. Those two facts have to be checked against
+    each other; checking either against a hand-written list only re-freezes
+    whatever was true when the list was typed.
+    """
+
+    def backed_root(self) -> Path:
+        """A root whose VERIFIED item is backed, so the count is nonzero."""
+
+        root = self.new_root("counts-backed")
+        write_jsonl(root / "evidence-manifest.jsonl", [manifest_row()])
+        self.with_cached_source(root)
+        write_jsonl(root / "materials.jsonl", [item_row()])
+        return root
+
+    def unbacked_root(self) -> Path:
+        """A root whose VERIFIED item names a source nobody has read."""
+
+        root = self.new_root("counts-unbacked")
+        self.with_brands([brand_row()], root)
+        self.with_declared([declared_row()], root)
+        write_jsonl(
+            root / "materials.jsonl", [item_row(source_id=DECLARED_ID)]
+        )
+        return root
+
+    def blocked_root(self) -> Path:
+        root = self.new_root("counts-blocked")
+        self.with_brands([brand_row()], root)
+        self.with_declared([blocked_row(), declared_row()], root)
+        return root
+
+    def every_root(self) -> tuple[tuple[str, Path], ...]:
+        return (
+            ("live", LIVE_REGISTRY_ROOT),
+            ("backed", self.backed_root()),
+            ("unbacked", self.unbacked_root()),
+            ("blocked", self.blocked_root()),
+        )
+
+    def test_every_measured_count_on_the_record_reaches_the_payload(
+        self,
+    ) -> None:
+        """The wave's central guard. It must hold for every shape of root."""
+
+        for name, root in self.every_root():
+            with self.subTest(root=name):
+                snapshot = build_snapshot(root)
+                payload = json.loads(
+                    canonical_json_bytes(snapshot_payload(snapshot))
+                )
+                missing = {
+                    count.label for count in snapshot.counts
+                } - payload_count_labels(payload)
+                self.assertEqual(
+                    set(),
+                    missing,
+                    "a MeasuredCount the record holds is absent from the "
+                    "hashed payload, so no release attests it",
+                )
+
+    def test_the_payload_publishes_no_count_the_record_does_not_hold(
+        self,
+    ) -> None:
+        """The converse, so the two enumerations are identical rather than
+        merely nested. Without it the guard above could be satisfied by
+        publishing an invented count alongside the real ones."""
+
+        for name, root in self.every_root():
+            with self.subTest(root=name):
+                snapshot = build_snapshot(root)
+                payload = json.loads(
+                    canonical_json_bytes(snapshot_payload(snapshot))
+                )
+                self.assertEqual(
+                    {count.label for count in snapshot.counts},
+                    payload_count_labels(payload),
+                )
+
+    def test_the_guard_is_not_vacuous(self) -> None:
+        """The record really does hold counts, and the walk really finds them."""
+
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        labels = {count.label for count in snapshot.counts}
+        # 4 item counts + 3 source counts + 1 cohort count + 7 classification
+        # states + 10 verification dimensions.
+        self.assertEqual(25, len(labels))
+        self.assertEqual(
+            labels,
+            payload_count_labels(
+                json.loads(canonical_json_bytes(snapshot_payload(snapshot)))
+            ),
+        )
+
+    def test_the_headline_count_is_published_by_name(self) -> None:
+        """The survivor the previous wave missed, named rather than implied."""
+
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        raw = canonical_json_bytes(snapshot_payload(snapshot))
+        self.assertIn(b"verified_items_with_backing_evidence", raw)
+        entry = json.loads(raw)["verified_item_count"]
+        self.assertEqual(MEASURED_COUNT_KEYS, set(entry))
+        expected = snapshot.verified_item_count
+        self.assertEqual(expected.label, entry["label"])
+        self.assertEqual(expected.count, entry["count"])
+        self.assertEqual(expected.denominator, entry["denominator"])
+        self.assertEqual(
+            expected.denominator_label, entry["denominator_label"]
+        )
+        self.assertEqual(expected.measured_by, entry["measured_by"])
+
+    def test_it_is_not_substitutable_by_the_classification_count(self) -> None:
+        """Measured, not argued: the two numbers disagree on a real root.
+
+        ``classification.VERIFIED`` counts what a file *claims*.
+        ``verified_items_with_backing_evidence`` counts what the evidence gate
+        *admitted*. On a root whose only VERIFIED item names a source nobody
+        has read they are 1 and 0, and two different functions measured them.
+        """
+
+        snapshot = build_snapshot(self.unbacked_root())
+        headline = snapshot.verified_item_count
+        claimed = snapshot.classification_counts["VERIFIED"]
+        self.assertEqual(1, claimed.count)
+        self.assertEqual(0, headline.count)
+        self.assertNotEqual(claimed.label, headline.label)
+        self.assertEqual("coverage.discover_registry_root", claimed.measured_by)
+        self.assertEqual(
+            "coverage.evaluate_evidence_gate", headline.measured_by
+        )
+        payload = json.loads(canonical_json_bytes(snapshot_payload(snapshot)))
+        self.assertEqual(
+            1, payload["classification_counts"]["VERIFIED"]["count"]
+        )
+        self.assertEqual(0, payload["verified_item_count"]["count"])
+
+
+# ---------------------------------------------------------------------------
+# G2. The declared-URL rule: userinfo, the percent grammar, and an accurate
+# statement of what stays open.
+# ---------------------------------------------------------------------------
+
+
+# A reviewer reads the brand before the `@`; every fetcher reads the host after
+# it. Each of these was **accepted** before this wave.
+USERINFO_URL_CASES: tuple[tuple[str, str], ...] = (
+    ("bare userinfo", "https://www.hafele.com@evil.invalid/products/"),
+    ("userinfo with password", "https://www.blum.com:pass@203.0.113.9/x"),
+    ("empty userinfo", "https://@evil.invalid/x"),
+    ("userinfo before a query", "https://titus.example@evil.invalid?a=1"),
+    ("userinfo before a fragment", "https://ovvo.example@evil.invalid#f"),
+    ("percent-encoded userinfo", "https://a%40b@evil.invalid/x"),
+)
+
+# `%` is the one admitted character that is not a literal: it introduces an
+# escape, and an escape that is not exactly two hex digits is not an escape.
+MALFORMED_PERCENT_URL_CASES: tuple[tuple[str, str], ...] = (
+    ("non-hex pair", "https://example.invalid/%zz"),
+    ("one hex digit then end", "https://example.invalid/%e"),
+    ("bare trailing percent", "https://example.invalid/x%"),
+    ("percent then delimiter", "https://example.invalid/%/a"),
+    ("second digit non-hex", "https://example.invalid/%0g"),
+)
+
+# Refused because the character they decode to is refused unencoded, and an
+# escape that smuggled it back in would make the rule depend on spelling.
+CONTROL_ESCAPE_URL_CASES: tuple[tuple[str, str], ...] = (
+    ("nul", "https://example.invalid/%00"),
+    ("line feed", "https://example.invalid/a%0Ab"),
+    ("unit separator", "https://example.invalid/%1F"),
+    ("delete", "https://example.invalid/%7F"),
+    ("lowercase hex line feed", "https://example.invalid/a%0ab"),
+)
+
+# Well-formed escapes that must stay admitted. RFC 3986 requires exactly this
+# form for a non-ASCII byte, and `_require_declared_url`'s own refusal message
+# tells a writer to use it.
+ADMITTED_ESCAPE_URLS: tuple[tuple[str, str], ...] = (
+    ("latin supplement octet", "https://example.invalid/caf%C3%A9"),
+    ("encoded delimiter", "https://example.invalid/a%2Fb"),
+    ("encoded space", "https://example.invalid/a%20b"),
+    ("lowercase hex digits", "https://example.invalid/caf%c3%a9"),
+)
+
+# **The residual list, asserted rather than described.** Every one of these is
+# still admitted after this wave. They are named in `_require_declared_url`'s
+# docstring, and this is what stops that docstring drifting from the code in
+# either direction: a case that quietly became refused would fail here, and the
+# docstring would then be claiming a weakness it no longer has.
+STILL_OPEN_URL_CASES: tuple[tuple[str, str], ...] = (
+    ("rn read as m", "https://exarnple.invalid/x"),
+    ("digit one read as letter l", "https://1ockdowel.invalid/x"),
+    ("digit zero read as letter O", "https://l0ckdowel.invalid/x"),
+    (
+        "brand name as a subdomain prefix",
+        "https://www.hafele.com.evil.invalid/x",
+    ),
+    ("brand name in the path", "https://evil.invalid/www.hafele.com/products/"),
+    (
+        "percent-encoded zero width space",
+        "https://exam%E2%80%8Bple.invalid/x",
+    ),
+)
+
+
+class DeclaredUrlAuthorityTests(RootCase):
+    """Userinfo is an unread grammar feature, not a font accident.
+
+    The rule's own justification is that *the only thing standing between the
+    transcription and that fetch is a human reading the committed line*. A
+    reviewer reading `https://www.hafele.com@evil.invalid/` reads Häfele; every
+    fetcher reads `evil.invalid`. That defeats the exact check the rule rests
+    on, and it does so with characters that are all inside the admitted set.
+    """
+
+    def refuse_url(self, name: str, url: str) -> str:
+        root = self.new_root(f"authority-{name}")
+        self.with_brands([brand_row()], root)
+        self.with_declared([declared_row(url=url)], root)
+        return self.assert_refused(
+            root, f"{SOURCE_DENOMINATOR_FILENAME}:1", "url"
+        )
+
+    def test_userinfo_is_refused_in_the_authority(self) -> None:
+        for index, (label, url) in enumerate(USERINFO_URL_CASES):
+            with self.subTest(label=label):
+                message = self.refuse_url(f"userinfo-{index}", url)
+                self.assertIn("userinfo", message)
+
+    def test_the_type_refuses_userinfo_too_not_only_the_file_reader(
+        self,
+    ) -> None:
+        for label, url in USERINFO_URL_CASES:
+            with self.subTest(label=label):
+                with self.assertRaises(ValueError) as caught:
+                    SourceDenominatorEntry(
+                        source_id=DECLARED_ID,
+                        sha256=None,
+                        state=DECLARED_UNREAD,
+                        url=url,
+                    )
+                self.assertIn("userinfo", str(caught.exception))
+
+    def test_the_refusal_names_the_host_a_fetcher_would_reach(self) -> None:
+        """A refusal saying only "bad URL" would leave the reader guessing
+        which of the two hosts on the line is the real one."""
+
+        message = self.refuse_url(
+            "names-host", "https://www.hafele.com@evil.invalid/products/"
+        )
+        self.assertIn("evil.invalid", message)
+
+    def test_an_authority_that_names_no_host_is_refused(self) -> None:
+        """Falls out of parsing the authority, and is refused rather than
+        parsed and then ignored."""
+
+        for index, url in enumerate(
+            ("https:///path", "https://?a=1", "https://#f", "https:///")
+        ):
+            with self.subTest(url=url):
+                self.refuse_url(f"empty-authority-{index}", url)
+
+    def test_a_port_an_ip_literal_and_a_later_at_sign_are_admitted(
+        self,
+    ) -> None:
+        """Non-vacuity: the rule refuses userinfo, not authorities, and `@` is
+        an ordinary character once the authority has ended."""
+
+        for url in (
+            "https://example.invalid:8443/a",
+            "https://203.0.113.9/x",
+            "https://[2001:db8::1]/x",
+            "https://example.invalid/a@b",
+            "https://example.invalid/x?to=a@b",
+            "https://example.invalid/x#a@b",
+        ):
+            with self.subTest(url=url):
+                entry = SourceDenominatorEntry(
+                    source_id=DECLARED_ID,
+                    sha256=None,
+                    state=DECLARED_UNREAD,
+                    url=url,
+                )
+                self.assertEqual(url, entry.url)
+
+
+class DeclaredUrlPercentGrammarTests(RootCase):
+    """`%` introduces an escape, so a `%` that introduces nothing is refused."""
+
+    def refuse_url(self, name: str, url: str) -> str:
+        root = self.new_root(f"percent-{name}")
+        self.with_brands([brand_row()], root)
+        self.with_declared([declared_row(url=url)], root)
+        return self.assert_refused(
+            root, f"{SOURCE_DENOMINATOR_FILENAME}:1", "url"
+        )
+
+    def test_a_malformed_escape_is_refused(self) -> None:
+        for index, (label, url) in enumerate(MALFORMED_PERCENT_URL_CASES):
+            with self.subTest(label=label):
+                message = self.refuse_url(f"malformed-{index}", url)
+                self.assertIn("two hexadecimal digits", message)
+
+    def test_an_escape_decoding_to_a_control_is_refused(self) -> None:
+        """The recorded decision, asserted. The unencoded character is refused,
+        so admitting its escaped spelling would make the rule depend on how the
+        same octet happens to be written."""
+
+        for index, (label, url) in enumerate(CONTROL_ESCAPE_URL_CASES):
+            with self.subTest(label=label):
+                message = self.refuse_url(f"control-escape-{index}", url)
+                self.assertIn("percent-escape", message)
+
+    def test_a_well_formed_escape_is_still_admitted(self) -> None:
+        """The other half of the same decision, and the reason a blanket
+        refusal was not taken: RFC 3986 requires this form for non-ASCII."""
+
+        for label, url in ADMITTED_ESCAPE_URLS:
+            with self.subTest(label=label):
+                entry = SourceDenominatorEntry(
+                    source_id=DECLARED_ID,
+                    sha256=None,
+                    state=DECLARED_UNREAD,
+                    url=url,
+                )
+                self.assertEqual(url, entry.url)
+
+    def test_the_type_refuses_a_malformed_escape_too(self) -> None:
+        for label, url in MALFORMED_PERCENT_URL_CASES:
+            with self.subTest(label=label):
+                with self.assertRaises(ValueError):
+                    SourceDenominatorEntry(
+                        source_id=DECLARED_ID,
+                        sha256=None,
+                        state=DECLARED_UNREAD,
+                        url=url,
+                    )
+
+
+class DeclaredUrlResidualTests(RootCase):
+    """What the rule does **not** close, asserted so the record cannot drift.
+
+    A residual list is a claim about behaviour. Left as prose it can be wrong
+    in either direction — it can name a case that is actually refused, or omit
+    the strongest one, which is what happened at `b7cd54ab`. Each case below is
+    exercised, so the docstring and the code have to agree.
+    """
+
+    def test_every_named_residual_is_genuinely_still_admitted(self) -> None:
+        for label, url in STILL_OPEN_URL_CASES:
+            with self.subTest(label=label):
+                entry = SourceDenominatorEntry(
+                    source_id=DECLARED_ID,
+                    sha256=None,
+                    state=DECLARED_UNREAD,
+                    url=url,
+                )
+                self.assertEqual(url, entry.url)
+
+    def test_the_docstring_names_each_residual_class(self) -> None:
+        """The list must name what remains and must be findable.
+
+        This asserts the statement and the tested behaviour land in one commit.
+        It does not assert the list is exhaustive, and nothing here claims it.
+        """
+
+        text = coverage_module._require_declared_url.__doc__ or ""
+        for fragment in (
+            "``rn`` against ``m``",
+            "userinfo",
+            "percent-escape",
+            "subdomain",
+            "Nothing here resolves a host",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
+    def test_the_committed_fourteen_are_unaffected_by_this_wave(self) -> None:
+        """The transcriptions must stay byte-unchanged and still admitted."""
+
+        rows = read_jsonl(LIVE_REGISTRY_ROOT / SOURCE_DENOMINATOR_FILENAME)
+        self.assertEqual(SOURCE_COUNT, len(rows))
+        declared = {
+            source_id: url
+            for source_id, _brand_id, url in EXPECTED_DECLARED_SOURCES
+        }
+        for row in rows:
+            with self.subTest(source_id=row["source_id"]):
+                url = str(row["url"])
+                self.assertEqual(declared[str(row["source_id"])], url)
+                self.assertNotIn("@", url)
+                self.assertNotIn("%", url)
+                entry = SourceDenominatorEntry(
+                    source_id=str(row["source_id"]),
+                    sha256=None,
+                    state=DECLARED_UNREAD,
+                    url=url,
+                )
+                self.assertEqual(url, entry.url)
+
+
+# ---------------------------------------------------------------------------
+# G3. `brand_name` admitted exactly the class `url` refuses, and F1 moved it
+# into the hashed payload.
+# ---------------------------------------------------------------------------
+
+
+# Deliberately **not** the URL rule. A brand name legitimately carries
+# non-ASCII — Häfele, Välinge, Italiana Ferramenta — so the refusal is by
+# Unicode general category, never by an ASCII allowlist.
+#
+# Written as code points rather than as literals: every character here is
+# invisible, or renders as something it is not, in whatever editor a reviewer
+# reads this file in. That is the entire reason the table exists, so it must
+# not be spelled in a way that hides its own contents.
+REFUSED_BRAND_NAME_CODE_POINTS: tuple[tuple[str, int], ...] = (
+    ("Cc", 0x0000),
+    ("Cc", 0x000A),
+    ("Cc", 0x001B),
+    ("Cf", 0x200B),
+    ("Cf", 0xFEFF),
+    ("Cf", 0x00AD),
+    ("Cf", 0x202E),  # bidi control: right-to-left override
+    ("Cf", 0x200F),  # bidi control: right-to-left mark
+    ("Cf", 0x2066),  # bidi control: left-to-right isolate
+    ("Cn", 0x0378),
+    ("Co", 0xE000),
+    ("Zl", 0x2028),
+    ("Zp", 0x2029),
+    ("Zs", 0x00A0),
+    ("Zs", 0x3000),
+)
+
+# A lone surrogate is refused by the same rule, but it cannot survive a JSONL
+# file at all: `json.dumps(...).encode("utf-8")` raises before the reader could
+# ever see it. It is asserted through the type only, and named here so the
+# asymmetry is deliberate rather than an omission.
+SURROGATE_CODE_POINT = 0xD800
+
+# Only invisibles, or only non-ASCII separators: refused because a name with
+# nothing visible left in it is not a name a reader can count.
+INVISIBLE_ONLY_BRAND_NAMES: tuple[str, ...] = (
+    chr(0x200B) * 3,
+    chr(0x202E),
+    chr(0x00A0) + chr(0x3000),
+)
+
+# Must stay admitted. A rule that refused these would have broken the twelve.
+ADMITTED_BRAND_NAMES: tuple[str, ...] = (
+    "Blum",
+    "Häfele",
+    "Välinge/Threespine",
+    "Festool DOMINO",
+    "Hoffmann Machine Company",
+    "KNAPP",
+    "Italiana Ferramenta",
+    # Outside the cohort, and admitted on purpose: the rule is about invisible
+    # and unassigned characters, not about scripts.
+    "ニチハ",
+    "Wilh. Schütte & Co.",
+)
+
+
+def refused_brand_name(code_point: int) -> str:
+    return "Blum" + chr(code_point) + "Evil"
+
+
+def code_point_label(code_point: int) -> str:
+    return f"U+{code_point:04X}"
+
+
+class BrandNameCharacterClassTests(RootCase):
+    """A brand name is a published, counted, human-read string.
+
+    `first_cohort_brand_count` publishes ``0 of 12``, and the duplicate-name
+    refusal exists so that *a reader counting names counts what the
+    denominator states*. Byte equality does not deliver that: two spellings of
+    one rendered name, or a name padded with invisibles, each defeat it. F1 is
+    what moved this field into the released bytes, so the argument that
+    justified fixing `url` transfers to it unchanged.
+    """
+
+    def refuse_name(self, name: str, brand_name: str) -> str:
+        root = self.new_root(f"brand-{name}")
+        self.with_brands([brand_row(brand_name=brand_name)], root)
+        self.with_declared([declared_row()], root)
+        return self.assert_refused(
+            root, f"{BRAND_UNIVERSE_FILENAME}:1", "brand_name"
+        )
+
+    def test_the_premise_of_each_case_is_the_category_it_claims(self) -> None:
+        """A Unicode version that reassigned one of these must fail loudly
+        rather than quietly make a case test nothing."""
+
+        for category, code_point in (
+            *REFUSED_BRAND_NAME_CODE_POINTS,
+            ("Cs", SURROGATE_CODE_POINT),
+        ):
+            with self.subTest(code_point=code_point_label(code_point)):
+                self.assertEqual(
+                    category, unicodedata.category(chr(code_point))
+                )
+
+    def test_each_refused_category_is_named_by_the_refusal(self) -> None:
+        for index, (category, code_point) in enumerate(
+            REFUSED_BRAND_NAME_CODE_POINTS
+        ):
+            with self.subTest(
+                category=category, code_point=code_point_label(code_point)
+            ):
+                message = self.refuse_name(
+                    f"cat-{index}", refused_brand_name(code_point)
+                )
+                self.assertIn(code_point_label(code_point), message)
+                self.assertIn(category, message)
+
+    def test_the_type_refuses_them_too_not_only_the_file_reader(self) -> None:
+        for category, code_point in (
+            *REFUSED_BRAND_NAME_CODE_POINTS,
+            ("Cs", SURROGATE_CODE_POINT),
+        ):
+            with self.subTest(
+                category=category, code_point=code_point_label(code_point)
+            ):
+                with self.assertRaises(ValueError) as caught:
+                    BrandUniverseEntry(
+                        brand_id="brand:demo",
+                        brand_name=refused_brand_name(code_point),
+                        source_ids=(DECLARED_ID,),
+                    )
+                self.assertIn(
+                    code_point_label(code_point), str(caught.exception)
+                )
+
+    def test_a_name_that_is_empty_once_the_invisibles_go_is_refused(
+        self,
+    ) -> None:
+        for index, brand_name in enumerate(INVISIBLE_ONLY_BRAND_NAMES):
+            with self.subTest(brand_name=ascii(brand_name)):
+                self.refuse_name(f"invisible-only-{index}", brand_name)
+
+    def test_legitimate_non_ascii_names_are_still_admitted(self) -> None:
+        """The control that keeps every test above from going vacuous."""
+
+        for brand_name in ADMITTED_BRAND_NAMES:
+            with self.subTest(brand_name=brand_name):
+                entry = BrandUniverseEntry(
+                    brand_id="brand:demo",
+                    brand_name=brand_name,
+                    source_ids=(DECLARED_ID,),
+                )
+                self.assertEqual(brand_name, entry.brand_name)
+
+    def test_the_twelve_committed_names_are_admitted_unchanged(self) -> None:
+        """Byte for byte, through the type and through the live root."""
+
+        rows = read_jsonl(LIVE_REGISTRY_ROOT / BRAND_UNIVERSE_FILENAME)
+        self.assertEqual(BRAND_COUNT, len(rows))
+        declared = dict(EXPECTED_FIRST_COHORT)
+        for row in rows:
+            with self.subTest(brand_id=row["brand_id"]):
+                name = str(row["brand_name"])
+                self.assertEqual(declared[str(row["brand_id"])], name)
+                entry = BrandUniverseEntry(
+                    brand_id=str(row["brand_id"]),
+                    brand_name=name,
+                    source_ids=tuple(row["source_ids"]),  # type: ignore[arg-type]
+                )
+                self.assertEqual(name, entry.brand_name)
+                self.assertEqual(name, unicodedata.normalize("NFC", name))
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        self.assertEqual(
+            sorted(declared.values()),
+            sorted(entry.brand_name for entry in snapshot.brand_universe),
+        )
+
+
+class BrandNameNormalizationTests(RootCase):
+    """Two spellings of one rendered name are one name, and must collide."""
+
+    NFC_NAME = unicodedata.normalize("NFC", "Häfele")
+    NFD_NAME = unicodedata.normalize("NFD", "Häfele")
+
+    def test_the_premise_holds_the_two_spellings_differ_in_bytes(self) -> None:
+        self.assertNotEqual(self.NFC_NAME, self.NFD_NAME)
+        self.assertEqual(
+            self.NFC_NAME, unicodedata.normalize("NFC", self.NFD_NAME)
+        )
+
+    def test_the_record_stores_the_composed_form(self) -> None:
+        entry = BrandUniverseEntry(
+            brand_id="brand:demo",
+            brand_name=self.NFD_NAME,
+            source_ids=(DECLARED_ID,),
+        )
+        self.assertEqual(self.NFC_NAME, entry.brand_name)
+
+    def two_brand_root(self, name: str, first: str, second: str) -> Path:
+        root = self.new_root(name)
+        self.with_brands(
+            [
+                brand_row(
+                    brand_id="brand:a",
+                    brand_name=first,
+                    source_ids=["source:a:x"],
+                ),
+                brand_row(
+                    brand_id="brand:b",
+                    brand_name=second,
+                    source_ids=["source:b:x"],
+                ),
+            ],
+            root,
+        )
+        self.with_declared(
+            [
+                declared_row("source:a:x", "https://a.invalid/"),
+                declared_row("source:b:x", "https://b.invalid/"),
+            ],
+            root,
+        )
+        return root
+
+    def test_two_spellings_of_one_name_are_refused_in_the_file(self) -> None:
+        root = self.two_brand_root("nfc-file", self.NFC_NAME, self.NFD_NAME)
+        self.assert_refused(
+            root, f"{BRAND_UNIVERSE_FILENAME}:2", "duplicate brand_name"
+        )
+
+    def test_two_spellings_of_one_name_are_refused_on_the_record(self) -> None:
+        """The same invariant where it belongs, for a caller with no file."""
+
+        with self.assertRaises(ValueError) as caught:
+            CoverageSnapshot(
+                discovered_item_count=0,
+                items=(),
+                unclassified=(),
+                blocked_sources=(),
+                source_denominator=(
+                    SourceDenominatorEntry(
+                        source_id="source:a:x",
+                        sha256=None,
+                        state=DECLARED_UNREAD,
+                        url="https://a.invalid/",
+                    ),
+                    SourceDenominatorEntry(
+                        source_id="source:b:x",
+                        sha256=None,
+                        state=DECLARED_UNREAD,
+                        url="https://b.invalid/",
+                    ),
+                ),
+                evidence_gate_findings=(),
+                brand_universe=(
+                    BrandUniverseEntry(
+                        brand_id="brand:a",
+                        brand_name=self.NFC_NAME,
+                        source_ids=("source:a:x",),
+                    ),
+                    BrandUniverseEntry(
+                        brand_id="brand:b",
+                        brand_name=self.NFD_NAME,
+                        source_ids=("source:b:x",),
+                    ),
+                ),
+            )
+        self.assertIn("duplicate brand_name", str(caught.exception))
+
+    def test_two_genuinely_different_names_still_coexist(self) -> None:
+        """Non-vacuity: normalization must collapse spellings, not brands."""
+
+        snapshot = build_snapshot(
+            self.two_brand_root("nfc-distinct", "Häfele", "Hafele")
+        )
+        self.assertEqual(2, snapshot.first_cohort_brand_count.denominator)
+
+    def test_the_published_bytes_carry_the_composed_form(self) -> None:
+        root = self.new_root("nfc-payload")
+        self.with_brands(
+            [
+                brand_row(
+                    brand_id="brand:a",
+                    brand_name=self.NFD_NAME,
+                    source_ids=["source:a:x"],
+                )
+            ],
+            root,
+        )
+        self.with_declared(
+            [declared_row("source:a:x", "https://a.invalid/")], root
+        )
+        raw = canonical_json_bytes(snapshot_payload(build_snapshot(root)))
+        self.assertIn(self.NFC_NAME.encode("utf-8"), raw)
+        self.assertNotIn(self.NFD_NAME.encode("utf-8"), raw)
+
+    def test_the_docstring_states_the_categories_and_the_form(self) -> None:
+        text = coverage_module.BrandUniverseEntry.__doc__ or ""
+        for fragment in (
+            "``Cc``",
+            "``Cf``",
+            "``Cn``",
+            "``Co``",
+            "``Cs``",
+            "``Zl``",
+            "``Zp``",
+            "``Zs``",
+            "NFC",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
+
+# ---------------------------------------------------------------------------
+# G4. The anchor resolves a path, and the reader must open **that** path.
+# ---------------------------------------------------------------------------
+
+
+class AnchorResolvedPathTests(RootCase):
+    """`_require_inside_root` returned a resolved path both callers discarded.
+
+    Severity is low — an attacker needs write access to the registry root,
+    which already permits arbitrary content — but passing the resolved path to
+    the read is free, and check-then-open is a shape that should not be left in
+    a module whose whole subject is what a release attests.
+    """
+
+    def redirect(self, mapping: Mapping[str, Path]) -> None:
+        """Make the anchor return a different, still-inside path.
+
+        The direct proof that the *returned* path is what gets opened: if a
+        caller re-opens its own unpinned argument, this redirect has no effect
+        at all.
+        """
+
+        original = coverage_module._require_inside_root
+
+        def patched(root: Path, path: Path, origin: str) -> Path:
+            resolved = original(root, path, origin)
+            replacement = mapping.get(origin)
+            if replacement is None:
+                return resolved
+            return original(root, replacement, origin)
+
+        coverage_module._require_inside_root = patched
+        self.addCleanup(
+            setattr, coverage_module, "_require_inside_root", original
+        )
+
+    def test_an_item_file_is_read_from_the_resolved_path(self) -> None:
+        root = self.new_root("resolved-item")
+        write_jsonl(root / "evidence-manifest.jsonl", [manifest_row()])
+        self.with_cached_source(root)
+        real = root / "real-items.jsonl.txt"
+        write_jsonl(real, [item_row()])
+        self.assertEqual((), build_snapshot(root).items)
+
+        self.redirect({"materials.jsonl": real})
+        self.assertEqual(
+            (DEMO_ITEM_ID,),
+            tuple(item.item_id for item in build_snapshot(root).items),
+        )
+
+    def test_the_source_manifest_is_read_from_the_resolved_path(self) -> None:
+        root = self.new_root("resolved-manifest")
+        self.with_cached_source(root)
+        real = root / "real-manifest.jsonl.txt"
+        write_jsonl(real, [manifest_row()])
+        self.assertEqual((), build_snapshot(root).source_denominator)
+
+        self.redirect({"evidence-manifest.jsonl": real})
+        self.assertEqual(
+            (DEMO_SOURCE_ID,),
+            tuple(
+                entry.source_id
+                for entry in build_snapshot(root).source_denominator
+            ),
+        )
+
+    def test_a_denominator_input_file_is_read_from_the_resolved_path(
+        self,
+    ) -> None:
+        root = self.new_root("resolved-denominator")
+        self.with_brands([brand_row()], root)
+        self.with_declared([], root)
+        real = root / "real-declared.jsonl.txt"
+        write_jsonl(real, [declared_row()])
+        # Without the redirect the empty file is read and the brand claims a
+        # source the denominator does not hold, so the root is refused.
+        with self.assertRaises(ValueError):
+            build_snapshot(root)
+
+        self.redirect({SOURCE_DENOMINATOR_FILENAME: real})
+        self.assertEqual(
+            (DECLARED_ID,),
+            tuple(
+                entry.source_id
+                for entry in build_snapshot(root).source_denominator
+            ),
+        )
+
+    def test_the_residual_is_recorded_rather_than_claimed_closed(self) -> None:
+        """Resolving and then opening still leaves a window a rename could
+        use. The record must say so; this wave narrows it, it does not prove
+        it closed."""
+
+        text = coverage_module._require_inside_root.__doc__ or ""
+        self.assertIn("resolved path", text)
+        self.assertIn("junction", text)
+
+
+class WindowsDirectoryJunctionTests(RootCase):
+    """A junction is not a symlink, and the difference is measured, not assumed.
+
+    The module recorded that directory symlinks are not followed. On Windows a
+    directory **junction** reports ``is_symlink() == False``, ``Path.rglob``
+    therefore descends it, and the file inside is caught by the anchor rather
+    than going unmeasured. That is a real difference between the two platforms,
+    and the record read as though junctions behaved like symlinks.
+    """
+
+    def outside_directory(self) -> Path:
+        outside = self.workspace / "outside-junction"
+        outside.mkdir(parents=True, exist_ok=True)
+        write_jsonl(outside / "smuggled.jsonl", [item_row()])
+        return outside
+
+    def make_junction(self, link: Path, target: Path) -> None:
+        if sys.platform != "win32":  # pragma: no cover - platform dependent
+            self.skipTest("directory junctions exist only on Windows")
+        result = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:  # pragma: no cover - host dependent
+            self.skipTest(f"mklink /J unavailable: {result.stderr.strip()}")
+        # Removed before the workspace is torn down, so the cleanup cannot walk
+        # through the junction into its target.
+        self.addCleanup(lambda: link.is_dir() and link.rmdir())
+
+    def test_a_junction_is_descended_and_the_file_inside_is_refused(
+        self,
+    ) -> None:
+        root = self.new_root("junction")
+        junction = root / "nested"
+        self.make_junction(junction, self.outside_directory())
+
+        # The measured premise: not a symlink, and therefore listed.
+        self.assertFalse(junction.is_symlink())
+        listed = {
+            path.relative_to(root).as_posix() for path in root.rglob("*.jsonl")
+        }
+        self.assertIn("nested/smuggled.jsonl", listed)
+
+        self.assert_refused(
+            root, "nested/smuggled.jsonl", "outside the registry root"
+        )
+
+    def test_a_directory_symlink_is_still_not_descended(self) -> None:
+        """The contrast, so the two cases are recorded as the two facts they
+        are: one is refused by name, the other goes unmeasured."""
+
+        root = self.new_root("symlinked-directory")
+        link = root / "nested"
+        try:
+            os.symlink(
+                self.outside_directory(), link, target_is_directory=True
+            )
+        except (OSError, NotImplementedError) as error:  # pragma: no cover
+            self.skipTest(f"symlink creation unavailable: {error}")
+        self.assertTrue(link.is_symlink())
+        listed = {
+            path.relative_to(root).as_posix() for path in root.rglob("*.jsonl")
+        }
+        self.assertNotIn("nested/smuggled.jsonl", listed)
+        # Unmeasured, not refused. Still unhandled, and still recorded.
+        self.assertEqual(0, build_snapshot(root).discovered_item_count)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual invocation

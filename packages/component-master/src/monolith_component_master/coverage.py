@@ -121,11 +121,17 @@ Each is answered here rather than left silent:
 
 ``releases.snapshot_payload`` names the fields it publishes one by one, so a
 field it does not name is outside the hashed payload and is attested by no
-release. It previously omitted :attr:`CoverageSnapshot.brand_universe`,
-:attr:`CoverageSnapshot.declared_unread_source_count` and
-:attr:`CoverageSnapshot.first_cohort_brand_count`, which meant two roots
-declaring completely different brands over one denominator produced the same
-digest. All three are inside the payload now.
+release. Four were omitted: :attr:`CoverageSnapshot.brand_universe`, which
+meant two roots declaring completely different brands over one denominator
+produced the same digest; :attr:`CoverageSnapshot.declared_unread_source_count`
+and :attr:`CoverageSnapshot.first_cohort_brand_count`, which left the source
+states as an incomplete partition; and
+:attr:`CoverageSnapshot.verified_item_count`, the module's **headline coverage
+number**, which survived a wave that fixed the other three and said in its own
+prose that the audit was complete. All four are inside the payload now, and a
+count-by-count comparison of the record against the payload — not a list
+anybody maintains by hand — is what keeps a fifth from being dropped
+silently.
 
 Every other ``*.jsonl`` file under the root, **at any depth**, is a
 coverage-item file. Each nonblank line is an object with ``item_id``,
@@ -150,12 +156,16 @@ by :func:`_require_inside_root`, alongside the ``content_path`` anchoring
 the root is refused by name; one that stays inside the root is still read,
 because a root is defined by the bytes it holds.
 
-One recorded boundary of that recursion remains: ``Path.rglob`` does not follow
-directory symlinks on this Python, so item files reachable only through a
-symlinked subdirectory still go unmeasured. That case is unexplored, not
-handled, and the anchor above does not close it — the anchor refuses files that
-are listed and lead outward, while an unfollowed directory is never listed at
-all.
+One recorded boundary of that recursion remains, and it is narrower than it
+used to read. ``Path.rglob`` does not follow directory **symlinks** on this
+Python, so item files reachable only through a symlinked subdirectory still go
+unmeasured; that case is unexplored, not handled, and the anchor above does not
+close it, because the anchor refuses files that are listed and lead outward
+while an unfollowed directory is never listed at all. A Windows directory
+**junction** is a different fact and behaves the opposite way: it reports
+``is_symlink() == False``, ``rglob`` descends it, and every file inside is
+listed and then refused by the anchor. Both behaviours were measured on this
+host rather than assumed, and they differ between the two platforms.
 
 The four item seeds and the source manifest in
 ``data/component-master/registry/v1`` are zero-record, so the registry root
@@ -428,6 +438,15 @@ _DECLARED_URL_PERMITTED = frozenset(
     _URI_UNRESERVED + _URI_GEN_DELIMS + _URI_SUB_DELIMS + _URI_PERCENT
 )
 
+# RFC 3986 section 2.1: ``pct-encoded = "%" HEXDIG HEXDIG``. Both cases are
+# admitted because the RFC admits both; the octet, not its spelling, is what
+# the rule then judges.
+_URI_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+
+# RFC 3986 section 3: ``authority = [ userinfo "@" ] host [ ":" port ]``, and
+# the authority ends at the first ``/``, ``?`` or ``#``.
+_AUTHORITY_TERMINATORS = "/?#"
+
 
 def _character_name(character: str) -> str:
     """Name a character for a refusal message, or say plainly that it has none."""
@@ -479,13 +498,59 @@ def _require_declared_url(value: object, field_name: str) -> str:
     - A non-ASCII byte written literally in a path or query. It must be
       percent-encoded, which RFC 3986 also requires.
 
-    **What this does not close, stated rather than claimed.** Confusables that
-    are *inside* the admitted set remain: ``1`` against ``l``, ``0`` against
-    ``O``, ``rn`` against ``m``. All are ASCII, all are admitted, and all can
-    still make a reviewer read one host while a fetcher reaches another. This
-    rule bounds the class where the character is invisible or has no ASCII
-    glyph at all. It does not bound the class where two admitted glyphs look
-    alike in some font, and nothing here should be read as if it did.
+    **The authority may not carry userinfo.** ``https://www.hafele.com@evil.invalid/``
+    is built entirely from admitted characters, and every character in it is
+    visible; what it defeats is not the reader's eyesight but the reader's
+    *grammar*. RFC 3986 section 3.2 reads everything before an unescaped ``@``
+    as userinfo, so a reviewer reads Häfele and every fetcher reaches
+    ``evil.invalid``. That is strictly more powerful than a glyph confusion,
+    and it defeats the exact check the paragraph above says this rule rests on.
+    A declared source URL has no business carrying credentials — nothing in
+    this registry fetches anything, and no source here is behind a login — so
+    userinfo is refused outright rather than parsed and ignored. An authority
+    that names no host at all is refused by the same reading, because a
+    locator with no host locates nothing.
+
+    **A percent-escape must be exactly ``%`` followed by two hexadecimal
+    digits**, as RFC 3986 section 2.1 requires. ``%zz`` and a trailing bare
+    ``%`` were both admitted before, and neither is an escape.
+
+    **The decision about what an escape may decode to, stated with its
+    reason.** An escape whose octet is a C0 control (``%00``–``%1F``) or
+    ``%7F`` is **refused**, because the unencoded character is refused and a
+    rule that turned on how the same octet happens to be spelled would be no
+    rule at all; ``%00`` in particular truncates for any consumer that hands
+    the string to a C string API. Every other well-formed escape is
+    **admitted**, including one that decodes to a non-ASCII byte. That is not
+    an oversight and it is the reason a blanket refusal was rejected: RFC 3986
+    requires exactly this form for a non-ASCII byte, this function's own
+    refusal message instructs a writer to use it, and refusing it would refuse
+    ``https://example.invalid/caf%C3%A9``. The cost is named in the residual
+    list below.
+
+    **What this does not close, stated rather than claimed.** Each of these is
+    still admitted, and each is exercised by
+    ``tests.component_master.registry.test_first_cohort_denominator.DeclaredUrlResidualTests``
+    so that this list cannot drift from the code in either direction.
+
+    - Confusables inside the admitted set: ``1`` against ``l``, ``0`` against
+      ``O``, ``rn`` against ``m``. All ASCII, all admitted, and each can still
+      make a reviewer read one host while a fetcher reaches another.
+    - **A percent-escape that decodes to an invisible or homograph character**,
+      such as ``https://exam%E2%80%8Bple.invalid/x``. It is admitted by the
+      decision recorded above. It is a *lesser* residual than the raw
+      character, because ``%E2%80%8B`` is nine visible ASCII characters that a
+      character-for-character transcription check does show — but it is a
+      residual, and it is named here rather than left to be discovered.
+    - **The host is not parsed, resolved, or checked against the publisher it
+      appears to name.** ``https://www.hafele.com.evil.invalid/x`` puts the
+      brand in a subdomain label and ``https://evil.invalid/www.hafele.com/``
+      puts it in the path; both are ordinary admitted strings and this rule
+      cannot see either. After userinfo is closed this is the strongest
+      remaining member of the same family, and it is not closable by a
+      character rule at all. **Nothing here resolves a host, contacts one, or
+      establishes that any of the fourteen committed URLs belongs to the brand
+      whose row names it.**
     """
 
     text = _require_string(value, field_name)
@@ -514,7 +579,140 @@ def _require_declared_url(value: object, field_name: str) -> str:
             "from; it asserts nothing about whether it resolves, is current, "
             "or may be used"
         )
+    _require_percent_escape_grammar(text, field_name)
+    _require_hostful_authority_without_userinfo(text, field_name)
     return text
+
+
+def _require_percent_escape_grammar(text: str, field_name: str) -> None:
+    """Require every ``%`` to introduce a well-formed, admissible escape.
+
+    Split out of :func:`_require_declared_url` so the two rules it enforces are
+    readable one at a time: the escape must be syntactically an escape, and the
+    octet it denotes must be one the unencoded rule would also admit.
+    """
+
+    index = 0
+    while index < len(text):
+        if text[index] != _URI_PERCENT:
+            index += 1
+            continue
+        escape = text[index : index + 3]
+        if len(escape) != 3 or not all(
+            digit in _URI_HEX_DIGITS for digit in escape[1:]
+        ):
+            raise ValueError(
+                f"{field_name} holds {_URI_PERCENT!r} at position {index} "
+                "that introduces no escape. RFC 3986 section 2.1 requires "
+                f"{_URI_PERCENT!r} to be followed by exactly two hexadecimal "
+                f"digits; this line has {escape[1:]!r}. A declared source is "
+                "fetched later by exactly the bytes written here, and what a "
+                "fetcher makes of a malformed escape is not defined by "
+                "anything this registry can point at"
+            )
+        octet = int(escape[1:], 16)
+        if octet < 0x20 or octet == 0x7F:
+            raise ValueError(
+                f"{field_name} holds the percent-escape {escape} at position "
+                f"{index}, which decodes to U+{octet:04X} "
+                f"({_character_name(chr(octet))}). That character is refused "
+                "unencoded, so it is refused encoded: a rule that turned on "
+                "how the same octet happens to be spelled would bound nothing"
+            )
+        index += 3
+
+
+def _require_hostful_authority_without_userinfo(
+    text: str, field_name: str
+) -> None:
+    """Refuse an authority that carries credentials, or that names no host.
+
+    Both refusals come from reading RFC 3986 section 3.2 rather than from a
+    character rule, which is why neither could be expressed in the admitted
+    set: every character involved is already admitted.
+    """
+
+    remainder = text[len(_DECLARED_URL_SCHEME) :]
+    end = len(remainder)
+    for terminator in _AUTHORITY_TERMINATORS:
+        position = remainder.find(terminator)
+        if position != -1:
+            end = min(end, position)
+    authority = remainder[:end]
+    if not authority:
+        raise ValueError(
+            f"{field_name} names no host: everything between "
+            f"{_DECLARED_URL_SCHEME!r} and the first {_AUTHORITY_TERMINATORS!r} "
+            "is empty, so the line records a scheme and a path and nothing "
+            "anybody could fetch"
+        )
+    if "@" in authority:
+        userinfo, _, host = authority.rpartition("@")
+        raise ValueError(
+            f"{field_name} carries userinfo in its authority: RFC 3986 "
+            f"section 3.2 reads {userinfo!r} as credentials and {host!r} as "
+            "the host, so a reviewer reading this line reads one publisher "
+            "while every fetcher reaches another. A declared source URL "
+            "records where a catalogue would be read from; it carries no "
+            "credentials, and nothing in this registry fetches anything"
+        )
+
+
+# The Unicode general categories a published display name may not contain.
+# Named as categories rather than as a code-point list because the list would
+# be wrong at the next Unicode release, and ``Cn`` in particular is defined
+# only by what the release does *not* assign.
+#
+# ``Cc`` control, ``Cf`` format, ``Cn`` unassigned, ``Co`` private use, ``Cs``
+# surrogate, ``Zl`` line separator, ``Zp`` paragraph separator. Every character
+# with the Unicode ``Bidi_Control`` property — U+061C, U+200E, U+200F,
+# U+202A-U+202E and U+2066-U+2069 — is ``Cf``, so refusing ``Cf`` refuses the
+# bidi controls too; they are named here because they are the class a reader
+# would look for by name.
+_REFUSED_BRAND_NAME_CATEGORIES = frozenset(
+    {"Cc", "Cf", "Cn", "Co", "Cs", "Zl", "Zp"}
+)
+
+# The one space character a name may hold. Every other ``Zs`` renders exactly
+# like it, so admitting them would let two names that read identically sit in
+# one cohort — the failure the duplicate-name refusal exists to prevent.
+_ADMITTED_BRAND_NAME_SPACE = " "
+
+
+def _require_brand_name(value: object, field_name: str) -> str:
+    """Require a published display name, and return it in NFC.
+
+    The rules are stated on :class:`BrandUniverseEntry`, which is where a
+    reader meets them. This function is what enforces them.
+    """
+
+    text = _require_string(value, field_name)
+    for index, character in enumerate(text):
+        category = unicodedata.category(character)
+        if (
+            category in _REFUSED_BRAND_NAME_CATEGORIES
+            or (
+                category == "Zs"
+                and character != _ADMITTED_BRAND_NAME_SPACE
+            )
+        ):
+            raise ValueError(
+                f"{field_name} must not hold general category {category}; "
+                f"position {index} holds U+{ord(character):04X} "
+                f"({_character_name(character)}). A brand name is published "
+                "in the release payload, counted against "
+                "declared_first_cohort_brands, and read by a human who has to "
+                "be able to count the names and see that there are as many as "
+                "the denominator states. A character that renders as nothing, "
+                "reorders what follows it, or is assigned no meaning at all "
+                "defeats that"
+            )
+    # NFC, and the composed form is what the record keeps. A name is a
+    # rendered thing: two encodings of one rendering are one name, so they
+    # must collide in the duplicate check rather than sit in the cohort as
+    # two brands that print the same. Normalising here rather than at each
+    # comparison means the released bytes also carry one spelling per name.
+    return unicodedata.normalize("NFC", text)
 
 
 def _require_sha256(value: object, field_name: str) -> str:
@@ -609,6 +807,49 @@ class BrandUniverseEntry:
     A declared brand is **work not yet done**, never coverage. It carries no
     count of its own beyond the two this snapshot publishes, and nothing here
     says how many brands the connector market has.
+
+    What ``brand_name`` admits, and why it is **not** the ``url`` rule
+    ------------------------------------------------------------------
+
+    ``url`` is restricted to the ASCII RFC 3986 repertoire. A brand name must
+    not be: Häfele, Välinge/Threespine and Italiana Ferramenta are the names
+    these publishers use, and an ASCII allowlist would refuse three of the
+    twelve declared brands outright. The rule here is therefore by **Unicode
+    general category**, and it admits every script.
+
+    Refused, with the reason each category is on the list:
+
+    - ``Cc`` control and ``Cf`` format — the characters that render as
+      nothing. A name padded with U+200B counts as a distinct brand while
+      printing identically to another, which is exactly the failure the
+      duplicate-name refusal exists to prevent. Every character carrying the
+      Unicode ``Bidi_Control`` property is ``Cf``, so U+202E and its family —
+      which reorder the text that follows them — are refused here too.
+    - ``Cn`` unassigned — a code point this Unicode release gives no meaning
+      to. It renders as a fallback box or as nothing, differently on every
+      reader's machine.
+    - ``Co`` private use and ``Cs`` surrogate — a code point whose appearance
+      is defined by a font vendor or by nothing at all. A lone surrogate
+      cannot even be encoded as UTF-8, so it could never reach a release.
+    - ``Zl`` line separator and ``Zp`` paragraph separator — a display name
+      that renders as two lines is not a name a reader can count, and this
+      package's own JSONL serializer emits both raw.
+    - Every ``Zs`` space separator **except** U+0020. ``Festool DOMINO``
+      spelled with U+00A0 renders exactly like ``Festool DOMINO`` spelled with
+      U+0020 and would sit beside it as a second brand.
+
+    A name with nothing visible left in it needs no separate check: each of
+    its characters is refused individually, and a name of ordinary spaces is
+    already refused as blank.
+
+    **Normalisation form: NFC, applied here, and the composed form is what the
+    record keeps.** A name is a rendered thing, so two encodings of one
+    rendering are one name. Normalising in this constructor rather than at
+    each comparison is what makes both duplicate checks — the one in
+    ``brand-universe.jsonl``'s reader and the one on
+    :class:`CoverageSnapshot` — answer the same question without either
+    knowing about it, and it means the released bytes carry one spelling per
+    name. All twelve committed names are already NFC and are unchanged by it.
     """
 
     brand_id: str
@@ -617,7 +858,11 @@ class BrandUniverseEntry:
 
     def __post_init__(self) -> None:
         _require_canonical_id(self.brand_id, "brand_id")
-        _require_string(self.brand_name, "brand_name")
+        object.__setattr__(
+            self,
+            "brand_name",
+            _require_brand_name(self.brand_name, "brand_name"),
+        )
         supplied = _snapshot_iterable(self.source_ids, "source_ids")
         if not supplied:
             raise ValueError(
@@ -1671,8 +1916,28 @@ def _require_inside_root(root: Path, path: Path, origin: str) -> Path:
     root is still read, because a registry root is defined by the bytes it
     holds and such a link does not leave them.
 
-    Directory symlinks are still not followed, and that remains unhandled
-    rather than fixed: a subdirectory reached only through one goes unmeasured.
+    **Both callers read the resolved path this returns, not the path they
+    passed in.** They previously discarded it and re-opened the unpinned
+    argument, which is a check-then-open ordering: the anchor decided about one
+    path and the reader opened another. The severity is low — reaching the
+    window needs write access to the registry root, which already permits
+    arbitrary content — and it is narrowed rather than closed. Resolving and
+    then opening still leaves a rename of a *directory component* of the
+    resolved path between the two calls unaccounted for; closing that needs an
+    open-then-verify against the opened handle, which this reader does not do.
+
+    A directory symlink and a Windows directory **junction** are two different
+    facts, and this record previously stated only the first:
+
+    - A symlinked directory reports ``is_symlink() == True`` and ``Path.rglob``
+      does not descend it, so item files reachable only through one go
+      **unmeasured**. That case is unexplored, not handled, and this anchor
+      does not close it — the anchor refuses files that are listed and lead
+      outward, while an unfollowed directory is never listed at all.
+    - A Windows directory junction reports ``is_symlink() == False``. ``rglob``
+      therefore **does** descend it, every file inside is listed, and this
+      anchor is what refuses each of them by name because they resolve outside
+      the root. Measured first-hand on this host, not inferred.
     """
 
     resolved = path.resolve()
@@ -1712,7 +1977,12 @@ def _discover_sources(
         raise FileNotFoundError(
             f"source manifest not found: {manifest_path}"
         )
-    _require_inside_root(root, manifest_path, SOURCE_MANIFEST_FILENAME)
+    # The read below opens what the anchor resolved, not `manifest_path`. The
+    # label is passed explicitly so a refusal still names the file a reader
+    # has to edit even when the resolved name differs.
+    resolved_manifest = _require_inside_root(
+        root, manifest_path, SOURCE_MANIFEST_FILENAME
+    )
 
     vault = EvidenceVault()
     blocked: list[BlockedSource] = []
@@ -1720,7 +1990,9 @@ def _discover_sources(
     stored: dict[str, bytes] = {}
     seen: set[str] = set()
 
-    for line_number, payload in _read_jsonl(manifest_path):
+    for line_number, payload in _read_jsonl(
+        resolved_manifest, SOURCE_MANIFEST_FILENAME
+    ):
         origin = f"{SOURCE_MANIFEST_FILENAME}:{line_number}"
         fields = dict(payload)
         blocked_reason = fields.pop("blocked_reason", None)
@@ -1987,7 +2259,12 @@ def discover_registry_root(root: object) -> DiscoveryResult:
         # files this reader goes on to open. The same anchor guards the source
         # manifest inside `_discover_sources`, and `_resolve_inside` has
         # guarded `content_path` since Task 8.
-        _require_inside_root(root_path, path, relative)
+        #
+        # The resolved path is what is carried forward and opened. The two
+        # name checks below stay on the *listed* name, because where a file
+        # sits in the root is what the filename contract is about; what gets
+        # read is the path the anchor decided about.
+        resolved = _require_inside_root(root_path, path, relative)
         if path.name == SOURCE_MANIFEST_FILENAME:
             raise ValueError(
                 f"{relative}: a source manifest is only recognized at the "
@@ -2002,9 +2279,9 @@ def discover_registry_root(root: object) -> DiscoveryResult:
                     f"{relative}: {path.name} is only recognized at the "
                     "registry root; a nested one is ambiguous"
                 )
-            denominator_files.append((relative, path))
+            denominator_files.append((relative, resolved))
             continue
-        item_files.append((relative, path))
+        item_files.append((relative, resolved))
     item_files.sort(key=lambda entry: entry[0])
     denominator_files.sort(key=lambda entry: entry[0])
 
