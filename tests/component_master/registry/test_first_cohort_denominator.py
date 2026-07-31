@@ -15,6 +15,8 @@ and several assert the opposite.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass, fields
+from functools import cached_property
 import hashlib
 import json
 import os
@@ -2058,10 +2060,17 @@ class CountEnrollmentDerivationTests(RootCase):
 
         if shape == "count":
             attribute: object = property(one)
+        elif shape == "cached":
+            attribute = cached_property(one)
+            attribute.__set_name__(CoverageSnapshot, name)
         elif shape == "tuple":
             attribute = property(lambda inner: (one(inner),))
         elif shape == "mapping":
             attribute = property(lambda inner: {"only": one(inner)})
+        elif shape == "mapping_of_mappings":
+            attribute = property(
+                lambda inner: {"outer": {"only": one(inner)}}
+            )
         elif shape == "plain":
             attribute = MeasuredCount(
                 label=label,
@@ -2108,57 +2117,93 @@ class CountEnrollmentDerivationTests(RootCase):
             },
         )
 
+    def test_a_cached_property_count_is_enrolled_too(self) -> None:
+        """It is a descriptor with a function and the value is reachable in
+        the same way as a property; silence here would leave an idiomatic
+        derived count outside publication."""
+
+        self.add_count_property(
+            "smuggled_cached", "smuggled_in_a_cached_property", shape="cached"
+        )
+        self.assertIn(
+            "smuggled_in_a_cached_property",
+            {
+                count.label
+                for count in build_snapshot(LIVE_REGISTRY_ROOT).counts
+            },
+        )
+        self.assertIn(
+            "cached_property",
+            prose(coverage_module.CoverageSnapshot.counts.fget.__doc__),
+        )
+
     def test_the_payload_guard_fails_when_a_property_is_not_published(
         self,
     ) -> None:
-        """The proof, watched rather than argued.
-
-        A real `MeasuredCount` property is added to the class and
-        `snapshot_payload` — which names its fields one by one — does not
-        publish it. The wave's central guard is then **run** and its failure is
-        observed. Before this wave the same mutation left the guard green,
-        because the record's own enumeration could not see the property either.
-        """
+        """Publication itself runs the comparison, not only this test class."""
 
         self.add_count_property("smuggled_count", "smuggled_by_a_property")
-        result = unittest.TestResult()
-        PayloadCountCompletenessTests(
-            "test_every_measured_count_on_the_record_reaches_the_payload"
-        ).run(result)
-        self.assertEqual([], result.errors)
-        self.assertTrue(
-            result.failures,
-            "the guard stayed green while the record held a count the "
-            "payload does not publish",
-        )
-        self.assertIn(
-            "smuggled_by_a_property",
-            "".join(text for _case, text in result.failures),
-        )
+        with self.assertRaises(ValueError) as caught:
+            snapshot_payload(build_snapshot(LIVE_REGISTRY_ROOT))
+        self.assertIn("smuggled_by_a_property", str(caught.exception))
 
     def test_the_guard_is_green_without_the_mutation(self) -> None:
         """The control. Without the added property the same guard passes, so
         the failure above is the mutation and not a broken guard."""
 
-        result = unittest.TestResult()
-        PayloadCountCompletenessTests(
-            "test_every_measured_count_on_the_record_reaches_the_payload"
-        ).run(result)
-        self.assertEqual([], result.errors)
-        self.assertEqual([], result.failures)
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        payload = snapshot_payload(snapshot)
+        self.assertEqual(
+            {count.label for count in snapshot.counts},
+            payload_count_labels(payload),
+        )
 
     def test_no_two_counts_share_a_label(self) -> None:
-        """A set comparison cannot see a duplicate, so the enumeration refuses
-        one instead of publishing two counts a reader cannot tell apart."""
+        """Direct enumeration corroborates the publication-path tests below."""
 
-        counts = build_snapshot(LIVE_REGISTRY_ROOT).counts
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        counts = snapshot.counts
         self.assertEqual(len(counts), len({count.label for count in counts}))
+        valid_payload = canonical_json_bytes(snapshot_payload(snapshot))
+        self.assertEqual(COMMITTED_SNAPSHOT.read_bytes(), valid_payload)
+        self.assertTrue(
+            build_release(
+                root=LIVE_REGISTRY_ROOT,
+                version="0.1.0",
+                created_at_utc=CREATED_AT,
+            ).payload_sha256.startswith("72ccc63f")
+        )
 
         self.add_count_property(
             "smuggled_duplicate", "first_cohort_brands_with_a_source_read"
         )
         with self.assertRaises(ValueError) as caught:
             build_snapshot(LIVE_REGISTRY_ROOT).counts
+        self.assertIn(
+            "first_cohort_brands_with_a_source_read", str(caught.exception)
+        )
+
+    def test_snapshot_payload_refuses_a_duplicate_count_label(self) -> None:
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        self.add_count_property(
+            "smuggled_duplicate", "first_cohort_brands_with_a_source_read"
+        )
+        with self.assertRaises(ValueError) as caught:
+            snapshot_payload(snapshot)
+        self.assertIn(
+            "first_cohort_brands_with_a_source_read", str(caught.exception)
+        )
+
+    def test_build_release_refuses_a_duplicate_count_label(self) -> None:
+        self.add_count_property(
+            "smuggled_duplicate", "first_cohort_brands_with_a_source_read"
+        )
+        with self.assertRaises(ValueError) as caught:
+            build_release(
+                root=LIVE_REGISTRY_ROOT,
+                version="0.1.0",
+                created_at_utc=CREATED_AT,
+            )
         self.assertIn(
             "first_cohort_brands_with_a_source_read", str(caught.exception)
         )
@@ -2185,26 +2230,78 @@ class CountEnrollmentResidualTests(RootCase):
             self, name, label, shape=shape
         )
 
-    def test_a_count_inside_a_tuple_is_not_enumerated(self) -> None:
-        self.add("smuggled_tuple", "smuggled_in_a_tuple", "tuple")
-        self.assertNotIn(
-            "smuggled_in_a_tuple",
-            {
-                count.label
-                for count in build_snapshot(LIVE_REGISTRY_ROOT).counts
-            },
+    def with_dataclass_count_field(self, label: str) -> CoverageSnapshot:
+        residual = MeasuredCount(
+            label=label,
+            count=0,
+            denominator=0,
+            denominator_label="sources_in_denominator",
+            measured_by="coverage.discover_registry_root",
         )
 
-    def test_a_count_in_a_plain_class_attribute_is_not_enumerated(
+        @dataclass(frozen=True)
+        class SnapshotWithCountField(CoverageSnapshot):
+            residual_count: MeasuredCount = residual
+
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        return SnapshotWithCountField(
+            **{
+                field.name: getattr(snapshot, field.name)
+                for field in fields(CoverageSnapshot)
+            }
+        )
+
+    def test_every_named_count_shape_is_genuinely_still_unenrolled(
         self,
     ) -> None:
-        self.add("smuggled_plain", "smuggled_in_an_attribute", "plain")
-        self.assertNotIn(
-            "smuggled_in_an_attribute",
-            {
-                count.label
-                for count in build_snapshot(LIVE_REGISTRY_ROOT).counts
-            },
+        cases = (
+            ("tuple", "smuggled_in_a_tuple", "tuple"),
+            (
+                "mapping of mappings",
+                "smuggled_in_a_mapping_of_mappings",
+                "mapping_of_mappings",
+            ),
+            ("plain class attribute", "smuggled_in_an_attribute", "plain"),
+            ("dataclass field", "smuggled_in_a_dataclass_field", "dataclass"),
+        )
+        for index, (name, label, shape) in enumerate(cases):
+            with self.subTest(name=name):
+                if shape == "dataclass":
+                    snapshot = self.with_dataclass_count_field(label)
+                else:
+                    self.add(f"smuggled_residual_{index}", label, shape)
+                    snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+                self.assertNotIn(
+                    label, {count.label for count in snapshot.counts}
+                )
+
+    def test_a_wrong_value_under_the_right_label_passes_enrolment_untouched(
+        self,
+    ) -> None:
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        correct = snapshot.first_cohort_brand_count
+        wrong_count = correct.count + 1
+        self.assertLessEqual(wrong_count, correct.denominator)
+        original = CoverageSnapshot.first_cohort_brand_count
+
+        def wrong(_snapshot: CoverageSnapshot) -> MeasuredCount:
+            return MeasuredCount(
+                label=correct.label,
+                count=wrong_count,
+                denominator=correct.denominator,
+                denominator_label=correct.denominator_label,
+                measured_by=correct.measured_by,
+            )
+
+        setattr(CoverageSnapshot, "first_cohort_brand_count", property(wrong))
+        self.addCleanup(
+            setattr, CoverageSnapshot, "first_cohort_brand_count", original
+        )
+        enrolled = {count.label: count for count in snapshot.counts}
+        self.assertEqual(wrong_count, enrolled[correct.label].count)
+        self.assertEqual(
+            wrong_count,
+            snapshot_payload(snapshot)["first_cohort_brand_count"]["count"],
         )
 
     def test_the_docstring_names_each_residual(self) -> None:
@@ -2212,7 +2309,9 @@ class CountEnrollmentResidualTests(RootCase):
         for fragment in (
             "what this does not close",
             "tuple",
-            "not a property",
+            "mapping of mappings",
+            "not one of those descriptors",
+            "dataclass field",
             "does not check that a count is right",
         ):
             with self.subTest(fragment=fragment):
@@ -2309,6 +2408,15 @@ STILL_OPEN_URL_CASES: tuple[tuple[str, str], ...] = (
     # **present**; it does not ask whether the host is well formed.
     ("empty IP-literal brackets", "https://[]/x"),
     ("unclosed IP-literal bracket", "https://[2001:db8::1/x"),
+    # Wave 4 names the port boundary rather than silently parsing only the
+    # host. RFC 3986 section 3.2.3's `port = *DIGIT` is not implemented here.
+    ("non-digit port", "https://host:abc/x"),
+    ("negative port", "https://host:-1/x"),
+    ("out-of-range digit port", "https://host:99999999999/x"),
+    ("multiple unbracketed colons", "https://a:b:c/x"),
+    ("empty port", "https://host:/x"),
+    # Filed under host well-formedness: it has no opening bracket.
+    ("unmatched closing bracket", "https://]/x"),
 )
 
 # The ten-case matrix `_require_hostful_authority_without_userinfo` is judged
@@ -2520,6 +2628,33 @@ class DeclaredUrlHostTests(RootCase):
         self.assertIn("host", message)
         self.assertIn("port", message)
 
+    def test_text_after_a_bracketed_host_is_refused(self) -> None:
+        url = "https://[::1]evil.invalid/x"
+        message = self.refuse_url("bracket-suffix", url)
+        for fragment in ("evil.invalid", "reviewer", "fetcher"):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, message)
+        with self.assertRaises(ValueError):
+            SourceDenominatorEntry(
+                source_id=DECLARED_ID,
+                sha256=None,
+                state=DECLARED_UNREAD,
+                url=url,
+            )
+
+    def test_the_named_bracket_well_formedness_residuals_stay_admitted(
+        self,
+    ) -> None:
+        for url in ("https://[]/x", "https://[2001:db8::1/x"):
+            with self.subTest(url=url):
+                entry = SourceDenominatorEntry(
+                    source_id=DECLARED_ID,
+                    sha256=None,
+                    state=DECLARED_UNREAD,
+                    url=url,
+                )
+                self.assertEqual(url, entry.url)
+
     def test_the_ten_case_matrix_is_unchanged(self) -> None:
         """Every currently-refused case still refused, every currently-admitted
         case still admitted. This is the regression surface the brief names."""
@@ -2545,6 +2680,8 @@ class DeclaredUrlHostTests(RootCase):
             "what this does not close",
             "well formed",
             "ip-literal",
+            "port = *digit",
+            "https://]/x",
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
@@ -2588,6 +2725,8 @@ class DeclaredUrlResidualTests(RootCase):
             # is what the new host rule deliberately does not check.
             "%40",
             "well formed",
+            "port = *DIGIT",
+            "https://]/x",
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
@@ -2934,12 +3073,13 @@ class BrandNameNormalizationTests(RootCase):
 # ---------------------------------------------------------------------------
 
 
-# The transcription `coverage.py` carries, written here independently so the
-# two can be compared rather than one read from the other. Source: Unicode
-# 16.0.0 `DerivedCoreProperties.txt`, property `Default_Ignorable_Code_Point`,
-# restricted to the members whose general category is **not** already on
-# `_REFUSED_BRAND_NAME_CATEGORIES`, plus U+2800 which is not
-# `Default_Ignorable` and renders as an empty braille cell.
+# The transcription `coverage.py` carries, written here a second time rather
+# than imported from that module so the two can be compared entry by entry.
+# Both were transcribed in one sitting by one author; independence is not
+# claimed. Source: Unicode 16.0.0 `DerivedCoreProperties.txt`, property
+# `Default_Ignorable_Code_Point`, restricted to the members whose general
+# category is **not** already on `_REFUSED_BRAND_NAME_CATEGORIES`, plus U+2800
+# which is not `Default_Ignorable` and renders as an empty braille cell.
 #
 # It is a **transcription, not a derivation**: `unicodedata` exposes no
 # `Default_Ignorable_Code_Point` accessor, so nothing here can re-derive it and
@@ -3042,7 +3182,11 @@ class BrandNameInvisibleTranscriptionTests(RootCase):
                 )
 
     def test_the_module_carries_the_same_transcription(self) -> None:
-        """Two independent transcriptions of one table, compared."""
+        """A second in-test transcription, compared entry by entry.
+
+        Both copies were transcribed in one sitting by one author; the test
+        claims a comparison, not independent authorship.
+        """
 
         self.assertEqual(
             TRANSCRIBED_INVISIBLE_CODE_POINTS,
@@ -3307,6 +3451,17 @@ class BrandNameWhitespaceTests(RootCase):
                     )
                 self.assertIn("blank", str(caught.exception))
 
+    def test_a_name_of_only_non_u0020_zs_is_refused_as_blank_first(
+        self,
+    ) -> None:
+        with self.assertRaises(ValueError) as caught:
+            BrandUniverseEntry(
+                brand_id="brand:demo",
+                brand_name="\u3000",
+                source_ids=(DECLARED_ID,),
+            )
+        self.assertEqual("brand_name must not be blank", str(caught.exception))
+
     def test_the_twelve_committed_names_are_unaffected_by_trimming(
         self,
     ) -> None:
@@ -3325,7 +3480,12 @@ class BrandNameWhitespaceTests(RootCase):
 
     def test_the_docstring_states_what_is_trimmed(self) -> None:
         text = prose(coverage_module.BrandUniverseEntry.__doc__)
-        for fragment in ("leading and trailing", "u+0020"):
+        for fragment in (
+            "leading and trailing",
+            "u+0020",
+            "all-whitespace",
+            "refused as blank before",
+        ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
 

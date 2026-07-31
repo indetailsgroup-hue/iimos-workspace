@@ -136,7 +136,8 @@ Which side of that comparison is derived, and which is not
 ----------------------------------------------------------
 
 The record side is **enumerated by introspection** over
-:class:`CoverageSnapshot`'s own properties, so a count added to the class and
+:class:`CoverageSnapshot`'s own count-bearing descriptors — properties and
+cached properties — so a count added through either enrolled descriptor and
 forgotten everywhere else still appears in :attr:`CoverageSnapshot.counts`.
 That is a change from the previous wave, whose prose called the guarantee "not
 a list anybody maintains by hand" while ``counts`` was itself a hand-typed
@@ -193,6 +194,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import cached_property
 import json
 import math
 from pathlib import Path
@@ -582,11 +584,20 @@ def _require_declared_url(value: object, field_name: str) -> str:
       rule rests on.
     - **The host is checked for being present, never for being well formed.**
       ``https://[]/x`` has empty IP-literal brackets and
-      ``https://[2001:db8::1/x`` never closes its own; both carry a nonempty
+      ``https://[2001:db8::1/x`` never closes its own, while ``https://]/x``
+      has a closing bracket with no opening one. All three carry a nonempty
       host by the reading in
-      :func:`_require_hostful_authority_without_userinfo` and both are
+      :func:`_require_hostful_authority_without_userinfo` and all three are
       admitted. Validating a reg-name or an IP-literal is a different rule and
       neither function attempts it.
+    - **The port is not parsed.** RFC 3986 section 3.2.3 writes
+      ``port = *DIGIT``, but ``https://host:abc/x``, ``https://host:-1/x``,
+      ``https://host:99999999999/x`` and ``https://a:b:c/x`` are all admitted.
+      This rule establishes that a host is present; it does not validate the
+      port grammar or range. ``https://host:/x`` stays admitted because
+      ``*DIGIT`` permits zero digits, while ``https://:/x`` is still refused by
+      the empty-host rule. ``https://]/x`` is filed under host well-formedness,
+      not under this port residual.
     """
 
     text = _require_string(value, field_name)
@@ -661,11 +672,11 @@ def _require_percent_escape_grammar(text: str, field_name: str) -> None:
 def _require_hostful_authority_without_userinfo(
     text: str, field_name: str
 ) -> None:
-    """Refuse an authority that carries credentials, or whose host is empty.
+    """Refuse credentials, an empty host, or text after a bracketed host.
 
-    Both refusals come from reading RFC 3986 section 3.2 rather than from a
-    character rule, which is why neither could be expressed in the admitted
-    set: every character involved is already admitted.
+    All three refusals come from reading RFC 3986 section 3.2 rather than from
+    a character rule, which is why none could be expressed in the admitted set:
+    every character involved is already admitted.
 
     **The host, not the authority string.** ``authority = [ userinfo "@" ]
     host [ ":" port ]``, so ``":8443"`` is an authority that is a nonempty
@@ -678,7 +689,11 @@ def _require_hostful_authority_without_userinfo(
     Userinfo is refused first, so the authority the host rule reads carries
     none and the host is what stands before an optional ``":" port``. An
     IP-literal is bracketed and holds colons of its own, so a closing ``]`` is
-    what ends it; every other host ends at the first ``:``.
+    what ends it; after that only an optional ``":" port`` may stand. Text
+    immediately after the bracket makes a reviewer read host text that a .NET
+    ``System.Uri`` consumer does not send its fetcher to, so it is refused by
+    the same reader/fetcher rule as userinfo. Every other host ends at the first
+    ``:``.
 
     **What this does not close, stated rather than claimed.** Each of these is
     still admitted and each is exercised by
@@ -686,10 +701,16 @@ def _require_hostful_authority_without_userinfo(
 
     - **The host is checked for being present, never for being well formed.**
       ``https://[]/x`` has empty IP-literal brackets and
-      ``https://[2001:db8::1/x`` never closes its own. Both leave a nonempty
-      host by the reading above and both are admitted. A reg-name and an
-      IP-literal each have their own grammar in RFC 3986 section 3.2.2; this
-      rule implements neither, and says so rather than implying it does.
+      ``https://[2001:db8::1/x`` never closes its own, while ``https://]/x``
+      has no opening bracket. All three leave a nonempty host by the reading
+      above and all three are admitted. A reg-name and an IP-literal each have
+      their own grammar in RFC 3986 section 3.2.2; this rule implements neither,
+      and says so rather than implying it does.
+    - **The port is not parsed.** RFC 3986 section 3.2.3 writes
+      ``port = *DIGIT``. Non-digit, negative, over-range and multiply-coloned
+      spellings remain admitted and are named in the residual table.
+      ``https://host:/x`` remains admitted because ``*DIGIT`` permits zero
+      digits; ``https://:/x`` remains an empty-host refusal.
     - **No percent-escape is decoded before the authority is read**, so
       ``https://www.hafele.com%40evil.invalid/`` is one reg-name here. That is
       also what RFC 3986 makes of it, so no fetcher reaches ``evil.invalid``;
@@ -721,7 +742,17 @@ def _require_hostful_authority_without_userinfo(
     if authority.startswith("[") and "]" in authority:
         # An IP-literal carries its own colons, so the bracket pair is what
         # ends the host rather than the first colon.
-        host = authority[: authority.index("]") + 1]
+        closing_bracket = authority.index("]")
+        host = authority[: closing_bracket + 1]
+        after_bracket = authority[closing_bracket + 1 :]
+        if after_bracket and not after_bracket.startswith(":"):
+            raise ValueError(
+                f"{field_name} has {after_bracket!r} standing after the "
+                f"bracketed host {host!r}. A reviewer reads "
+                f"{after_bracket!r} as host text, while a .NET System.Uri "
+                f"consumer sends its fetcher to {host!r}. A declared source "
+                "URL must not make those two readers approve different hosts"
+            )
     else:
         host, _, _port = authority.partition(":")
     if not host:
@@ -823,9 +854,9 @@ def _require_brand_name(value: object, field_name: str) -> str:
     text = _require_string(value, field_name)
     # Leading and trailing U+0020 come off before anything else reads the
     # name, so that ``'X'`` and ``'X '`` are one name in both duplicate checks
-    # and in the released bytes. **Only** U+0020: every other ``Zs`` is
-    # refused below, and trimming a character the rule refuses would silently
-    # repair a line a human is supposed to read and approve.
+    # and in the released bytes. **Only** U+0020: in a nonblank name every
+    # other ``Zs`` is refused below, and trimming a character the rule refuses
+    # would silently repair a line a human is supposed to read and approve.
     trimmed = text.strip(_ADMITTED_BRAND_NAME_SPACE)
     if not trimmed:
         raise ValueError(f"{field_name} must not be blank")
@@ -1014,9 +1045,14 @@ class BrandUniverseEntry:
     the name is stored, so that ``'X'`` and ``'X '`` collide in both duplicate
     checks. Without that the paragraph above about U+00A0 was false one
     character away from the case it argues: ``Festool DOMINO`` and ``Festool
-    DOMINO`` with a trailing U+0020 were two brands. Only U+0020 is trimmed —
-    every other ``Zs`` is refused by name, because trimming a refused
-    character would silently repair a line a human has to read and approve.
+    DOMINO`` with a trailing U+0020 were two brands. Only U+0020 is trimmed. In
+    a value not already refused as blank, every other ``Zs`` is refused by
+    name, because trimming a refused character would silently repair a line a
+    human has to read and approve. An **all-whitespace** value is refused as
+    blank before the by-name character check runs, so a name made only of
+    U+3000 reports ``brand_name must not be blank`` rather than a named ``Zs``
+    refusal. This keeps the shared nonblank-string rule first and narrows the
+    sentence to the behavior it actually enforces.
 
     **Normalisation form: NFC, applied here, and the composed form is what the
     record keeps.** A name is a rendered thing, so two encodings of one
@@ -1980,8 +2016,9 @@ class CoverageSnapshot:
     def counts(self) -> tuple[MeasuredCount, ...]:
         """Every :class:`MeasuredCount` this record holds, **derived**.
 
-        Enumerated by introspection over this class's own properties rather
-        than typed out. The list this replaced was hand-maintained, which made
+        Enumerated by introspection over this class's own properties and cached
+        properties rather than typed out. The list this replaced was
+        hand-maintained, which made
         the module docstring's guarantee — *a count-by-count comparison of the
         record against the payload, not a list anybody maintains by hand* —
         false on the record side: a real ``MeasuredCount`` property added to
@@ -1989,10 +2026,13 @@ class CoverageSnapshot:
         enumeration, absent from the hashed payload, and invisible to every
         test at once. Deriving it is what makes the sentence true.
 
-        Two shapes are walked, and they are the two this record uses: a
-        property returning a ``MeasuredCount``, and a property returning a
-        nonempty mapping whose values are all ``MeasuredCount`` —
-        ``classification_counts`` and ``dimension_verified_counts``.
+        Two value shapes are walked from either a ``property`` or a
+        ``functools.cached_property``: a descriptor returning a
+        ``MeasuredCount``, and a descriptor returning a nonempty mapping whose
+        values are all ``MeasuredCount`` — ``classification_counts`` and
+        ``dimension_verified_counts``. A ``cached_property`` is enrolled
+        because it is the idiomatic memoised form of the same derived value and
+        is reachable through ``getattr`` in exactly the same way.
 
         Two counts sharing one label are **refused** rather than published,
         because every comparison downstream is over a *set* of labels and a
@@ -2006,9 +2046,10 @@ class CoverageSnapshot:
           ``tuple`` of counts, or a mapping of mappings, is not walked. Adding
           one more level would only move the boundary, so the boundary is
           named here instead of chased.
-        - **A count held in something that is not a property** — a plain class
-          attribute or a dataclass field — is not reached at all. This walk
-          asks the class for its properties and enumerates nothing else.
+        - **A count held in something that is not one of those descriptors** —
+          a plain class attribute or a dataclass field — is not reached at all.
+          This walk asks the class for properties and cached properties and
+          enumerates nothing else.
         - **This is an enrolment check, not an arithmetic one.** It
           establishes that every count the record computes reaches the payload
           carrying the same five field values. It **does not check that a
@@ -2023,7 +2064,7 @@ class CoverageSnapshot:
                 attribute_name
                 for klass in type(self).__mro__
                 for attribute_name, attribute in vars(klass).items()
-                if isinstance(attribute, property)
+                if isinstance(attribute, (property, cached_property))
             }
         ):
             # The one property this walk must not read is itself; doing so

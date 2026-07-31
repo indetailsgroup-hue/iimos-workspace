@@ -47,6 +47,9 @@ RELEASE_MANIFEST_FILENAME = "release-manifest.json"
 
 _SEMANTIC_VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_MEASURED_COUNT_PAYLOAD_KEYS = frozenset(
+    {"count", "denominator", "denominator_label", "label", "measured_by"}
+)
 
 
 def _plain(value: object) -> object:
@@ -130,6 +133,70 @@ def _exact_snapshot(snapshot: object) -> CoverageSnapshot:
     return snapshot
 
 
+def _published_count_payloads(
+    payload: object,
+) -> Mapping[str, Mapping[str, object]]:
+    """Collect count objects from the payload by shape, not by field name."""
+
+    collected: dict[str, Mapping[str, object]] = {}
+
+    def walk(value: object) -> None:
+        if isinstance(value, Mapping):
+            if frozenset(value) == _MEASURED_COUNT_PAYLOAD_KEYS:
+                label = value["label"]
+                if not isinstance(label, str):  # pragma: no cover - internal shape
+                    raise TypeError("a published count label must be a string")
+                if label in collected:
+                    raise ValueError(
+                        "the payload publishes two counts with the same label: "
+                        + label
+                    )
+                collected[label] = value
+                return
+            for nested in value.values():
+                walk(nested)
+        elif isinstance(value, tuple):
+            for nested in value:
+                walk(nested)
+
+    walk(payload)
+    return MappingProxyType(collected)
+
+
+def _require_count_publication_matches(
+    snapshot: CoverageSnapshot, payload: Mapping[str, object]
+) -> None:
+    """Refuse a payload whose count objects diverge from the record."""
+
+    record = {count.label: count.as_payload() for count in snapshot.counts}
+    published = _published_count_payloads(payload)
+    missing = sorted(set(record) - set(published))
+    unexpected = sorted(set(published) - set(record))
+    changed = sorted(
+        label
+        for label in set(record) & set(published)
+        if record[label] != published[label]
+    )
+    if not (missing or unexpected or changed):
+        return
+    details = []
+    if missing:
+        details.append("record counts not published: " + ", ".join(missing))
+    if unexpected:
+        details.append(
+            "published counts absent from the record: "
+            + ", ".join(unexpected)
+        )
+    if changed:
+        details.append(
+            "counts whose five published fields differ: " + ", ".join(changed)
+        )
+    raise ValueError(
+        "the snapshot count enumeration and payload count objects disagree: "
+        + "; ".join(details)
+    )
+
+
 def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
     """The hashed payload. It contains no wall-clock value, by construction.
 
@@ -142,15 +209,17 @@ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
     decided to add. That is the shape this docstring must not repeat: a fix
     applied to the named instances while the prose generalises to the class.
     The list below is therefore a record of what happened, not the guarantee.
-    The guarantee is
-    ``tests.component_master.registry.test_first_cohort_denominator.PayloadCountCompletenessTests``,
-    which compares every count object reachable in this payload against
+    The guarantee runs here on every publication: every count object reachable
+    in the payload is compared against
     :attr:`~monolith_component_master.coverage.CoverageSnapshot.counts` in both
-    directions and fails if either side holds one the other does not. The
-    comparison carries all five fields of each count, not only its label, so a
-    count republished under the right name with a wrong number, denominator or
-    ``measured_by`` fails it too. A hand-maintained key list cannot make that
-    check, because it can only freeze whatever was true when it was typed.
+    directions, and publication is refused if either side holds one the other
+    does not. The comparison carries all five fields of each count, not only
+    its label, so a count republished under the right name with a wrong number,
+    denominator or ``measured_by`` is refused too.
+    ``tests.component_master.registry.test_first_cohort_denominator.PayloadCountCompletenessTests``
+    independently attacks that production comparison. A hand-maintained key
+    list cannot make the check, because it can only freeze whatever was true
+    when it was typed.
 
     **The field list in this function is still written by hand, and the
     record's enumeration is not.** ``counts`` is derived by introspection over
@@ -196,7 +265,7 @@ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
 
     _exact_snapshot(snapshot)
     unbacked = set(snapshot.unbacked_item_ids)
-    return MappingProxyType(
+    payload = MappingProxyType(
         {
             "authority_state": AUTHORITY_STATE,
             "blocked_source_count": snapshot.blocked_source_count.as_payload(),
@@ -258,6 +327,8 @@ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
             "verified_item_count": snapshot.verified_item_count.as_payload(),
         }
     )
+    _require_count_publication_matches(snapshot, payload)
+    return payload
 
 
 def source_denominator_digest(snapshot: CoverageSnapshot) -> str:
