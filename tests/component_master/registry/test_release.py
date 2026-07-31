@@ -1296,6 +1296,44 @@ class GateReasonReachabilityTests(TemporaryRootTestCase):
             .with_sources([source_line()])
             .with_cached_source(),
         )
+
+        def with_declared_unread(builder: RootBuilder) -> RootBuilder:
+            """A source named in the denominator that nobody has read yet."""
+
+            write_jsonl(
+                builder.root / SOURCE_DENOMINATOR_FILENAME,
+                [
+                    {
+                        "source_id": DECLARED_SOURCE_ID,
+                        "state": "DECLARED_UNREAD",
+                        "url": "https://example.invalid/declared",
+                    }
+                ],
+            )
+            write_jsonl(
+                builder.root / BRAND_UNIVERSE_FILENAME,
+                [
+                    {
+                        "brand_id": "brand:demo",
+                        "brand_name": "Demo Brand",
+                        "source_ids": [DECLARED_SOURCE_ID],
+                    }
+                ],
+            )
+            return builder.with_items(
+                [
+                    item_line(
+                        assertions=[
+                            {
+                                **verified_assertion,
+                                "source_id": DECLARED_SOURCE_ID,
+                            }
+                        ]
+                    )
+                ]
+            )
+
+        measure("declared-unread", with_declared_unread)
         return observed
 
     def reasons_from_direct_gate_calls(self) -> set[str]:
@@ -1363,6 +1401,33 @@ class GateReasonReachabilityTests(TemporaryRootTestCase):
             | self.reasons_from_direct_gate_calls()
         )
         self.assertEqual(set(EVIDENCE_GATE_REASONS), demonstrated)
+
+    # -- the guard on the derivation itself --------------------------------
+    #
+    # A derivation that cannot fail is a comment. These two drive a reason with
+    # no demonstration behind it and confirm the derivation refuses it, so a
+    # later task cannot add a reason to the allowlist and leave it unexercised.
+
+    def test_an_undemonstrated_reason_fails_the_derivation(self) -> None:
+        with mock.patch.object(
+            sys.modules[__name__],
+            "EVIDENCE_GATE_REASONS",
+            EVIDENCE_GATE_REASONS + ("REASON_WITH_NO_DEMONSTRATION",),
+        ):
+            with self.assertRaises(AssertionError):
+                self.test_every_declared_reason_is_demonstrated_somewhere()
+
+    def test_a_wrongly_placed_reason_fails_the_discovery_derivation(
+        self,
+    ) -> None:
+        with mock.patch.object(
+            sys.modules[__name__],
+            "GATE_REASONS_DEMONSTRATED_THROUGH_DISCOVERY",
+            GATE_REASONS_DEMONSTRATED_THROUGH_DISCOVERY
+            + ("ASSERTION_NOT_REGISTERED",),
+        ):
+            with self.assertRaises(AssertionError):
+                self.test_the_discovery_reachable_set_is_exactly_as_declared()
 
 
 # ---------------------------------------------------------------------------
@@ -2645,11 +2710,20 @@ class DenominatorInputFileTests(TemporaryRootTestCase):
         self.assertEqual(0, snapshot.verified_item_count.count)
         self.assertEqual((ITEM_ID,), snapshot.unbacked_item_ids)
 
-    # -- brand universe: recognized, but no row schema exists yet ----------
+    # -- brand universe: a row schema now exists, and still refuses ---------
 
-    def test_a_nonblank_brand_row_is_refused_naming_what_is_missing(
+    def test_a_brand_row_off_the_schema_is_refused_naming_the_field(
         self,
     ) -> None:
+        """Task 8 refused every nonblank brand row; Task 9 defines the shape.
+
+        The refusal did not go away, it got narrower: a row is now measured if
+        it states exactly `brand_id`, `brand_name` and `source_ids`, and is
+        still refused by name otherwise. The full brand contract lives in
+        `test_first_cohort_denominator.py`; what is pinned here is that the
+        recognized file has not become a file that accepts anything.
+        """
+
         self.seed_root()
         write_jsonl(
             self.root / BRAND_UNIVERSE_FILENAME,
@@ -2659,7 +2733,8 @@ class DenominatorInputFileTests(TemporaryRootTestCase):
             discover_registry_root(self.root)
         message = str(caught.exception)
         self.assertIn(f"{BRAND_UNIVERSE_FILENAME}:1", message)
-        self.assertIn("Task 9", message)
+        self.assertIn("name", message)
+        self.assertIn("source_ids", message)
 
     # -- 6. determinism ----------------------------------------------------
 
@@ -2690,19 +2765,31 @@ class DenominatorInputFileTests(TemporaryRootTestCase):
 
 
 # ---------------------------------------------------------------------------
-# 1. Empty registry over the live repository root
+# 1. The live repository root: zero coverage items, and a declared denominator
 # ---------------------------------------------------------------------------
 
 
 class LiveEmptyRegistryTests(unittest.TestCase):
+    """The registry root still holds zero coverage items.
+
+    Task 9 added two declaration files to it. They are denominator input and
+    contribute nothing to `discovered_item_count`, so every claim in this class
+    about an empty registry still holds; what moved is the digest, because the
+    measured source denominator is no longer empty.
+    """
+
     # Measured from this repository's own committed registry root. Content
     # derived, not environment derived: it is the SHA-256 of the canonical
     # payload bytes over `data/component-master/registry/v1`, which is also
     # the committed `coverage-snapshot.json` byte for byte.
     EMPTY_ROOT_PAYLOAD_SHA256 = (
-        "f957bb48d5be2c3f4a80998cd47e429b0a9ae3ae833f1685ef81bbee0c89df4e"
+        "2aa4b50a9da685783efd8aa2c7e3023d90b094dfe9d7905ca1b9e5abd4e4e0fb"
     )
-    EMPTY_ROOT_PAYLOAD_BYTE_COUNT = 4428
+    EMPTY_ROOT_PAYLOAD_BYTE_COUNT = 6895
+    DECLARATION_FILENAMES = (
+        BRAND_UNIVERSE_FILENAME,
+        SOURCE_DENOMINATOR_FILENAME,
+    )
 
     def test_the_empty_root_payload_digest_is_unchanged(self) -> None:
         release = build_release(
@@ -2721,19 +2808,25 @@ class LiveEmptyRegistryTests(unittest.TestCase):
             hashlib.sha256(release.payload_bytes).hexdigest(),
         )
 
-    def test_every_seed_is_a_zero_record_file(self) -> None:
-        """The registry holds nothing; the seeds are a bare line terminator.
+    def test_every_item_seed_is_a_zero_record_file(self) -> None:
+        """No coverage item exists; the item seeds are a bare line terminator.
 
-        The terminator is compared against both forms because this repository
-        has no `.gitattributes` and `core.autocrlf` is enabled on at least one
-        contributor machine, so a fresh checkout rewrites a one-byte `\\n` seed
-        into a two-byte `\\r\\n` seed. That is git's checkout filter, not a
-        generator defect; the substantive claim asserted here is that the file
-        carries zero records either way.
+        The two declaration files are excluded **by name**, not by "whatever is
+        nonempty": a seed that quietly acquired records would otherwise stop
+        being checked. They are asserted separately, immediately below.
+
+        The terminator is compared against both forms because `.gitattributes`
+        pins only `*.json` and `*.jsonl` inside this directory and
+        `core.autocrlf` is enabled on at least one contributor machine. The
+        substantive claim here is that the file carries zero records either way.
         """
 
-        seeds = sorted(LIVE_REGISTRY_ROOT.glob("*.jsonl"))
-        self.assertTrue(seeds)
+        seeds = sorted(
+            path
+            for path in LIVE_REGISTRY_ROOT.glob("*.jsonl")
+            if path.name not in self.DECLARATION_FILENAMES
+        )
+        self.assertEqual(5, len(seeds))
         for seed in seeds:
             with self.subTest(seed=seed.name):
                 self.assertIn(seed.read_bytes(), (b"\n", b"\r\n"))
@@ -2745,6 +2838,18 @@ class LiveEmptyRegistryTests(unittest.TestCase):
                         if line.strip()
                     ],
                 )
+
+    def test_the_declaration_files_are_the_only_nonempty_jsonl(self) -> None:
+        nonempty = sorted(
+            path.name
+            for path in LIVE_REGISTRY_ROOT.glob("*.jsonl")
+            if [
+                line
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        )
+        self.assertEqual(sorted(self.DECLARATION_FILENAMES), nonempty)
 
     def test_release_over_the_empty_registry_succeeds(self) -> None:
         release = build_release(
@@ -2787,11 +2892,12 @@ class LiveEmptyRegistryTests(unittest.TestCase):
         # The generator never emits CR. This is asserted on the bytes it just
         # produced, which never passed through git.
         self.assertNotIn(b"\r", generated)
-        # The committed copy is compared with checkout-time EOL conversion
-        # normalized away: this repository has no `.gitattributes` and
-        # `core.autocrlf` is enabled, so a fresh checkout rewrites the LF
-        # terminators. See the seed test above for the same condition.
-        self.assertEqual(generated, committed.replace(b"\r\n", b"\n"))
+        # Compared byte for byte with no normalization. `51c6428b` pinned
+        # `*.json -text` inside this directory, so the committed copy is not
+        # rewritten on checkout and a reader can confirm the published digest
+        # against the file they received. Normalizing here would hide exactly
+        # the failure that pinning exists to prevent.
+        self.assertEqual(generated, committed)
 
 
 # ---------------------------------------------------------------------------

@@ -36,24 +36,98 @@ Either name in a subdirectory is refused as ambiguous, exactly as a nested
 ``evidence-manifest.jsonl`` is. Neither contributes to
 ``discovered_item_count``.
 
-``source-denominator.jsonl`` declares sources whose bytes this reader does not
-hold. Each nonblank line holds exactly ``source_id``, ``sha256``, ``state`` and
-``blocked_reason``; it becomes one :class:`SourceDenominatorEntry` and one
-matching :class:`BlockedSource`. ``state`` must be ``BLOCKED``: this reader
-cannot re-hash a source it never read, and
-:attr:`CoverageSnapshot.coverage_statement` publishes a ``REGISTERED`` source
-as "readable and hash-verified". A source whose bytes belong in a release is
-declared in ``evidence-manifest.jsonl`` with a ``content_path``. Any other
-field, any missing field, any other state, and any source ID already named by
-the manifest are each refused with the file and line.
+``brand-universe.jsonl`` declares the brands whose official sources this
+registry intends to review, and which source each brand answers for. Each
+nonblank line holds exactly ``brand_id``, ``brand_name`` and a nonempty
+``source_ids`` array, and becomes one :class:`BrandUniverseEntry`. Every
+``source_ids`` entry must exist in the measured source denominator, and no two
+brands may claim the same source. A zero-record file contributes nothing.
 
-``brand-universe.jsonl`` is recognized so it is never read as item data, and a
-zero-record file contributes nothing. A **nonblank** row is refused: this
-package holds no brand record type to validate one against and
-:class:`CoverageSnapshot` has no field to carry one, so an accepted row could
-only be discarded — and discarding is silence. Defining that row schema, and
-the field that would carry it, is Task 9's decision, not a shape this reader
-guesses.
+**A declared brand set is a chosen first cohort, never a market and never a
+complete registry.** :attr:`CoverageSnapshot.coverage_statement` says so in
+words, because a file listing brands and official URLs looks exactly like
+coverage and is the opposite of it: it is a list of work not yet done.
+
+``source-denominator.jsonl`` declares sources whose bytes this reader does not
+hold. ``state`` decides the rest of the row, because the three states are three
+different facts and one shared field set would blur them:
+
+``DECLARED_UNREAD``
+    Named, and nobody has read it yet. The row holds exactly ``source_id``,
+    ``state`` and ``url``. It carries **no** ``sha256``: no bytes exist, so no
+    digest can, and a digest supplied here is refused rather than ignored. It
+    carries no ``blocked_reason`` either, because nothing has been attempted.
+    It is excluded from ``registered_source_count`` **and** from
+    ``blocked_source_count``, and it has its own spoken count in
+    ``coverage_statement``. Exactly one brand must claim it.
+``BLOCKED``
+    Somebody expected these bytes and could not read them. The row holds
+    exactly ``blocked_reason``, ``sha256``, ``source_id`` and ``state``, and
+    becomes one :class:`SourceDenominatorEntry` and one matching
+    :class:`BlockedSource`. Unchanged from Task 8.
+``REGISTERED``
+    Refused in this file. This reader cannot re-hash a source it never read,
+    and ``coverage_statement`` publishes a ``REGISTERED`` source as "readable
+    and hash-verified". A source whose bytes belong in a release is declared in
+    ``evidence-manifest.jsonl`` with a ``content_path``.
+
+Any unknown field, any field belonging to another state, any missing field, any
+other state, and any source ID already named by the manifest are each refused
+with the file and the line.
+
+Why ``BLOCKED`` still requires 64 hex where ``DECLARED_UNREAD`` refuses one
+--------------------------------------------------------------------------
+
+It is intended, and it is what makes the two states differ in **shape** rather
+than only in spelling. A ``BLOCKED`` row's ``sha256`` is *the digest that was
+expected and could not be confirmed*: for a manifest-derived block it is
+``SourceSnapshot.sha256`` exactly as the manifest asserted it, carried through
+unchanged by :func:`_discover_sources`, and it is the claim that failed. A
+``DECLARED_UNREAD`` row has no such claim to carry, so requiring one would
+invent a fact. One limitation is recorded and **not fixed here**: for a
+``BLOCKED`` row written directly into ``source-denominator.jsonl`` the digest is
+a value this reader can never confirm against bytes, because it holds none.
+Relaxing the requirement would weaken a check, so it stands as it is.
+
+What ``source-denominator.jsonl`` deliberately does **not** record
+-----------------------------------------------------------------
+
+The implementation plan's prose for this file named seven further concepts.
+Each is answered here rather than left silent:
+
+- **publisher** — refused. It is a property of a document somebody has read and
+  already has a home in ``SourceSnapshot.publisher`` inside
+  ``evidence-manifest.jsonl``. The organisation behind a declared source is
+  carried instead by ``brand-universe.jsonl``, which claims the source by ID.
+- **official URL** — **admitted**, as ``url``, because a declared source with no
+  locator names nothing anybody could later fetch, and it must be an
+  ``https://`` URL. **Recording a URL asserts nothing about what is behind
+  it**: not that it resolves, not that it is current, not that its contents may
+  be used. Nothing in this module has visited one.
+- **edition when printed** — refused. An edition is printed on a document nobody
+  has read. It belongs in ``SourceSnapshot.edition``, recorded at fetch time.
+- **region** — deferred, not admitted. The region a catalogue *covers* is a fact
+  about its contents; the region in a URL path is website routing. A review
+  scope is a partition of sources that have been read, and belongs to the task
+  that reads them.
+- **language** — refused. The same argument as ``region``, and it has no
+  downstream home at all: ``SourceSnapshot`` carries no language field, so a
+  task that needs one must add it there first.
+- **access date** — refused. Nobody accessed these. An access date for an
+  unfetched URL is a fabricated fact.
+- **rights state** — refused. **Recording a URL is not asserting a right to use
+  what is behind it.** Rights review of these publishers has not happened. It
+  belongs in ``SourceSnapshot.rights_state``, set after that review.
+
+One recorded boundary of this contract: ``releases.snapshot_payload`` names the
+fields it publishes one by one, and it was outside the scope this module's
+brand and declared-source work was authorized to change. The release payload
+therefore carries every declared source row and the full rendered
+``coverage_statement`` — including the declared-but-unread and first-cohort
+clauses — but does **not** enumerate :attr:`CoverageSnapshot.brand_universe`,
+:attr:`CoverageSnapshot.declared_unread_source_count` or
+:attr:`CoverageSnapshot.first_cohort_brand_count` as payload entries of their
+own. That is a stated gap, not an oversight.
 
 Every other ``*.jsonl`` file under the root, **at any depth**, is a
 coverage-item file. Each nonblank line is an object with ``item_id``,
@@ -76,8 +150,10 @@ directory symlinks on this Python, so item files reachable only through a
 symlinked subdirectory would go unmeasured. That case is unexplored, not
 handled.
 
-All five seed files in ``data/component-master/registry/v1`` are zero-record
-today, so this contract reinterprets no existing data.
+The four item seeds and the source manifest in
+``data/component-master/registry/v1`` are zero-record, so the registry root
+still holds no coverage item at all and every release built from it says in
+words that it covers nothing.
 """
 
 from __future__ import annotations
@@ -144,24 +220,47 @@ DENOMINATOR_INPUT_FILENAMES: tuple[str, ...] = (
     SOURCE_DENOMINATOR_FILENAME,
 )
 
-# The complete row contract for `source-denominator.jsonl`. `blocked_reason` is
-# reused verbatim from `evidence-manifest.jsonl`, where it already names why a
-# source is unavailable; the other three are exactly SourceDenominatorEntry.
-DECLARED_DENOMINATOR_REQUIRED_FIELDS: tuple[str, ...] = (
-    "sha256",
-    "source_id",
-    "state",
-)
-DECLARED_DENOMINATOR_FIELDS: tuple[str, ...] = tuple(
-    sorted(DECLARED_DENOMINATOR_REQUIRED_FIELDS + ("blocked_reason",))
-)
-
 UNCLASSIFIED_REASONS: tuple[str, ...] = (
     "CLASSIFICATION_ABSENT",
     "CLASSIFICATION_UNRECOGNIZED",
 )
 
-SOURCE_DENOMINATOR_STATES: tuple[str, ...] = ("BLOCKED", "REGISTERED")
+# A source named in the denominator that nobody has read yet. Named for what it
+# is — declared by somebody, unread by everybody — so that a reader who has
+# never seen this module cannot mistake it for a weaker form of REGISTERED,
+# and so that it can never be confused with BLOCKED, which means somebody tried
+# to read a source and could not.
+DECLARED_UNREAD_STATE = "DECLARED_UNREAD"
+
+SOURCE_DENOMINATOR_STATES: tuple[str, ...] = (
+    "BLOCKED",
+    DECLARED_UNREAD_STATE,
+    "REGISTERED",
+)
+
+# The complete row contract for `source-denominator.jsonl`, decided by `state`.
+# Every listed field is required and no unlisted field is admitted: an optional
+# `sha256` is how a registered source silently loses its digest, and an optional
+# `blocked_reason` is how "nobody has tried" quietly becomes "could not read".
+# `blocked_reason` is reused verbatim from `evidence-manifest.jsonl`, where it
+# already names why a source is unavailable.
+DECLARED_DENOMINATOR_FIELDS_BY_STATE: Mapping[str, tuple[str, ...]] = (
+    MappingProxyType(
+        {
+            "BLOCKED": ("blocked_reason", "sha256", "source_id", "state"),
+            DECLARED_UNREAD_STATE: ("source_id", "state", "url"),
+        }
+    )
+)
+
+# The complete row contract for `brand-universe.jsonl`. `source_ids` is not
+# optional: a brand that claims no source declares no work, and a name with no
+# work behind it measures nothing.
+BRAND_UNIVERSE_FIELDS: tuple[str, ...] = (
+    "brand_id",
+    "brand_name",
+    "source_ids",
+)
 
 # Closed allowlist of reasons a claim of VERIFIED could not be traced back to a
 # registered source with a verified hash.
@@ -180,6 +279,11 @@ EVIDENCE_GATE_REASONS: tuple[str, ...] = (
     "MISSING_ASSERTION",
     "SOURCE_BLOCKED_IN_MANIFEST",
     "SOURCE_BYTES_UNAVAILABLE",
+    # Named after the state, and deliberately not collapsed into
+    # SOURCE_NOT_REGISTERED: "the denominator does not hold this source at all"
+    # is a different and less alarming fact than "the denominator holds it, and
+    # nobody has read it yet".
+    "SOURCE_DECLARED_UNREAD",
     "SOURCE_HASH_MISMATCH",
     "SOURCE_NOT_REGISTERED",
 )
@@ -200,6 +304,7 @@ GATE_REASONS_DEMONSTRATED_THROUGH_DISCOVERY: tuple[str, ...] = (
     "MISSING_ASSERTION",
     "SOURCE_BLOCKED_IN_MANIFEST",
     "SOURCE_BYTES_UNAVAILABLE",
+    "SOURCE_DECLARED_UNREAD",
     "SOURCE_HASH_MISMATCH",
     "SOURCE_NOT_REGISTERED",
 )
@@ -297,6 +402,33 @@ def _require_enum_text(
     return _require_member(value, field_name, allowed)
 
 
+_DECLARED_URL_SCHEME = "https://"
+
+
+def _require_declared_url(value: object, field_name: str) -> str:
+    """Require a whitespace-free ``https://`` URL, and claim nothing more.
+
+    This is a **declared location, not a visited one.** Nothing in this module
+    fetches it, and recording it asserts no right to what is behind it. The
+    shape rules exist so that the string is a locator somebody could act on,
+    not so that it is a claim about reachability.
+    """
+
+    text = _require_string(value, field_name)
+    if any(character.isspace() for character in text):
+        raise ValueError(f"{field_name} must not contain whitespace")
+    if not text.startswith(_DECLARED_URL_SCHEME) or len(text) <= len(
+        _DECLARED_URL_SCHEME
+    ):
+        raise ValueError(
+            f"{field_name} must be an {_DECLARED_URL_SCHEME} URL naming a "
+            "declared source root. It records where a source would be read "
+            "from; it asserts nothing about whether it resolves, is current, "
+            "or may be used"
+        )
+    return text
+
+
 def _require_sha256(value: object, field_name: str) -> str:
     text = _require_string(value, field_name)
     if len(text) != 64 or any(
@@ -383,19 +515,92 @@ class UnclassifiedItem:
 
 
 @dataclass(frozen=True)
+class BrandUniverseEntry:
+    """One brand this registry intends to review, and the sources it answers for.
+
+    A declared brand is **work not yet done**, never coverage. It carries no
+    count of its own beyond the two this snapshot publishes, and nothing here
+    says how many brands the connector market has.
+    """
+
+    brand_id: str
+    brand_name: str
+    source_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        _require_canonical_id(self.brand_id, "brand_id")
+        _require_string(self.brand_name, "brand_name")
+        supplied = _snapshot_iterable(self.source_ids, "source_ids")
+        if not supplied:
+            raise ValueError(
+                "source_ids must name at least one source: a brand that "
+                "claims no source declares no work and measures nothing"
+            )
+        identifiers = tuple(
+            _require_canonical_id(value, "source_ids") for value in supplied
+        )
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("duplicate source_ids entry")
+        object.__setattr__(self, "source_ids", tuple(sorted(identifiers)))
+
+    def as_payload(self) -> Mapping[str, object]:
+        return MappingProxyType(
+            {
+                "brand_id": self.brand_id,
+                "brand_name": self.brand_name,
+                "source_ids": tuple(self.source_ids),
+            }
+        )
+
+
+@dataclass(frozen=True)
 class SourceDenominatorEntry:
-    """One source in the measured denominator, with its registered digest."""
+    """One source in the measured denominator, in one of three states.
+
+    The field contract is decided by ``state`` rather than shared across
+    states. A digest is **required** where bytes were expected and **refused**
+    where none can exist, because a digest that is merely optional is how a
+    registered source quietly loses its hash and how a source nobody has read
+    quietly acquires one.
+    """
 
     source_id: str
-    sha256: str
+    sha256: str | None
     state: str
+    url: str | None = None
 
     def __post_init__(self) -> None:
         _require_canonical_id(self.source_id, "source_id")
+        state = _require_member(self.state, "state", SOURCE_DENOMINATOR_STATES)
+        if state == DECLARED_UNREAD_STATE:
+            if self.sha256 is not None:
+                raise ValueError(
+                    f"sha256 must be absent for state {DECLARED_UNREAD_STATE}: "
+                    "nobody has read these bytes, so no digest exists and "
+                    "supplying one would publish a claim nobody can check"
+                )
+            _require_declared_url(self.url, "url")
+            return
         _require_sha256(self.sha256, "sha256")
-        _require_member(self.state, "state", SOURCE_DENOMINATOR_STATES)
+        if self.url is not None:
+            raise ValueError(
+                f"url is carried only by state {DECLARED_UNREAD_STATE}; a "
+                "source that has been read or attempted records its location "
+                "in evidence-manifest.jsonl"
+            )
 
     def as_payload(self) -> Mapping[str, object]:
+        if self.state == DECLARED_UNREAD_STATE:
+            # No ``sha256`` key at all, rather than a null one. A null would
+            # read as "digest unknown"; the truth is that no digest can exist
+            # for bytes nobody holds, and the absent key says exactly that.
+            return MappingProxyType(
+                {
+                    "source_id": self.source_id,
+                    "state": self.state,
+                    "url": self.url,
+                }
+            )
         return MappingProxyType(
             {
                 "sha256": self.sha256,
@@ -655,6 +860,12 @@ def _gate_assertion(
         state = source_states.get(claimed.source_id)
         if state is None:
             return "SOURCE_NOT_REGISTERED"
+        if state == DECLARED_UNREAD_STATE:
+            # Named distinctly, before the blocked mapping below. A declared
+            # source has no `blocked_reason` to map, and collapsing it into
+            # SOURCE_BLOCKED_IN_MANIFEST would report a read that failed where
+            # no read was ever attempted.
+            return "SOURCE_DECLARED_UNREAD"
         if state != "REGISTERED":
             return _BLOCKED_REASON_TO_GATE_REASON.get(
                 blocked_reasons.get(claimed.source_id, ""),
@@ -692,6 +903,61 @@ def _gate_assertion(
     if not verify_source_hash(source, content):
         return "SOURCE_HASH_MISMATCH"
     return None
+
+
+def _require_brand_source_agreement(
+    brands: tuple["BrandUniverseEntry", ...],
+    denominator: tuple["SourceDenominatorEntry", ...],
+) -> None:
+    """Refuse any disagreement between the two declaration files.
+
+    Called from :func:`discover_registry_root` **and** from
+    :class:`CoverageSnapshot`, so the two enforcement points answer the same
+    question the same way. Task 8's wave 1 lesson was that an invariant living
+    inside one caller is a convention, not an invariant of the record.
+
+    Three shapes are refused, each in both directions where a direction exists:
+    a brand claiming a source the denominator does not hold; two brands
+    claiming the same source; and a ``DECLARED_UNREAD`` source no brand claims.
+    The last is scoped to that state on purpose — a ``BLOCKED`` source reaches
+    the denominator from ``evidence-manifest.jsonl``, where no brand is
+    involved at all, so requiring a claim for it would refuse a shape this
+    reader produces itself.
+    """
+
+    known_sources = {entry.source_id for entry in denominator}
+    claimed_by: dict[str, str] = {}
+    problems: list[str] = []
+    for brand in brands:
+        for source_id in brand.source_ids:
+            owner = claimed_by.get(source_id)
+            if owner is not None:
+                problems.append(
+                    f"{source_id} is claimed by both {owner} and "
+                    f"{brand.brand_id}; a source answers to one brand"
+                )
+                continue
+            claimed_by[source_id] = brand.brand_id
+            if source_id not in known_sources:
+                problems.append(
+                    f"{brand.brand_id} claims {source_id}, which "
+                    f"{SOURCE_DENOMINATOR_FILENAME} does not declare and "
+                    f"{SOURCE_MANIFEST_FILENAME} does not name"
+                )
+    for entry in denominator:
+        if entry.state != DECLARED_UNREAD_STATE:
+            continue
+        if entry.source_id not in claimed_by:
+            problems.append(
+                f"{entry.source_id} is declared {DECLARED_UNREAD_STATE} but no "
+                f"row of {BRAND_UNIVERSE_FILENAME} claims it; a source nobody "
+                "answers for names no work"
+            )
+    if problems:
+        raise ValueError(
+            f"{BRAND_UNIVERSE_FILENAME} and {SOURCE_DENOMINATOR_FILENAME} "
+            "disagree: " + "; ".join(sorted(problems))
+        )
 
 
 def _require_backed_verified_claims(
@@ -803,6 +1069,10 @@ class CoverageSnapshot:
     blocked_sources: tuple[BlockedSource, ...]
     source_denominator: tuple[SourceDenominatorEntry, ...]
     evidence_gate_findings: tuple[EvidenceGateFinding, ...]
+    # Declared work, not coverage. Defaulted so that a snapshot over a root
+    # with no `brand-universe.jsonl` is a legitimate measurement of "no brand
+    # declared", rather than a construction error.
+    brand_universe: tuple[BrandUniverseEntry, ...] = ()
 
     def __post_init__(self) -> None:
         items = tuple(
@@ -835,6 +1105,12 @@ class CoverageSnapshot:
                 self.evidence_gate_findings, "evidence_gate_findings"
             )
         )
+        brands = tuple(
+            _snapshot_exact(record, BrandUniverseEntry, "brand_universe")
+            for record in _snapshot_iterable(
+                self.brand_universe, "brand_universe"
+            )
+        )
         _require_exact_int(
             self.discovered_item_count, "discovered_item_count"
         )
@@ -848,6 +1124,16 @@ class CoverageSnapshot:
         blocked_ids = tuple(record.source_id for record in blocked)
         if len(blocked_ids) != len(set(blocked_ids)):
             raise ValueError("duplicate blocked source_id")
+        brand_ids = tuple(entry.brand_id for entry in brands)
+        if len(brand_ids) != len(set(brand_ids)):
+            raise ValueError("duplicate brand_id")
+        brand_names = tuple(entry.brand_name for entry in brands)
+        if len(brand_names) != len(set(brand_names)):
+            # Two IDs sharing one display name make the published cohort
+            # unreadable: a reader counting names would count fewer brands
+            # than the denominator states.
+            raise ValueError("duplicate brand_name")
+        _require_brand_source_agreement(brands, denominator)
         unknown = sorted(
             {
                 finding.item_id
@@ -900,6 +1186,11 @@ class CoverageSnapshot:
             self,
             "evidence_gate_findings",
             tuple(sorted(findings, key=lambda finding: finding._order())),
+        )
+        object.__setattr__(
+            self,
+            "brand_universe",
+            tuple(sorted(brands, key=lambda entry: entry.brand_id)),
         )
 
     # -- derived counts ---------------------------------------------------
@@ -998,6 +1289,55 @@ class CoverageSnapshot:
         )
 
     @property
+    def declared_unread_source_count(self) -> MeasuredCount:
+        """Sources named in the denominator that nobody has read yet.
+
+        Its own count with its own denominator, carried so that
+        :attr:`coverage_statement` can speak it. A third state excluded from
+        ``registered_source_count`` but never spoken is exactly the coverage
+        inflation this module exists to prevent.
+        """
+
+        return self._count(
+            "sources_declared_but_not_yet_read",
+            sum(
+                1
+                for entry in self.source_denominator
+                if entry.state == DECLARED_UNREAD_STATE
+            ),
+            denominator=len(self.source_denominator),
+            denominator_label="sources_in_denominator",
+            measured_by=_MEASURED_BY_DISCOVERY,
+        )
+
+    @property
+    def first_cohort_brand_count(self) -> MeasuredCount:
+        """Declared brands with at least one source read and hash-verified.
+
+        The denominator is the declared cohort, which is a **chosen list, not
+        a market**. No count here has the number of connector brands in the
+        world as a denominator, because this module does not know it and will
+        not invent it.
+        """
+
+        registered = {
+            entry.source_id
+            for entry in self.source_denominator
+            if entry.state == "REGISTERED"
+        }
+        return self._count(
+            "first_cohort_brands_with_a_source_read",
+            sum(
+                1
+                for brand in self.brand_universe
+                if registered.intersection(brand.source_ids)
+            ),
+            denominator=len(self.brand_universe),
+            denominator_label="declared_first_cohort_brands",
+            measured_by=_MEASURED_BY_DISCOVERY,
+        )
+
+    @property
     def classification_counts(self) -> Mapping[str, MeasuredCount]:
         """One entry per state, always present, so zero is never an omission."""
 
@@ -1051,6 +1391,8 @@ class CoverageSnapshot:
             self.unbacked_verified_item_count,
             self.blocked_source_count,
             self.registered_source_count,
+            self.declared_unread_source_count,
+            self.first_cohort_brand_count,
             *self.classification_counts.values(),
             *self.dimension_verified_counts.values(),
         ]
@@ -1065,6 +1407,8 @@ class CoverageSnapshot:
         unbacked = self.unbacked_verified_item_count
         blocked = self.blocked_source_count
         registered = self.registered_source_count
+        declared = self.declared_unread_source_count
+        cohort = self.first_cohort_brand_count
         parts = [
             f"{classified.count} of {classified.denominator} discovered "
             f"registry items classified",
@@ -1074,13 +1418,26 @@ class CoverageSnapshot:
             f"refused by the evidence gate",
             f"{registered.count} of {registered.denominator} named sources "
             f"readable and hash-verified",
+            # The owner's binding constraint on OR-9.1, rendered in words with
+            # its own denominator so the published sentence cannot be read as
+            # coverage.
+            f"{declared.count} of {declared.denominator} named sources "
+            f"declared but not yet read",
             f"{blocked.count} of {blocked.denominator} named sources blocked",
+            f"{cohort.count} of {cohort.denominator} declared first-cohort "
+            f"brands with at least one source read",
         ]
         statement = "; ".join(parts) + "."
         if self.discovered_item_count == 0:
             statement += (
                 " The registry root holds zero records, so this release "
                 "covers nothing."
+            )
+        if self.brand_universe:
+            statement += (
+                " The declared brands are a first cohort selected for review, "
+                "not the connector market; a source named here has not been "
+                "fetched, read, or rights-reviewed by this measurement."
             )
         if self.unclassified:
             statement += " Unclassified discovered items: " + ", ".join(
@@ -1109,6 +1466,7 @@ class DiscoveryResult:
     source_denominator: tuple[SourceDenominatorEntry, ...]
     vault: EvidenceVault
     source_bytes: Mapping[str, bytes]
+    brand_universe: tuple[BrandUniverseEntry, ...] = ()
 
 
 def _read_jsonl(
@@ -1253,36 +1611,23 @@ def _read_declared_denominator(
     denominator: list[SourceDenominatorEntry] = []
     for line_number, payload in _read_jsonl(path, relative):
         origin = f"{relative}:{line_number}"
-        unknown = sorted(set(payload) - set(DECLARED_DENOMINATOR_FIELDS))
-        if unknown:
+        # `state` is read first, because it decides which fields the row may
+        # hold. Validating a shared field union first would have to admit both
+        # `sha256` and `url` for every state, and an admitted-then-ignored
+        # field is the silence this module refuses.
+        if "state" not in payload:
             raise ValueError(
-                f"{origin}: unrecognized field(s) "
-                + ", ".join(unknown)
-                + "; a declared denominator row holds exactly "
-                + ", ".join(DECLARED_DENOMINATOR_FIELDS)
-                + ". Extending that row schema is Task 9's decision, not a "
-                "shape this reader guesses."
+                f"{origin}: missing required field state; state decides which "
+                "fields a declared denominator row may hold, so it cannot be "
+                "inferred"
             )
-        missing = sorted(
-            name
-            for name in DECLARED_DENOMINATOR_REQUIRED_FIELDS
-            if name not in payload
-        )
-        if missing:
-            raise ValueError(
-                f"{origin}: missing required field(s) "
-                + ", ".join(missing)
-                + "; a declared denominator row must state "
-                + ", ".join(DECLARED_DENOMINATOR_REQUIRED_FIELDS)
-            )
-
         try:
             state = _require_member(
                 payload["state"], "state", SOURCE_DENOMINATOR_STATES
             )
         except (TypeError, ValueError) as error:
             raise ValueError(f"{origin}: {error}") from error
-        if state != "BLOCKED":
+        if state == "REGISTERED":
             raise ValueError(
                 f"{origin}: state REGISTERED cannot be declared in "
                 f"{SOURCE_DENOMINATOR_FILENAME}. This reader holds no bytes "
@@ -1291,22 +1636,49 @@ def _read_declared_denominator(
                 "\"readable and hash-verified\". Declare such a source in "
                 f"{SOURCE_MANIFEST_FILENAME} with a content_path instead."
             )
-        reason = payload.get("blocked_reason")
-        if reason is None:
+
+        admitted = DECLARED_DENOMINATOR_FIELDS_BY_STATE[state]
+        unknown = sorted(set(payload) - set(admitted))
+        if unknown:
             raise ValueError(
-                f"{origin}: a BLOCKED source must state blocked_reason. A "
-                "source that could not be read is a visible gap, never an "
-                "absence."
+                f"{origin}: unrecognized field(s) "
+                + ", ".join(unknown)
+                + f"; a row in state {state} holds exactly "
+                + ", ".join(admitted)
+                + ". A field belonging to another state is refused here rather "
+                "than accepted and dropped."
+            )
+        missing = sorted(name for name in admitted if name not in payload)
+        if missing:
+            raise ValueError(
+                f"{origin}: missing required field(s) "
+                + ", ".join(missing)
+                + f"; a row in state {state} must state "
+                + ", ".join(admitted)
             )
 
         try:
             entry = SourceDenominatorEntry(
                 source_id=payload["source_id"],
-                sha256=payload["sha256"],
+                sha256=(
+                    None
+                    if state == DECLARED_UNREAD_STATE
+                    else payload["sha256"]
+                ),
                 state=state,
+                url=(
+                    payload["url"]
+                    if state == DECLARED_UNREAD_STATE
+                    else None
+                ),
             )
-            record = BlockedSource(
-                source_id=payload["source_id"], reason=reason
+            record = (
+                None
+                if state == DECLARED_UNREAD_STATE
+                else BlockedSource(
+                    source_id=payload["source_id"],
+                    reason=payload["blocked_reason"],
+                )
             )
         except (TypeError, ValueError) as error:
             raise ValueError(f"{origin}: {error}") from error
@@ -1317,34 +1689,70 @@ def _read_declared_denominator(
             )
         seen_sources.add(entry.source_id)
         denominator.append(entry)
-        blocked.append(record)
+        if record is not None:
+            blocked.append(record)
     return tuple(blocked), tuple(denominator)
 
 
-def _refuse_undefined_brand_records(path: Path, relative: str) -> None:
-    """Recognize ``brand-universe.jsonl``; refuse a row with no schema.
+def _read_brand_universe(
+    path: Path,
+    relative: str,
+) -> tuple[BrandUniverseEntry, ...]:
+    """Read ``brand-universe.jsonl`` into the declared first cohort.
 
-    The file is recognized so it is never misread as item data, and a
-    zero-record file contributes nothing. A nonblank row is refused rather
-    than accepted-and-discarded: this package holds no brand record type to
-    validate one against, and :class:`CoverageSnapshot` has no field to carry
-    one, so accepting a row could only drop it — and a dropped record is the
-    silence this module exists to refuse.
+    Every refusal names the file, the line, and the exact field or value that
+    is wrong. Duplicate IDs and duplicate display names are both refused here,
+    so a refusal can name the offending line; :class:`CoverageSnapshot`
+    enforces the same two invariants over the record, for callers that never
+    went through a file.
     """
 
-    records = _read_jsonl(path, relative)
-    if not records:
-        return
-    line_number = records[0][0]
-    raise ValueError(
-        f"{relative}:{line_number}: {BRAND_UNIVERSE_FILENAME} is recognized "
-        "as denominator input, but no row schema for it is defined. This "
-        "package holds no brand record type to validate a row against and "
-        "CoverageSnapshot has no field to carry one, so an accepted row "
-        "could only be discarded. Task 9 must define the brand-universe row "
-        "schema and the field that carries it. A zero-record file is read "
-        "and contributes nothing."
-    )
+    brands: list[BrandUniverseEntry] = []
+    seen_ids: set[str] = set()
+    seen_names: set[str] = set()
+    for line_number, payload in _read_jsonl(path, relative):
+        origin = f"{relative}:{line_number}"
+        unknown = sorted(set(payload) - set(BRAND_UNIVERSE_FIELDS))
+        if unknown:
+            raise ValueError(
+                f"{origin}: unrecognized field(s) "
+                + ", ".join(unknown)
+                + "; a brand row holds exactly "
+                + ", ".join(BRAND_UNIVERSE_FIELDS)
+                + ". A brand row is a declaration of intended work, not a "
+                "record of a source that has been read; what a source turns "
+                f"out to hold belongs in {SOURCE_MANIFEST_FILENAME}."
+            )
+        missing = sorted(
+            name for name in BRAND_UNIVERSE_FIELDS if name not in payload
+        )
+        if missing:
+            raise ValueError(
+                f"{origin}: missing required field(s) "
+                + ", ".join(missing)
+                + "; a brand row must state "
+                + ", ".join(BRAND_UNIVERSE_FIELDS)
+            )
+        try:
+            entry = BrandUniverseEntry(
+                brand_id=payload["brand_id"],
+                brand_name=payload["brand_name"],
+                source_ids=payload["source_ids"],
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"{origin}: {error}") from error
+        if entry.brand_id in seen_ids:
+            raise ValueError(f"{origin}: duplicate brand_id {entry.brand_id}")
+        if entry.brand_name in seen_names:
+            raise ValueError(
+                f"{origin}: duplicate brand_name {entry.brand_name}; two IDs "
+                "sharing one display name make the published cohort count "
+                "disagree with the names a reader can see"
+            )
+        seen_ids.add(entry.brand_id)
+        seen_names.add(entry.brand_name)
+        brands.append(entry)
+    return tuple(brands)
 
 
 def _build_assertions(
@@ -1415,16 +1823,23 @@ def discover_registry_root(root: object) -> DiscoveryResult:
     # twice, and never counted toward `discovered_item_count`.
     declared_blocked: list[BlockedSource] = []
     declared_denominator: list[SourceDenominatorEntry] = []
+    brand_universe: tuple[BrandUniverseEntry, ...] = ()
     seen_sources = {entry.source_id for entry in denominator}
     for relative, path in denominator_files:
         if relative == BRAND_UNIVERSE_FILENAME:
-            _refuse_undefined_brand_records(path, relative)
+            brand_universe = _read_brand_universe(path, relative)
             continue
         extra_blocked, extra_entries = _read_declared_denominator(
             path, relative, seen_sources
         )
         declared_blocked.extend(extra_blocked)
         declared_denominator.extend(extra_entries)
+    # Cross-file, so it runs once both files have been read. The same rule is
+    # an invariant of `CoverageSnapshot`; this call is what lets the refusal
+    # name the two files a reader has to edit.
+    _require_brand_source_agreement(
+        brand_universe, denominator + tuple(declared_denominator)
+    )
 
     for relative, path in item_files:
         for line_number, payload in _read_jsonl(path, relative):
@@ -1498,6 +1913,7 @@ def discover_registry_root(root: object) -> DiscoveryResult:
         source_denominator=denominator + tuple(declared_denominator),
         vault=vault,
         source_bytes=stored,
+        brand_universe=brand_universe,
     )
 
 
@@ -1520,4 +1936,5 @@ def build_snapshot(root: object) -> CoverageSnapshot:
         blocked_sources=discovered.blocked_sources,
         source_denominator=discovered.source_denominator,
         evidence_gate_findings=findings,
+        brand_universe=discovered.brand_universe,
     )
