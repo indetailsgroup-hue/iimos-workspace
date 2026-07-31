@@ -18,7 +18,6 @@ export interface BoltDiagLineInput {
  */
 export function logBoltDiagLine(input: BoltDiagLineInput): void {
   const { pairKeyV2, cornerType, dot_toPocket, dot_modelFwd } = input;
-  // eslint-disable-next-line no-console
   console.log(
     `[BOLT-DIAG] ${pairKeyV2} ${cornerType} dot_toPocket=${dot_toPocket.toFixed(3)} dot_modelFwd=${dot_modelFwd.toFixed(3)}`,
   );

@@ -87,7 +87,6 @@ function clamp(value: number, min: number, max: number): number {
  */
 function warnClamped(what: string, requested: number, applied: number): void {
   if (import.meta.env?.DEV) {
-    // eslint-disable-next-line no-console
     console.warn(
       `[handlePlacement] ${what}: requested ${requested}mm falls off the panel; clamped to ${applied}mm.`
     );

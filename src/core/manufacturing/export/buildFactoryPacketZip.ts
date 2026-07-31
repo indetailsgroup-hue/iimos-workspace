@@ -73,7 +73,6 @@ export async function buildFactoryPacketZip(
   options?: ZipOptions
 ): Promise<ZipResult> {
   // Dynamically import JSZip (browser-compatible)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const JSZip = (await import("jszip")).default;
 
   const zip = new JSZip();
@@ -252,7 +251,6 @@ export async function extractManifestFromZip(
   blob: Blob,
   manifestPath: string = "manifest.toolpath.v1.json"
 ): Promise<string | null> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const JSZip = (await import("jszip")).default;
 
   const zip = await JSZip.loadAsync(blob);
