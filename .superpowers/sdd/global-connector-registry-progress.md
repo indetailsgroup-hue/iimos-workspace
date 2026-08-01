@@ -790,3 +790,165 @@ These are recorded without softening, because each one bounds what the Task 8 ev
 - Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.
 - No push, merge, rebase, or branch change was performed.
 - Task 9 is next, has not started, has no brief yet, and cannot begin until the plan conflict recorded above is resolved by owner ruling.
+
+## Task 9 closeout — 1 August 2026
+
+**Status:** COMPLETE
+**Task 9 base:** `26d344e3edafb7a1e693c358087c001d51c0373b`
+**Implementation commit:** `b50b0c96e5b7d22e6a78d067f11bcba0bafdff3f` — `feat(registry): declare the first cohort as work, not as coverage`
+**Correction:** `f0b6809d11c3983c3a564d8590b5a71a6be841a4` — `docs(connectors): retract "mutation-tested guard" from the Task 8 closeout`
+**Fix wave 1:** `b7cd54ab3bc5fc4b804fe036fcae8e0d85cb3e7f` — `fix(registry): make a release digest attest the cohort it measured`
+**Correction:** `45302686ca656d05d45e3a2f1c587246b0355ca7` — `docs(connectors): record that Task 9 made the retracted phrase true`
+**Fix wave 2:** `277d508b71cfd4c817560b333caa9db3fab65699` — `fix(registry): guard the class, not the three named instances`
+**Fix wave 3:** `79e76062a0a772c3fa938e5e53f683e76d5d8a6d` — `fix(registry): narrow every claim to what a test can attack`
+**Fix wave 4:** `a46c5e85ded93a7a3135acd784d315e6a09e070f` — `fix(registry): put the duplicate-label refusal on the publication path`
+**Fix wave 5:** `15425a7d8b5a198215373717b5d828a8a0b595fa` — `fix(registry): make the publication guard's own claims attackable`
+**Fix wave 6:** `33782a92f499be4edd3336cfb0efbc9b08f91a22` — `fix(registry): bind every prose claim to a test that can falsify it`
+**Fix wave 7:** `8ad41b28eca56eed6d5ca11311a95bfe12f05bd4` — `fix(registry): delete the claims instead of propping them up`
+**Fix wave 8:** `6cdff0f0bfda093666d7ce5527e6494249c943cb` — `docs(registry): narrow the cyclic residual to the shape it describes`
+**Fix wave 9 and accepted HEAD:** `9fa928ac0ccb1d17bba455612966195242a22213` — `docs(registry): state the cycle rule by what stops the walk, not by container`
+
+**Current boundary:** Task 10 is next, has not started, and has no brief yet. This closeout supersedes only the Task 8 current-boundary statement that recorded Task 9 as next, not started, or blocked by a plan conflict; all earlier Task 1–8 statements remain preserved as historical snapshots. The plan-versus-implementation conflict that Task 8's closeout recorded as blocking Task 9 was resolved by owner ruling and is published at `docs/reports/2026-07-31-global-connector-registry-owner-rulings.*`.
+
+### Exact tracked Task 9 scope
+
+`git diff --name-status 26d344e3..9fa928ac` over product paths returns exactly eleven entries:
+
+| Status | Path | Insertions | Deletions |
+| --- | --- | ---: | ---: |
+| Modified | `packages/component-master/src/monolith_component_master/coverage.py` | 1,327 | 110 |
+| Modified | `packages/component-master/src/monolith_component_master/releases.py` | 261 | 2 |
+| Added | `tests/component_master/registry/test_first_cohort_denominator.py` | 4,265 | 0 |
+| Modified | `tests/component_master/registry/test_release.py` | 199 | 21 |
+| Added | `data/component-master/registry/v1/brand-universe.jsonl` | 12 | 0 |
+| Added | `data/component-master/registry/v1/source-denominator.jsonl` | 14 | 0 |
+| Modified | `data/component-master/registry/v1/coverage-snapshot.json` | 1 | 1 |
+| Added | `docs/reports/2026-07-31-global-connector-registry-owner-rulings.en.md` | 117 | 0 |
+| Added | `docs/reports/2026-07-31-global-connector-registry-owner-rulings.th.md` | 103 | 0 |
+| Added | `docs/reports/2026-07-31-global-connector-registry-owner-rulings.en.html` | 113 | 0 |
+| Added | `docs/reports/2026-07-31-global-connector-registry-owner-rulings.th.html` | 112 | 0 |
+
+Total 6,524 insertions and 134 deletions. `evidence.py` was not modified, as every brief in the range required. No owner governance-root, nested product-runtime, seed-data, verifier or export path was changed. No push, merge, rebase, or branch change was performed at any point in Task 9.
+
+### Exact first-cohort and publication contract
+
+- **The declared cohort is twelve brands and fourteen sources, and it is a chosen list, not a market.** `first_cohort_brands_with_a_source_read` carries the denominator `declared_first_cohort_brands`, and the published statement says in words that the brands are *"a first cohort selected for review, not the connector market"* and that *"a source named here has not been fetched, read, or rights-reviewed by this measurement."* No count in this module has the number of connector brands in the world as a denominator.
+- **The published `coverage_statement` at accepted HEAD reads, in full:** *"0 of 0 discovered registry items classified; 0 of 0 counted as verified with backing evidence; 0 of 0 verified claims refused by the evidence gate; 0 of 14 named sources readable and hash-verified; 14 of 14 named sources declared but not yet read; 0 of 14 named sources blocked; 0 of 12 declared first-cohort brands with at least one source read. The registry root holds zero records, so this release covers nothing. The declared brands are a first cohort selected for review, not the connector market; a source named here has not been fetched, read, or rights-reviewed by this measurement. Measured by coverage.discover\_registry\_root over the named registry root; no figure here is a market-wide claim."*
+- **Source counts partition their denominator.** Registered, declared-unread and blocked sum to the fourteen declared sources: `0 + 14 + 0 == 14`.
+- **`CoverageSnapshot.counts` is derived, not hand-maintained.** The record enumerates its own count-bearing descriptors by introspection over the full MRO — plain `property` and `functools.cached_property`, returning either a `MeasuredCount` or a nonempty mapping whose values are all `MeasuredCount`. Twenty-five count labels are published at accepted HEAD.
+- **Publication compares the record against the payload, in both directions and on all five fields.** `snapshot_payload` — and therefore `build_release_from_snapshot` and `build_release` — refuses a payload whose count objects diverge from the record's enumeration: a count the record holds and the payload omits, a count the payload holds and the record does not, or a count republished under its label with a different `count`, `denominator`, `denominator_label` or `measured_by`. Two counts sharing one label are refused on both sides.
+- **A declared source URL is refused if a reviewer and a fetcher would disagree about it.** Userinfo in the authority is refused; an authority naming no host is refused; text after a bracketed IP-literal's closing `]` that neither is empty nor begins with `:` is refused, because `https://[::1]evil.invalid/x` shows a reader `evil.invalid` while a conforming fetcher reaches `::1`.
+- **A published brand name is refused by Unicode general category, plus an explicit 268-code-point transcription** of Unicode 16.0.0 `Default_Ignorable_Code_Point` restricted to members no category rule already refuses, plus U+2800. Leading and trailing U+0020 are trimmed before validation and before storage, so `'X'` and `'X '` collide in both duplicate checks. Names are stored in NFC.
+- **Release identity is unchanged and re-pinned:** the payload is 8,930 bytes with `payload_sha256` `72ccc63ff4a3fd716adf7f3c10804d3ba7a5b179011134588b30bf68297fd788`; `source_denominator_sha256` is `cdb61e57ffffd1877125258bc7004ba6b614144b65d3637c2d45c7e4abb40ced`.
+
+### Wave provenance — which change came from where
+
+| Wave | Origin | What it closed |
+| --- | --- | --- |
+| Implementation `b50b0c96` | Implementer | The first-cohort denominator, the brand universe and the source denominator, declared as work rather than as coverage. |
+| `f0b6809d`, `45302686` | Orchestrator | Two corrections to the Task 8 closeout: one retracting "mutation-tested guard", one recording that Task 9 subsequently made the retracted phrase true. |
+| Fix wave 1 `b7cd54ab` | Review-driven | A release digest that attests the cohort it measured. |
+| Fix wave 2 `277d508b` | Review-driven | Three fixes applied to named instances while the prose generalised to the class. |
+| Fix wave 3 `79e76062` | Review-driven | H1–H4. Every completeness claim in the module made either true or narrower; the residual-list pattern extended to every rule touched. |
+| Fix wave 4 `a46c5e85` | Two-vendor review | W1–W7. The duplicate-label refusal moved onto the publication path; `[::1]evil.invalid` refused; `cached_property` enrolled; the port and `Zs` claims narrowed to what is enforced. |
+| Fix wave 5 `15425a7d` | Two-vendor review | F1–F5. The collector widened to `list`; the `unexpected` and `changed` arms driven to refusal; the bracket boundary attacked from the admitted side; the guard given its own residual section. |
+| Fix wave 6 `33782a92` | Two-vendor review | G1–G8. The "unreachable by construction" claim corrected; a count no longer a leaf; `denominator_label` compared; every fragment-only prose test audited. |
+| Fix wave 7 `8ad41b28` | Two-vendor review | H1–H7. Five claims deleted rather than propped up; the traversal depth boundary bound by a loop. |
+| Fix wave 8 `6cdff0f0` | Two-vendor review | J1–J5. The cyclic residual narrowed; two residual preambles given their exception; two unsupported clauses deleted. |
+| Fix wave 9 `9fa928ac` | **Orchestrator** | The cycle rule restated by what stops the walk rather than by container kind, and the deletion guard repinned. **Authored by the orchestrator, not a fresh implementer, and not independently reviewed — see the limitations.** |
+
+### Honest TDD and independent-review chronology
+
+Every review below was performed by a fresh reader against the commit named, and every verdict is recorded as returned.
+
+| Stage | Verdict / result | Disposition |
+| --- | --- | --- |
+| Implementation `b50b0c96` | — | The first cohort declared as work. |
+| Reviews through wave 3 | `NEEDS_FIXES` ×3 | Waves 1–3. Wave 3 found that wave 2 had committed the defect shape it was convened to close, three more times, inside its own fixes. |
+| Two independent reviews of `79e76062` | `NEEDS_FIXES` ×2 | W1–W7. **Each vendor found defects the other missed** — one found W1 and W3, the other W4 and W6. |
+| Two independent reviews of `a46c5e85` | `NEEDS_FIXES` ×2 | F1–F5. Both independently found the same list-container hole and the same untested guard arms. |
+| Two independent reviews of `15425a7d` | `NEEDS_FIXES` ×2 | G1–G8. The claim that two guard arms were unreachable *by construction* was false, and was falsified through the public path. |
+| Two independent reviews of `33782a92` | `NEEDS_FIXES` ×2 | H1–H7. The precedence claim wave 6 wrote was falsified by the mechanism wave 6 itself introduced. |
+| Two independent reviews of `8ad41b28` | `NEEDS_FIXES` ×2 | J1–J5. One reviewer's cycle table drove wave 8; one reviewer's static gap claim was **falsified by the orchestrator** and deliberately not acted on. |
+| Two independent reviews of `6cdff0f0` | One `ACCEPTED`, one `NEEDS_FIXES` | Both found the same imprecision in the cyclic residual and split on whether it warranted another wave. Fixed in wave 9. |
+| Review of `9fa928ac` | **None** | Recorded in the limitations. |
+
+**The recurring defect shape, stated rather than implied.** Six times across waves 3 to 6 this module shipped prose claiming more than the code delivered, guarded by a test that could not falsify it — because the test had been written *from* the claim. The suites were green each time. Two working rules were added in response and are now in force in the module's own docstrings and tests:
+
+1. A docstring may state a class only if a test attacks the class.
+2. Every rule carries a *what this does not close* section in its own docstring, with a test per named residual asserting the residual is genuinely still open.
+3. A test written *from* prose can never falsify it.
+4. **A test whose only assertion is that a docstring contains a substring may never be the test a prose claim is credited to.** Added at wave 6, after the shape was committed for the sixth time — inside the test written to prevent it. Fragment assertions survive only as secondary guards against a docstring being deleted wholesale.
+5. **Prefer deleting a claim to propping it up.** Added at wave 7, after each wave's new prose had become the next wave's findings. Wave 7 closed five of its seven findings by deletion.
+
+**The shape is not proven extinct.** Wave 8's own narrowing was still imprecise and wave 9 corrected it. What changed materially is that the behaviour is now mutation-bound where it was not: at wave 4 the guard's arms could be deleted with the suite staying green, and at accepted HEAD they cannot.
+
+### Verification rerun at this ledger closeout
+
+Every figure below was rerun by the orchestrator during this closeout against accepted HEAD `9fa928ac`, not carried from any task or review report.
+
+- Full dynamic discovery: `909 passed`, exit `0`.
+- Verifier: `overall_passed: true`, `check_count 13`, `passed_count 13`, `failed_count 0`.
+- A freshly built release payload is byte-identical to the committed `data/component-master/registry/v1/coverage-snapshot.json`: 8,930 bytes, `payload_sha256` `72ccc63ff4a3fd716adf7f3c10804d3ba7a5b179011134588b30bf68297fd788`, `source_denominator_sha256` `cdb61e57ffffd1877125258bc7004ba6b614144b65d3637c2d45c7e4abb40ced`.
+- Twenty-five count labels; twelve brands; fourteen sources; source counts partition `0 + 14 + 0 == 14`.
+- **Mutation battery, each mutant applied to accepted HEAD, observed, then restored with both source files verified byte-identical afterward:**
+
+| Mutation | Result |
+| --- | --- |
+| Delete the collector's duplicate-label arm | 2 failed, 907 passed |
+| Narrow the collector walk to tuples only | 4 failed, 905 passed |
+| Delete the `unexpected` comparison arm | 2 failed, 907 passed |
+| Delete the `changed` comparison arm | 2 failed, 907 passed |
+| Restore the count-as-leaf early `return` | 2 failed, 907 passed |
+| Delete the bracket-suffix refusal | 1 failed, 908 passed |
+| Depth-cap the post-count walk at two levels | 2 failed, 907 passed |
+| Skip a mapping that is literally its own value | 1 failed, 908 passed |
+| Revert the cyclic bullet to the wording wave 8 retracted | 1 failed, 908 passed |
+
+- `git status --porcelain` empty at `9fa928ac0ccb1d17bba455612966195242a22213`.
+
+### Accepted evidence integrity and cleanup
+
+The Task 9 evidence trail is now **tracked in the repository** rather than living only on disk, by commit `37ab28bc` — see the note on that change in the limitations. Brief digests at this closeout, first sixteen hex characters:
+
+| Brief | Size | SHA-256 |
+| --- | ---: | --- |
+| `task-9-brief.md` | 10,898 B | `dee3a9380b0927af` |
+| `task-9-fix-wave-brief.md` | 9,859 B | `23f5c00919041341` |
+| `task-9-fix-wave-2-brief.md` | 9,534 B | `f255789792cc8380` |
+| `task-9-fix-wave-3-brief.md` | 9,481 B | `83b54b79d58a2a22` |
+| `task-9-fix-wave-4-brief.md` | 12,796 B | `0750d1e8b3fe9c6c` |
+| `task-9-fix-wave-5-brief.md` | 8,628 B | `2c28d7f418cd56f4` |
+| `task-9-fix-wave-6-brief.md` | 11,384 B | `969a60244dafac64` |
+| `task-9-fix-wave-7-brief.md` | 10,747 B | `a0a80a78de50f3e0` |
+| `task-9-fix-wave-8-brief.md` | 7,907 B | `1fd70256fe4ae343` |
+
+Every wave-4-to-8 implementer report and review-package diff is tracked alongside them. Wave 9 has no separate brief or report; it is described in its own commit message and here.
+
+### Stated limitations
+
+These are recorded without softening, because each one bounds what the Task 9 evidence can support.
+
+- **Fix wave 9 was authored by the orchestrator and never independently reviewed.** It is a three-line prose swap plus two deletion-guard fragments, on wording both reviewers of `6cdff0f0` had converged on, and its verification was not shortened — the full suite and the whole mutation battery were rerun. But every other wave in this range passed through a fresh reader and this one did not. It is the single gap in the range's review chain.
+- **Every commit in waves 4 to 9 was created by the orchestrator, not by an implementer.** The implementer sandbox could not write the linked worktree's git index. Implementers wrote the code; the orchestrator inspected the range, ran the suite, ran the mutations, and committed. The orchestrator/implementer distinction in the provenance table above therefore rests on the session record and these ledger statements, not on git author metadata — every commit in the range carries one identity as both author and committer. This is the same limitation Task 8's closeout records for its own waves.
+- **Wave 6's implementer report ends BLOCKED with zero observed mutation output**, because that implementer's sandbox could not launch Python at all. The evidence behind `33782a92` was produced by the orchestrator. The report carries a dated correction saying so, and it is repeated here, because a reader of that report alone would conclude the evidence does not exist. That report is a correct output, not a failed one: it declined to predict results it had not observed.
+- **One reviewer finding was falsified rather than fixed, and is recorded so it cannot return as received wisdom.** Reviewing `6cdff0f0`, a reviewer that could not launch Python reasoned statically that the traversal depth loop left a gap — that a walk skipping tuple-valued immediate children of a recognised count, or walking only `measured_by` after recognition, would survive the suite. Both mutants were run: `1 failed / 908 passed` and `70 failed / 839 passed`. Both are caught. The same reviewer, by the same static method, produced the six-shape cycle table that drove wave 9 and reproduced perfectly. Static review is neither reliably wrong nor reliably right, and was verified in both directions.
+- **An implementer refused an instruction from its brief and was correct to.** Wave 7's brief required the cyclic residual to state that no publication path can produce a cyclic payload. The implementer probed the clause, falsified it — a duck-typed descriptor carrying a self-referential `measured_by` drives `snapshot_payload` to `RecursionError` — declined to write it, and recorded the probe. The orchestrator reproduced it and ruled the brief wrong.
+- **A cyclic payload is refused by stack exhaustion, not by a rule.** `RecursionError` names no field and gives no reason, unlike every other refusal in this path. It is recorded as a residual, not fixed: `canonical_json_bytes` exhausts the stack on the same payload, so cycle detection would change only the exception text.
+- **The `nonempty` half of the count-enrolment condition is semantically dead.** `all()` over an empty mapping is true and an empty mapping contributes no counts either way, so no test can attack it. The prose is vacuously true and is stated rather than removed from the code.
+- **Task 1's baseline manifest still publishes 77 path-and-SHA-256 pairs, none of which reproduce on a fresh checkout.** Unruled, unchanged by Task 9, and carried forward from Task 8's closeout.
+- **A file at the registry root that is not `*.jsonl` is still skipped silently.** Inherited from Task 8 and deliberately unfixed. Task 9 wrote two `.jsonl` files into that root and did not change the discovery glob.
+- **The census families and the twelve brands are constructed by hand, not sampled from the field.** They bound the rules against imagined shapes. No source named in `source-denominator.jsonl` has been fetched, read, or rights-reviewed by this measurement.
+- **Determinism was proven on one interpreter and one operating system.** Byte identity was confirmed across separate processes and reversed input order on Windows with CPython on this host only. Cross-platform and cross-interpreter byte identity is unproven.
+- **The 268-code-point Unicode transcription is a transcription, not a derivation.** `unicodedata` exposes no `Default_Ignorable_Code_Point` accessor, so nothing in this package can re-derive the list or prove it complete. Both independent reviewers verified it as complete and correct for Unicode 16.0.0 by deriving the property two independent ways; the pinned release fails loudly rather than skipping when the runtime moves.
+
+### Task 9 authority boundary
+
+- Task 9 declares a first cohort of brands and sources as **work not yet done**. It publishes no coverage of the connector market and no count with a market-wide denominator.
+- **The registry root still holds zero records and every release built from it covers nothing.** The two files Task 9 added are a declared brand universe and a declared source denominator; neither is measured item data.
+- **A source named in the denominator has not been fetched, read, or rights-reviewed.** Fourteen of fourteen are `DECLARED_UNREAD`.
+- Task 9 signs nothing. It grants no manufacturing, freeze, export, or production authority.
+- It is not a populated worldwide registry, release signing, network access, runtime integration, structural or physical qualification, coupon testing, machine capability, first-article inspection, field validation, owner ratification, production readiness, or manufacturing readiness.
+- NOT-FOR-PRODUCTION remains active. Software evidence does not grant manufacturing, installation, operational, or production authority.
+- Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.
+- Task 10 is next, has not started, and has no brief yet.

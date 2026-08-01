@@ -790,3 +790,165 @@ Implementation commit สร้างทั้งสี่พาธ ส่วน
 - Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data
 - ไม่ได้ push, merge, rebase หรือเปลี่ยน branch
 - งานที่ 9 เป็นงานถัดไป ยังไม่ได้เริ่ม ยังไม่มี brief และเริ่มไม่ได้จนกว่าความขัดแย้งของแผนที่บันทึกไว้ข้างต้นจะได้รับคำตัดสินจากเจ้าของ
+
+## ปิดงานที่ 9 — 1 สิงหาคม 2026
+
+**สถานะ:** COMPLETE
+**Base ของงานที่ 9:** `26d344e3edafb7a1e693c358087c001d51c0373b`
+**Commit การพัฒนา:** `b50b0c96e5b7d22e6a78d067f11bcba0bafdff3f` — `feat(registry): declare the first cohort as work, not as coverage`
+**การแก้ไขข้อความ:** `f0b6809d11c3983c3a564d8590b5a71a6be841a4` — `docs(connectors): retract "mutation-tested guard" from the Task 8 closeout`
+**Fix wave 1:** `b7cd54ab3bc5fc4b804fe036fcae8e0d85cb3e7f` — `fix(registry): make a release digest attest the cohort it measured`
+**การแก้ไขข้อความ:** `45302686ca656d05d45e3a2f1c587246b0355ca7` — `docs(connectors): record that Task 9 made the retracted phrase true`
+**Fix wave 2:** `277d508b71cfd4c817560b333caa9db3fab65699` — `fix(registry): guard the class, not the three named instances`
+**Fix wave 3:** `79e76062a0a772c3fa938e5e53f683e76d5d8a6d` — `fix(registry): narrow every claim to what a test can attack`
+**Fix wave 4:** `a46c5e85ded93a7a3135acd784d315e6a09e070f` — `fix(registry): put the duplicate-label refusal on the publication path`
+**Fix wave 5:** `15425a7d8b5a198215373717b5d828a8a0b595fa` — `fix(registry): make the publication guard's own claims attackable`
+**Fix wave 6:** `33782a92f499be4edd3336cfb0efbc9b08f91a22` — `fix(registry): bind every prose claim to a test that can falsify it`
+**Fix wave 7:** `8ad41b28eca56eed6d5ca11311a95bfe12f05bd4` — `fix(registry): delete the claims instead of propping them up`
+**Fix wave 8:** `6cdff0f0bfda093666d7ce5527e6494249c943cb` — `docs(registry): narrow the cyclic residual to the shape it describes`
+**Fix wave 9 และเป็น HEAD ที่รับแล้ว:** `9fa928ac0ccb1d17bba455612966195242a22213` — `docs(registry): state the cycle rule by what stops the walk, not by container`
+
+**ขอบเขตปัจจุบัน:** งานที่ 10 เป็นงานถัดไป ยังไม่ได้เริ่ม และยังไม่มี brief การปิดงานนี้แทนที่เฉพาะประโยคขอบเขตปัจจุบันของงานที่ 8 ที่บันทึกว่างานที่ 9 เป็นงานถัดไป ยังไม่ได้เริ่ม หรือติดขัดด้วยความขัดแย้งของแผนเท่านั้น ประโยคทั้งหมดของงานที่ 1–8 ยังคงถูกเก็บรักษาไว้เป็น snapshot ทางประวัติศาสตร์ ความขัดแย้งระหว่างแผนกับ implementation ที่การปิดงานที่ 8 บันทึกไว้ว่าขวางงานที่ 9 อยู่นั้น ได้รับการแก้ไขด้วยคำตัดสินของเจ้าของแล้ว และเผยแพร่ไว้ที่ `docs/reports/2026-07-31-global-connector-registry-owner-rulings.*`
+
+### ขอบเขตที่ติดตามได้จริงของงานที่ 9
+
+`git diff --name-status 26d344e3..9fa928ac` บนเส้นทางผลิตภัณฑ์ให้ผลลัพธ์สิบเอ็ดรายการพอดี:
+
+| สถานะ | เส้นทาง | เพิ่ม | ลบ |
+| --- | --- | ---: | ---: |
+| แก้ไข | `packages/component-master/src/monolith_component_master/coverage.py` | 1,327 | 110 |
+| แก้ไข | `packages/component-master/src/monolith_component_master/releases.py` | 261 | 2 |
+| เพิ่ม | `tests/component_master/registry/test_first_cohort_denominator.py` | 4,265 | 0 |
+| แก้ไข | `tests/component_master/registry/test_release.py` | 199 | 21 |
+| เพิ่ม | `data/component-master/registry/v1/brand-universe.jsonl` | 12 | 0 |
+| เพิ่ม | `data/component-master/registry/v1/source-denominator.jsonl` | 14 | 0 |
+| แก้ไข | `data/component-master/registry/v1/coverage-snapshot.json` | 1 | 1 |
+| เพิ่ม | `docs/reports/2026-07-31-global-connector-registry-owner-rulings.en.md` | 117 | 0 |
+| เพิ่ม | `docs/reports/2026-07-31-global-connector-registry-owner-rulings.th.md` | 103 | 0 |
+| เพิ่ม | `docs/reports/2026-07-31-global-connector-registry-owner-rulings.en.html` | 113 | 0 |
+| เพิ่ม | `docs/reports/2026-07-31-global-connector-registry-owner-rulings.th.html` | 112 | 0 |
+
+รวม 6,524 บรรทัดที่เพิ่ม และ 134 บรรทัดที่ลบ `evidence.py` ไม่ถูกแก้ไข ตามที่ brief ทุกฉบับในช่วงนี้กำหนด ไม่มีการเปลี่ยนแปลงเส้นทาง governance-root ของเจ้าของ, product-runtime ที่ซ้อนอยู่, seed-data, verifier หรือ export ใด ๆ ไม่มีการ push, merge, rebase หรือเปลี่ยน branch ณ จุดใดของงานที่ 9
+
+### สัญญาของ first cohort และการเผยแพร่ที่แน่นอน
+
+- **cohort ที่ประกาศไว้คือ 12 แบรนด์และ 14 แหล่งข้อมูล และเป็นรายการที่ถูกเลือก ไม่ใช่ตลาด** `first_cohort_brands_with_a_source_read` มีตัวส่วนชื่อ `declared_first_cohort_brands` และประโยคที่เผยแพร่ระบุเป็นคำพูดว่าแบรนด์เหล่านี้เป็น *"first cohort ที่เลือกมาเพื่อทบทวน ไม่ใช่ตลาด connector"* และว่า *"แหล่งข้อมูลที่ระบุชื่อไว้ที่นี่ยังไม่ถูกดึง อ่าน หรือทบทวนสิทธิ์โดยการวัดนี้"* ไม่มีตัวนับใดในโมดูลนี้ใช้จำนวนแบรนด์ connector ทั้งโลกเป็นตัวส่วน
+- **`coverage_statement` ที่เผยแพร่ ณ HEAD ที่รับแล้ว อ่านได้เต็ม ๆ ว่า:** *"0 of 0 discovered registry items classified; 0 of 0 counted as verified with backing evidence; 0 of 0 verified claims refused by the evidence gate; 0 of 14 named sources readable and hash-verified; 14 of 14 named sources declared but not yet read; 0 of 14 named sources blocked; 0 of 12 declared first-cohort brands with at least one source read. The registry root holds zero records, so this release covers nothing. The declared brands are a first cohort selected for review, not the connector market; a source named here has not been fetched, read, or rights-reviewed by this measurement. Measured by coverage.discover\_registry\_root over the named registry root; no figure here is a market-wide claim."*
+- **ตัวนับแหล่งข้อมูลแบ่งตัวส่วนของตัวเองครบพอดี** registered, declared-unread และ blocked รวมกันได้เท่ากับแหล่งข้อมูลที่ประกาศไว้ 14 รายการ: `0 + 14 + 0 == 14`
+- **`CoverageSnapshot.counts` เป็นสิ่งที่ derive มา ไม่ใช่รายการที่พิมพ์ด้วยมือ** เรคอร์ดนับ descriptor ที่ถือตัวนับของตัวเองด้วย introspection ตลอด MRO — ทั้ง `property` ธรรมดาและ `functools.cached_property` ที่คืน `MeasuredCount` หรือคืน mapping ที่ไม่ว่างและทุกค่าเป็น `MeasuredCount` มี 25 count label ที่เผยแพร่ ณ HEAD ที่รับแล้ว
+- **การเผยแพร่เทียบเรคอร์ดกับ payload ทั้งสองทิศทางและครบทั้งห้า field** `snapshot_payload` — และดังนั้น `build_release_from_snapshot` กับ `build_release` — ปฏิเสธ payload ที่ count object ต่างไปจากการนับของเรคอร์ด: count ที่เรคอร์ดมีแต่ payload ไม่มี, count ที่ payload มีแต่เรคอร์ดไม่มี, หรือ count ที่เผยแพร่ซ้ำใต้ label เดิมแต่ `count`, `denominator`, `denominator_label` หรือ `measured_by` ต่างออกไป count สองตัวที่ใช้ label เดียวกันถูกปฏิเสธทั้งสองฝั่ง
+- **URL ของแหล่งข้อมูลที่ประกาศไว้จะถูกปฏิเสธ ถ้าคนอ่านกับเครื่องที่ไปดึงจะเห็นไม่ตรงกัน** userinfo ใน authority ถูกปฏิเสธ, authority ที่ไม่ระบุ host ถูกปฏิเสธ, ข้อความหลังวงเล็บปิด `]` ของ IP-literal ที่ไม่ว่างและไม่ได้ขึ้นต้นด้วย `:` ถูกปฏิเสธ เพราะ `https://[::1]evil.invalid/x` แสดงให้คนอ่านเห็น `evil.invalid` ขณะที่เครื่องที่ทำตามมาตรฐานจะไปที่ `::1`
+- **ชื่อแบรนด์ที่เผยแพร่ถูกปฏิเสธด้วย Unicode general category บวกกับการถอดความ 268 code point** ของคุณสมบัติ `Default_Ignorable_Code_Point` ใน Unicode 16.0.0 เฉพาะสมาชิกที่กฎ category ยังไม่ได้ปฏิเสธ บวก U+2800 U+0020 นำหน้าและต่อท้ายถูกตัดก่อนการตรวจสอบและก่อนการจัดเก็บ ดังนั้น `'X'` กับ `'X '` ชนกันในการตรวจซ้ำทั้งสองจุด ชื่อถูกจัดเก็บในรูป NFC
+- **อัตลักษณ์ของ release ไม่เปลี่ยนและถูกตรึงใหม่:** payload มีขนาด 8,930 ไบต์ `payload_sha256` คือ `72ccc63ff4a3fd716adf7f3c10804d3ba7a5b179011134588b30bf68297fd788` และ `source_denominator_sha256` คือ `cdb61e57ffffd1877125258bc7004ba6b614144b65d3637c2d45c7e4abb40ced`
+
+### ที่มาของแต่ละ wave — การเปลี่ยนแปลงใดมาจากไหน
+
+| Wave | ที่มา | ปิดอะไร |
+| --- | --- | --- |
+| การพัฒนา `b50b0c96` | Implementer | ตัวส่วนของ first cohort, brand universe และ source denominator ประกาศไว้ในฐานะงานที่ยังไม่ได้ทำ ไม่ใช่ความครอบคลุม |
+| `f0b6809d`, `45302686` | Orchestrator | การแก้ไขข้อความสองครั้งในการปิดงานที่ 8: ครั้งหนึ่งถอนคำว่า "mutation-tested guard" อีกครั้งบันทึกว่างานที่ 9 ทำให้วลีที่ถอนไปนั้นเป็นจริงในภายหลัง |
+| Fix wave 1 `b7cd54ab` | จากการรีวิว | ทำให้ digest ของ release รับรอง cohort ที่มันวัดจริง |
+| Fix wave 2 `277d508b` | จากการรีวิว | การแก้สามจุดที่ใช้กับ instance ที่ระบุชื่อ ขณะที่ prose ของตัวเองพูดครอบคลุมทั้ง class |
+| Fix wave 3 `79e76062` | จากการรีวิว | H1–H4 ทุกข้ออ้างเรื่องความครบถ้วนในโมดูลถูกทำให้จริงหรือแคบลง และรูปแบบรายการ residual ถูกขยายไปยังทุกกฎที่แตะ |
+| Fix wave 4 `a46c5e85` | รีวิวสองค่าย | W1–W7 ย้ายการปฏิเสธ label ซ้ำขึ้นมาบนเส้นทางเผยแพร่, ปฏิเสธ `[::1]evil.invalid`, รับ `cached_property` เข้าการนับ, ทำให้ข้ออ้างเรื่อง port และ `Zs` แคบลงเท่าที่บังคับใช้จริง |
+| Fix wave 5 `15425a7d` | รีวิวสองค่าย | F1–F5 ขยาย collector ให้เดิน `list`, ขับแขน `unexpected` และ `changed` จนถึงการปฏิเสธจริง, โจมตีขอบเขตวงเล็บจากฝั่งที่ยอมรับ, ให้ guard มีหัวข้อ residual ของตัวเอง |
+| Fix wave 6 `33782a92` | รีวิวสองค่าย | G1–G8 แก้ข้ออ้าง "unreachable by construction", count ไม่เป็น leaf อีกต่อไป, เทียบ `denominator_label`, ตรวจสอบเทสต์ prose แบบ fragment-only ทุกตัว |
+| Fix wave 7 `8ad41b28` | รีวิวสองค่าย | H1–H7 ลบข้ออ้างห้าข้อแทนที่จะหาอะไรมาค้ำ, ผูกขอบเขตความลึกของการเดินด้วย loop |
+| Fix wave 8 `6cdff0f0` | รีวิวสองค่าย | J1–J5 ทำให้ residual เรื่อง cycle แคบลง, ให้คำนำ residual สองแห่งมีข้อยกเว้นของตัวเอง, ลบสองวลีที่ไม่มีหลักฐานรองรับ |
+| Fix wave 9 `9fa928ac` | **Orchestrator** | ระบุกฎเรื่อง cycle ใหม่ด้วยสิ่งที่หยุดการเดิน แทนที่จะระบุด้วยชนิดของ container และตรึง deletion guard ใหม่ **เขียนโดย orchestrator ไม่ใช่ implementer คนใหม่ และไม่ผ่านการรีวิวอิสระ — ดูหัวข้อข้อจำกัด** |
+
+### ลำดับเหตุการณ์ TDD และการรีวิวอิสระอย่างซื่อสัตย์
+
+ทุกการรีวิวด้านล่างทำโดยผู้อ่านคนใหม่ที่ commit ที่ระบุชื่อ และทุกคำตัดสินถูกบันทึกตามที่ส่งกลับมาจริง
+
+| ขั้นตอน | คำตัดสิน / ผลลัพธ์ | การจัดการ |
+| --- | --- | --- |
+| การพัฒนา `b50b0c96` | — | first cohort ถูกประกาศในฐานะงาน |
+| การรีวิวจนถึง wave 3 | `NEEDS_FIXES` ×3 | Wave 1–3 wave 3 พบว่า wave 2 ได้ก่อรูปแบบข้อบกพร่องที่มันถูกตั้งขึ้นมาเพื่อปิดซ้ำอีกสามครั้ง ภายในการแก้ของตัวเอง |
+| การรีวิวอิสระสองครั้งของ `79e76062` | `NEEDS_FIXES` ×2 | W1–W7 **แต่ละค่ายพบข้อบกพร่องที่อีกค่ายไม่พบ** — ค่ายหนึ่งพบ W1 และ W3 อีกค่ายพบ W4 และ W6 |
+| การรีวิวอิสระสองครั้งของ `a46c5e85` | `NEEDS_FIXES` ×2 | F1–F5 ทั้งสองค่ายพบช่องโหว่ list container เดียวกันและแขน guard ที่ไม่มีเทสต์เดียวกันโดยอิสระ |
+| การรีวิวอิสระสองครั้งของ `15425a7d` | `NEEDS_FIXES` ×2 | G1–G8 ข้ออ้างว่าแขน guard สองแขน unreachable *by construction* เป็นเท็จ และถูกหักล้างผ่านเส้นทางสาธารณะ |
+| การรีวิวอิสระสองครั้งของ `33782a92` | `NEEDS_FIXES` ×2 | H1–H7 ข้ออ้างเรื่องลำดับก่อนหลังที่ wave 6 เขียน ถูกหักล้างด้วยกลไกที่ wave 6 เป็นผู้สร้างขึ้นเอง |
+| การรีวิวอิสระสองครั้งของ `8ad41b28` | `NEEDS_FIXES` ×2 | J1–J5 ตาราง cycle ของ reviewer หนึ่งขับ wave 8 ส่วนข้ออ้างเรื่องช่องโหว่แบบ static ของ reviewer หนึ่ง **ถูก orchestrator หักล้าง** และจงใจไม่แก้ตาม |
+| การรีวิวอิสระสองครั้งของ `6cdff0f0` | หนึ่ง `ACCEPTED` หนึ่ง `NEEDS_FIXES` | ทั้งสองพบความไม่แม่นยำเดียวกันใน residual เรื่อง cycle และเห็นต่างกันว่าคุ้มกับอีก wave หรือไม่ แก้ใน wave 9 |
+| การรีวิวของ `9fa928ac` | **ไม่มี** | บันทึกไว้ในหัวข้อข้อจำกัด |
+
+**รูปแบบข้อบกพร่องที่เกิดซ้ำ ระบุไว้ตรง ๆ แทนที่จะปล่อยให้เป็นนัย** หกครั้งตลอด wave 3 ถึง 6 โมดูลนี้ส่งมอบ prose ที่อ้างมากกว่าที่โค้ดทำได้จริง โดยมีเทสต์ที่หักล้างมันไม่ได้คอยคุ้ม — เพราะเทสต์ถูกเขียน *จาก* ข้ออ้างนั้น suite เขียวทุกครั้ง กฎการทำงานสองข้อถูกเพิ่มขึ้นเพื่อตอบสนอง และตอนนี้บังคับใช้อยู่ใน docstring และเทสต์ของโมดูลเอง:
+
+1. docstring จะระบุ class ได้ก็ต่อเมื่อมีเทสต์โจมตี class นั้น
+2. ทุกกฎมีหัวข้อ *what this does not close* ใน docstring ของตัวเอง พร้อมเทสต์ต่อ residual แต่ละข้อที่ยืนยันว่า residual นั้นยังเปิดอยู่จริง
+3. เทสต์ที่เขียน *จาก* prose ไม่มีวันหักล้างมันได้
+4. **เทสต์ที่ assert แค่ว่า docstring มี substring ห้ามเป็นเทสต์ที่ข้ออ้างใน prose อ้างอิงถึง** เพิ่มที่ wave 6 หลังจากรูปแบบนี้ถูกก่อขึ้นเป็นครั้งที่หก — ภายในเทสต์ที่เขียนขึ้นมาเพื่อป้องกันมันเอง การ assert fragment คงอยู่ได้เฉพาะในฐานะยามชั้นรองที่กันไม่ให้ docstring ถูกลบทิ้งทั้งก้อน
+5. **ลบข้ออ้างดีกว่าหาอะไรมาค้ำ** เพิ่มที่ wave 7 หลังจากที่ prose ใหม่ของแต่ละ wave กลายเป็น finding ของ wave ถัดไป wave 7 ปิดห้าในเจ็ดข้อด้วยการลบ
+
+**ยังไม่มีการพิสูจน์ว่ารูปแบบนี้สูญพันธุ์** การทำให้แคบลงของ wave 8 เองก็ยังไม่แม่นยำ และ wave 9 เป็นผู้แก้ สิ่งที่เปลี่ยนไปอย่างมีนัยสำคัญคือตอนนี้พฤติกรรมถูกผูกด้วย mutation ในจุดที่เดิมไม่ถูกผูก: ที่ wave 4 แขนของ guard ถูกลบทิ้งได้โดย suite ยังเขียว ส่วนที่ HEAD ที่รับแล้วทำแบบนั้นไม่ได้
+
+### การตรวจสอบที่รันใหม่ ณ การปิดงานนี้
+
+ทุกตัวเลขด้านล่าง orchestrator รันใหม่ระหว่างการปิดงานนี้กับ HEAD ที่รับแล้ว `9fa928ac` ไม่ได้ยกมาจากรายงานของงานหรือของการรีวิวใด
+
+- การค้นหาแบบ dynamic เต็มรูปแบบ: `909 passed` exit `0`
+- Verifier: `overall_passed: true`, `check_count 13`, `passed_count 13`, `failed_count 0`
+- payload ของ release ที่สร้างใหม่เหมือนกันทุกไบต์กับ `data/component-master/registry/v1/coverage-snapshot.json` ที่ commit ไว้: 8,930 ไบต์, `payload_sha256` `72ccc63ff4a3fd716adf7f3c10804d3ba7a5b179011134588b30bf68297fd788`, `source_denominator_sha256` `cdb61e57ffffd1877125258bc7004ba6b614144b65d3637c2d45c7e4abb40ced`
+- 25 count label; 12 แบรนด์; 14 แหล่งข้อมูล; ตัวนับแหล่งข้อมูลแบ่งตัวส่วน `0 + 14 + 0 == 14`
+- **ชุดทดสอบ mutation แต่ละตัวถูกใช้กับ HEAD ที่รับแล้ว สังเกตผล แล้วคืนสภาพพร้อมตรวจสอบว่าไฟล์ต้นทางทั้งสองเหมือนกันทุกไบต์หลังจากนั้น:**
+
+| การกลายพันธุ์ | ผลลัพธ์ |
+| --- | --- |
+| ลบแขนปฏิเสธ label ซ้ำของ collector | 2 failed, 907 passed |
+| หดการเดินของ collector ให้เหลือแค่ tuple | 4 failed, 905 passed |
+| ลบแขนเปรียบเทียบ `unexpected` | 2 failed, 907 passed |
+| ลบแขนเปรียบเทียบ `changed` | 2 failed, 907 passed |
+| คืน `return` ที่ทำให้ count เป็น leaf | 2 failed, 907 passed |
+| ลบการปฏิเสธข้อความหลังวงเล็บ | 1 failed, 908 passed |
+| จำกัดความลึกของการเดินหลัง count ไว้สองชั้น | 2 failed, 907 passed |
+| ข้าม mapping ที่เป็นค่าของตัวเองอย่างแท้จริง | 1 failed, 908 passed |
+| ย้อน bullet เรื่อง cycle กลับไปเป็นถ้อยคำที่ wave 8 ถอนไปแล้ว | 1 failed, 908 passed |
+
+- `git status --porcelain` ว่างเปล่าที่ `9fa928ac0ccb1d17bba455612966195242a22213`
+
+### ความสมบูรณ์ของหลักฐานที่รับแล้วและการเก็บกวาด
+
+ร่องรอยหลักฐานของงานที่ 9 ตอนนี้ **ถูกติดตามในรีโพซิทอรี** แล้ว แทนที่จะอยู่แต่บนดิสก์ ด้วย commit `37ab28bc` — ดูหมายเหตุเกี่ยวกับการเปลี่ยนแปลงนั้นในหัวข้อข้อจำกัด digest ของ brief ณ การปิดงานนี้ สิบหกตัวอักษรฐานสิบหกแรก:
+
+| Brief | ขนาด | SHA-256 |
+| --- | ---: | --- |
+| `task-9-brief.md` | 10,898 B | `dee3a9380b0927af` |
+| `task-9-fix-wave-brief.md` | 9,859 B | `23f5c00919041341` |
+| `task-9-fix-wave-2-brief.md` | 9,534 B | `f255789792cc8380` |
+| `task-9-fix-wave-3-brief.md` | 9,481 B | `83b54b79d58a2a22` |
+| `task-9-fix-wave-4-brief.md` | 12,796 B | `0750d1e8b3fe9c6c` |
+| `task-9-fix-wave-5-brief.md` | 8,628 B | `2c28d7f418cd56f4` |
+| `task-9-fix-wave-6-brief.md` | 11,384 B | `969a60244dafac64` |
+| `task-9-fix-wave-7-brief.md` | 10,747 B | `a0a80a78de50f3e0` |
+| `task-9-fix-wave-8-brief.md` | 7,907 B | `1fd70256fe4ae343` |
+
+รายงานของ implementer และ diff ของ review package ของ wave 4 ถึง 8 ทุกฉบับถูกติดตามไว้ข้าง ๆ กัน wave 9 ไม่มี brief หรือรายงานแยก มันถูกอธิบายไว้ใน commit message ของตัวเองและที่นี่
+
+### ข้อจำกัดที่ระบุไว้
+
+รายการเหล่านี้บันทึกไว้โดยไม่ลดทอน เพราะแต่ละข้อกำหนดขอบเขตว่าหลักฐานของงานที่ 9 รองรับอะไรได้บ้าง
+
+- **Fix wave 9 เขียนโดย orchestrator และไม่เคยผ่านการรีวิวอิสระ** มันคือการสลับ prose สามบรรทัดบวก deletion guard สอง fragment บนถ้อยคำที่ reviewer ทั้งสองของ `6cdff0f0` เห็นตรงกัน และการตรวจสอบไม่ได้ถูกลดทอน — suite เต็มและชุด mutation ทั้งชุดถูกรันใหม่ แต่ทุก wave อื่นในช่วงนี้ผ่านผู้อ่านคนใหม่ ส่วน wave นี้ไม่ผ่าน นี่คือช่องว่างเดียวในสายการรีวิวของช่วงนี้
+- **ทุก commit ใน wave 4 ถึง 9 ถูกสร้างโดย orchestrator ไม่ใช่ implementer** sandbox ของ implementer เขียน git index ของ linked worktree ไม่ได้ implementer เขียนโค้ด ส่วน orchestrator ตรวจช่วงการเปลี่ยนแปลง รัน suite รัน mutation และ commit ดังนั้นการแยก orchestrator/implementer ในตารางที่มาด้านบนจึงตั้งอยู่บนบันทึกของเซสชันและประโยคใน ledger นี้ ไม่ใช่บน metadata ผู้เขียนของ git — ทุก commit ในช่วงนี้ถืออัตลักษณ์เดียวทั้งในฐานะผู้เขียนและผู้ commit นี่คือข้อจำกัดเดียวกับที่การปิดงานที่ 8 บันทึกไว้สำหรับ wave ของตัวเอง
+- **รายงาน implementer ของ wave 6 จบลงด้วย BLOCKED โดยไม่มีผล mutation ที่สังเกตได้เลย** เพราะ sandbox ของ implementer คนนั้นเปิด Python ไม่ได้เลย หลักฐานเบื้องหลัง `33782a92` ผลิตโดย orchestrator รายงานฉบับนั้นมีการแก้ไขลงวันที่ระบุเรื่องนี้ไว้ และย้ำอีกครั้งที่นี่ เพราะคนที่อ่านรายงานฉบับนั้นอย่างเดียวจะสรุปว่าไม่มีหลักฐาน รายงานฉบับนั้นเป็นผลลัพธ์ที่ถูกต้อง ไม่ใช่ความล้มเหลว: มันปฏิเสธที่จะทำนายผลที่ตัวเองไม่ได้สังเกต
+- **finding ของ reviewer หนึ่งข้อถูกหักล้างแทนที่จะถูกแก้ และบันทึกไว้เพื่อไม่ให้กลับมาเป็นความเชื่อที่รับต่อกันมา** ในการรีวิว `6cdff0f0` reviewer ที่เปิด Python ไม่ได้ให้เหตุผลแบบ static ว่า loop ความลึกมีช่องโหว่ — ว่าการเดินที่ข้าม tuple ที่เป็นลูกโดยตรงของ count ที่รู้จัก หรือเดินเฉพาะ `measured_by` หลังการรู้จำ จะรอดจาก suite ได้ mutant ทั้งสองถูกรันจริง: `1 failed / 908 passed` และ `70 failed / 839 passed` ทั้งคู่ถูกจับ reviewer คนเดียวกันด้วยวิธี static เดียวกันผลิตตาราง cycle หกรูปทรงที่ขับ wave 9 และทำซ้ำได้ตรงเป๊ะ การรีวิวแบบ static ไม่ได้ผิดเสมอและไม่ได้ถูกเสมอ และถูกตรวจสอบทั้งสองทาง
+- **implementer ปฏิเสธคำสั่งจาก brief ของตัวเองและทำถูกต้อง** brief ของ wave 7 กำหนดให้ residual เรื่อง cycle ระบุว่าไม่มีเส้นทางเผยแพร่ใดสร้าง payload วนซ้ำได้ implementer ทดสอบวลีนั้น หักล้างมันได้ — descriptor แบบ duck-typed ที่ถือ `measured_by` ซึ่งอ้างถึงตัวเอง ทำให้ `snapshot_payload` ตกไปที่ `RecursionError` — ปฏิเสธที่จะเขียน และบันทึกการทดสอบไว้ orchestrator ทำซ้ำได้และตัดสินว่า brief ผิด
+- **payload ที่วนซ้ำถูกปฏิเสธด้วยการใช้ stack จนหมด ไม่ใช่ด้วยกฎ** `RecursionError` ไม่ระบุ field และไม่ให้เหตุผล ต่างจากการปฏิเสธอื่นทุกอันในเส้นทางนี้ บันทึกไว้เป็น residual ไม่ได้แก้: `canonical_json_bytes` ก็ใช้ stack จนหมดกับ payload เดียวกัน การตรวจจับ cycle จึงเปลี่ยนแค่ข้อความ exception เท่านั้น
+- **ครึ่ง `nonempty` ของเงื่อนไขการนับเข้าเป็นโค้ดที่ตายในเชิงความหมาย** `all()` ของ mapping ว่างเป็นจริง และ mapping ว่างไม่สร้างตัวนับใด ๆ อยู่แล้ว จึงไม่มีเทสต์ใดโจมตีมันได้ prose เป็นจริงแบบว่างเปล่า และถูกระบุไว้แทนที่จะลบออกจากโค้ด
+- **manifest พื้นฐานของงานที่ 1 ยังคงเผยแพร่คู่ path กับ SHA-256 จำนวน 77 คู่ ซึ่งไม่มีคู่ใดสร้างซ้ำได้บน checkout ใหม่** ยังไม่มีคำตัดสิน ไม่ถูกเปลี่ยนโดยงานที่ 9 และยกมาจากการปิดงานที่ 8
+- **ไฟล์ที่รากของ registry ที่ไม่ใช่ `*.jsonl` ยังคงถูกข้ามไปอย่างเงียบ ๆ** สืบทอดจากงานที่ 8 และจงใจไม่แก้ งานที่ 9 เขียนไฟล์ `.jsonl` สองไฟล์ลงในรากนั้นและไม่ได้เปลี่ยน glob ของการค้นหา
+- **ตระกูลข้อมูลสำมะโนและแบรนด์ทั้งสิบสองถูกสร้างขึ้นด้วยมือ ไม่ได้สุ่มมาจากภาคสนาม** พวกมันกำหนดขอบเขตของกฎกับรูปทรงที่จินตนาการขึ้น ไม่มีแหล่งข้อมูลใดที่ระบุชื่อใน `source-denominator.jsonl` ถูกดึง อ่าน หรือทบทวนสิทธิ์โดยการวัดนี้
+- **ความเป็น deterministic ถูกพิสูจน์บนตัวแปลภาษาเดียวและระบบปฏิบัติการเดียว** ความเหมือนกันทุกไบต์ถูกยืนยันข้ามโพรเซสและข้ามลำดับข้อมูลที่กลับด้าน บน Windows ด้วย CPython บนเครื่องนี้เท่านั้น ความเหมือนกันทุกไบต์ข้ามแพลตฟอร์มและข้ามตัวแปลภาษายังไม่ได้พิสูจน์
+- **การถอดความ Unicode 268 code point เป็นการถอดความ ไม่ใช่การ derive** `unicodedata` ไม่มี accessor สำหรับ `Default_Ignorable_Code_Point` ดังนั้นไม่มีอะไรในแพ็กเกจนี้ที่ derive รายการนี้ใหม่หรือพิสูจน์ความครบถ้วนได้ reviewer อิสระทั้งสองยืนยันว่ามันครบถ้วนและถูกต้องสำหรับ Unicode 16.0.0 โดย derive คุณสมบัตินั้นด้วยสองวิธีอิสระ release ที่ตรึงไว้จะล้มเหลวเสียงดังแทนที่จะข้ามเมื่อ runtime ขยับ
+
+### ขอบเขตอำนาจของงานที่ 9
+
+- งานที่ 9 ประกาศ first cohort ของแบรนด์และแหล่งข้อมูลในฐานะ **งานที่ยังไม่ได้ทำ** มันไม่เผยแพร่ความครอบคลุมของตลาด connector และไม่มีตัวนับใดที่มีตัวส่วนระดับตลาด
+- **รากของ registry ยังคงมีศูนย์เรคอร์ด และทุก release ที่สร้างจากมันครอบคลุมอะไรไม่ได้เลย** ไฟล์สองไฟล์ที่งานที่ 9 เพิ่มเข้ามาคือ brand universe และ source denominator ที่ประกาศไว้ ไม่ใช่ข้อมูล item ที่วัดได้
+- **แหล่งข้อมูลที่ระบุชื่อไว้ในตัวส่วนยังไม่ถูกดึง อ่าน หรือทบทวนสิทธิ์** สิบสี่จากสิบสี่รายการอยู่ในสถานะ `DECLARED_UNREAD`
+- งานที่ 9 ไม่ลงนามอะไรทั้งสิ้น ไม่ให้อำนาจด้านการผลิต การ freeze การส่งออก หรือการนำขึ้นใช้งานจริง
+- มันไม่ใช่ registry ระดับโลกที่มีข้อมูลครบ ไม่ใช่การลงนาม release ไม่ใช่การเข้าถึงเครือข่าย ไม่ใช่การผสานกับ runtime ไม่ใช่การรับรองเชิงโครงสร้างหรือเชิงกายภาพ ไม่ใช่การทดสอบชิ้นตัวอย่าง ไม่ใช่ความสามารถของเครื่องจักร ไม่ใช่การตรวจชิ้นงานแรก ไม่ใช่การตรวจสอบภาคสนาม ไม่ใช่การให้สัตยาบันของเจ้าของ ไม่ใช่ความพร้อมสำหรับการใช้งานจริง และไม่ใช่ความพร้อมสำหรับการผลิต
+- NOT-FOR-PRODUCTION ยังคงมีผลบังคับ หลักฐานเชิงซอฟต์แวร์ไม่ให้อำนาจด้านการผลิต การติดตั้ง การปฏิบัติการ หรือการนำขึ้นใช้งานจริง
+- Daph ยังคงเป็นผู้เช่า/นำร่องรายเดียวเท่านั้น และไม่ได้เป็นเจ้าของ registry ที่ใช้ร่วมกันหรือข้อมูลแพลตฟอร์มที่เป็น canonical
+- งานที่ 10 เป็นงานถัดไป ยังไม่ได้เริ่ม และยังไม่มี brief
