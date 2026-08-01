@@ -1,0 +1,640 @@
+diff --git a/packages/component-master/src/monolith_component_master/__init__.py b/packages/component-master/src/monolith_component_master/__init__.py
+index a0b848d409ccfac3d692a6555b96511619888419..28870b638e07507067a8cbc951850aa8df9e87bc 100644
+--- a/packages/component-master/src/monolith_component_master/__init__.py
++++ b/packages/component-master/src/monolith_component_master/__init__.py
+@@ -25,11 +25,20 @@ from .catalog import (
+     default_data_dir,
+     load_default_catalog,
+ )
++from .registry_models import (
++    CommercialSku,
++    LifecycleState,
++    ProductModel,
++    Registry,
++    VerificationDimension,
++    VerificationState,
++)
+ from .validators import ValidationIssue, report, validate_project_hardware
+ from .finishes import assess_finish_equivalence
+ 
+ __all__ = [
+     "BoringSystem",
++    "CommercialSku",
+     "ComponentSpec",
+     "Dimensions",
+     "DrillProgram",
+@@ -37,11 +46,16 @@ __all__ = [
+     "Face",
+     "HardwareCatalog",
+     "Hole",
++    "LifecycleState",
++    "ProductModel",
++    "Registry",
+     "SpecStatus",
+     "Substitutability",
+     "SupplierSKU",
+     "ThreadClass",
+     "ValidationIssue",
++    "VerificationDimension",
++    "VerificationState",
+     "boring_recipe",
+     "assess_finish_equivalence",
+     "build_cross_dowel_joint",
+diff --git a/packages/component-master/src/monolith_component_master/registry_models.py b/packages/component-master/src/monolith_component_master/registry_models.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..462d2fffd1c3f811a84caa30c6f4f56d241967fe
+--- /dev/null
++++ b/packages/component-master/src/monolith_component_master/registry_models.py
+@@ -0,0 +1,184 @@
++"""Immutable exact-SKU identity and verification registry models."""
++
++from __future__ import annotations
++
++from collections.abc import Iterable, Mapping
++from dataclasses import dataclass
++from enum import Enum
++from types import MappingProxyType
++
++
++class VerificationDimension(str, Enum):
++    IDENTITY = "identity"
++    GEOMETRY = "geometry"
++    BOM = "bom"
++    TOOLING = "tooling"
++    MATERIAL_THICKNESS = "material_thickness"
++    STRUCTURAL = "structural"
++    COMMERCIAL = "commercial"
++    FIELD = "field"
++    LIFECYCLE = "lifecycle"
++    RIGHTS = "rights"
++
++
++class VerificationState(str, Enum):
++    VERIFIED = "VERIFIED"
++    PENDING = "PENDING"
++    REGION_ONLY = "REGION_ONLY"
++    DISCONTINUED = "DISCONTINUED"
++    BLOCKED = "BLOCKED"
++
++
++class LifecycleState(str, Enum):
++    PENDING = "PENDING"
++    ACTIVE = "ACTIVE"
++    REGION_ONLY = "REGION_ONLY"
++    SUPERSEDED = "SUPERSEDED"
++    DISCONTINUED = "DISCONTINUED"
++    SOURCE_BLOCKED = "SOURCE_BLOCKED"
++
++
++def _require_prefixed(value: object, field_name: str, prefix: str) -> None:
++    if not isinstance(value, str):
++        raise TypeError(f"{field_name} must be a string")
++    if not value.startswith(prefix) or not value[len(prefix) :].strip():
++        raise ValueError(
++            f"{field_name} must start with {prefix!r} and contain an identifier"
++        )
++
++
++def _require_nonblank(value: object, field_name: str) -> None:
++    if not isinstance(value, str):
++        raise TypeError(f"{field_name} must be a string")
++    if not value.strip():
++        raise ValueError(f"{field_name} must not be blank")
++
++
++@dataclass(frozen=True)
++class CommercialSku:
++    global_id: str
++    brand_id: str
++    model_id: str
++    oem_order_code: str
++    region: str
++    pack_qty: int
++    verification: Mapping[VerificationDimension, VerificationState]
++
++    def __post_init__(self) -> None:
++        _require_prefixed(self.global_id, "global_id", "sku:")
++        _require_prefixed(self.brand_id, "brand_id", "brand:")
++        _require_prefixed(self.model_id, "model_id", "model:")
++        _require_nonblank(self.oem_order_code, "oem_order_code")
++        _require_nonblank(self.region, "region")
++        if isinstance(self.pack_qty, bool) or not isinstance(self.pack_qty, int):
++            raise TypeError("pack_qty must be an integer")
++        if self.pack_qty <= 0:
++            raise ValueError("pack_qty must be positive")
++        if not isinstance(self.verification, Mapping):
++            raise TypeError("verification must be a mapping")
++
++        dimensions = tuple(self.verification)
++        required = frozenset(VerificationDimension)
++        if len(dimensions) != len(required):
++            raise ValueError(
++                "verification must contain every verification dimension exactly once"
++            )
++        if any(
++            not isinstance(dimension, VerificationDimension)
++            for dimension in dimensions
++        ):
++            raise TypeError(
++                "verification keys must be VerificationDimension values"
++            )
++        if frozenset(dimensions) != required:
++            raise ValueError(
++                "verification must contain every verification dimension exactly once"
++            )
++        if any(
++            not isinstance(state, VerificationState)
++            for state in self.verification.values()
++        ):
++            raise TypeError(
++                "verification values must be VerificationState values"
++            )
++
++        object.__setattr__(
++            self,
++            "verification",
++            MappingProxyType(dict(self.verification)),
++        )
++
++    def is_verified(self, dimension: VerificationDimension) -> bool:
++        return self.verification.get(dimension) is VerificationState.VERIFIED
++
++
++@dataclass(frozen=True)
++class ProductModel:
++    model_id: str
++    brand_id: str
++    name: str
++    lifecycle: LifecycleState
++
++    def __post_init__(self) -> None:
++        _require_prefixed(self.model_id, "model_id", "model:")
++        _require_prefixed(self.brand_id, "brand_id", "brand:")
++        _require_nonblank(self.name, "name")
++        if not isinstance(self.lifecycle, LifecycleState):
++            raise TypeError("lifecycle must be a LifecycleState")
++
++
++@dataclass(frozen=True, init=False)
++class Registry:
++    models: Mapping[str, ProductModel]
++    skus: Mapping[str, CommercialSku]
++
++    def __init__(
++        self,
++        models: Iterable[ProductModel],
++        skus: Iterable[CommercialSku],
++    ) -> None:
++        model_by_id: dict[str, ProductModel] = {}
++        for model in models:
++            if not isinstance(model, ProductModel):
++                raise TypeError("models must contain ProductModel values")
++            if model.model_id in model_by_id:
++                raise ValueError(f"duplicate model_id: {model.model_id}")
++            model_by_id[model.model_id] = model
++
++        sku_by_id: dict[str, CommercialSku] = {}
++        for sku in skus:
++            if not isinstance(sku, CommercialSku):
++                raise TypeError("skus must contain CommercialSku values")
++            if sku.global_id in sku_by_id:
++                raise ValueError(f"duplicate global_id: {sku.global_id}")
++            sku_by_id[sku.global_id] = sku
++
++        unknown_model_ids = sorted(
++            {
++                sku.model_id
++                for sku in sku_by_id.values()
++                if sku.model_id not in model_by_id
++            }
++        )
++        if unknown_model_ids:
++            raise ValueError(
++                "SKU references unknown model_id: "
++                + ", ".join(unknown_model_ids)
++            )
++
++        object.__setattr__(
++            self,
++            "models",
++            MappingProxyType(model_by_id),
++        )
++        object.__setattr__(
++            self,
++            "skus",
++            MappingProxyType(sku_by_id),
++        )
++
++    def get_model(self, model_id: str) -> ProductModel | None:
++        return self.models.get(model_id)
++
++    def get_sku(self, global_id: str) -> CommercialSku | None:
++        return self.skus.get(global_id)
+diff --git a/tests/component_master/registry/__init__.py b/tests/component_master/registry/__init__.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..184556bfbc107b505bc622b00ab1ef0e8cc7ea4d
+--- /dev/null
++++ b/tests/component_master/registry/__init__.py
+@@ -0,0 +1 @@
++"""Exact-SKU registry model contracts."""
+diff --git a/tests/component_master/registry/test_registry_models.py b/tests/component_master/registry/test_registry_models.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..5b3cd8488d28bdd00bac21e7e154d6e4fe1fa37c
+--- /dev/null
++++ b/tests/component_master/registry/test_registry_models.py
+@@ -0,0 +1,395 @@
++"""Contracts for exact commercial identity and verification registry models."""
++
++from __future__ import annotations
++
++from dataclasses import FrozenInstanceError, fields
++from pathlib import Path
++import sys
++import unittest
++
++
++REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
++PACKAGE_SOURCE = REPOSITORY_ROOT / "packages" / "component-master" / "src"
++sys.path.insert(0, str(PACKAGE_SOURCE))
++
++from monolith_component_master.registry_models import (  # noqa: E402
++    CommercialSku,
++    LifecycleState,
++    ProductModel,
++    Registry,
++    VerificationDimension,
++    VerificationState,
++)
++
++
++def verification_states(
++    **overrides: VerificationState,
++) -> dict[VerificationDimension, VerificationState]:
++    states = {
++        dimension: VerificationState.PENDING
++        for dimension in VerificationDimension
++    }
++    for name, state in overrides.items():
++        states[VerificationDimension[name]] = state
++    return states
++
++
++def make_model(
++    model_id: str = "model:hafele:minifix-15",
++) -> ProductModel:
++    return ProductModel(
++        model_id=model_id,
++        brand_id="brand:hafele",
++        name="Minifix 15",
++        lifecycle=LifecycleState.ACTIVE,
++    )
++
++
++def make_sku(
++    order_code: str = "262.26.033",
++    *,
++    global_id: str | None = None,
++    model_id: str = "model:hafele:minifix-15",
++    verification: dict[
++        VerificationDimension, VerificationState
++    ] | None = None,
++) -> CommercialSku:
++    states = verification or verification_states(
++        IDENTITY=VerificationState.VERIFIED,
++        GEOMETRY=VerificationState.VERIFIED,
++    )
++    return CommercialSku(
++        global_id=global_id or f"sku:hafele:{order_code}:EU",
++        brand_id="brand:hafele",
++        model_id=model_id,
++        oem_order_code=order_code,
++        region="EU",
++        pack_qty=1,
++        verification=states,
++    )
++
++
++class EnumContractTests(unittest.TestCase):
++    def test_verification_dimension_has_exact_planned_members_and_values(
++        self,
++    ) -> None:
++        self.assertEqual(
++            {
++                "IDENTITY": "identity",
++                "GEOMETRY": "geometry",
++                "BOM": "bom",
++                "TOOLING": "tooling",
++                "MATERIAL_THICKNESS": "material_thickness",
++                "STRUCTURAL": "structural",
++                "COMMERCIAL": "commercial",
++                "FIELD": "field",
++                "LIFECYCLE": "lifecycle",
++                "RIGHTS": "rights",
++            },
++            {member.name: member.value for member in VerificationDimension},
++        )
++
++    def test_verification_state_has_exact_planned_members_and_values(
++        self,
++    ) -> None:
++        self.assertEqual(
++            {
++                "VERIFIED": "VERIFIED",
++                "PENDING": "PENDING",
++                "REGION_ONLY": "REGION_ONLY",
++                "DISCONTINUED": "DISCONTINUED",
++                "BLOCKED": "BLOCKED",
++            },
++            {member.name: member.value for member in VerificationState},
++        )
++
++    def test_lifecycle_state_has_only_living_registry_members(self) -> None:
++        self.assertEqual(
++            {
++                "PENDING": "PENDING",
++                "ACTIVE": "ACTIVE",
++                "REGION_ONLY": "REGION_ONLY",
++                "SUPERSEDED": "SUPERSEDED",
++                "DISCONTINUED": "DISCONTINUED",
++                "SOURCE_BLOCKED": "SOURCE_BLOCKED",
++            },
++            {member.name: member.value for member in LifecycleState},
++        )
++
++
++class CommercialSkuTests(unittest.TestCase):
++    def test_approved_field_shape_is_exact(self) -> None:
++        self.assertEqual(
++            [
++                "global_id",
++                "brand_id",
++                "model_id",
++                "oem_order_code",
++                "region",
++                "pack_qty",
++                "verification",
++            ],
++            [field.name for field in fields(CommercialSku)],
++        )
++
++    def test_same_geometry_does_not_collapse_distinct_order_codes(self) -> None:
++        first = make_sku("262.26.033")
++        second = make_sku("262.26.533")
++
++        self.assertNotEqual(first.oem_order_code, second.oem_order_code)
++        self.assertNotEqual(first.global_id, second.global_id)
++        self.assertEqual(first.verification, second.verification)
++
++    def test_verified_is_dimension_specific(self) -> None:
++        sku = make_sku(
++            verification=verification_states(
++                IDENTITY=VerificationState.VERIFIED,
++                GEOMETRY=VerificationState.PENDING,
++            )
++        )
++
++        self.assertTrue(sku.is_verified(VerificationDimension.IDENTITY))
++        self.assertFalse(sku.is_verified(VerificationDimension.GEOMETRY))
++        self.assertFalse(sku.is_verified(VerificationDimension.BOM))
++
++    def test_id_fields_require_prefix_and_nonblank_content(self) -> None:
++        valid = {
++            "global_id": "sku:hafele:262.26.033:EU",
++            "brand_id": "brand:hafele",
++            "model_id": "model:hafele:minifix-15",
++        }
++        invalid_values = {
++            "global_id": ("262.26.033", "sku:   "),
++            "brand_id": ("hafele", "brand:   "),
++            "model_id": ("minifix-15", "model:   "),
++        }
++        for field_name, values in invalid_values.items():
++            for invalid in values:
++                with self.subTest(field=field_name, value=invalid):
++                    arguments = {**valid, field_name: invalid}
++                    with self.assertRaises(ValueError):
++                        CommercialSku(
++                            **arguments,
++                            oem_order_code="262.26.033",
++                            region="EU",
++                            pack_qty=1,
++                            verification=verification_states(),
++                        )
++
++    def test_order_code_and_region_must_be_nonblank(self) -> None:
++        for field_name in ("oem_order_code", "region"):
++            with self.subTest(field=field_name):
++                arguments = {
++                    "global_id": "sku:hafele:262.26.033:EU",
++                    "brand_id": "brand:hafele",
++                    "model_id": "model:hafele:minifix-15",
++                    "oem_order_code": "262.26.033",
++                    "region": "EU",
++                    "pack_qty": 1,
++                    "verification": verification_states(),
++                }
++                arguments[field_name] = "   "
++                with self.assertRaises(ValueError):
++                    CommercialSku(**arguments)
++
++    def test_pack_quantity_requires_positive_non_boolean_integer(self) -> None:
++        for invalid in (0, -1, True, False, 1.5, "1"):
++            with self.subTest(pack_qty=invalid):
++                with self.assertRaises((TypeError, ValueError)):
++                    CommercialSku(
++                        global_id="sku:hafele:262.26.033:EU",
++                        brand_id="brand:hafele",
++                        model_id="model:hafele:minifix-15",
++                        oem_order_code="262.26.033",
++                        region="EU",
++                        pack_qty=invalid,
++                        verification=verification_states(),
++                    )
++
++    def test_verification_requires_every_dimension_exactly_once(self) -> None:
++        missing = verification_states()
++        del missing[VerificationDimension.RIGHTS]
++        extra = verification_states()
++        extra["rights-review"] = VerificationState.PENDING
++
++        for label, invalid in (("missing", missing), ("extra", extra)):
++            with self.subTest(case=label):
++                with self.assertRaises(ValueError):
++                    make_sku(verification=invalid)
++
++    def test_verification_rejects_untyped_keys_and_states(self) -> None:
++        untyped_key = verification_states()
++        del untyped_key[VerificationDimension.RIGHTS]
++        untyped_key["rights"] = VerificationState.PENDING
++        untyped_state = verification_states()
++        untyped_state[VerificationDimension.RIGHTS] = "PENDING"
++
++        with self.assertRaises(TypeError):
++            make_sku(verification=untyped_key)
++        with self.assertRaises(TypeError):
++            make_sku(verification=untyped_state)
++
++    def test_verification_is_defensively_copied_and_read_only(self) -> None:
++        caller_states = verification_states(
++            IDENTITY=VerificationState.VERIFIED
++        )
++        sku = make_sku(verification=caller_states)
++
++        caller_states[VerificationDimension.IDENTITY] = (
++            VerificationState.BLOCKED
++        )
++
++        self.assertTrue(sku.is_verified(VerificationDimension.IDENTITY))
++        with self.assertRaises(TypeError):
++            sku.verification[VerificationDimension.IDENTITY] = (
++                VerificationState.BLOCKED
++            )
++
++    def test_sku_fields_are_frozen(self) -> None:
++        sku = make_sku()
++
++        with self.assertRaises(FrozenInstanceError):
++            sku.region = "TH"
++
++
++class ProductModelTests(unittest.TestCase):
++    def test_approved_field_shape_is_exact(self) -> None:
++        self.assertEqual(
++            ["model_id", "brand_id", "name", "lifecycle"],
++            [field.name for field in fields(ProductModel)],
++        )
++
++    def test_model_is_frozen(self) -> None:
++        model = make_model()
++
++        with self.assertRaises(FrozenInstanceError):
++            model.name = "Changed"
++
++    def test_model_ids_require_prefix_and_nonblank_content(self) -> None:
++        invalid_values = {
++            "model_id": ("minifix-15", "model:   "),
++            "brand_id": ("hafele", "brand:   "),
++        }
++        for field_name, values in invalid_values.items():
++            for invalid in values:
++                with self.subTest(field=field_name, value=invalid):
++                    arguments = {
++                        "model_id": "model:hafele:minifix-15",
++                        "brand_id": "brand:hafele",
++                        "name": "Minifix 15",
++                        "lifecycle": LifecycleState.ACTIVE,
++                    }
++                    arguments[field_name] = invalid
++                    with self.assertRaises(ValueError):
++                        ProductModel(**arguments)
++
++    def test_model_name_must_be_nonblank(self) -> None:
++        with self.assertRaises(ValueError):
++            ProductModel(
++                model_id="model:hafele:minifix-15",
++                brand_id="brand:hafele",
++                name="   ",
++                lifecycle=LifecycleState.ACTIVE,
++            )
++
++    def test_model_lifecycle_must_be_typed(self) -> None:
++        with self.assertRaises(TypeError):
++            ProductModel(
++                model_id="model:hafele:minifix-15",
++                brand_id="brand:hafele",
++                name="Minifix 15",
++                lifecycle="ACTIVE",
++            )
++
++
++class RegistryTests(unittest.TestCase):
++    def test_exact_id_lookups_are_deterministic(self) -> None:
++        model = make_model()
++        sku = make_sku()
++        registry = Registry(models=[model], skus=[sku])
++
++        self.assertIs(model, registry.get_model(model.model_id))
++        self.assertIs(sku, registry.get_sku(sku.global_id))
++        self.assertIsNone(registry.get_model("model:hafele:unknown"))
++        self.assertIsNone(registry.get_sku("sku:hafele:unknown:EU"))
++        self.assertEqual({model.model_id: model}, registry.models)
++        self.assertEqual({sku.global_id: sku}, registry.skus)
++
++    def test_registry_defensively_copies_and_freezes_public_mappings(
++        self,
++    ) -> None:
++        model = make_model()
++        sku = make_sku()
++        caller_models = [model]
++        caller_skus = [sku]
++        registry = Registry(models=caller_models, skus=caller_skus)
++
++        caller_models.clear()
++        caller_skus.clear()
++
++        self.assertIs(model, registry.get_model(model.model_id))
++        self.assertIs(sku, registry.get_sku(sku.global_id))
++        with self.assertRaises(TypeError):
++            registry.models[model.model_id] = model
++        with self.assertRaises(TypeError):
++            registry.skus[sku.global_id] = sku
++        with self.assertRaises(FrozenInstanceError):
++            registry.models = {}
++
++    def test_duplicate_model_ids_are_rejected_before_mapping_collapse(
++        self,
++    ) -> None:
++        first = make_model()
++        second = ProductModel(
++            model_id=first.model_id,
++            brand_id="brand:hafele",
++            name="Different display name",
++            lifecycle=LifecycleState.PENDING,
++        )
++
++        with self.assertRaises(ValueError):
++            Registry(models=[first, second], skus=[])
++
++    def test_duplicate_global_ids_cannot_collapse_distinct_order_codes(
++        self,
++    ) -> None:
++        first = make_sku(
++            "262.26.033",
++            global_id="sku:hafele:commercial-record:EU",
++        )
++        second = make_sku(
++            "262.26.533",
++            global_id="sku:hafele:commercial-record:EU",
++        )
++
++        with self.assertRaises(ValueError):
++            Registry(models=[make_model()], skus=[first, second])
++
++    def test_unknown_model_reference_is_rejected(self) -> None:
++        with self.assertRaises(ValueError):
++            Registry(
++                models=[make_model()],
++                skus=[make_sku(model_id="model:hafele:unknown")],
++            )
++
++
++class PublicApiTests(unittest.TestCase):
++    def test_package_exports_all_registry_interfaces(self) -> None:
++        import monolith_component_master
++
++        expected = {
++            "CommercialSku",
++            "ProductModel",
++            "VerificationDimension",
++            "VerificationState",
++            "LifecycleState",
++            "Registry",
++        }
++        self.assertTrue(expected.issubset(set(monolith_component_master.__all__)))
++        for name in expected:
++            with self.subTest(name=name):
++                self.assertIsNotNone(getattr(monolith_component_master, name))
++
++
++if __name__ == "__main__":
++    unittest.main()

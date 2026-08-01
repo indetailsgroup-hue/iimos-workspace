@@ -1,0 +1,141 @@
+# Review package: 9597ce6924b14ec71fe311160a7dfe927f449b13..260016d1062e63ef45c4fe84f3867d4bb93de2e5
+
+## Commits
+260016d1 chore(connectors): record paired registry baselines
+
+## Files changed
+ .../sdd/global-connector-registry-progress.md      | 125 +++++++++++++++++++++
+ 1 file changed, 125 insertions(+)
+
+## Diff
+diff --git a/.superpowers/sdd/global-connector-registry-progress.md b/.superpowers/sdd/global-connector-registry-progress.md
+new file mode 100644
+index 00000000..5c2d3d86
+--- /dev/null
++++ b/.superpowers/sdd/global-connector-registry-progress.md
+@@ -0,0 +1,125 @@
++# Global Connector Registry — SDD Progress Ledger
++
++## Task 1: Paired worktrees and baseline gates
++
++**Recorded:** 26 July 2026
++**Status:** BLOCKED
++**Stop condition:** The first required parent baseline exited nonzero. Per the implementation plan, no later baseline command was run.
++
++## Paired isolated worktrees
++
++### Parent governance/bootstrap worktree
++
++- Absolute path: `C:\tmp\monolith-global-connector-registry-parent`
++- Branch: `codex/global-connector-registry`
++- `git rev-parse HEAD`: `9597ce6924b14ec71fe311160a7dfe927f449b13`
++- Approved-design ancestor: `92d67571`
++- `git status --short` before baseline: empty
++- Git directory: `C:/Users/thai3/determined-williams (2)/.git/worktrees/monolith-global-connector-registry-parent`
++- Common Git directory: `C:/Users/thai3/determined-williams (2)/.git`
++- Superproject working tree: empty (not a submodule)
++- Isolation result: linked worktree verified
++
++### Nested MONOLITH runtime worktree
++
++- Absolute path: `C:\tmp\monolith-global-connector-registry-runtime`
++- Branch: `codex/global-connector-runtime`
++- `git rev-parse HEAD`: `ed036a2ceebc8c3c9fa71edd3fc85ff67ca53b97`
++- Minifix provenance baseline: `ed036a2c` retained unchanged
++- `git status --short` before baseline: empty
++- Git directory: `C:/Users/thai3/determined-williams (2)/determined-williams/.git/worktrees/monolith-global-connector-registry-runtime`
++- Common Git directory: `C:/Users/thai3/determined-williams (2)/determined-williams/.git`
++- Superproject working tree: empty (not a submodule)
++- Isolation result: linked worktree verified
++
++## Toolchain
++
++- Python: `Python 3.14.2`
++- Node.js: `v22.21.1`
++- npm: `11.6.2`
++
++## NOT-FOR-PRODUCTION state
++
++- State: active
++- Source evidence: `src/core/config/shadowMode.ts:16` in the runtime worktree declares `SHADOW_MODE_NOT_FOR_PRODUCTION = true`.
++- Packet evidence paths: `src/factory/packet/buildFactoryPacket.ts` adds `NOT_FOR_PRODUCTION.txt`; `src/factory/packet/zipBundle.ts` applies the `NFP-` prefix while shadow mode is active.
++- Verification note: the source state was inspected, but the runtime targeted baseline was not run because the plan required stopping at the first failed parent baseline.
++
++## Required baseline commands
++
++### 1. Parent component-master unit tests — FAIL
++
++Command:
++
++```powershell
++python -m unittest discover -s tests/component_master -v
++```
++
++Exit status: `1`
++
++Complete captured output:
++
++```text
++Traceback (most recent call last):
++  File "<frozen runpy>", line 198, in _run_module_as_main
++  File "<frozen runpy>", line 88, in _run_code
++  File "C:\Users\thai3\AppData\Local\Programs\Python\Python314\Lib\unittest\__main__.py", line 18, in <module>
++    main(module=None)
++    ~~~~^^^^^^^^^^^^^
++  File "C:\Users\thai3\AppData\Local\Programs\Python\Python314\Lib\unittest\main.py", line 103, in __init__
++    self.parseArgs(argv)
++    ~~~~~~~~~~~~~~^^^^^^
++  File "C:\Users\thai3\AppData\Local\Programs\Python\Python314\Lib\unittest\main.py", line 119, in parseArgs
++    self._do_discovery(argv[2:])
++    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^
++  File "C:\Users\thai3\AppData\Local\Programs\Python\Python314\Lib\unittest\main.py", line 242, in _do_discovery
++    self.createTests(from_discovery=True, Loader=Loader)
++    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++  File "C:\Users\thai3\AppData\Local\Programs\Python\Python314\Lib\unittest\main.py", line 149, in createTests
++    self.test = loader.discover(self.start, self.pattern, self.top)
++                ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++  File "C:\Users\thai3\AppData\Local\Programs\Python\Python314\Lib\unittest\loader.py", line 334, in discover
++    raise ImportError('Start directory is not importable: %r' % start_dir)
++ImportError: Start directory is not importable: 'tests/component_master'
++```
++
++Observed summary: unittest discovery did not start; Python reported that `tests/component_master` is not importable. No test count or passing summary was produced.
++
++### 2. Parent kitchen-kernel verifier — NOT RUN
++
++Command:
++
++```powershell
++python tools/verify_kitchen_kernel.py
++```
++
++Exit status: not run after required stop condition.
++
++### 3. Runtime targeted tests — NOT RUN
++
++Command:
++
++```powershell
++npm.cmd run test:run -- src/core/connector src/core/hardware/catalog src/factory/packet
++```
++
++Exit status: not run after required stop condition.
++
++The Minifix live-recipe provenance state was not re-evaluated by this task. No claim is made beyond retaining runtime commit `ed036a2c` unchanged.
++
++### 4. Runtime typecheck — NOT RUN
++
++Command:
++
++```powershell
++npm.cmd run typecheck:all
++```
++
++Exit status: not run after required stop condition.
++
++## Residual concerns
++
++- The plan-required parent unittest discovery command is incompatible with the checked-out parent baseline under Python 3.14.2 because the specified start directory is not importable.
++- `CONTEXT.md` and the 21 July repository-scope correction are absent from parent commit `9597ce69`; they were read from the original governance checkout as mandatory routing context. No file from that checkout was modified.
++- Runtime dependencies were installed by the controller before this task. No npm installation or audit output was produced or observed during this execution, so this ledger makes no npm-audit claim.
++- No production source was changed. The runtime worktree remains read/test-only and unchanged.

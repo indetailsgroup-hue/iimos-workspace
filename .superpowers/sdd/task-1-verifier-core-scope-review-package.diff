@@ -1,0 +1,113 @@
+diff --git a/tests/test_verify_kitchen_kernel_contract.py b/tests/test_verify_kitchen_kernel_contract.py
+index d4bffbb8..a1e17a28 100644
+--- a/tests/test_verify_kitchen_kernel_contract.py
++++ b/tests/test_verify_kitchen_kernel_contract.py
+@@ -63,17 +63,16 @@ class UnittestEvidenceContractTests(unittest.TestCase):
+         identity_ok: bool = True,
+     ) -> verifier.Evidence:
+         def fake_run(command: list[str]) -> dict[str, object]:
+-            joined = " ".join(command).replace("\\", "/")
+             if "compileall" in command:
+                 return command_result(command)
+-            if "tests/component_master" in joined:
++            if "tests.component_master.test_boring_standard" in command:
+                 return unittest_result(
+                     command,
+                     component_count,
+                     exit_code=component_exit,
+                     ok=component_ok,
+                 )
+-            if "tests/identity_tenancy" in joined:
++            if "tests.identity_tenancy.test_contracts" in command:
+                 return unittest_result(
+                     command,
+                     identity_count,
+@@ -110,6 +109,41 @@ class UnittestEvidenceContractTests(unittest.TestCase):
+             governed["details"]["suites"]["identity_tenancy"]["test_count"],
+         )
+ 
++    def test_governed_suites_pin_adopted_modules_and_exact_counts(self) -> None:
++        evidence = self.run_command_checks()
++        governed = check_by_name(evidence, "governed_kernel_unittest_suites")
++
++        component_master = governed["details"]["suites"]["component_master"]
++        self.assertEqual(
++            [
++                verifier.sys.executable,
++                "-m",
++                "unittest",
++                "tests.component_master.test_boring_standard",
++                "tests.component_master.test_catalog_baseline",
++                "tests.component_master.test_finish_taxonomy",
++                "tests.component_master.test_seed_integrity",
++                "-v",
++            ],
++            component_master["command"],
++        )
++        self.assertEqual(20, component_master["expected_test_count"])
++        self.assertEqual(20, component_master["test_count"])
++
++        identity_tenancy = governed["details"]["suites"]["identity_tenancy"]
++        self.assertEqual(
++            [
++                verifier.sys.executable,
++                "-m",
++                "unittest",
++                "tests.identity_tenancy.test_contracts",
++                "-v",
++            ],
++            identity_tenancy["command"],
++        )
++        self.assertEqual(7, identity_tenancy["expected_test_count"])
++        self.assertEqual(7, identity_tenancy["test_count"])
++
+     def test_core_count_drift_missing_ok_and_nonzero_exit_are_rejected(self) -> None:
+         cases = {
+             "component count drift": {"component_count": 19},
+diff --git a/tools/verify_kitchen_kernel.py b/tools/verify_kitchen_kernel.py
+index 2831b79f..9a20191d 100644
+--- a/tools/verify_kitchen_kernel.py
++++ b/tools/verify_kitchen_kernel.py
+@@ -22,6 +22,19 @@ ROOT = Path(__file__).resolve().parents[1]
+ OUTPUT = ROOT / "artifacts" / "verification" / "kitchen-kernel-bootstrap-summary.json"
+ PACKAGE_SOURCE = ROOT / "packages" / "component-master" / "src"
+ GOVERNED_CORE_TEST_FLOOR = 27
++GOVERNED_COMPONENT_MASTER_TEST_MODULES = (
++    "tests.component_master.test_boring_standard",
++    "tests.component_master.test_catalog_baseline",
++    "tests.component_master.test_finish_taxonomy",
++    "tests.component_master.test_seed_integrity",
++)
++GOVERNED_IDENTITY_TENANCY_TEST_MODULES = (
++    "tests.identity_tenancy.test_contracts",
++)
++GOVERNED_UNITTEST_SUITES = (
++    ("component_master", GOVERNED_COMPONENT_MASTER_TEST_MODULES, 20),
++    ("identity_tenancy", GOVERNED_IDENTITY_TENANCY_TEST_MODULES, 7),
++)
+ # 1.1.0 adds governed sub-suite evidence and replaces bootstrap Git evidence.
+ OUTPUT_SCHEMA_VERSION = "1.1.0"
+ 
+@@ -151,20 +164,13 @@ def check_commands(evidence: Evidence) -> None:
+     )
+ 
+     governed_suites: dict[str, dict[str, Any]] = {}
+-    for name, start_directory, expected_count in (
+-        ("component_master", "tests/component_master", 20),
+-        ("identity_tenancy", "tests/identity_tenancy", 7),
+-    ):
++    for name, modules, expected_count in GOVERNED_UNITTEST_SUITES:
+         result = run(
+             [
+                 sys.executable,
+                 "-m",
+                 "unittest",
+-                "discover",
+-                "-s",
+-                start_directory,
+-                "-t",
+-                ".",
++                *modules,
+                 "-v",
+             ]
+         )

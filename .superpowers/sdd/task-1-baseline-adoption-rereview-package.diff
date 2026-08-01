@@ -1,0 +1,1141 @@
+# Review package: 13bcf5149570feb6ec5c7b15dbefd1fb88ef4161..a6a8d8bd18a871784e806cf54c3a2d6836a540fa
+
+## Commits
+a6a8d8bd docs(kernel): align baseline manifest editions
+a3f62169 docs(kernel): manifest governed baseline adoption
+
+## Files changed
+ ...tor-registry-baseline-adoption-manifest.en.html |  82 +++
+ ...ector-registry-baseline-adoption-manifest.en.md |  58 ++
+ ...nector-registry-baseline-adoption-manifest.json | 816 +++++++++++++++++++++
+ ...tor-registry-baseline-adoption-manifest.th.html |  82 +++
+ ...ector-registry-baseline-adoption-manifest.th.md |  58 ++
+ 5 files changed, 1096 insertions(+)
+
+## Diff
+diff --git a/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.en.html b/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.en.html
+new file mode 100644
+index 00000000..204d23c2
+--- /dev/null
++++ b/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.en.html
+@@ -0,0 +1,82 @@
++<!doctype html>
++<html lang="en">
++<head>
++<meta charset="utf-8">
++<meta name="viewport" content="width=device-width, initial-scale=1">
++<title>Governed Baseline Adoption Manifest</title>
++<style>
++body{font-family:Segoe UI,Tahoma,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1.25rem;line-height:1.55;color:#1d2433}
++h1{color:#173b57} .summary{background:#eef6fa;border-left:5px solid #25759b;padding:1rem;margin:1rem 0}
++pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f8fa;border:1px solid #dfe3e8;border-radius:8px;padding:1rem}
++code{font-family:Consolas,monospace} footer{margin-top:2rem;color:#586273;font-size:.9rem}
++</style>
++</head>
++<body>
++<h1>Governed Baseline Adoption Manifest</h1>
++<section class="summary">
++<p><strong>Included files:</strong> 77</p>
++<p><strong>Total bytes:</strong> 712400</p>
++<p><strong>Inventory SHA-256:</strong> <code>1d25a3fdc6bb008d227fcfc80e865dd244396f8842778135e5afa833bbabb2db</code></p>
++<p><strong>Digest contract:</strong> SHA-256 over the UTF-8 compact JSON serialization of <code>/files</code>, preserving manifest array and object-key order, with no trailing newline (<code>ConvertTo-Json -Depth 20 -Compress</code>).</p>
++</section>
++<pre># Governed Baseline Adoption Manifest
++
++**Edition:** English  
++**Date:** 26 July 2026  
++**Status:** Proposed mechanical allowlist; source baseline files are not copied by this task  
++**Source:** `C:\Users\thai3\determined-williams (2)` at `8b65a1e974c5a34ee5abc12edab87d1ec54d69a4`  
++**Target:** `C:\tmp\monolith-global-connector-registry-parent` at base `13bcf5149570feb6ec5c7b15dbefd1fb88ef4161`
++
++## Summary
++
++- Included files: **77**
++- Total source bytes: **712400**
++- Inventory SHA-256: `1d25a3fdc6bb008d227fcfc80e865dd244396f8842778135e5afa833bbabb2db`
++- Digest contract: **SHA-256** over the **UTF-8 compact JSON serialization of `/files`**, preserving manifest array and object-key order, with **no trailing newline** (`ConvertTo-Json -Depth 20 -Compress`).
++- Actions: **77 ADD**, **0 REPLACE**
++- Source states: **77 untracked**, **0 tracked**, **0 modified**
++
++The JSON file is the machine-readable authority. Every entry pins a POSIX repository-relative path, exact byte length, SHA-256, purpose group, source Git state, target action, and requirement trace.
++
++## Purpose groups
++
++| Purpose group | Files | Bytes |
++| --- | ---: | ---: |
++| bootstrap-configuration | 2 | 859 |
++| bounded-context-skeleton | 13 | 598 |
++| component-master-engine | 6 | 31243 |
++| component-master-seed | 6 | 34035 |
++| identity-tenancy-contracts | 2 | 7706 |
++| identity-tenancy-documentation | 4 | 19098 |
++| intended-27-test-suite | 7 | 24573 |
++| repository-context | 8 | 42279 |
++| verification-entrypoint | 1 | 20150 |
++| verifier-required-adrs | 16 | 154669 |
++| verifier-required-bootstrap-plan | 4 | 95589 |
++| verifier-required-bootstrap-report | 4 | 64133 |
++| verifier-required-research | 4 | 217468 |
++| **Total** | **77** | **712400** |
++
++## Execution boundary
++
++This allowlist covers the governed parent kitchen-kernel baseline only. A later reviewed task may copy an entry only when the source bytes still match the pinned size and hash and when the resolved target remains inside the isolated parent worktree. The nested runtime and every forbidden noise root remain outside scope. This manifest makes no runtime, deployment, manufacturing, or production-readiness claim.
++
++## Exclusions
++
++The allowlist excludes the nested `determined-williams/` repository, `Documents/`, `All aboute kitchen/`, `artifacts/`, `tmp/`, `.tmp.driveupload/`, `worktrees/`, downloads, archives, copied product systems, source PDF/catalog directories, `desktop.ini`, bytecode/cache files, generated verification output, dependency/build output, credentials, secret values, and unrelated neighboring documents or tools. Exclusion counts in JSON are rule-class counts; the dirty tree was not broadly scanned or hashed.
++
++## Existing target dependencies
++
++The target already tracks the agent-guardrail and render-doc tests, their governance tools/hooks and allowlist, and `.github/workflows/claim-guardrails.yml`. They are recorded in JSON as existing target dependencies and are intentionally outside the ADD entries.
++
++## Unresolved verifier migrations
++
++- `VERIFIER-TEST-COUNT-MIGRATION` — `tools/verify_kitchen_kernel.py` hard-codes an expected count of 27 tests. The intended kitchen-kernel baseline is 20 Component Master tests plus 7 identity-tenancy tests, while full source-root discovery currently runs 258 tests because existing agent-guardrail and render-doc tests also participate. The next authorized TDD task must migrate this assertion.
++- `VERIFIER-GIT-BOOTSTRAP-MIGRATION` — `check_git` asserts `head_exists == false`, zero staged paths, and zero remotes. The isolated adoption target is an established linked worktree, so the next authorized TDD task must migrate this bootstrap-only assertion.
++
++## Later-task mechanical gate
++
++Before any copy, parse the JSON, re-read each source file, verify exact bytes and SHA-256, reject forbidden paths, resolve each target underneath the isolated target root, and refuse a target whose current state conflicts with the recorded ADD action.</pre>
++<footer>Standalone edition generated from the aligned Markdown source on 26 July 2026.</footer>
++</body>
++</html>
+diff --git a/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.en.md b/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.en.md
+new file mode 100644
+index 00000000..9a16e987
+--- /dev/null
++++ b/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.en.md
+@@ -0,0 +1,58 @@
++# Governed Baseline Adoption Manifest
++
++**Edition:** English  
++**Date:** 26 July 2026  
++**Status:** Proposed mechanical allowlist; source baseline files are not copied by this task  
++**Source:** `C:\Users\thai3\determined-williams (2)` at `8b65a1e974c5a34ee5abc12edab87d1ec54d69a4`  
++**Target:** `C:\tmp\monolith-global-connector-registry-parent` at base `13bcf5149570feb6ec5c7b15dbefd1fb88ef4161`
++
++## Summary
++
++- Included files: **77**
++- Total source bytes: **712400**
++- Inventory SHA-256: `1d25a3fdc6bb008d227fcfc80e865dd244396f8842778135e5afa833bbabb2db`
++- Digest contract: **SHA-256** over the **UTF-8 compact JSON serialization of `/files`**, preserving manifest array and object-key order, with **no trailing newline** (`ConvertTo-Json -Depth 20 -Compress`).
++- Actions: **77 ADD**, **0 REPLACE**
++- Source states: **77 untracked**, **0 tracked**, **0 modified**
++
++The JSON file is the machine-readable authority. Every entry pins a POSIX repository-relative path, exact byte length, SHA-256, purpose group, source Git state, target action, and requirement trace.
++
++## Purpose groups
++
++| Purpose group | Files | Bytes |
++| --- | ---: | ---: |
++| bootstrap-configuration | 2 | 859 |
++| bounded-context-skeleton | 13 | 598 |
++| component-master-engine | 6 | 31243 |
++| component-master-seed | 6 | 34035 |
++| identity-tenancy-contracts | 2 | 7706 |
++| identity-tenancy-documentation | 4 | 19098 |
++| intended-27-test-suite | 7 | 24573 |
++| repository-context | 8 | 42279 |
++| verification-entrypoint | 1 | 20150 |
++| verifier-required-adrs | 16 | 154669 |
++| verifier-required-bootstrap-plan | 4 | 95589 |
++| verifier-required-bootstrap-report | 4 | 64133 |
++| verifier-required-research | 4 | 217468 |
++| **Total** | **77** | **712400** |
++
++## Execution boundary
++
++This allowlist covers the governed parent kitchen-kernel baseline only. A later reviewed task may copy an entry only when the source bytes still match the pinned size and hash and when the resolved target remains inside the isolated parent worktree. The nested runtime and every forbidden noise root remain outside scope. This manifest makes no runtime, deployment, manufacturing, or production-readiness claim.
++
++## Exclusions
++
++The allowlist excludes the nested `determined-williams/` repository, `Documents/`, `All aboute kitchen/`, `artifacts/`, `tmp/`, `.tmp.driveupload/`, `worktrees/`, downloads, archives, copied product systems, source PDF/catalog directories, `desktop.ini`, bytecode/cache files, generated verification output, dependency/build output, credentials, secret values, and unrelated neighboring documents or tools. Exclusion counts in JSON are rule-class counts; the dirty tree was not broadly scanned or hashed.
++
++## Existing target dependencies
++
++The target already tracks the agent-guardrail and render-doc tests, their governance tools/hooks and allowlist, and `.github/workflows/claim-guardrails.yml`. They are recorded in JSON as existing target dependencies and are intentionally outside the ADD entries.
++
++## Unresolved verifier migrations
++
++- `VERIFIER-TEST-COUNT-MIGRATION` — `tools/verify_kitchen_kernel.py` hard-codes an expected count of 27 tests. The intended kitchen-kernel baseline is 20 Component Master tests plus 7 identity-tenancy tests, while full source-root discovery currently runs 258 tests because existing agent-guardrail and render-doc tests also participate. The next authorized TDD task must migrate this assertion.
++- `VERIFIER-GIT-BOOTSTRAP-MIGRATION` — `check_git` asserts `head_exists == false`, zero staged paths, and zero remotes. The isolated adoption target is an established linked worktree, so the next authorized TDD task must migrate this bootstrap-only assertion.
++
++## Later-task mechanical gate
++
++Before any copy, parse the JSON, re-read each source file, verify exact bytes and SHA-256, reject forbidden paths, resolve each target underneath the isolated target root, and refuse a target whose current state conflicts with the recorded ADD action.
+diff --git a/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.json b/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.json
+new file mode 100644
+index 00000000..d4b10726
+--- /dev/null
++++ b/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.json
+@@ -0,0 +1,816 @@
++{
++  "schema_version": "1.0.0",
++  "manifest_id": "global-connector-registry-baseline-adoption",
++  "generated_date": "2026-07-26",
++  "source_root": "C:\\Users\\thai3\\determined-williams (2)",
++  "source_head": "8b65a1e974c5a34ee5abc12edab87d1ec54d69a4",
++  "target_root": "C:\\tmp\\monolith-global-connector-registry-parent",
++  "target_base_commit": "13bcf5149570feb6ec5c7b15dbefd1fb88ef4161",
++  "scope": "Governed parent kitchen-kernel baseline adoption only; no source files are copied by this manifest task.",
++  "execution_contract": {
++    "source_bytes_must_match": true,
++    "target_path_must_remain_inside_target_root": true,
++    "permitted_actions": [
++      "ADD"
++    ],
++    "nested_runtime_in_scope": false,
++    "production_claim": false
++  },
++  "summary": {
++    "included_file_count": 77,
++    "total_bytes": 712400,
++    "inventory_sha256": "1d25a3fdc6bb008d227fcfc80e865dd244396f8842778135e5afa833bbabb2db",
++    "inventory_digest_contract": {
++      "algorithm": "SHA-256",
++      "payload_json_pointer": "/files",
++      "encoding": "UTF-8",
++      "serialization": "compact JSON with manifest array order and object-key order preserved",
++      "reference_command": "ConvertTo-Json -Depth 20 -Compress",
++      "trailing_newline": false
++    },
++    "source_git_state_counts": {
++      "tracked": 0,
++      "untracked": 77,
++      "modified": 0
++    },
++    "target_action_counts": {
++      "ADD": 77,
++      "REPLACE": 0
++    }
++  },
++  "exclusion_rules": {
++    "forbidden_roots": [
++      "determined-williams/",
++      "Documents/",
++      "All aboute kitchen/",
++      "artifacts/",
++      "tmp/",
++      ".tmp.driveupload/",
++      "worktrees/",
++      "downloads/",
++      "archives/",
++      "copied product systems",
++      "source PDF/catalog directories"
++    ],
++    "forbidden_names": [
++      "desktop.ini"
++    ],
++    "forbidden_generated": [
++      "__pycache__/",
++      "*.pyc",
++      "*.pyo",
++      "generated verification output",
++      "dependency directories",
++      "build output"
++    ],
++    "forbidden_content": [
++      "credentials",
++      "secret values",
++      "unrelated neighboring documents or tools"
++    ],
++    "excluded_by_rule_counts": {
++      "nested_runtime_roots": 1,
++      "named_noise_roots": 9,
++      "generated_or_dependency_patterns": 6,
++      "credential_or_secret_classes": 2,
++      "unrelated_neighbor_class": 1
++    },
++    "note": "Counts describe exclusion-rule classes and bounded roots, not a scan or enumeration of the dirty source tree."
++  },
++  "existing_target_dependencies": [
++    {
++      "paths": [
++        "tests/__init__.py",
++        "tests/agent_guardrails/**",
++        "tests/render_docs/**"
++      ],
++      "reason": "Already tracked in the isolated target; tests/__init__.py is sufficient as-is, and unittest discovery currently expands the source-root suite from the intended 27 tests to 258."
++    },
++    {
++      "paths": [
++        "tools/claim_detect.py",
++        "tools/lint_allowlist.py",
++        "tools/lint_certifications.py",
++        "tools/lint_claims.py",
++        "tools/verify_absence.py",
++        "tools/render_docs.py",
++        "tools/hooks/**",
++        "tools/.lint_allowlist"
++      ],
++      "reason": "Already tracked transitive dependencies of the target guardrail and render-doc tests; not re-adopted."
++    },
++    {
++      "paths": [
++        ".github/workflows/claim-guardrails.yml"
++      ],
++      "reason": "Already tracked workflow dependency; not re-adopted."
++    }
++  ],
++  "unresolved_references": [
++    {
++      "id": "VERIFIER-TEST-COUNT-MIGRATION",
++      "status": "expected migration evidence",
++      "detail": "tools/verify_kitchen_kernel.py hard-codes 27 tests, while the source root currently discovers 258 because already-tracked agent_guardrails and render_docs tests are also present. This manifest adopts only the intended 20 Component Master plus 7 identity-tenancy tests; the verifier must be migrated by TDD in the next authorized task."
++    },
++    {
++      "id": "VERIFIER-GIT-BOOTSTRAP-MIGRATION",
++      "status": "expected migration evidence",
++      "detail": "check_git still expects an unborn repository with no HEAD, index, or remotes. The isolated adoption target is an established linked worktree, so this bootstrap-only assertion must be migrated by TDD in the next authorized verifier task."
++    }
++  ],
++  "files": [
++    {
++      "path": ".gitignore",
++      "bytes": 411,
++      "sha256": "69e714c6eae6023e2303466bf201d4d6768fd53b52932bca78e1964a093603ff",
++      "purpose_group": "bootstrap-configuration",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Keeps verifier-generated output, Python bytecode, build output, and local secrets outside the governed adoption set."
++    },
++    {
++      "path": "CONTEXT-MAP.html",
++      "bytes": 5791,
++      "sha256": "aaae374c258dff1c89d59d392566da5fbc99f8931e75ab251ad6be36deedf6aa",
++      "purpose_group": "repository-context",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Verifier bilingual_project_deliverables and bounded_context_inventory checks require the paired repository context and canonical context map."
++    },
++    {
++      "path": "CONTEXT-MAP.md",
++      "bytes": 3984,
++      "sha256": "32c4aa166edace79a5dba1015a246ee18607a2e3e4066bdee4ee8938e61fc844",
++      "purpose_group": "repository-context",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Verifier bilingual_project_deliverables and bounded_context_inventory checks require the paired repository context and canonical context map."
++    },
++    {
++      "path": "CONTEXT-MAP.th.html",
++      "bytes": 6697,
++      "sha256": "e3a8bc5082f689e073c4cca4d6b8304a91dfdc3e073533396cf3ef9c7e9bef57",
++      "purpose_group": "repository-context",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Verifier bilingual_project_deliverables and bounded_context_inventory checks require the paired repository context and canonical context map."
++    },
++    {
++      "path": "CONTEXT-MAP.th.md",
++      "bytes": 5655,
++      "sha256": "6270c3ae0e240ca3a4e521b67b67777507d65a460fc81009842dab2485f5805c",
++      "purpose_group": "repository-context",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Verifier bilingual_project_deliverables and bounded_context_inventory checks require the paired repository context and canonical context map."
++    },
++    {
++      "path": "CONTEXT.html",
++      "bytes": 5324,
++      "sha256": "55e44e2399536065ea41291dafc63d0ee693421aff373b426cd42db1b8530f3d",
++      "purpose_group": "repository-context",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Verifier bilingual_project_deliverables and bounded_context_inventory checks require the paired repository context and canonical context map."
++    },
++    {
++      "path": "CONTEXT.md",
++      "bytes": 2977,
++      "sha256": "715e4865b1a4498ac08c6e9ac7a0c7881a54645a645c088b130fe0572a92de99",
++      "purpose_group": "repository-context",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Verifier bilingual_project_deliverables and bounded_context_inventory checks require the paired repository context and canonical context map."
++    },
++    {
++      "path": "CONTEXT.th.html",
++      "bytes": 7103,
++      "sha256": "bf989b1c535e6ed37106cf61a0fd448e8588f418d079e22caf8f2356336b3240",
++      "purpose_group": "repository-context",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Verifier bilingual_project_deliverables and bounded_context_inventory checks require the paired repository context and canonical context map."
++    },
++    {
++      "path": "CONTEXT.th.md",
++      "bytes": 4748,
++      "sha256": "213f3654285b1079174a220b7cad8806ddd489385d30e7a37459fcbfd981e9a1",
++      "purpose_group": "repository-context",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Verifier bilingual_project_deliverables and bounded_context_inventory checks require the paired repository context and canonical context map."
++    },
++    {
++      "path": "data/component-master/boring-profiles.jsonl",
++      "bytes": 784,
++      "sha256": "02398b4a65b0194e8f40440b0761849d1e4dfd4a23e1ee28cc4837769b195c2d",
++      "purpose_group": "component-master-seed",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Read by Component Master tests and verifier JSON parse, seed-contract, and secret-scan checks."
++    },
++    {
++      "path": "data/component-master/boring-standards/MON-BS-001.json",
++      "bytes": 4358,
++      "sha256": "19f43a54cd422002f851da4503ec73ccf8df2aacd6357f4191f113549b8f79a4",
++      "purpose_group": "component-master-seed",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Read by Component Master tests and verifier JSON parse, seed-contract, and secret-scan checks."
++    },
++    {
++      "path": "data/component-master/finish-mappings.jsonl",
++      "bytes": 2146,
++      "sha256": "994f17b36249c11fb8bc6ea6f83208e8ee94ee66834e3a06956ad29eabc295f2",
++      "purpose_group": "component-master-seed",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Read by Component Master tests and verifier JSON parse, seed-contract, and secret-scan checks."
++    },
++    {
++      "path": "data/component-master/finish-taxonomy.jsonl",
++      "bytes": 2437,
++      "sha256": "1c95db434c50806fcad065d31012541eae29663f531d1595109eec57d54db9ef",
++      "purpose_group": "component-master-seed",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Read by Component Master tests and verifier JSON parse, seed-contract, and secret-scan checks."
++    },
++    {
++      "path": "data/component-master/skus.jsonl",
++      "bytes": 9223,
++      "sha256": "015d063f3324a83a9858001c6d78c641c78dd109a3c36cff1f4169a2ccf65c04",
++      "purpose_group": "component-master-seed",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Read by Component Master tests and verifier JSON parse, seed-contract, and secret-scan checks."
++    },
++    {
++      "path": "data/component-master/specs.jsonl",
++      "bytes": 15087,
++      "sha256": "22796c5eceb98e640b1b7ef66f1e52d60370c1072dfab0c039084c8ee6c829e2",
++      "purpose_group": "component-master-seed",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Read by Component Master tests and verifier JSON parse, seed-contract, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-001-tenant-boundary.en.html",
++      "bytes": 9718,
++      "sha256": "9b9dd9cfb3c57fd8e1d51702a6eb5c279c099504db1afa6719254875c55821bf",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-001-tenant-boundary.en.md",
++      "bytes": 7086,
++      "sha256": "886b8430e728eacdecd2cfbf76692f2f7627968636fa7e49fb6586a4d90ab17b",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-001-tenant-boundary.th.html",
++      "bytes": 12420,
++      "sha256": "aed1c3c85499d26c5628e5ce2febc144d2a5320c1538b457934bc9930d65512d",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-001-tenant-boundary.th.md",
++      "bytes": 9760,
++      "sha256": "5fefdc6d9b55ccc0ac95c1057689c0d4e748fc0b988ac6c51a8f8e98a909c3e4",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-002-component-master-schema.en.html",
++      "bytes": 13695,
++      "sha256": "86f26250b9537ae295f0b609e1dee4ac2f4c3d7cfa7f9542987ab51c6564108e",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-002-component-master-schema.en.md",
++      "bytes": 9905,
++      "sha256": "b5503f639bc5e10b79bf46f1097abfc9658313b19846a233a2d7f7364929e3a6",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-002-component-master-schema.th.html",
++      "bytes": 21318,
++      "sha256": "a904a4b8e119617e36ec11308efbb9fc6415452078ea332a68305bc40b23352f",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-002-component-master-schema.th.md",
++      "bytes": 17495,
++      "sha256": "4ed7b4ec1e9f391d320d28d8ce56d231d7d760e2109d544c4569f18effbd1c45",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-003-finish-library-ip.en.html",
++      "bytes": 7232,
++      "sha256": "a061670530197205ada732679778f4134d9dae7984aeac4602258802a7b47552",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-003-finish-library-ip.en.md",
++      "bytes": 4807,
++      "sha256": "719c0cb8677fb49a54c74ceec45004399d0d2939ec1789c5766c473358579923",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-003-finish-library-ip.th.html",
++      "bytes": 8948,
++      "sha256": "f249de1bd897b2c98bd4db092975f8507a9f941778ff703b4441cabf630a5aac",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-003-finish-library-ip.th.md",
++      "bytes": 6517,
++      "sha256": "08ab8c18be8086326535902f6bdf4021c7348bb03eed6f21eafa2ec3d5702f45",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-005-boring-standard.en.html",
++      "bytes": 7094,
++      "sha256": "16245d5683c63884a43294b4e88593d6e5a8266aa7dc5451e3120e62f635cb5f",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-005-boring-standard.en.md",
++      "bytes": 4604,
++      "sha256": "5f363f6e6dc6c51695cda94a567b7434090c060e8e6002dcb9d85e47639cce18",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-005-boring-standard.th.html",
++      "bytes": 8280,
++      "sha256": "9522c06104995cb97d3cd9e6d1377c1d14bcbc23d6a906f1986d5634afb0f6ae",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/adr/ADR-005-boring-standard.th.md",
++      "bytes": 5790,
++      "sha256": "599b932105fa78cd7cd9a8c2a7d8cbeebce3d7de792be47a2d2a303c7dfb5117",
++      "purpose_group": "verifier-required-adrs",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, decision-token, and secret-scan checks."
++    },
++    {
++      "path": "docs/reports/2026-07-19-kitchen-kernel-bootstrap.en.html",
++      "bytes": 15886,
++      "sha256": "04f4c587e703dec18de1c491d49276371ad99991ab19c5552eac33a5de977c93",
++      "purpose_group": "verifier-required-bootstrap-report",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Conditionally required because an existing bootstrap report edition is present; verifier requires the complete four-edition topology and parity."
++    },
++    {
++      "path": "docs/reports/2026-07-19-kitchen-kernel-bootstrap.en.md",
++      "bytes": 11823,
++      "sha256": "753f073c274d330bbe88cf8d7fc261d87f3d009bdc6744e2f546fd0c235011e8",
++      "purpose_group": "verifier-required-bootstrap-report",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Conditionally required because an existing bootstrap report edition is present; verifier requires the complete four-edition topology and parity."
++    },
++    {
++      "path": "docs/reports/2026-07-19-kitchen-kernel-bootstrap.th.html",
++      "bytes": 20263,
++      "sha256": "a7ddc9d7d216e6cddccbfb56d48f81f75cf329445b1cac8e307fdc834197b46c",
++      "purpose_group": "verifier-required-bootstrap-report",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Conditionally required because an existing bootstrap report edition is present; verifier requires the complete four-edition topology and parity."
++    },
++    {
++      "path": "docs/reports/2026-07-19-kitchen-kernel-bootstrap.th.md",
++      "bytes": 16161,
++      "sha256": "aff935a3701e6e73e9d0ac40c554b5e5b5035d21a9706f20faaac630d0cb9e61",
++      "purpose_group": "verifier-required-bootstrap-report",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Conditionally required because an existing bootstrap report edition is present; verifier requires the complete four-edition topology and parity."
++    },
++    {
++      "path": "docs/research/2026-07-19-kitchen-master-gap-analysis.en.html",
++      "bytes": 51136,
++      "sha256": "afff317f4ec94149406e111a255b7afcee27aa4bbfbb5084a65a4af8aaa74246",
++      "purpose_group": "verifier-required-research",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual parity, standalone HTML, and secret-scan checks."
++    },
++    {
++      "path": "docs/research/2026-07-19-kitchen-master-gap-analysis.en.md",
++      "bytes": 42451,
++      "sha256": "cf238eda6a348d03415529b2bb694386ccd96aa115b078f3b78fbf2354998106",
++      "purpose_group": "verifier-required-research",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual parity, standalone HTML, and secret-scan checks."
++    },
++    {
++      "path": "docs/research/2026-07-19-kitchen-master-gap-analysis.th.html",
++      "bytes": 66346,
++      "sha256": "e6a337f0ee5f26f602d4e08fa35de72a099bb9047d438892007b12397641c799",
++      "purpose_group": "verifier-required-research",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual parity, standalone HTML, and secret-scan checks."
++    },
++    {
++      "path": "docs/research/2026-07-19-kitchen-master-gap-analysis.th.md",
++      "bytes": 57535,
++      "sha256": "2bd902f0a15af71767ed440630c9527ac1fe835134695353a9becab3c94fb38b",
++      "purpose_group": "verifier-required-research",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual parity, standalone HTML, and secret-scan checks."
++    },
++    {
++      "path": "docs/superpowers/plans/2026-07-19-kitchen-knowledge-kernel-bootstrap.en.html",
++      "bytes": 26347,
++      "sha256": "7f56013cdb6e293673a0133aeb3d447485d79aade37cfcee6c82ef5fedee0ca4",
++      "purpose_group": "verifier-required-bootstrap-plan",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, and secret-scan checks."
++    },
++    {
++      "path": "docs/superpowers/plans/2026-07-19-kitchen-knowledge-kernel-bootstrap.en.md",
++      "bytes": 20019,
++      "sha256": "e3f7eeb91beae60e16e36d38ad91dc04c5e79a59e1b6319263acdaf20e765e0d",
++      "purpose_group": "verifier-required-bootstrap-plan",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, and secret-scan checks."
++    },
++    {
++      "path": "docs/superpowers/plans/2026-07-19-kitchen-knowledge-kernel-bootstrap.th.html",
++      "bytes": 27079,
++      "sha256": "3e34c6042d264b3fc986ffa503b78c5818068bb4d1cec95a7d53136ec24fbbea",
++      "purpose_group": "verifier-required-bootstrap-plan",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, and secret-scan checks."
++    },
++    {
++      "path": "docs/superpowers/plans/2026-07-19-kitchen-knowledge-kernel-bootstrap.th.md",
++      "bytes": 22144,
++      "sha256": "a29bfc4f351c1ef2dee7f1b1dd9dfa7b1f4210a3636ff2219e7dbe73f8120895",
++      "purpose_group": "verifier-required-bootstrap-plan",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by verifier bilingual deliverable, standalone HTML, and secret-scan checks."
++    },
++    {
++      "path": "packages/ai-governance/.gitkeep",
++      "bytes": 46,
++      "sha256": "8344f854c96ab09d92e70dd745d5521483322960a4b3e63f0f6e973dcb72a50c",
++      "purpose_group": "bounded-context-skeleton",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Sole artifact preserving an otherwise empty required bounded-context directory for the verifier 15-context inventory."
++    },
++    {
++      "path": "packages/bom-costing/.gitkeep",
++      "bytes": 46,
++      "sha256": "8344f854c96ab09d92e70dd745d5521483322960a4b3e63f0f6e973dcb72a50c",
++      "purpose_group": "bounded-context-skeleton",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Sole artifact preserving an otherwise empty required bounded-context directory for the verifier 15-context inventory."
++    },
++    {
++      "path": "packages/cad-parametric-design/.gitkeep",
++      "bytes": 46,
++      "sha256": "8344f854c96ab09d92e70dd745d5521483322960a4b3e63f0f6e973dcb72a50c",
++      "purpose_group": "bounded-context-skeleton",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Sole artifact preserving an otherwise empty required bounded-context directory for the verifier 15-context inventory."
++    },
++    {
++      "path": "packages/component-master/pyproject.toml",
++      "bytes": 340,
++      "sha256": "c3bab0fa7f6b799e7b1fd9ca6c4d19f6cc73418c188880e927902c0520bd2cf3",
++      "purpose_group": "component-master-engine",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Preserves package-local build-system and project metadata so the Component Master source can be adopted as one coherent Python package."
++    },
++    {
++      "path": "packages/component-master/src/monolith_component_master/__init__.py",
++      "bytes": 1260,
++      "sha256": "c54d3920949399cc79e846cc9c309bb12a93dd2532c0a049f1df5114be13bf04",
++      "purpose_group": "component-master-engine",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Imported by Component Master tests and compiled by verify_kitchen_kernel.py."
++    },
++    {
++      "path": "packages/component-master/src/monolith_component_master/boring.py",
++      "bytes": 9016,
++      "sha256": "9a37129c311638072a104c6ca775618ca4617cbfe9eb569fe1d6c37930f2866d",
++      "purpose_group": "component-master-engine",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Imported by Component Master tests and compiled by verify_kitchen_kernel.py."
++    },
++    {
++      "path": "packages/component-master/src/monolith_component_master/catalog.py",
++      "bytes": 11346,
++      "sha256": "3eb3600404df353e995c9d00beeca2c3a0a7c0496fca073a609d3a932cc90bb4",
++      "purpose_group": "component-master-engine",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Imported by Component Master tests and compiled by verify_kitchen_kernel.py."
++    },
++    {
++      "path": "packages/component-master/src/monolith_component_master/finishes.py",
++      "bytes": 3912,
++      "sha256": "e638d6ef1d65b22cd469e063797137783b5a013b6a8f0a5ed8da2d060709ec7e",
++      "purpose_group": "component-master-engine",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Imported by Component Master tests and compiled by verify_kitchen_kernel.py."
++    },
++    {
++      "path": "packages/component-master/src/monolith_component_master/validators.py",
++      "bytes": 5369,
++      "sha256": "2f012e12c1aa06510f15965e0f7895be9ccffa4cbb7f47ea7248c48f88b2dfd1",
++      "purpose_group": "component-master-engine",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Imported by Component Master tests and compiled by verify_kitchen_kernel.py."
++    },
++    {
++      "path": "packages/customer-partner/.gitkeep",
++      "bytes": 46,
++      "sha256": "8344f854c96ab09d92e70dd745d5521483322960a4b3e63f0f6e973dcb72a50c",
++      "purpose_group": "bounded-context-skeleton",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Sole artifact preserving an otherwise empty required bounded-context directory for the verifier 15-context inventory."
++    },
++    {
++      "path": "packages/finance/.gitkeep",
++      "bytes": 46,
++      "sha256": "8344f854c96ab09d92e70dd745d5521483322960a4b3e63f0f6e973dcb72a50c",
++      "purpose_group": "bounded-context-skeleton",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Sole artifact preserving an otherwise empty required bounded-context directory for the verifier 15-context inventory."
++    },
++    {
++      "path": "packages/geometry-kernel/.gitkeep",
++      "bytes": 46,
++      "sha256": "8344f854c96ab09d92e70dd745d5521483322960a4b3e63f0f6e973dcb72a50c",
++      "purpose_group": "bounded-context-skeleton",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Sole artifact preserving an otherwise empty required bounded-context directory for the verifier 15-context inventory."
++    },
++    {
++      "path": "packages/identity-tenancy/contracts/isolation-test-matrix.json",
++      "bytes": 4069,
++      "sha256": "82ec04b29cf97b94e0a6a03de4e4e26f37e8bd228cfa20bd061a9b9b4c4f900a",
++      "purpose_group": "identity-tenancy-contracts",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Read by identity-tenancy tests and the verifier tenant_contract_contract check."
++    },
++    {
++      "path": "packages/identity-tenancy/contracts/tenant-boundary.schema.json",
++      "bytes": 3637,
++      "sha256": "c29c84217fd423c4bd8f283621cec36ddbe6b23dc8caf8f6d2c3de84a8fd1adf",
++      "purpose_group": "identity-tenancy-contracts",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Read by identity-tenancy tests and the verifier tenant_contract_contract check."
++    },
++    {
++      "path": "packages/identity-tenancy/README.en.html",
++      "bytes": 5204,
++      "sha256": "14965d1c470a865532dfa2936d53ea756f40bfee9ab6fef137d7766559055804",
++      "purpose_group": "identity-tenancy-documentation",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by the identity-tenancy bilingual-readme test and verifier bilingual/standalone HTML checks."
++    },
++    {
++      "path": "packages/identity-tenancy/README.en.md",
++      "bytes": 2968,
++      "sha256": "496dc369daf6da4343221aa07c23642bc1400a154ddef5cb91a41ccc0c204daf",
++      "purpose_group": "identity-tenancy-documentation",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by the identity-tenancy bilingual-readme test and verifier bilingual/standalone HTML checks."
++    },
++    {
++      "path": "packages/identity-tenancy/README.th.html",
++      "bytes": 6587,
++      "sha256": "f8e86240e55d5752d6f24c729037d91a3be3792d830e74b5de6a303289308fc3",
++      "purpose_group": "identity-tenancy-documentation",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by the identity-tenancy bilingual-readme test and verifier bilingual/standalone HTML checks."
++    },
++    {
++      "path": "packages/identity-tenancy/README.th.md",
++      "bytes": 4339,
++      "sha256": "dd3a8561a65a14abde386fabb0565f527c3493d531dffad60eab2ddacc0dc8b8",
++      "purpose_group": "identity-tenancy-documentation",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Required by the identity-tenancy bilingual-readme test and verifier bilingual/standalone HTML checks."
++    },
++    {
++      "path": "packages/manufacturing/.gitkeep",
++      "bytes": 46,
++      "sha256": "8344f854c96ab09d92e70dd745d5521483322960a4b3e63f0f6e973dcb72a50c",
++      "purpose_group": "bounded-context-skeleton",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Sole artifact preserving an otherwise empty required bounded-context directory for the verifier 15-context inventory."
++    },
++    {
++      "path": "packages/platform-api/.gitkeep",
++      "bytes": 46,
++      "sha256": "8344f854c96ab09d92e70dd745d5521483322960a4b3e63f0f6e973dcb72a50c",
++      "purpose_group": "bounded-context-skeleton",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Sole artifact preserving an otherwise empty required bounded-context directory for the verifier 15-context inventory."
++    },
++    {
++      "path": "packages/procurement/.gitkeep",
++      "bytes": 46,
++      "sha256": "8344f854c96ab09d92e70dd745d5521483322960a4b3e63f0f6e973dcb72a50c",
++      "purpose_group": "bounded-context-skeleton",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Sole artifact preserving an otherwise empty required bounded-context directory for the verifier 15-context inventory."
++    },
++    {
++      "path": "packages/product-configuration/.gitkeep",
++      "bytes": 46,
++      "sha256": "8344f854c96ab09d92e70dd745d5521483322960a4b3e63f0f6e973dcb72a50c",
++      "purpose_group": "bounded-context-skeleton",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Sole artifact preserving an otherwise empty required bounded-context directory for the verifier 15-context inventory."
++    },
++    {
++      "path": "packages/quality-field-service/.gitkeep",
++      "bytes": 46,
++      "sha256": "8344f854c96ab09d92e70dd745d5521483322960a4b3e63f0f6e973dcb72a50c",
++      "purpose_group": "bounded-context-skeleton",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Sole artifact preserving an otherwise empty required bounded-context directory for the verifier 15-context inventory."
++    },
++    {
++      "path": "packages/security-observability/.gitkeep",
++      "bytes": 46,
++      "sha256": "8344f854c96ab09d92e70dd745d5521483322960a4b3e63f0f6e973dcb72a50c",
++      "purpose_group": "bounded-context-skeleton",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Sole artifact preserving an otherwise empty required bounded-context directory for the verifier 15-context inventory."
++    },
++    {
++      "path": "packages/workflow/.gitkeep",
++      "bytes": 46,
++      "sha256": "8344f854c96ab09d92e70dd745d5521483322960a4b3e63f0f6e973dcb72a50c",
++      "purpose_group": "bounded-context-skeleton",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Sole artifact preserving an otherwise empty required bounded-context directory for the verifier 15-context inventory."
++    },
++    {
++      "path": "pyproject.toml",
++      "bytes": 448,
++      "sha256": "03f46757ffbe6da7cd1034f73a71059d8851bd10a6dc6b4cdf41345ee9278286",
++      "purpose_group": "bootstrap-configuration",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Preserves repository-level Python build metadata and setuptools package-discovery configuration for standard packaging and repository tooling."
++    },
++    {
++      "path": "tests/component_master/__init__.py",
++      "bytes": 52,
++      "sha256": "2299d1da021b69d3ad6865269bf22082d6f14ec5680d9ba181c615000596698e",
++      "purpose_group": "intended-27-test-suite",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Contributes to the intended 20 Component Master plus 7 identity-tenancy unittest baseline compiled and counted by the verifier migration target."
++    },
++    {
++      "path": "tests/component_master/test_boring_standard.py",
++      "bytes": 2905,
++      "sha256": "95c5553e54af363288080d3f2018297d1c0046947b33233b70cb318bde93b12d",
++      "purpose_group": "intended-27-test-suite",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Contributes to the intended 20 Component Master plus 7 identity-tenancy unittest baseline compiled and counted by the verifier migration target."
++    },
++    {
++      "path": "tests/component_master/test_catalog_baseline.py",
++      "bytes": 1963,
++      "sha256": "0fb4ef7f425d96c824d9f8f7c2a8ff55fca4ed601bed1f5447ba20d03ed2b326",
++      "purpose_group": "intended-27-test-suite",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Contributes to the intended 20 Component Master plus 7 identity-tenancy unittest baseline compiled and counted by the verifier migration target."
++    },
++    {
++      "path": "tests/component_master/test_finish_taxonomy.py",
++      "bytes": 5157,
++      "sha256": "df9fa4139a28bf7686687dc70bef9085eea3233f593efc69896384389ecf3fa2",
++      "purpose_group": "intended-27-test-suite",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Contributes to the intended 20 Component Master plus 7 identity-tenancy unittest baseline compiled and counted by the verifier migration target."
++    },
++    {
++      "path": "tests/component_master/test_seed_integrity.py",
++      "bytes": 7938,
++      "sha256": "8b1995a8d201d7216015969f8bec060a4b2c2a011e45fc5e0308e76124e757d1",
++      "purpose_group": "intended-27-test-suite",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Contributes to the intended 20 Component Master plus 7 identity-tenancy unittest baseline compiled and counted by the verifier migration target."
++    },
++    {
++      "path": "tests/identity_tenancy/__init__.py",
++      "bytes": 51,
++      "sha256": "e5ca030af6f027485092a89a5d802fc98b6e50e37a76084d7bd216ded41eb659",
++      "purpose_group": "intended-27-test-suite",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Contributes to the intended 20 Component Master plus 7 identity-tenancy unittest baseline compiled and counted by the verifier migration target."
++    },
++    {
++      "path": "tests/identity_tenancy/test_contracts.py",
++      "bytes": 6507,
++      "sha256": "69d79c8346c355c36669a7257e8dc23b9acfb40f12897124e2ee29848884da6b",
++      "purpose_group": "intended-27-test-suite",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Contributes to the intended 20 Component Master plus 7 identity-tenancy unittest baseline compiled and counted by the verifier migration target."
++    },
++    {
++      "path": "tools/verify_kitchen_kernel.py",
++      "bytes": 20150,
++      "sha256": "e35033c6455e70ac0827e1b9ffece5fc68dc03b7b3798a25b8ecef39434a42c9",
++      "purpose_group": "verification-entrypoint",
++      "source_git_state": "untracked",
++      "target_action": "ADD",
++      "required_by": "Authoritative verifier that resolves the governed kitchen-kernel baseline and emits the verification summary."
++    }
++  ]
++}
+diff --git a/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.th.html b/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.th.html
+new file mode 100644
+index 00000000..17ecde60
+--- /dev/null
++++ b/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.th.html
+@@ -0,0 +1,82 @@
++<!doctype html>
++<html lang="th">
++<head>
++<meta charset="utf-8">
++<meta name="viewport" content="width=device-width, initial-scale=1">
++<title>Manifest สำหรับรับ baseline ที่อยู่ภายใต้การกำกับดูแล</title>
++<style>
++body{font-family:Segoe UI,Tahoma,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1.25rem;line-height:1.55;color:#1d2433}
++h1{color:#173b57} .summary{background:#eef6fa;border-left:5px solid #25759b;padding:1rem;margin:1rem 0}
++pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f8fa;border:1px solid #dfe3e8;border-radius:8px;padding:1rem}
++code{font-family:Consolas,monospace} footer{margin-top:2rem;color:#586273;font-size:.9rem}
++</style>
++</head>
++<body>
++<h1>Manifest สำหรับรับ baseline ที่อยู่ภายใต้การกำกับดูแล</h1>
++<section class="summary">
++<p><strong>Included files:</strong> 77</p>
++<p><strong>Total bytes:</strong> 712400</p>
++<p><strong>Inventory SHA-256:</strong> <code>1d25a3fdc6bb008d227fcfc80e865dd244396f8842778135e5afa833bbabb2db</code></p>
++<p><strong>ข้อตกลง digest:</strong> ใช้ SHA-256 กับ compact JSON ของ <code>/files</code> ที่เข้ารหัส UTF-8 โดยรักษาลำดับ array และลำดับ key ตาม manifest และกำหนด <code>trailing_newline=false</code> (<code>ConvertTo-Json -Depth 20 -Compress</code>)</p>
++</section>
++<pre># Manifest สำหรับรับ baseline ที่อยู่ภายใต้การกำกับดูแล
++
++**ฉบับ:** ภาษาไทย  
++**วันที่:** 26 กรกฎาคม 2026  
++**สถานะ:** Allowlist เชิงกลที่เสนอไว้ งานนี้ยังไม่คัดลอกไฟล์ baseline ต้นทาง  
++**ต้นทาง:** `C:\Users\thai3\determined-williams (2)` ที่ `8b65a1e974c5a34ee5abc12edab87d1ec54d69a4`  
++**เป้าหมาย:** `C:\tmp\monolith-global-connector-registry-parent` ที่ base `13bcf5149570feb6ec5c7b15dbefd1fb88ef4161`
++
++## สรุป
++
++- ไฟล์ที่รวม: **77**
++- จำนวนไบต์ต้นทางรวม: **712400**
++- Inventory SHA-256: `1d25a3fdc6bb008d227fcfc80e865dd244396f8842778135e5afa833bbabb2db`
++- ข้อตกลง digest: ใช้ **SHA-256** กับ **compact JSON ของ `/files` ที่เข้ารหัส UTF-8** โดยรักษาลำดับ array และลำดับ key ตาม manifest และกำหนด **`trailing_newline=false`** (`ConvertTo-Json -Depth 20 -Compress`)
++- การดำเนินการ: **77 ADD**, **0 REPLACE**
++- สถานะ Git ต้นทาง: **77 untracked**, **0 tracked**, **0 modified**
++
++ไฟล์ JSON เป็นหลักฐานแบบ machine-readable ที่มีอำนาจกำกับ แต่ละรายการตรึง path แบบ POSIX ที่สัมพันธ์กับ repository, จำนวนไบต์ที่แน่นอน, SHA-256, กลุ่มวัตถุประสงค์, สถานะ Git ต้นทาง, การดำเนินการต่อเป้าหมาย และเหตุผลที่ต้องใช้
++
++## กลุ่มวัตถุประสงค์
++
++| กลุ่มวัตถุประสงค์ | ไฟล์ | ไบต์ |
++| --- | ---: | ---: |
++| bootstrap-configuration | 2 | 859 |
++| bounded-context-skeleton | 13 | 598 |
++| component-master-engine | 6 | 31243 |
++| component-master-seed | 6 | 34035 |
++| identity-tenancy-contracts | 2 | 7706 |
++| identity-tenancy-documentation | 4 | 19098 |
++| intended-27-test-suite | 7 | 24573 |
++| repository-context | 8 | 42279 |
++| verification-entrypoint | 1 | 20150 |
++| verifier-required-adrs | 16 | 154669 |
++| verifier-required-bootstrap-plan | 4 | 95589 |
++| verifier-required-bootstrap-report | 4 | 64133 |
++| verifier-required-research | 4 | 217468 |
++| **รวม** | **77** | **712400** |
++
++## ขอบเขตการดำเนินการ
++
++Allowlist นี้ครอบคลุมเฉพาะ baseline ของ kitchen kernel ใน parent ที่อยู่ภายใต้การกำกับดูแล งานที่ได้รับการทบทวนในภายหลังจึงจะคัดลอกรายการได้เมื่อไบต์ต้นทางยังตรงกับขนาดและ hash ที่ตรึงไว้ และ path เป้าหมายที่ resolve แล้วยังอยู่ภายใน isolated parent worktree เท่านั้น Nested runtime และ noise root ที่ห้ามทั้งหมดอยู่นอกขอบเขต Manifest นี้ไม่อ้างความพร้อมด้าน runtime, deployment, manufacturing หรือ production
++
++## การยกเว้น
++
++Allowlist ไม่รวม nested repository `determined-williams/`, `Documents/`, `All aboute kitchen/`, `artifacts/`, `tmp/`, `.tmp.driveupload/`, `worktrees/`, downloads, archives, ระบบผลิตภัณฑ์ที่ถูกคัดลอก, ไดเรกทอรี PDF/catalog ต้นทาง, `desktop.ini`, bytecode/cache, ผล verification ที่สร้างขึ้น, dependency/build output, credentials, secret values และเอกสารหรือเครื่องมือข้างเคียงที่ไม่เกี่ยวข้อง จำนวนการยกเว้นใน JSON คือจำนวนคลาสของกฎ ไม่ใช่ผลจากการ scan หรือ hash dirty tree แบบกว้าง
++
++## Dependency ที่มีอยู่แล้วในเป้าหมาย
++
++เป้าหมาย track ชุดทดสอบ agent guardrail และ render-doc อยู่แล้ว รวมถึง governance tools/hooks, allowlist และ `.github/workflows/claim-guardrails.yml` รายการเหล่านี้ถูกบันทึกเป็น existing target dependencies ใน JSON และอยู่นอกชุดรายการ ADD โดยตั้งใจ
++
++## ประเด็น migration ของ verifier ที่ยังต้องดำเนินการ
++
++- `VERIFIER-TEST-COUNT-MIGRATION` — `tools/verify_kitchen_kernel.py` กำหนดจำนวนที่คาดไว้เป็น 27 tests โดย baseline kitchen-kernel ที่ตั้งใจไว้คือ 20 Component Master tests และ 7 identity-tenancy tests ส่วนการ discover ทั้ง source root ปัจจุบันรัน 258 tests เพราะชุดทดสอบ agent guardrail และ render-doc ที่มีอยู่แล้วเข้าร่วมด้วย งาน TDD ที่ได้รับอนุญาตถัดไปต้อง migrate assertion นี้
++- `VERIFIER-GIT-BOOTSTRAP-MIGRATION` — `check_git` กำหนด assertion เป็น `head_exists == false`, staged path เท่ากับศูนย์ และ remote เท่ากับศูนย์ ขณะที่ isolated adoption target เป็น linked worktree ที่จัดตั้งแล้ว งาน TDD ที่ได้รับอนุญาตถัดไปต้อง migrate assertion สำหรับ bootstrap นี้
++
++## Gate เชิงกลสำหรับงานภายหลัง
++
++ก่อนคัดลอก ต้อง parse JSON, อ่านไฟล์ต้นทางทุกไฟล์ใหม่, ตรวจจำนวนไบต์และ SHA-256 ที่แน่นอน, ปฏิเสธ path ที่ห้าม, resolve ทุกเป้าหมายให้อยู่ใต้ isolated target root และปฏิเสธเป้าหมายที่สถานะปัจจุบันขัดกับการดำเนินการ ADD ที่บันทึกไว้</pre>
++<footer>Standalone edition generated from the aligned Markdown source on 26 July 2026.</footer>
++</body>
++</html>
+diff --git a/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.th.md b/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.th.md
+new file mode 100644
+index 00000000..353cf5f5
+--- /dev/null
++++ b/docs/reports/2026-07-26-global-connector-registry-baseline-adoption-manifest.th.md
+@@ -0,0 +1,58 @@
++# Manifest สำหรับรับ baseline ที่อยู่ภายใต้การกำกับดูแล
++
++**ฉบับ:** ภาษาไทย  
++**วันที่:** 26 กรกฎาคม 2026  
++**สถานะ:** Allowlist เชิงกลที่เสนอไว้ งานนี้ยังไม่คัดลอกไฟล์ baseline ต้นทาง  
++**ต้นทาง:** `C:\Users\thai3\determined-williams (2)` ที่ `8b65a1e974c5a34ee5abc12edab87d1ec54d69a4`  
++**เป้าหมาย:** `C:\tmp\monolith-global-connector-registry-parent` ที่ base `13bcf5149570feb6ec5c7b15dbefd1fb88ef4161`
++
++## สรุป
++
++- ไฟล์ที่รวม: **77**
++- จำนวนไบต์ต้นทางรวม: **712400**
++- Inventory SHA-256: `1d25a3fdc6bb008d227fcfc80e865dd244396f8842778135e5afa833bbabb2db`
++- ข้อตกลง digest: ใช้ **SHA-256** กับ **compact JSON ของ `/files` ที่เข้ารหัส UTF-8** โดยรักษาลำดับ array และลำดับ key ตาม manifest และกำหนด **`trailing_newline=false`** (`ConvertTo-Json -Depth 20 -Compress`)
++- การดำเนินการ: **77 ADD**, **0 REPLACE**
++- สถานะ Git ต้นทาง: **77 untracked**, **0 tracked**, **0 modified**
++
++ไฟล์ JSON เป็นหลักฐานแบบ machine-readable ที่มีอำนาจกำกับ แต่ละรายการตรึง path แบบ POSIX ที่สัมพันธ์กับ repository, จำนวนไบต์ที่แน่นอน, SHA-256, กลุ่มวัตถุประสงค์, สถานะ Git ต้นทาง, การดำเนินการต่อเป้าหมาย และเหตุผลที่ต้องใช้
++
++## กลุ่มวัตถุประสงค์
++
++| กลุ่มวัตถุประสงค์ | ไฟล์ | ไบต์ |
++| --- | ---: | ---: |
++| bootstrap-configuration | 2 | 859 |
++| bounded-context-skeleton | 13 | 598 |
++| component-master-engine | 6 | 31243 |
++| component-master-seed | 6 | 34035 |
++| identity-tenancy-contracts | 2 | 7706 |
++| identity-tenancy-documentation | 4 | 19098 |
++| intended-27-test-suite | 7 | 24573 |
++| repository-context | 8 | 42279 |
++| verification-entrypoint | 1 | 20150 |
++| verifier-required-adrs | 16 | 154669 |
++| verifier-required-bootstrap-plan | 4 | 95589 |
++| verifier-required-bootstrap-report | 4 | 64133 |
++| verifier-required-research | 4 | 217468 |
++| **รวม** | **77** | **712400** |
++
++## ขอบเขตการดำเนินการ
++
++Allowlist นี้ครอบคลุมเฉพาะ baseline ของ kitchen kernel ใน parent ที่อยู่ภายใต้การกำกับดูแล งานที่ได้รับการทบทวนในภายหลังจึงจะคัดลอกรายการได้เมื่อไบต์ต้นทางยังตรงกับขนาดและ hash ที่ตรึงไว้ และ path เป้าหมายที่ resolve แล้วยังอยู่ภายใน isolated parent worktree เท่านั้น Nested runtime และ noise root ที่ห้ามทั้งหมดอยู่นอกขอบเขต Manifest นี้ไม่อ้างความพร้อมด้าน runtime, deployment, manufacturing หรือ production
++
++## การยกเว้น
++
++Allowlist ไม่รวม nested repository `determined-williams/`, `Documents/`, `All aboute kitchen/`, `artifacts/`, `tmp/`, `.tmp.driveupload/`, `worktrees/`, downloads, archives, ระบบผลิตภัณฑ์ที่ถูกคัดลอก, ไดเรกทอรี PDF/catalog ต้นทาง, `desktop.ini`, bytecode/cache, ผล verification ที่สร้างขึ้น, dependency/build output, credentials, secret values และเอกสารหรือเครื่องมือข้างเคียงที่ไม่เกี่ยวข้อง จำนวนการยกเว้นใน JSON คือจำนวนคลาสของกฎ ไม่ใช่ผลจากการ scan หรือ hash dirty tree แบบกว้าง
++
++## Dependency ที่มีอยู่แล้วในเป้าหมาย
++
++เป้าหมาย track ชุดทดสอบ agent guardrail และ render-doc อยู่แล้ว รวมถึง governance tools/hooks, allowlist และ `.github/workflows/claim-guardrails.yml` รายการเหล่านี้ถูกบันทึกเป็น existing target dependencies ใน JSON และอยู่นอกชุดรายการ ADD โดยตั้งใจ
++
++## ประเด็น migration ของ verifier ที่ยังต้องดำเนินการ
++
++- `VERIFIER-TEST-COUNT-MIGRATION` — `tools/verify_kitchen_kernel.py` กำหนดจำนวนที่คาดไว้เป็น 27 tests โดย baseline kitchen-kernel ที่ตั้งใจไว้คือ 20 Component Master tests และ 7 identity-tenancy tests ส่วนการ discover ทั้ง source root ปัจจุบันรัน 258 tests เพราะชุดทดสอบ agent guardrail และ render-doc ที่มีอยู่แล้วเข้าร่วมด้วย งาน TDD ที่ได้รับอนุญาตถัดไปต้อง migrate assertion นี้
++- `VERIFIER-GIT-BOOTSTRAP-MIGRATION` — `check_git` กำหนด assertion เป็น `head_exists == false`, staged path เท่ากับศูนย์ และ remote เท่ากับศูนย์ ขณะที่ isolated adoption target เป็น linked worktree ที่จัดตั้งแล้ว งาน TDD ที่ได้รับอนุญาตถัดไปต้อง migrate assertion สำหรับ bootstrap นี้
++
++## Gate เชิงกลสำหรับงานภายหลัง
++
++ก่อนคัดลอก ต้อง parse JSON, อ่านไฟล์ต้นทางทุกไฟล์ใหม่, ตรวจจำนวนไบต์และ SHA-256 ที่แน่นอน, ปฏิเสธ path ที่ห้าม, resolve ทุกเป้าหมายให้อยู่ใต้ isolated target root และปฏิเสธเป้าหมายที่สถานะปัจจุบันขัดกับการดำเนินการ ADD ที่บันทึกไว้

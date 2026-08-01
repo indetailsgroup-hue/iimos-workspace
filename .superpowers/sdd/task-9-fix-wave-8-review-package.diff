@@ -1,0 +1,151 @@
+diff --git a/packages/component-master/src/monolith_component_master/coverage.py b/packages/component-master/src/monolith_component_master/coverage.py
+index a0d45a727..144d03af4 100644
+--- a/packages/component-master/src/monolith_component_master/coverage.py
++++ b/packages/component-master/src/monolith_component_master/coverage.py
+@@ -2060,8 +2060,9 @@ class CoverageSnapshot:
+ 
+         **What this does not close, stated rather than claimed.** Each
+         unreached shape is exercised by
+-        ``tests.component_master.registry.test_first_cohort_denominator.CountEnrollmentResidualTests``;
+-        the non-homogeneous mapping is driven through publication by
++        ``tests.component_master.registry.test_first_cohort_denominator.CountEnrollmentResidualTests``,
++        **except** the non-homogeneous mapping, which is driven through
++        publication by
+         ``tests.component_master.registry.test_first_cohort_denominator.PublicationGuardSeamTests``.
+ 
+         - **A count reached through any other shape.** A property returning a
+diff --git a/packages/component-master/src/monolith_component_master/releases.py b/packages/component-master/src/monolith_component_master/releases.py
+index 64e866873..bc3031afd 100644
+--- a/packages/component-master/src/monolith_component_master/releases.py
++++ b/packages/component-master/src/monolith_component_master/releases.py
+@@ -164,7 +164,11 @@ def _published_count_payloads(
+     **What this does not close, stated rather than claimed.** Each residual
+     is exercised by
+     ``tests.component_master.registry.test_first_cohort_denominator.PublicationGuardResidualTests``
+-    and asserted genuinely still open.
++    and asserted genuinely still open, **except** the record/payload enrolment
++    asymmetry below, which
++    ``tests.component_master.registry.test_first_cohort_denominator.PublicationGuardSeamTests``
++    drives through ``snapshot_payload``; the residual class holds only a
++    prose-fragment assertion for it.
+ 
+     - **A count-shaped mapping carrying a sixth key is a container, not a
+       count.** The match is the exact five-key set, so an object holding the
+@@ -174,13 +178,17 @@ def _published_count_payloads(
+       fields, while this guard compares only objects that are exactly a
+       published count — and the difference is stated on both walks so the
+       two definitions cannot drift apart unnoticed.
+-    - **A payload that contains itself is not refused; it exhausts the
+-      stack.** A container this walk descends into that holds itself makes the
+-      walk recurse until ``RecursionError``, which names no field and gives no
+-      reason, while every refusal in this module does both. Nothing here
+-      detects the cycle. :func:`canonical_json_bytes` fails the same way on the
+-      same payload, so such a payload is unrenderable rather than merely
+-      uncollected — but by stack exhaustion, not by a rule.
++    - **A cycle through a container this walk does not recognise as a count
++      is not refused; it exhausts the stack.** Such a container holding itself
++      makes the walk recurse until ``RecursionError``, which names no field
++      and gives no reason. Nothing here detects the cycle.
++      :func:`canonical_json_bytes` fails the same way on the same payload, so
++      such a payload is unrenderable rather than merely uncollected — but by
++      stack exhaustion, not by a rule. A count-shaped mapping that contains
++      itself is refused instead: the second visit finds its label already
++      collected, so the duplicate-label arm names the field and the reason
++      while :func:`canonical_json_bytes` still exhausts the stack on the same
++      payload. That refusal is an accident of that arm, not cycle handling.
+     - This collector sees only the payload. On the record side,
+       :attr:`~monolith_component_master.coverage.CoverageSnapshot.counts`
+       enrols a count-bearing mapping only when it is nonempty and every value
+diff --git a/tests/component_master/registry/test_first_cohort_denominator.py b/tests/component_master/registry/test_first_cohort_denominator.py
+index 3fedf09e5..9457a7329 100644
+--- a/tests/component_master/registry/test_first_cohort_denominator.py
++++ b/tests/component_master/registry/test_first_cohort_denominator.py
+@@ -2430,9 +2430,9 @@ class PublicationGuardSeamTests(RootCase):
+         """Canonical JSON walks a count's values, so the collector must too.
+ 
+         The claim is the canonical container set, not a level count, so the
+-        depths run past any plausible cap and the containers are mixed: a walk
+-        capped at one or two levels below a count fails the deeper rows, and a
+-        walk that descends only some container types fails the mixed ones."""
++        depths vary and the containers are mixed: a walk capped at one or two
++        levels below a count fails the deeper rows, and a walk that descends
++        only some container types fails the mixed ones."""
+ 
+         def nest(value: object, depth: int) -> object:
+             for level in range(depth):
+@@ -2444,7 +2444,7 @@ class PublicationGuardSeamTests(RootCase):
+                     value = (value,)
+             return value
+ 
+-        for depth in (1, 2, 4, 7):
++        for depth in (1, 2, 3, 4, 7):
+             with self.subTest(depth=depth):
+                 inner = doctored_count_payload("inner_count_inside_a_count")
+                 outer = doctored_count_payload("outer_count")
+@@ -2675,27 +2675,50 @@ class PublicationGuardResidualTests(RootCase):
+             COMMITTED_SNAPSHOT.read_bytes(), release.payload_bytes
+         )
+ 
+-    def test_a_cyclic_payload_exhausts_the_stack_instead_of_being_refused(
++    def test_a_cyclic_payload_exhausts_the_stack_or_trips_the_duplicate_arm(
+         self,
+     ) -> None:
+-        """The residual is the failure mode, not a bypass.
+-
+-        A container that holds itself is walked forever. Both the collector and
+-        the canonical serialiser stop only at the recursion limit, so the
+-        payload is unpublishable — by ``RecursionError``, which names no field,
+-        rather than by a refusal that says what is wrong."""
++        """The residual is the failure mode, not a bypass — and it is not
++        universal.
++
++        A container this walk descends into and does *not* recognise as a
++        count, holding itself, is walked forever: both the collector and the
++        canonical serialiser stop only at the recursion limit, so the payload
++        is unpublishable by ``RecursionError``, which names no field, rather
++        than by a refusal that says what is wrong. A count-shaped mapping that
++        contains itself is the exception: the collector's duplicate-label arm
++        refuses it by name, while the canonical serialiser still exhausts the
++        stack. That refusal is an accident of that arm, not cycle handling."""
+ 
+         cycle: list[object] = []
+         cycle.append(cycle)
+-        count = doctored_count_payload("cyclic_count")
+-        count["measured_by"] = cycle
+-        payload = {"wrapper": count}
+-        for name, call in (
+-            ("collector", releases_module._published_count_payloads),
+-            ("canonical serialiser", canonical_json_bytes),
+-        ):
+-            with self.subTest(walk=name), self.assertRaises(RecursionError):
+-                call(payload)
++        list_in_measured_by = doctored_count_payload("cyclic_count")
++        list_in_measured_by["measured_by"] = cycle
++        self_referential = doctored_count_payload("self_referential_count")
++        self_referential["measured_by"] = self_referential
++
++        cases = (
++            ("list in measured_by", list_in_measured_by, RecursionError, ()),
++            (
++                "count-shaped mapping that contains itself",
++                self_referential,
++                ValueError,
++                (
++                    "two counts with the same label",
++                    "self_referential_count",
++                ),
++            ),
++        )
++        for shape, count, expected, fragments in cases:
++            payload = {"wrapper": count}
++            with self.subTest(shape=shape, walk="collector"):
++                with self.assertRaises(expected) as caught:
++                    releases_module._published_count_payloads(payload)
++                for fragment in fragments:
++                    self.assertIn(fragment, str(caught.exception))
++            with self.subTest(shape=shape, walk="canonical serialiser"):
++                with self.assertRaises(RecursionError):
++                    canonical_json_bytes(payload)
+ 
+     def test_test_walkers_and_the_collector_require_a_string_label(self) -> None:
+         """The attacker and guard agree on the label-type boundary."""

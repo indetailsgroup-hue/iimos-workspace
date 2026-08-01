@@ -1,0 +1,660 @@
+diff --git a/packages/component-master/src/monolith_component_master/coverage.py b/packages/component-master/src/monolith_component_master/coverage.py
+index 80ef6a257..fb44e09a0 100644
+--- a/packages/component-master/src/monolith_component_master/coverage.py
++++ b/packages/component-master/src/monolith_component_master/coverage.py
+@@ -598,9 +598,15 @@ def _require_declared_url(value: object, field_name: str) -> str:
+       ``*DIGIT`` permits zero digits, while ``https://:/x`` is still refused by
+       the empty-host rule. The residual reaches bracketed hosts too:
+       ``https://[::1]:8080extra/x`` is admitted, because the suffix after
+-      ``]`` need only begin with ``:`` and nothing after that colon is
+-      parsed. ``https://]/x`` is filed under host well-formedness,
+-      not under this port residual.
++      ``]`` need only begin with ``:`` and no port grammar or range is parsed.
++      The general character and percent-escape rules above still apply.
++      ``https://]/x`` is filed under host well-formedness, not under this port
++      residual.
++    - **An opening bracket after reg-name text is not parsed as an IP-literal.**
++      ``https://a[::1]:8443/x`` is admitted: the unbracketed branch treats
++      ``a[`` before the first colon as a nonempty host. This is a remaining
++      reviewer/fetcher divergence in the host-well-formedness class, named
++      rather than implied closed.
+     """
+ 
+     text = _require_string(value, field_name)
+@@ -693,9 +699,11 @@ def _require_hostful_authority_without_userinfo(
+     none and the host is what stands before an optional ``":" port``. An
+     IP-literal is bracketed and holds colons of its own, so a closing ``]`` is
+     what ends it; the suffix after the bracket must be empty or begin with
+-    ``:``, and nothing after that ``:`` is parsed — the suffix is admitted
+-    whole on its first character alone, so the port residual below reaches
+-    bracketed hosts too and ``https://[::1]:8080extra/x`` is admitted. Text
++    ``:``. This helper applies no port grammar or range after that colon. When
++    reached through ``_require_declared_url``, the general character and
++    percent-escape checks have already run. The port residual below therefore
++    reaches bracketed hosts too and
++    ``https://[::1]:8080extra/x`` is admitted. Text
+     immediately after the bracket makes a reviewer read host text that a .NET
+     ``System.Uri`` consumer does not send its fetcher to, so it is refused by
+     the same reader/fetcher rule as userinfo. Every other host ends at the first
+@@ -712,6 +720,9 @@ def _require_hostful_authority_without_userinfo(
+       above and all three are admitted. A reg-name and an IP-literal each have
+       their own grammar in RFC 3986 section 3.2.2; this rule implements neither,
+       and says so rather than implying it does.
++      ``https://a[::1]:8443/x`` is admitted by the same boundary: because the
++      authority does not start with ``[``, the unbracketed branch treats ``a[``
++      before the first colon as the host and never parses the embedded bracket.
+     - **The port is not parsed.** RFC 3986 section 3.2.3 writes
+       ``port = *DIGIT``. Non-digit, negative, over-range and multiply-coloned
+       spellings remain admitted and are named in the residual table.
+@@ -2055,6 +2066,15 @@ class CoverageSnapshot:
+           ``tuple`` of counts, or a mapping of mappings, is not walked. Adding
+           one more level would only move the boundary, so the boundary is
+           named here instead of chased.
++        - **A count-bearing mapping that is empty or not homogeneous.** A
++          mapping is enrolled only when it is nonempty and every value is an
++          actual ``MeasuredCount``. ``snapshot_payload`` publishes the values
++          of ``classification_counts`` and ``dimension_verified_counts``
++          unconditionally, including a duck-typed value that merely offers
++          ``as_payload``; the publication comparison turns that asymmetry into
++          an ``unexpected`` refusal. The public-path test installs exactly that
++          descriptor and proves publication would pass if the refusal were
++          removed.
+         - **A count held in something that is not one of those descriptors** —
+           a plain class attribute or a dataclass field — is not reached at all.
+           This walk asks the class for properties and cached properties and
+diff --git a/packages/component-master/src/monolith_component_master/releases.py b/packages/component-master/src/monolith_component_master/releases.py
+index 0e9ff275b..63802f90d 100644
+--- a/packages/component-master/src/monolith_component_master/releases.py
++++ b/packages/component-master/src/monolith_component_master/releases.py
+@@ -143,7 +143,11 @@ def _published_count_payloads(
+     emits. The match is on shape rather than on field name, because the
+     defect this guard exists for is a count nobody remembered to look for.
+     The walk descends into every container the canonical allowlist admits:
+-    mappings, and both sequence types, ``list`` and ``tuple``.
++    mappings, and both sequence types, ``list`` and ``tuple``. Recognising a
++    count does not make that mapping a leaf: its values are walked too, because
++    ``canonical_value`` also keeps descending and therefore permits another
++    count-shaped mapping inside one of the five fields. The traversal boundary
++    is the canonical container set, not one arbitrary level below a count.
+     ``canonical_value`` admits the two sequence types alike, so a count
+     nested in either is publishable through canonical JSON; the previous
+     version of this walk descended into mappings and tuples only, and a
+@@ -153,7 +157,11 @@ def _published_count_payloads(
+ 
+     Two counts sharing a label are refused rather than merged, because a
+     mapping keyed by label can carry only one of them, and the one silently
+-    dropped would be a count the comparison never saw.
++    dropped would be a count the comparison never saw. This arm is
++    defence-in-depth at this seam: every publication path builds the record
++    enumeration first, whose own duplicate-label refusal fires before this
++    collector can run. ``PublicationGuardSeamTests`` hands the collector a
++    duplicate payload directly so that deleting this arm cannot stay green.
+ 
+     **What this does not close, stated rather than claimed.** Each residual
+     is exercised by
+@@ -168,6 +176,12 @@ def _published_count_payloads(
+       fields, while this guard compares only objects that are exactly a
+       published count — and the difference is stated on both walks so the
+       two definitions cannot drift apart unnoticed.
++    - This collector sees only the payload. On the record side,
++      :attr:`~monolith_component_master.coverage.CoverageSnapshot.counts`
++      enrols a count-bearing mapping only when it is nonempty and every value
++      is a ``MeasuredCount``; :func:`snapshot_payload` publishes both of its
++      count mappings unconditionally. The comparison below is what turns that
++      asymmetry into a refusal rather than a silent omission.
+     - This function reads whatever payload it is handed and binds nothing
+       else; which callers are bound is stated on
+       :func:`_require_count_publication_matches`.
+@@ -179,7 +193,7 @@ def _published_count_payloads(
+         if isinstance(value, Mapping):
+             if frozenset(value) == _MEASURED_COUNT_PAYLOAD_KEYS:
+                 label = value["label"]
+-                if not isinstance(label, str):  # pragma: no cover - internal shape
++                if not isinstance(label, str):
+                     raise TypeError("a published count label must be a string")
+                 if label in collected:
+                     raise ValueError(
+@@ -187,7 +201,6 @@ def _published_count_payloads(
+                         + label
+                     )
+                 collected[label] = value
+-                return
+             for nested in value.values():
+                 walk(nested)
+         elif isinstance(value, (list, tuple)):
+@@ -206,30 +219,33 @@ def _require_count_publication_matches(
+     The record side is
+     :attr:`~monolith_component_master.coverage.CoverageSnapshot.counts`
+     rendered through ``as_payload``; the payload side is whatever
+-    :func:`_published_count_payloads` collects. The comparison carries all
+-    five fields of each count, and its three refusal arms are not equally
+-    reachable:
++    :func:`_published_count_payloads` collects. The label is the comparison
++    key; equality of the two payload mappings then compares the other four
++    fields as values. Its three refusal arms are all reachable through
++    publication, but by different mechanisms:
+ 
+-    - ``missing`` — a count the record holds and the payload does not — is
+-      the one arm a publication can exhibit. :func:`snapshot_payload` names
++    - ``missing`` — a count the record holds and the payload does not — is the
++      ordinary hand-written-list divergence. :func:`snapshot_payload` names
+       its fields by hand, so a count enrolled on the record and absent from
+-      that hand-written list reaches this refusal through the public path.
++      that list reaches this refusal through the public path.
+       ``tests.component_master.registry.test_first_cohort_denominator.CountEnrollmentDerivationTests``
+       drives it there.
+-    - ``unexpected`` and ``changed`` are unreachable through
+-      :func:`snapshot_payload` **by construction**: that builder's count
+-      objects and the record's enumeration read the same properties through
+-      the same ``as_payload``, so no snapshot can publish a count the record
+-      lacks, or a right-label count with a wrong field, through it. Both
+-      arms are defence-in-depth, live only if the payload builder itself
+-      diverges from the record's enumeration, and each is driven to refusal
+-      at this seam — a doctored payload handed straight to this comparison —
+-      by
+-      ``tests.component_master.registry.test_first_cohort_denominator.PublicationGuardSeamTests``.
+-      The previous version of this module credited
+-      ``PayloadCountCompletenessTests`` with attacking these refusals; that
+-      class re-walks the released bytes and asserts equality, and has never
+-      made this function refuse anything.
++    - ``unexpected`` is reachable through :func:`snapshot_payload` because
++      its two count-bearing mappings are published unconditionally, while the
++      record enrols such a mapping only when it is nonempty and homogeneous in
++      ``MeasuredCount`` values. A duck-typed value with ``as_payload`` is
++      therefore published but causes the whole mapping to be absent from the
++      record enumeration.
++    - ``changed`` is reachable because the builder and the later record
++      enumeration read a descriptor at different times. A stateful descriptor
++      can return the same label with different field values on those reads.
++
++    ``tests.component_master.registry.test_first_cohort_denominator.PublicationGuardSeamTests``
++    drives both construction mechanisms through :func:`snapshot_payload` and
++    also drives all three arms directly at this seam with doctored payloads.
++    The direct seam tests bind each refusal independently of a particular
++    builder. ``PayloadCountCompletenessTests`` only re-walks the released bytes
++    and asserts equality; it has never made this function refuse anything.
+ 
+     **What this does not close, stated rather than claimed.** Each residual
+     is exercised by
+@@ -245,7 +261,8 @@ def _require_count_publication_matches(
+     - What is a count object at all is decided by
+       :func:`_published_count_payloads`, its residuals included: a
+       count-shaped mapping carrying a sixth key is walked as a container and
+-      never compared here.
++      never compared here. An exact five-key count is not a leaf: its values
++      are still walked for nested count objects.
+     """
+ 
+     record = {count.label: count.as_payload() for count in snapshot.counts}
+@@ -269,7 +286,8 @@ def _require_count_publication_matches(
+         )
+     if changed:
+         details.append(
+-            "counts whose five published fields differ: " + ", ".join(changed)
++            "counts whose four non-label fields differ under their shared "
++            "label: " + ", ".join(changed)
+         )
+     raise ValueError(
+         "the snapshot count enumeration and payload count objects disagree: "
+@@ -292,12 +310,15 @@ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
+     The guarantee runs here on every publication: every count object reachable
+     in the payload is compared against
+     :attr:`~monolith_component_master.coverage.CoverageSnapshot.counts` in both
+-    directions, and the comparison carries all five fields of each count, not
+-    only its label. Which of its refusals this builder can actually exhibit
+-    is not claimed here: through this function only the missing-count arm is
+-    reachable, and :func:`_require_count_publication_matches` states which
+-    arms are defence-in-depth and names the tests that drive each one to
+-    refusal.
++    directions: the label is the comparison key and the other four fields are
++    compared as values. This builder can exhibit all three refusal arms:
++    ``missing`` when a derived count property is absent from this hand-written
++    payload; ``unexpected`` when one of the mappings published unconditionally
++    is not enrolled because it contains a non-``MeasuredCount`` value; and
++    ``changed`` when a descriptor returns different values to this builder and
++    the later record enumeration. The publication-path tests exercise both
++    non-missing mechanisms, while the seam tests bind each comparison arm
++    independently.
+     ``tests.component_master.registry.test_first_cohort_denominator.PayloadCountCompletenessTests``
+     independently re-walks the record and the released bytes and asserts the
+     two enumerations are identical; it makes nothing refuse, and is credited
+diff --git a/tests/component_master/registry/test_first_cohort_denominator.py b/tests/component_master/registry/test_first_cohort_denominator.py
+index ab44691c5..2708c17d2 100644
+--- a/tests/component_master/registry/test_first_cohort_denominator.py
++++ b/tests/component_master/registry/test_first_cohort_denominator.py
+@@ -1168,13 +1168,17 @@ def payload_count_labels(node: object) -> set[str]:
+     production side, and ``PublicationGuardResidualTests`` asserts the
+     divergent verdict the two definitions give one six-key mapping, so the
+     difference cannot drift unnoticed. ``payload_count_objects`` below
+-    matches the same way.
++    matches the same way. Both attackers require the label to be a real
++    ``str``, exactly as the production collector does.
+     """
+ 
+     found: set[str] = set()
+     if isinstance(node, Mapping):
+         if MEASURED_COUNT_KEYS <= set(node):
+-            found.add(str(node["label"]))
++            label = node["label"]
++            if not isinstance(label, str):
++                raise TypeError("a payload count label must be a string")
++            found.add(label)
+         for value in node.values():
+             found |= payload_count_labels(value)
+     elif isinstance(node, (list, tuple)):
+@@ -1201,6 +1205,8 @@ def payload_count_objects(node: object) -> set[CountFingerprint]:
+     found: set[CountFingerprint] = set()
+     if isinstance(node, Mapping):
+         if MEASURED_COUNT_KEYS <= set(node):
++            if not isinstance(node["label"], str):
++                raise TypeError("a payload count label must be a string")
+             found.add(
+                 tuple(sorted((key, node[key]) for key in MEASURED_COUNT_KEYS))
+             )
+@@ -2315,6 +2321,9 @@ class CountEnrollmentResidualTests(RootCase):
+         )
+ 
+     def test_the_docstring_names_each_residual(self) -> None:
++        """Secondary deletion guard; the preceding residual tests exercise
++        every claim against ``CoverageSnapshot.counts`` itself."""
++
+         text = prose(coverage_module.CoverageSnapshot.counts.fget.__doc__)
+         for fragment in (
+             "what this does not close",
+@@ -2322,6 +2331,7 @@ class CountEnrollmentResidualTests(RootCase):
+             "mapping of mappings",
+             "not one of those descriptors",
+             "dataclass field",
++            "not homogeneous",
+             "does not check that a count is right",
+         ):
+             with self.subTest(fragment=fragment):
+@@ -2330,8 +2340,12 @@ class CountEnrollmentResidualTests(RootCase):
+     def test_the_module_docstring_says_the_payload_list_is_hand_written(
+         self,
+     ) -> None:
+-        """The record side is derived; the payload side is not, and the module
+-        docstring must say which is which rather than claim both."""
++        """Secondary deletion guard for behavior attacked above.
++
++        The property-installation tests prove the record side is derived and
++        that omitting it from the hand-written payload makes publication
++        refuse; these fragments are not credited as that attack.
++        """
+ 
+         text = coverage_module.__doc__ or ""
+         self.assertIn("enumerated by introspection", text)
+@@ -2372,14 +2386,14 @@ class PublicationGuardSeamTests(RootCase):
+     Wave 4 shipped ``_require_count_publication_matches`` with a docstring
+     claiming refusals in both directions and a wrong-field refusal, while the
+     only arm any test drove was ``missing``; deleting the ``unexpected`` and
+-    ``changed`` computations left the whole suite green. Through
+-    ``snapshot_payload`` those two arms are unreachable by construction — the
+-    payload's count objects and the record's enumeration read the same
+-    properties through the same ``as_payload`` — so they are attacked here at
+-    the guard seam, with a doctored payload handed to the comparison, which
+-    is the only caller that can reach them. The collector's list hole is
+-    attacked here too: ``canonical_value`` admits ``list`` and ``tuple``
+-    alike, and the wave-4 walk descended into mappings and tuples only.
++    ``changed`` computations left the whole suite green. Wave 5 then called
++    ``unexpected`` and ``changed`` unreachable through
++    ``snapshot_payload``. They are not: the builder publishes its two count
++    mappings unconditionally while the record enrolls them conditionally, and
++    it reads descriptors before the record enumeration reads them again. This
++    class attacks both mechanisms through the public builder, keeps the direct
++    seam attacks that bind each refusal independently, and attacks the
++    collector's own traversal and duplicate-label branches at their seam.
+     """
+ 
+     def snapshot_and_payload(
+@@ -2411,9 +2425,100 @@ class PublicationGuardSeamTests(RootCase):
+                     {"doctored_count_nobody_measured"}, set(collected)
+                 )
+ 
++    def test_a_count_is_not_a_leaf_to_the_production_walk(self) -> None:
++        """Canonical JSON walks a count's values, so the collector must too."""
++
++        inner = doctored_count_payload("inner_count_inside_a_count")
++        outer = doctored_count_payload("outer_count")
++        outer["measured_by"] = [inner]
++        payload = {"wrapper": outer}
++        self.assertTrue(canonical_json_bytes(payload).endswith(b"\n"))
++        self.assertEqual(
++            {"outer_count", "inner_count_inside_a_count"},
++            set(releases_module._published_count_payloads(payload)),
++        )
++
++    def test_the_collectors_own_duplicate_label_arm_refuses(self) -> None:
++        """Direct seam attack: record-side refusal fires first in publication."""
++
++        first = doctored_count_payload("duplicate_at_collector_seam")
++        second = doctored_count_payload("duplicate_at_collector_seam")
++        second["count"] = 1
++        with self.assertRaises(ValueError) as caught:
++            releases_module._published_count_payloads(
++                {"first": first, "second": second}
++            )
++        message = str(caught.exception)
++        self.assertIn("two counts with the same label", message)
++        self.assertIn("duplicate_at_collector_seam", message)
++
++    def test_snapshot_payload_refuses_a_mapping_the_record_does_not_enrol(
++        self,
++    ) -> None:
++        """A duck-typed payload value makes the mapping non-homogeneous."""
++
++        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
++        label = "published_but_not_enrolled"
++
++        class PayloadOnlyCount:
++            def as_payload(self) -> Mapping[str, object]:
++                return doctored_count_payload(label)
++
++        original = CoverageSnapshot.classification_counts
++        setattr(
++            CoverageSnapshot,
++            "classification_counts",
++            property(lambda _snapshot: {"PAYLOAD_ONLY": PayloadOnlyCount()}),
++        )
++        self.addCleanup(
++            setattr, CoverageSnapshot, "classification_counts", original
++        )
++        self.assertNotIn(label, {count.label for count in snapshot.counts})
++
++        with self.assertRaises(ValueError) as caught:
++            snapshot_payload(snapshot)
++        message = str(caught.exception)
++        self.assertIn("published counts absent from the record", message)
++        self.assertIn(label, message)
++
++    def test_snapshot_payload_refuses_a_descriptor_that_changes_between_reads(
++        self,
++    ) -> None:
++        """The builder and record enumeration read the descriptor separately."""
++
++        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
++        reads = 0
++
++        def changing(_snapshot: CoverageSnapshot) -> Mapping[str, MeasuredCount]:
++            nonlocal reads
++            reads += 1
++            return {
++                "STATEFUL": MeasuredCount(
++                    label="stateful_public_count",
++                    count=reads - 1,
++                    denominator=2,
++                    denominator_label="descriptor_reads",
++                    measured_by="test.stateful_descriptor",
++                )
++            }
++
++        original = CoverageSnapshot.classification_counts
++        setattr(CoverageSnapshot, "classification_counts", property(changing))
++        self.addCleanup(
++            setattr, CoverageSnapshot, "classification_counts", original
++        )
++
++        with self.assertRaises(ValueError) as caught:
++            snapshot_payload(snapshot)
++        self.assertEqual(2, reads)
++        message = str(caught.exception)
++        self.assertIn(
++            "four non-label fields differ under their shared label", message
++        )
++        self.assertIn("stateful_public_count", message)
++
+     def test_an_unexpected_count_is_refused_at_the_comparison(self) -> None:
+-        """The `unexpected` arm, driven at the seam because no payload this
+-        module builds can carry a count the record lacks."""
++        """The `unexpected` arm driven independently at the comparison seam."""
+ 
+         cases = (
+             ("list-nested", lambda count: [count]),
+@@ -2436,13 +2541,16 @@ class PublicationGuardSeamTests(RootCase):
+     def test_a_right_label_count_with_one_changed_field_is_refused(
+         self,
+     ) -> None:
+-        """The `changed` arm. One field at a time, because a comparison that
+-        happened to read only the count value would pass a wrong denominator
+-        or a wrong ``measured_by`` under the right label."""
++        """The `changed` arm. One field at a time, because the label is the
++        lookup key and the other four fields must all be compared as values."""
+ 
+         cases = (
+             ("count", lambda entry: entry["count"] + 1),
+             ("denominator", lambda entry: entry["denominator"] + 1),
++            (
++                "denominator_label",
++                lambda entry: entry["denominator_label"] + "_wrong",
++            ),
+             ("measured_by", lambda entry: "coverage.discover_registry_root"),
+         )
+         for field_name, doctor in cases:
+@@ -2457,43 +2565,36 @@ class PublicationGuardSeamTests(RootCase):
+                     )
+                 message = str(caught.exception)
+                 self.assertIn(
+-                    "counts whose five published fields differ", message
++                    "four non-label fields differ under their shared label",
++                    message,
+                 )
+                 self.assertIn(
+                     "verified_items_with_backing_evidence", message
+                 )
+ 
+     def test_the_comparison_is_green_without_the_doctoring(self) -> None:
+-        """The control. The undoctored payload passes the same seam, so the
+-        refusals above are the doctoring and not a broken comparison."""
++        """The control also proves the comparison body actually runs."""
+ 
+         snapshot, payload = self.snapshot_and_payload()
+-        self.assertIsNone(
+-            releases_module._require_count_publication_matches(
+-                snapshot, payload
+-            )
+-        )
++        calls: list[Mapping[str, Mapping[str, object]]] = []
++        original = releases_module._published_count_payloads
+ 
+-    def test_the_guard_docstring_states_which_arms_a_publication_can_exhibit(
+-        self,
+-    ) -> None:
+-        """Prose may not credit a test that does not attack, and it may not
+-        imply an arm is publication-reachable when no publication can reach
+-        it."""
++        def observed(
++            candidate: object,
++        ) -> Mapping[str, Mapping[str, object]]:
++            collected = original(candidate)
++            calls.append(collected)
++            return collected
+ 
+-        text = prose(
+-            releases_module._require_count_publication_matches.__doc__
++        releases_module._published_count_payloads = observed
++        self.addCleanup(
++            setattr, releases_module, "_published_count_payloads", original
++        )
++        releases_module._require_count_publication_matches(snapshot, payload)
++        self.assertEqual(1, len(calls))
++        self.assertEqual(
++            {count.label for count in snapshot.counts}, set(calls[0])
+         )
+-        for fragment in (
+-            "missing",
+-            "unexpected",
+-            "changed",
+-            "the one arm a publication can exhibit",
+-            "by construction",
+-            "defence-in-depth",
+-        ):
+-            with self.subTest(fragment=fragment):
+-                self.assertIn(fragment, text)
+ 
+ 
+ class PublicationGuardResidualTests(RootCase):
+@@ -2556,9 +2657,24 @@ class PublicationGuardResidualTests(RootCase):
+             COMMITTED_SNAPSHOT.read_bytes(), release.payload_bytes
+         )
+ 
++    def test_test_walkers_and_the_collector_require_a_string_label(self) -> None:
++        """The attacker and guard agree on the label-type boundary."""
++
++        count = doctored_count_payload()
++        count["label"] = 7
++        for name, walk in (
++            ("collector", releases_module._published_count_payloads),
++            ("label attacker", payload_count_labels),
++            ("fingerprint attacker", payload_count_objects),
++        ):
++            with self.subTest(walk=name), self.assertRaises(TypeError):
++                walk({"wrapper": count})
++
+     def test_the_collector_docstring_records_what_it_does_not_close(
+         self,
+     ) -> None:
++        """Secondary deletion guard for the collector behaviors above."""
++
+         text = prose(releases_module._published_count_payloads.__doc__)
+         for fragment in (
+             "what this does not close",
+@@ -2566,6 +2682,9 @@ class PublicationGuardResidualTests(RootCase):
+             "a container, not a count",
+             "superset",
+             "``list``",
++            "does not make that mapping a leaf",
++            "defence-in-depth",
++            "nonempty and every value",
+         ):
+             with self.subTest(fragment=fragment):
+                 self.assertIn(fragment, text)
+@@ -2573,6 +2692,8 @@ class PublicationGuardResidualTests(RootCase):
+     def test_the_comparison_docstring_records_what_it_does_not_close(
+         self,
+     ) -> None:
++        """Secondary deletion guard for the direct-constructor behavior."""
++
+         text = prose(
+             releases_module._require_count_publication_matches.__doc__
+         )
+@@ -2606,6 +2727,7 @@ USERINFO_URL_CASES: tuple[tuple[str, str], ...] = (
+ # escape, and an escape that is not exactly two hex digits is not an escape.
+ MALFORMED_PERCENT_URL_CASES: tuple[tuple[str, str], ...] = (
+     ("non-hex pair", "https://example.invalid/%zz"),
++    ("non-hex pair after bracket-port colon", "https://[::1]:%zz/x"),
+     ("one hex digit then end", "https://example.invalid/%e"),
+     ("bare trailing percent", "https://example.invalid/x%"),
+     ("percent then delimiter", "https://example.invalid/%/a"),
+@@ -2672,12 +2794,18 @@ STILL_OPEN_URL_CASES: tuple[tuple[str, str], ...] = (
+     # Filed under host well-formedness: it has no opening bracket.
+     ("unmatched closing bracket", "https://]/x"),
+     # Added in wave 5. The bracket rule admits any suffix whose first
+-    # character is `:` and parses nothing after it, so the port residual
+-    # reaches bracketed hosts too.
++    # character is `:` and applies no port grammar or range after it, so the
++    # port residual reaches bracketed hosts too.
+     (
+         "bracketed host with an unparsed port suffix",
+         "https://[::1]:8080extra/x",
+     ),
++    # Wave 6 names the embedded-bracket branch instead of implying the
++    # bracketed-host refusal sees a bracket that does not start the authority.
++    (
++        "opening bracket embedded after reg-name text",
++        "https://a[::1]:8443/x",
++    ),
+ )
+ 
+ # The ten-case matrix `_require_hostful_authority_without_userinfo` is judged
+@@ -2952,6 +3080,8 @@ class DeclaredUrlHostTests(RootCase):
+                     self.refuse_url(f"matrix-{index}", url)
+ 
+     def test_the_host_rule_records_what_it_does_not_close(self) -> None:
++        """Secondary deletion guard for the residual table's behavior."""
++
+         text = prose(
+             coverage_module._require_hostful_authority_without_userinfo.__doc__
+         )
+@@ -2965,6 +3095,8 @@ class DeclaredUrlHostTests(RootCase):
+             # `":" port` may stand after the bracket, which overstates what
+             # is enforced — the suffix's content is never parsed.
+             "https://[::1]:8080extra/x",
++            "https://a[::1]:8443/x",
++            "no port grammar or range",
+         ):
+             with self.subTest(fragment=fragment):
+                 self.assertIn(fragment, text)
+@@ -2991,10 +3123,10 @@ class DeclaredUrlResidualTests(RootCase):
+                 self.assertEqual(url, entry.url)
+ 
+     def test_the_docstring_names_each_residual_class(self) -> None:
+-        """The list must name what remains and must be findable.
++        """Secondary deletion guard; the residual table is the attack.
+ 
+-        This asserts the statement and the tested behaviour land in one commit.
+-        It does not assert the list is exhaustive, and nothing here claims it.
++        It asserts the statement and tested behaviour land in one commit. It
++        does not assert the list is exhaustive, and nothing here claims it.
+         """
+ 
+         text = coverage_module._require_declared_url.__doc__ or ""
+@@ -3012,6 +3144,8 @@ class DeclaredUrlResidualTests(RootCase):
+             "https://]/x",
+             # Added in wave 5: the port residual reaches bracketed hosts.
+             "https://[::1]:8080extra/x",
++            "https://a[::1]:8443/x",
++            "no port grammar or range",
+         ):
+             with self.subTest(fragment=fragment):
+                 self.assertIn(fragment, text)
+@@ -3335,6 +3469,8 @@ class BrandNameNormalizationTests(RootCase):
+         self.assertNotIn(self.NFD_NAME.encode("utf-8"), raw)
+ 
+     def test_the_docstring_states_the_categories_and_the_form(self) -> None:
++        """Secondary deletion guard for the category and NFC tests above."""
++
+         text = coverage_module.BrandUniverseEntry.__doc__ or ""
+         for fragment in (
+             "``Cc``",
+@@ -3568,7 +3704,7 @@ class BrandNameInvisibleTranscriptionTests(RootCase):
+         self.assert_refused(root, f"{BRAND_UNIVERSE_FILENAME}:2", "U+3164")
+ 
+     def test_the_docstring_states_that_it_is_a_transcription(self) -> None:
+-        """The narrowing, asserted. The old prose claimed the class."""
++        """Secondary deletion guard for the transcription tests above."""
+ 
+         text = prose(coverage_module.BrandUniverseEntry.__doc__)
+         for fragment in (
+@@ -3764,6 +3900,8 @@ class BrandNameWhitespaceTests(RootCase):
+                 self.assertEqual(brand_name, entry.brand_name)
+ 
+     def test_the_docstring_states_what_is_trimmed(self) -> None:
++        """Secondary deletion guard for the trim/refusal tests above."""
++
+         text = prose(coverage_module.BrandUniverseEntry.__doc__)
+         for fragment in (
+             "leading and trailing",
+@@ -3872,6 +4010,8 @@ class BrandNameResidualTests(RootCase):
+         )
+ 
+     def test_the_docstring_names_each_residual(self) -> None:
++        """Secondary deletion guard for the admitted residuals above."""
++
+         text = prose(coverage_module.BrandUniverseEntry.__doc__)
+         for fragment in (
+             "what this does not close",
+@@ -3973,9 +4113,11 @@ class AnchorResolvedPathTests(RootCase):
+         )
+ 
+     def test_the_residual_is_recorded_rather_than_claimed_closed(self) -> None:
+-        """Resolving and then opening still leaves a window a rename could
+-        use. The record must say so; this wave narrows it, it does not prove
+-        it closed."""
++        """Secondary deletion guard for the resolved-path and junction tests.
++
++        Resolving and then opening still leaves a window a rename could use;
++        this fragment check is not credited as the behavioral attack.
++        """
+ 
+         text = coverage_module._require_inside_root.__doc__ or ""
+         self.assertIn("resolved path", text)

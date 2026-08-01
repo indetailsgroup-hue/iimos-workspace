@@ -16,9 +16,13 @@ build/
 *.pem
 *.key
 
-# superpowers brainstorming companion writes a session token here
-# (.superpowers/brainstorm/.last-token) — never commit it
-.superpowers/
+# superpowers brainstorming companion writes a session token here — never
+# commit it. The ignore is scoped to that directory rather than to the whole
+# of .superpowers/, because the wholesale ignore also hid .superpowers/sdd/,
+# which holds the SDD evidence trail: every task brief, implementer report and
+# review-package diff whose digests the progress ledger publishes. A ledger
+# that cites artifacts a reader cannot open is a ledger a reader cannot check.
+.superpowers/brainstorm/
 
 # OS and editor noise
 .DS_Store

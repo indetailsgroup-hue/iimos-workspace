@@ -1,0 +1,723 @@
+diff --git a/packages/component-master/src/monolith_component_master/coverage.py b/packages/component-master/src/monolith_component_master/coverage.py
+index 7f534596..13a3967d 100644
+--- a/packages/component-master/src/monolith_component_master/coverage.py
++++ b/packages/component-master/src/monolith_component_master/coverage.py
+@@ -136,7 +136,8 @@ Which side of that comparison is derived, and which is not
+ ----------------------------------------------------------
+ 
+ The record side is **enumerated by introspection** over
+-:class:`CoverageSnapshot`'s own properties, so a count added to the class and
++:class:`CoverageSnapshot`'s own count-bearing descriptors — properties and
++cached properties — so a count added through either enrolled descriptor and
+ forgotten everywhere else still appears in :attr:`CoverageSnapshot.counts`.
+ That is a change from the previous wave, whose prose called the guarantee "not
+ a list anybody maintains by hand" while ``counts`` was itself a hand-typed
+@@ -193,6 +194,7 @@ from __future__ import annotations
+ 
+ from collections.abc import Mapping
+ from dataclasses import dataclass
++from functools import cached_property
+ import json
+ import math
+ from pathlib import Path
+@@ -582,11 +584,20 @@ def _require_declared_url(value: object, field_name: str) -> str:
+       rule rests on.
+     - **The host is checked for being present, never for being well formed.**
+       ``https://[]/x`` has empty IP-literal brackets and
+-      ``https://[2001:db8::1/x`` never closes its own; both carry a nonempty
++      ``https://[2001:db8::1/x`` never closes its own, while ``https://]/x``
++      has a closing bracket with no opening one. All three carry a nonempty
+       host by the reading in
+-      :func:`_require_hostful_authority_without_userinfo` and both are
++      :func:`_require_hostful_authority_without_userinfo` and all three are
+       admitted. Validating a reg-name or an IP-literal is a different rule and
+       neither function attempts it.
++    - **The port is not parsed.** RFC 3986 section 3.2.3 writes
++      ``port = *DIGIT``, but ``https://host:abc/x``, ``https://host:-1/x``,
++      ``https://host:99999999999/x`` and ``https://a:b:c/x`` are all admitted.
++      This rule establishes that a host is present; it does not validate the
++      port grammar or range. ``https://host:/x`` stays admitted because
++      ``*DIGIT`` permits zero digits, while ``https://:/x`` is still refused by
++      the empty-host rule. ``https://]/x`` is filed under host well-formedness,
++      not under this port residual.
+     """
+ 
+     text = _require_string(value, field_name)
+@@ -661,11 +672,11 @@ def _require_percent_escape_grammar(text: str, field_name: str) -> None:
+ def _require_hostful_authority_without_userinfo(
+     text: str, field_name: str
+ ) -> None:
+-    """Refuse an authority that carries credentials, or whose host is empty.
++    """Refuse credentials, an empty host, or text after a bracketed host.
+ 
+-    Both refusals come from reading RFC 3986 section 3.2 rather than from a
+-    character rule, which is why neither could be expressed in the admitted
+-    set: every character involved is already admitted.
++    All three refusals come from reading RFC 3986 section 3.2 rather than from
++    a character rule, which is why none could be expressed in the admitted set:
++    every character involved is already admitted.
+ 
+     **The host, not the authority string.** ``authority = [ userinfo "@" ]
+     host [ ":" port ]``, so ``":8443"`` is an authority that is a nonempty
+@@ -678,7 +689,11 @@ def _require_hostful_authority_without_userinfo(
+     Userinfo is refused first, so the authority the host rule reads carries
+     none and the host is what stands before an optional ``":" port``. An
+     IP-literal is bracketed and holds colons of its own, so a closing ``]`` is
+-    what ends it; every other host ends at the first ``:``.
++    what ends it; after that only an optional ``":" port`` may stand. Text
++    immediately after the bracket makes a reviewer read host text that a .NET
++    ``System.Uri`` consumer does not send its fetcher to, so it is refused by
++    the same reader/fetcher rule as userinfo. Every other host ends at the first
++    ``:``.
+ 
+     **What this does not close, stated rather than claimed.** Each of these is
+     still admitted and each is exercised by
+@@ -686,10 +701,16 @@ def _require_hostful_authority_without_userinfo(
+ 
+     - **The host is checked for being present, never for being well formed.**
+       ``https://[]/x`` has empty IP-literal brackets and
+-      ``https://[2001:db8::1/x`` never closes its own. Both leave a nonempty
+-      host by the reading above and both are admitted. A reg-name and an
+-      IP-literal each have their own grammar in RFC 3986 section 3.2.2; this
+-      rule implements neither, and says so rather than implying it does.
++      ``https://[2001:db8::1/x`` never closes its own, while ``https://]/x``
++      has no opening bracket. All three leave a nonempty host by the reading
++      above and all three are admitted. A reg-name and an IP-literal each have
++      their own grammar in RFC 3986 section 3.2.2; this rule implements neither,
++      and says so rather than implying it does.
++    - **The port is not parsed.** RFC 3986 section 3.2.3 writes
++      ``port = *DIGIT``. Non-digit, negative, over-range and multiply-coloned
++      spellings remain admitted and are named in the residual table.
++      ``https://host:/x`` remains admitted because ``*DIGIT`` permits zero
++      digits; ``https://:/x`` remains an empty-host refusal.
+     - **No percent-escape is decoded before the authority is read**, so
+       ``https://www.hafele.com%40evil.invalid/`` is one reg-name here. That is
+       also what RFC 3986 makes of it, so no fetcher reaches ``evil.invalid``;
+@@ -721,7 +742,17 @@ def _require_hostful_authority_without_userinfo(
+     if authority.startswith("[") and "]" in authority:
+         # An IP-literal carries its own colons, so the bracket pair is what
+         # ends the host rather than the first colon.
+-        host = authority[: authority.index("]") + 1]
++        closing_bracket = authority.index("]")
++        host = authority[: closing_bracket + 1]
++        after_bracket = authority[closing_bracket + 1 :]
++        if after_bracket and not after_bracket.startswith(":"):
++            raise ValueError(
++                f"{field_name} has {after_bracket!r} standing after the "
++                f"bracketed host {host!r}. A reviewer reads "
++                f"{after_bracket!r} as host text, while a .NET System.Uri "
++                f"consumer sends its fetcher to {host!r}. A declared source "
++                "URL must not make those two readers approve different hosts"
++            )
+     else:
+         host, _, _port = authority.partition(":")
+     if not host:
+@@ -823,9 +854,9 @@ def _require_brand_name(value: object, field_name: str) -> str:
+     text = _require_string(value, field_name)
+     # Leading and trailing U+0020 come off before anything else reads the
+     # name, so that ``'X'`` and ``'X '`` are one name in both duplicate checks
+-    # and in the released bytes. **Only** U+0020: every other ``Zs`` is
+-    # refused below, and trimming a character the rule refuses would silently
+-    # repair a line a human is supposed to read and approve.
++    # and in the released bytes. **Only** U+0020: in a nonblank name every
++    # other ``Zs`` is refused below, and trimming a character the rule refuses
++    # would silently repair a line a human is supposed to read and approve.
+     trimmed = text.strip(_ADMITTED_BRAND_NAME_SPACE)
+     if not trimmed:
+         raise ValueError(f"{field_name} must not be blank")
+@@ -1014,9 +1045,14 @@ class BrandUniverseEntry:
+     the name is stored, so that ``'X'`` and ``'X '`` collide in both duplicate
+     checks. Without that the paragraph above about U+00A0 was false one
+     character away from the case it argues: ``Festool DOMINO`` and ``Festool
+-    DOMINO`` with a trailing U+0020 were two brands. Only U+0020 is trimmed —
+-    every other ``Zs`` is refused by name, because trimming a refused
+-    character would silently repair a line a human has to read and approve.
++    DOMINO`` with a trailing U+0020 were two brands. Only U+0020 is trimmed. In
++    a value not already refused as blank, every other ``Zs`` is refused by
++    name, because trimming a refused character would silently repair a line a
++    human has to read and approve. An **all-whitespace** value is refused as
++    blank before the by-name character check runs, so a name made only of
++    U+3000 reports ``brand_name must not be blank`` rather than a named ``Zs``
++    refusal. This keeps the shared nonblank-string rule first and narrows the
++    sentence to the behavior it actually enforces.
+ 
+     **Normalisation form: NFC, applied here, and the composed form is what the
+     record keeps.** A name is a rendered thing, so two encodings of one
+@@ -1980,8 +2016,9 @@ class CoverageSnapshot:
+     def counts(self) -> tuple[MeasuredCount, ...]:
+         """Every :class:`MeasuredCount` this record holds, **derived**.
+ 
+-        Enumerated by introspection over this class's own properties rather
+-        than typed out. The list this replaced was hand-maintained, which made
++        Enumerated by introspection over this class's own properties and cached
++        properties rather than typed out. The list this replaced was
++        hand-maintained, which made
+         the module docstring's guarantee — *a count-by-count comparison of the
+         record against the payload, not a list anybody maintains by hand* —
+         false on the record side: a real ``MeasuredCount`` property added to
+@@ -1989,10 +2026,13 @@ class CoverageSnapshot:
+         enumeration, absent from the hashed payload, and invisible to every
+         test at once. Deriving it is what makes the sentence true.
+ 
+-        Two shapes are walked, and they are the two this record uses: a
+-        property returning a ``MeasuredCount``, and a property returning a
+-        nonempty mapping whose values are all ``MeasuredCount`` —
+-        ``classification_counts`` and ``dimension_verified_counts``.
++        Two value shapes are walked from either a ``property`` or a
++        ``functools.cached_property``: a descriptor returning a
++        ``MeasuredCount``, and a descriptor returning a nonempty mapping whose
++        values are all ``MeasuredCount`` — ``classification_counts`` and
++        ``dimension_verified_counts``. A ``cached_property`` is enrolled
++        because it is the idiomatic memoised form of the same derived value and
++        is reachable through ``getattr`` in exactly the same way.
+ 
+         Two counts sharing one label are **refused** rather than published,
+         because every comparison downstream is over a *set* of labels and a
+@@ -2006,9 +2046,10 @@ class CoverageSnapshot:
+           ``tuple`` of counts, or a mapping of mappings, is not walked. Adding
+           one more level would only move the boundary, so the boundary is
+           named here instead of chased.
+-        - **A count held in something that is not a property** — a plain class
+-          attribute or a dataclass field — is not reached at all. This walk
+-          asks the class for its properties and enumerates nothing else.
++        - **A count held in something that is not one of those descriptors** —
++          a plain class attribute or a dataclass field — is not reached at all.
++          This walk asks the class for properties and cached properties and
++          enumerates nothing else.
+         - **This is an enrolment check, not an arithmetic one.** It
+           establishes that every count the record computes reaches the payload
+           carrying the same five field values. It **does not check that a
+@@ -2023,7 +2064,7 @@ class CoverageSnapshot:
+                 attribute_name
+                 for klass in type(self).__mro__
+                 for attribute_name, attribute in vars(klass).items()
+-                if isinstance(attribute, property)
++                if isinstance(attribute, (property, cached_property))
+             }
+         ):
+             # The one property this walk must not read is itself; doing so
+diff --git a/packages/component-master/src/monolith_component_master/releases.py b/packages/component-master/src/monolith_component_master/releases.py
+index 6eae421a..93865560 100644
+--- a/packages/component-master/src/monolith_component_master/releases.py
++++ b/packages/component-master/src/monolith_component_master/releases.py
+@@ -47,6 +47,9 @@ RELEASE_MANIFEST_FILENAME = "release-manifest.json"
+ 
+ _SEMANTIC_VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
+ _SHA256 = re.compile(r"[0-9a-f]{64}")
++_MEASURED_COUNT_PAYLOAD_KEYS = frozenset(
++    {"count", "denominator", "denominator_label", "label", "measured_by"}
++)
+ 
+ 
+ def _plain(value: object) -> object:
+@@ -130,6 +133,70 @@ def _exact_snapshot(snapshot: object) -> CoverageSnapshot:
+     return snapshot
+ 
+ 
++def _published_count_payloads(
++    payload: object,
++) -> Mapping[str, Mapping[str, object]]:
++    """Collect count objects from the payload by shape, not by field name."""
++
++    collected: dict[str, Mapping[str, object]] = {}
++
++    def walk(value: object) -> None:
++        if isinstance(value, Mapping):
++            if frozenset(value) == _MEASURED_COUNT_PAYLOAD_KEYS:
++                label = value["label"]
++                if not isinstance(label, str):  # pragma: no cover - internal shape
++                    raise TypeError("a published count label must be a string")
++                if label in collected:
++                    raise ValueError(
++                        "the payload publishes two counts with the same label: "
++                        + label
++                    )
++                collected[label] = value
++                return
++            for nested in value.values():
++                walk(nested)
++        elif isinstance(value, tuple):
++            for nested in value:
++                walk(nested)
++
++    walk(payload)
++    return MappingProxyType(collected)
++
++
++def _require_count_publication_matches(
++    snapshot: CoverageSnapshot, payload: Mapping[str, object]
++) -> None:
++    """Refuse a payload whose count objects diverge from the record."""
++
++    record = {count.label: count.as_payload() for count in snapshot.counts}
++    published = _published_count_payloads(payload)
++    missing = sorted(set(record) - set(published))
++    unexpected = sorted(set(published) - set(record))
++    changed = sorted(
++        label
++        for label in set(record) & set(published)
++        if record[label] != published[label]
++    )
++    if not (missing or unexpected or changed):
++        return
++    details = []
++    if missing:
++        details.append("record counts not published: " + ", ".join(missing))
++    if unexpected:
++        details.append(
++            "published counts absent from the record: "
++            + ", ".join(unexpected)
++        )
++    if changed:
++        details.append(
++            "counts whose five published fields differ: " + ", ".join(changed)
++        )
++    raise ValueError(
++        "the snapshot count enumeration and payload count objects disagree: "
++        + "; ".join(details)
++    )
++
++
+ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
+     """The hashed payload. It contains no wall-clock value, by construction.
+ 
+@@ -142,15 +209,17 @@ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
+     decided to add. That is the shape this docstring must not repeat: a fix
+     applied to the named instances while the prose generalises to the class.
+     The list below is therefore a record of what happened, not the guarantee.
+-    The guarantee is
+-    ``tests.component_master.registry.test_first_cohort_denominator.PayloadCountCompletenessTests``,
+-    which compares every count object reachable in this payload against
++    The guarantee runs here on every publication: every count object reachable
++    in the payload is compared against
+     :attr:`~monolith_component_master.coverage.CoverageSnapshot.counts` in both
+-    directions and fails if either side holds one the other does not. The
+-    comparison carries all five fields of each count, not only its label, so a
+-    count republished under the right name with a wrong number, denominator or
+-    ``measured_by`` fails it too. A hand-maintained key list cannot make that
+-    check, because it can only freeze whatever was true when it was typed.
++    directions, and publication is refused if either side holds one the other
++    does not. The comparison carries all five fields of each count, not only
++    its label, so a count republished under the right name with a wrong number,
++    denominator or ``measured_by`` is refused too.
++    ``tests.component_master.registry.test_first_cohort_denominator.PayloadCountCompletenessTests``
++    independently attacks that production comparison. A hand-maintained key
++    list cannot make the check, because it can only freeze whatever was true
++    when it was typed.
+ 
+     **The field list in this function is still written by hand, and the
+     record's enumeration is not.** ``counts`` is derived by introspection over
+@@ -196,7 +265,7 @@ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
+ 
+     _exact_snapshot(snapshot)
+     unbacked = set(snapshot.unbacked_item_ids)
+-    return MappingProxyType(
++    payload = MappingProxyType(
+         {
+             "authority_state": AUTHORITY_STATE,
+             "blocked_source_count": snapshot.blocked_source_count.as_payload(),
+@@ -258,6 +327,8 @@ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
+             "verified_item_count": snapshot.verified_item_count.as_payload(),
+         }
+     )
++    _require_count_publication_matches(snapshot, payload)
++    return payload
+ 
+ 
+ def source_denominator_digest(snapshot: CoverageSnapshot) -> str:
+diff --git a/tests/component_master/registry/test_first_cohort_denominator.py b/tests/component_master/registry/test_first_cohort_denominator.py
+index 488e0ca1..0d3604bc 100644
+--- a/tests/component_master/registry/test_first_cohort_denominator.py
++++ b/tests/component_master/registry/test_first_cohort_denominator.py
+@@ -15,6 +15,8 @@ and several assert the opposite.
+ from __future__ import annotations
+ 
+ from collections.abc import Mapping
++from dataclasses import dataclass, fields
++from functools import cached_property
+ import hashlib
+ import json
+ import os
+@@ -2058,10 +2060,17 @@ class CountEnrollmentDerivationTests(RootCase):
+ 
+         if shape == "count":
+             attribute: object = property(one)
++        elif shape == "cached":
++            attribute = cached_property(one)
++            attribute.__set_name__(CoverageSnapshot, name)
+         elif shape == "tuple":
+             attribute = property(lambda inner: (one(inner),))
+         elif shape == "mapping":
+             attribute = property(lambda inner: {"only": one(inner)})
++        elif shape == "mapping_of_mappings":
++            attribute = property(
++                lambda inner: {"outer": {"only": one(inner)}}
++            )
+         elif shape == "plain":
+             attribute = MeasuredCount(
+                 label=label,
+@@ -2108,51 +2117,62 @@ class CountEnrollmentDerivationTests(RootCase):
+             },
+         )
+ 
++    def test_a_cached_property_count_is_enrolled_too(self) -> None:
++        """It is a descriptor with a function and the value is reachable in
++        the same way as a property; silence here would leave an idiomatic
++        derived count outside publication."""
++
++        self.add_count_property(
++            "smuggled_cached", "smuggled_in_a_cached_property", shape="cached"
++        )
++        self.assertIn(
++            "smuggled_in_a_cached_property",
++            {
++                count.label
++                for count in build_snapshot(LIVE_REGISTRY_ROOT).counts
++            },
++        )
++        self.assertIn(
++            "cached_property",
++            prose(coverage_module.CoverageSnapshot.counts.fget.__doc__),
++        )
++
+     def test_the_payload_guard_fails_when_a_property_is_not_published(
+         self,
+     ) -> None:
+-        """The proof, watched rather than argued.
+-
+-        A real `MeasuredCount` property is added to the class and
+-        `snapshot_payload` — which names its fields one by one — does not
+-        publish it. The wave's central guard is then **run** and its failure is
+-        observed. Before this wave the same mutation left the guard green,
+-        because the record's own enumeration could not see the property either.
+-        """
++        """Publication itself runs the comparison, not only this test class."""
+ 
+         self.add_count_property("smuggled_count", "smuggled_by_a_property")
+-        result = unittest.TestResult()
+-        PayloadCountCompletenessTests(
+-            "test_every_measured_count_on_the_record_reaches_the_payload"
+-        ).run(result)
+-        self.assertEqual([], result.errors)
+-        self.assertTrue(
+-            result.failures,
+-            "the guard stayed green while the record held a count the "
+-            "payload does not publish",
+-        )
+-        self.assertIn(
+-            "smuggled_by_a_property",
+-            "".join(text for _case, text in result.failures),
+-        )
++        with self.assertRaises(ValueError) as caught:
++            snapshot_payload(build_snapshot(LIVE_REGISTRY_ROOT))
++        self.assertIn("smuggled_by_a_property", str(caught.exception))
+ 
+     def test_the_guard_is_green_without_the_mutation(self) -> None:
+         """The control. Without the added property the same guard passes, so
+         the failure above is the mutation and not a broken guard."""
+ 
+-        result = unittest.TestResult()
+-        PayloadCountCompletenessTests(
+-            "test_every_measured_count_on_the_record_reaches_the_payload"
+-        ).run(result)
+-        self.assertEqual([], result.errors)
+-        self.assertEqual([], result.failures)
++        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
++        payload = snapshot_payload(snapshot)
++        self.assertEqual(
++            {count.label for count in snapshot.counts},
++            payload_count_labels(payload),
++        )
+ 
+     def test_no_two_counts_share_a_label(self) -> None:
+-        """A set comparison cannot see a duplicate, so the enumeration refuses
+-        one instead of publishing two counts a reader cannot tell apart."""
++        """Direct enumeration corroborates the publication-path tests below."""
+ 
+-        counts = build_snapshot(LIVE_REGISTRY_ROOT).counts
++        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
++        counts = snapshot.counts
+         self.assertEqual(len(counts), len({count.label for count in counts}))
++        valid_payload = canonical_json_bytes(snapshot_payload(snapshot))
++        self.assertEqual(COMMITTED_SNAPSHOT.read_bytes(), valid_payload)
++        self.assertTrue(
++            build_release(
++                root=LIVE_REGISTRY_ROOT,
++                version="0.1.0",
++                created_at_utc=CREATED_AT,
++            ).payload_sha256.startswith("72ccc63f")
++        )
+ 
+         self.add_count_property(
+             "smuggled_duplicate", "first_cohort_brands_with_a_source_read"
+@@ -2163,6 +2183,31 @@ class CountEnrollmentDerivationTests(RootCase):
+             "first_cohort_brands_with_a_source_read", str(caught.exception)
+         )
+ 
++    def test_snapshot_payload_refuses_a_duplicate_count_label(self) -> None:
++        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
++        self.add_count_property(
++            "smuggled_duplicate", "first_cohort_brands_with_a_source_read"
++        )
++        with self.assertRaises(ValueError) as caught:
++            snapshot_payload(snapshot)
++        self.assertIn(
++            "first_cohort_brands_with_a_source_read", str(caught.exception)
++        )
++
++    def test_build_release_refuses_a_duplicate_count_label(self) -> None:
++        self.add_count_property(
++            "smuggled_duplicate", "first_cohort_brands_with_a_source_read"
++        )
++        with self.assertRaises(ValueError) as caught:
++            build_release(
++                root=LIVE_REGISTRY_ROOT,
++                version="0.1.0",
++                created_at_utc=CREATED_AT,
++            )
++        self.assertIn(
++            "first_cohort_brands_with_a_source_read", str(caught.exception)
++        )
++
+     def test_counts_is_not_reached_by_its_own_enumeration(self) -> None:
+         """`counts` is a property too. Walking it would recurse forever, so it
+         is skipped by name, and this pins that the skip is exactly one name."""
+@@ -2185,26 +2230,78 @@ class CountEnrollmentResidualTests(RootCase):
+             self, name, label, shape=shape
+         )
+ 
+-    def test_a_count_inside_a_tuple_is_not_enumerated(self) -> None:
+-        self.add("smuggled_tuple", "smuggled_in_a_tuple", "tuple")
+-        self.assertNotIn(
+-            "smuggled_in_a_tuple",
+-            {
+-                count.label
+-                for count in build_snapshot(LIVE_REGISTRY_ROOT).counts
+-            },
++    def with_dataclass_count_field(self, label: str) -> CoverageSnapshot:
++        residual = MeasuredCount(
++            label=label,
++            count=0,
++            denominator=0,
++            denominator_label="sources_in_denominator",
++            measured_by="coverage.discover_registry_root",
+         )
+ 
+-    def test_a_count_in_a_plain_class_attribute_is_not_enumerated(
++        @dataclass(frozen=True)
++        class SnapshotWithCountField(CoverageSnapshot):
++            residual_count: MeasuredCount = residual
++
++        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
++        return SnapshotWithCountField(
++            **{
++                field.name: getattr(snapshot, field.name)
++                for field in fields(CoverageSnapshot)
++            }
++        )
++
++    def test_every_named_count_shape_is_genuinely_still_unenrolled(
+         self,
+     ) -> None:
+-        self.add("smuggled_plain", "smuggled_in_an_attribute", "plain")
+-        self.assertNotIn(
+-            "smuggled_in_an_attribute",
+-            {
+-                count.label
+-                for count in build_snapshot(LIVE_REGISTRY_ROOT).counts
+-            },
++        cases = (
++            ("tuple", "smuggled_in_a_tuple", "tuple"),
++            (
++                "mapping of mappings",
++                "smuggled_in_a_mapping_of_mappings",
++                "mapping_of_mappings",
++            ),
++            ("plain class attribute", "smuggled_in_an_attribute", "plain"),
++            ("dataclass field", "smuggled_in_a_dataclass_field", "dataclass"),
++        )
++        for index, (name, label, shape) in enumerate(cases):
++            with self.subTest(name=name):
++                if shape == "dataclass":
++                    snapshot = self.with_dataclass_count_field(label)
++                else:
++                    self.add(f"smuggled_residual_{index}", label, shape)
++                    snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
++                self.assertNotIn(
++                    label, {count.label for count in snapshot.counts}
++                )
++
++    def test_a_wrong_value_under_the_right_label_passes_enrolment_untouched(
++        self,
++    ) -> None:
++        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
++        correct = snapshot.first_cohort_brand_count
++        wrong_count = correct.count + 1
++        self.assertLessEqual(wrong_count, correct.denominator)
++        original = CoverageSnapshot.first_cohort_brand_count
++
++        def wrong(_snapshot: CoverageSnapshot) -> MeasuredCount:
++            return MeasuredCount(
++                label=correct.label,
++                count=wrong_count,
++                denominator=correct.denominator,
++                denominator_label=correct.denominator_label,
++                measured_by=correct.measured_by,
++            )
++
++        setattr(CoverageSnapshot, "first_cohort_brand_count", property(wrong))
++        self.addCleanup(
++            setattr, CoverageSnapshot, "first_cohort_brand_count", original
++        )
++        enrolled = {count.label: count for count in snapshot.counts}
++        self.assertEqual(wrong_count, enrolled[correct.label].count)
++        self.assertEqual(
++            wrong_count,
++            snapshot_payload(snapshot)["first_cohort_brand_count"]["count"],
+         )
+ 
+     def test_the_docstring_names_each_residual(self) -> None:
+@@ -2212,7 +2309,9 @@ class CountEnrollmentResidualTests(RootCase):
+         for fragment in (
+             "what this does not close",
+             "tuple",
+-            "not a property",
++            "mapping of mappings",
++            "not one of those descriptors",
++            "dataclass field",
+             "does not check that a count is right",
+         ):
+             with self.subTest(fragment=fragment):
+@@ -2309,6 +2408,15 @@ STILL_OPEN_URL_CASES: tuple[tuple[str, str], ...] = (
+     # **present**; it does not ask whether the host is well formed.
+     ("empty IP-literal brackets", "https://[]/x"),
+     ("unclosed IP-literal bracket", "https://[2001:db8::1/x"),
++    # Wave 4 names the port boundary rather than silently parsing only the
++    # host. RFC 3986 section 3.2.3's `port = *DIGIT` is not implemented here.
++    ("non-digit port", "https://host:abc/x"),
++    ("negative port", "https://host:-1/x"),
++    ("out-of-range digit port", "https://host:99999999999/x"),
++    ("multiple unbracketed colons", "https://a:b:c/x"),
++    ("empty port", "https://host:/x"),
++    # Filed under host well-formedness: it has no opening bracket.
++    ("unmatched closing bracket", "https://]/x"),
+ )
+ 
+ # The ten-case matrix `_require_hostful_authority_without_userinfo` is judged
+@@ -2520,6 +2628,33 @@ class DeclaredUrlHostTests(RootCase):
+         self.assertIn("host", message)
+         self.assertIn("port", message)
+ 
++    def test_text_after_a_bracketed_host_is_refused(self) -> None:
++        url = "https://[::1]evil.invalid/x"
++        message = self.refuse_url("bracket-suffix", url)
++        for fragment in ("evil.invalid", "reviewer", "fetcher"):
++            with self.subTest(fragment=fragment):
++                self.assertIn(fragment, message)
++        with self.assertRaises(ValueError):
++            SourceDenominatorEntry(
++                source_id=DECLARED_ID,
++                sha256=None,
++                state=DECLARED_UNREAD,
++                url=url,
++            )
++
++    def test_the_named_bracket_well_formedness_residuals_stay_admitted(
++        self,
++    ) -> None:
++        for url in ("https://[]/x", "https://[2001:db8::1/x"):
++            with self.subTest(url=url):
++                entry = SourceDenominatorEntry(
++                    source_id=DECLARED_ID,
++                    sha256=None,
++                    state=DECLARED_UNREAD,
++                    url=url,
++                )
++                self.assertEqual(url, entry.url)
++
+     def test_the_ten_case_matrix_is_unchanged(self) -> None:
+         """Every currently-refused case still refused, every currently-admitted
+         case still admitted. This is the regression surface the brief names."""
+@@ -2545,6 +2680,8 @@ class DeclaredUrlHostTests(RootCase):
+             "what this does not close",
+             "well formed",
+             "ip-literal",
++            "port = *digit",
++            "https://]/x",
+         ):
+             with self.subTest(fragment=fragment):
+                 self.assertIn(fragment, text)
+@@ -2588,6 +2725,8 @@ class DeclaredUrlResidualTests(RootCase):
+             # is what the new host rule deliberately does not check.
+             "%40",
+             "well formed",
++            "port = *DIGIT",
++            "https://]/x",
+         ):
+             with self.subTest(fragment=fragment):
+                 self.assertIn(fragment, text)
+@@ -2934,12 +3073,13 @@ class BrandNameNormalizationTests(RootCase):
+ # ---------------------------------------------------------------------------
+ 
+ 
+-# The transcription `coverage.py` carries, written here independently so the
+-# two can be compared rather than one read from the other. Source: Unicode
+-# 16.0.0 `DerivedCoreProperties.txt`, property `Default_Ignorable_Code_Point`,
+-# restricted to the members whose general category is **not** already on
+-# `_REFUSED_BRAND_NAME_CATEGORIES`, plus U+2800 which is not
+-# `Default_Ignorable` and renders as an empty braille cell.
++# The transcription `coverage.py` carries, written here a second time rather
++# than imported from that module so the two can be compared entry by entry.
++# Both were transcribed in one sitting by one author; independence is not
++# claimed. Source: Unicode 16.0.0 `DerivedCoreProperties.txt`, property
++# `Default_Ignorable_Code_Point`, restricted to the members whose general
++# category is **not** already on `_REFUSED_BRAND_NAME_CATEGORIES`, plus U+2800
++# which is not `Default_Ignorable` and renders as an empty braille cell.
+ #
+ # It is a **transcription, not a derivation**: `unicodedata` exposes no
+ # `Default_Ignorable_Code_Point` accessor, so nothing here can re-derive it and
+@@ -3042,7 +3182,11 @@ class BrandNameInvisibleTranscriptionTests(RootCase):
+                 )
+ 
+     def test_the_module_carries_the_same_transcription(self) -> None:
+-        """Two independent transcriptions of one table, compared."""
++        """A second in-test transcription, compared entry by entry.
++
++        Both copies were transcribed in one sitting by one author; the test
++        claims a comparison, not independent authorship.
++        """
+ 
+         self.assertEqual(
+             TRANSCRIBED_INVISIBLE_CODE_POINTS,
+@@ -3307,6 +3451,17 @@ class BrandNameWhitespaceTests(RootCase):
+                     )
+                 self.assertIn("blank", str(caught.exception))
+ 
++    def test_a_name_of_only_non_u0020_zs_is_refused_as_blank_first(
++        self,
++    ) -> None:
++        with self.assertRaises(ValueError) as caught:
++            BrandUniverseEntry(
++                brand_id="brand:demo",
++                brand_name="\u3000",
++                source_ids=(DECLARED_ID,),
++            )
++        self.assertEqual("brand_name must not be blank", str(caught.exception))
++
+     def test_the_twelve_committed_names_are_unaffected_by_trimming(
+         self,
+     ) -> None:
+@@ -3325,7 +3480,12 @@ class BrandNameWhitespaceTests(RootCase):
+ 
+     def test_the_docstring_states_what_is_trimmed(self) -> None:
+         text = prose(coverage_module.BrandUniverseEntry.__doc__)
+-        for fragment in ("leading and trailing", "u+0020"):
++        for fragment in (
++            "leading and trailing",
++            "u+0020",
++            "all-whitespace",
++            "refused as blank before",
++        ):
+             with self.subTest(fragment=fragment):
+                 self.assertIn(fragment, text)
+ 

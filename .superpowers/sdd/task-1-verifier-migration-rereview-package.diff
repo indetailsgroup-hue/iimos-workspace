@@ -1,0 +1,596 @@
+diff --git a/.gitignore b/.gitignore
+index b2c3f1065ac375b37cbe149d9fc6f03f0128a6cd..490a87e16f3d09908d6c14132c2434bbd8239900 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -30,3 +30,5 @@ Thumbs.db
+ *.tmp
+ *.log
+ 
++# Repeatable kitchen-kernel verifier output
++/artifacts/verification/kitchen-kernel-bootstrap-summary.json
+diff --git a/tests/test_verify_kitchen_kernel_contract.py b/tests/test_verify_kitchen_kernel_contract.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..d4bffbb828d72694a7a634494ab442a5580917c0
+--- /dev/null
++++ b/tests/test_verify_kitchen_kernel_contract.py
+@@ -0,0 +1,376 @@
++"""Contract tests for the kitchen-kernel verification evidence."""
++
++from __future__ import annotations
++
++from pathlib import Path
++import subprocess
++import tempfile
++import unittest
++from unittest import mock
++
++from tools import verify_kitchen_kernel as verifier
++
++
++def command_result(
++    command: list[str],
++    *,
++    exit_code: int = 0,
++    output: str = "",
++) -> dict[str, object]:
++    return {
++        "command": command,
++        "exit_code": exit_code,
++        "output": output,
++        "output_bytes": len(output.encode("utf-8")),
++        "output_sha256": "test-double",
++    }
++
++
++def unittest_result(
++    command: list[str],
++    count: int,
++    *,
++    exit_code: int = 0,
++    ok: bool = True,
++) -> dict[str, object]:
++    summary = "OK" if ok else "FAILED (failures=1)"
++    return command_result(
++        command,
++        exit_code=exit_code,
++        output=f"Ran {count} tests in 0.001s\n\n{summary}\n",
++    )
++
++
++def check_by_name(evidence: verifier.Evidence, name: str) -> dict[str, object]:
++    matches = [check for check in evidence.checks if check["name"] == name]
++    if not matches:
++        return {"name": name, "passed": False, "details": {"missing": True}}
++    return matches[0]
++
++
++class UnittestEvidenceContractTests(unittest.TestCase):
++    def run_command_checks(
++        self,
++        *,
++        ambient_count: int = 35,
++        ambient_exit: int = 0,
++        ambient_ok: bool = True,
++        component_count: int = 20,
++        component_exit: int = 0,
++        component_ok: bool = True,
++        identity_count: int = 7,
++        identity_exit: int = 0,
++        identity_ok: bool = True,
++    ) -> verifier.Evidence:
++        def fake_run(command: list[str]) -> dict[str, object]:
++            joined = " ".join(command).replace("\\", "/")
++            if "compileall" in command:
++                return command_result(command)
++            if "tests/component_master" in joined:
++                return unittest_result(
++                    command,
++                    component_count,
++                    exit_code=component_exit,
++                    ok=component_ok,
++                )
++            if "tests/identity_tenancy" in joined:
++                return unittest_result(
++                    command,
++                    identity_count,
++                    exit_code=identity_exit,
++                    ok=identity_ok,
++                )
++            return unittest_result(
++                command,
++                ambient_count,
++                exit_code=ambient_exit,
++                ok=ambient_ok,
++            )
++
++        evidence = verifier.Evidence()
++        with mock.patch.object(verifier, "run", side_effect=fake_run):
++            verifier.check_commands(evidence)
++        return evidence
++
++    def test_additional_ambient_tests_pass_without_losing_exact_core_counts(self) -> None:
++        evidence = self.run_command_checks(ambient_count=35)
++
++        full_suite = check_by_name(evidence, "unittest_full_suite")
++        governed = check_by_name(evidence, "governed_kernel_unittest_suites")
++
++        self.assertTrue(full_suite["passed"], full_suite)
++        self.assertEqual(35, full_suite["details"]["test_count"])
++        self.assertTrue(governed["passed"], governed)
++        self.assertEqual(
++            20,
++            governed["details"]["suites"]["component_master"]["test_count"],
++        )
++        self.assertEqual(
++            7,
++            governed["details"]["suites"]["identity_tenancy"]["test_count"],
++        )
++
++    def test_core_count_drift_missing_ok_and_nonzero_exit_are_rejected(self) -> None:
++        cases = {
++            "component count drift": {"component_count": 19},
++            "component missing OK": {"component_ok": False},
++            "component nonzero exit": {"component_exit": 1},
++            "identity count drift": {"identity_count": 8},
++            "identity missing OK": {"identity_ok": False},
++            "identity nonzero exit": {"identity_exit": 1},
++        }
++        for label, overrides in cases.items():
++            with self.subTest(label=label):
++                evidence = self.run_command_checks(**overrides)
++                governed = check_by_name(
++                    evidence,
++                    "governed_kernel_unittest_suites",
++                )
++                self.assertFalse(governed["passed"], governed)
++
++    def test_full_suite_requires_floor_ok_and_zero_exit(self) -> None:
++        cases = {
++            "below governed floor": {"ambient_count": 26},
++            "missing OK": {"ambient_ok": False},
++            "nonzero exit": {"ambient_exit": 1},
++        }
++        for label, overrides in cases.items():
++            with self.subTest(label=label):
++                evidence = self.run_command_checks(**overrides)
++                full_suite = check_by_name(evidence, "unittest_full_suite")
++                self.assertFalse(full_suite["passed"], full_suite)
++
++    def test_schema_documents_consumer_visible_check_change(self) -> None:
++        self.assertEqual(
++            "1.1.0",
++            getattr(verifier, "OUTPUT_SCHEMA_VERSION", None),
++        )
++
++
++class GitEvidenceContractTests(unittest.TestCase):
++    def git(
++        self,
++        repository: Path,
++        *arguments: str,
++        check: bool = True,
++    ) -> subprocess.CompletedProcess[str]:
++        return subprocess.run(
++            ["git", *arguments],
++            cwd=repository,
++            text=True,
++            encoding="utf-8",
++            errors="replace",
++            capture_output=True,
++            check=check,
++        )
++
++    def init_repository(self, repository: Path, *, commit: bool = True) -> str:
++        self.git(repository, "init", "-q")
++        self.git(repository, "config", "user.name", "Verifier Contract Test")
++        self.git(repository, "config", "user.email", "verifier@example.invalid")
++        branch = self.git(
++            repository,
++            "branch",
++            "--show-current",
++        ).stdout.strip()
++        if commit:
++            (repository / "tracked.txt").write_text("base\n", encoding="utf-8")
++            self.git(repository, "add", "tracked.txt")
++            self.git(repository, "commit", "-q", "-m", "test fixture")
++        return branch
++
++    def git_evidence(self, repository: Path) -> dict[str, object]:
++        evidence = verifier.Evidence()
++        with mock.patch.object(verifier, "ROOT", repository):
++            verifier.check_git(evidence)
++        return check_by_name(evidence, "git_established_repository_state")
++
++    def test_clean_committed_repository_passes_with_and_without_remote(self) -> None:
++        for with_remote in (False, True):
++            with self.subTest(with_remote=with_remote):
++                with tempfile.TemporaryDirectory() as temporary:
++                    repository = Path(temporary)
++                    branch = self.init_repository(repository)
++                    if with_remote:
++                        self.git(
++                            repository,
++                            "remote",
++                            "add",
++                            "origin",
++                            str(repository / "unused-remote.git"),
++                        )
++
++                    check = self.git_evidence(repository)
++
++                    self.assertTrue(check["passed"], check)
++                    self.assertEqual(branch, check["details"]["branch_name"])
++                    self.assertFalse(check["details"]["detached_head"])
++                    self.assertEqual(
++                        1 if with_remote else 0,
++                        check["details"]["remote_count"],
++                    )
++
++    def test_remote_query_failure_fails_without_parsing_stderr_as_names(self) -> None:
++        with tempfile.TemporaryDirectory() as temporary:
++            repository = Path(temporary)
++            self.init_repository(repository)
++            actual_run = verifier.run
++
++            def fail_only_remote(command: list[str]) -> dict[str, object]:
++                if command == ["git", "remote"]:
++                    return command_result(
++                        command,
++                        exit_code=2,
++                        output="fatal: injected remote query failure\n",
++                    )
++                return actual_run(command)
++
++            evidence = verifier.Evidence()
++            with (
++                mock.patch.object(verifier, "ROOT", repository),
++                mock.patch.object(
++                    verifier,
++                    "run",
++                    side_effect=fail_only_remote,
++                ),
++            ):
++                verifier.check_git(evidence)
++            check = check_by_name(
++                evidence,
++                "git_established_repository_state",
++            )
++
++            self.assertFalse(check["passed"], check)
++            self.assertEqual(2, check["details"]["remote_exit_code"])
++            self.assertEqual([], check["details"]["remote_names"])
++            self.assertEqual(0, check["details"]["remote_count"])
++
++    def test_clean_detached_head_is_recorded_accurately(self) -> None:
++        with tempfile.TemporaryDirectory() as temporary:
++            repository = Path(temporary)
++            self.init_repository(repository)
++            self.git(repository, "checkout", "-q", "--detach", "HEAD")
++
++            check = self.git_evidence(repository)
++
++            self.assertTrue(check["passed"], check)
++            self.assertIsNone(check["details"]["branch_name"])
++            self.assertTrue(check["details"]["detached_head"])
++
++    def test_unborn_repository_fails(self) -> None:
++        with tempfile.TemporaryDirectory() as temporary:
++            repository = Path(temporary)
++            self.init_repository(repository, commit=False)
++
++            check = self.git_evidence(repository)
++
++            self.assertFalse(check["passed"], check)
++            self.assertFalse(check["details"].get("head_exists", True))
++
++    def test_staged_unstaged_and_untracked_changes_fail(self) -> None:
++        cases = ("staged", "unstaged", "untracked")
++        for dirty_state in cases:
++            with self.subTest(dirty_state=dirty_state):
++                with tempfile.TemporaryDirectory() as temporary:
++                    repository = Path(temporary)
++                    self.init_repository(repository)
++                    if dirty_state == "staged":
++                        (repository / "tracked.txt").write_text(
++                            "staged\n",
++                            encoding="utf-8",
++                        )
++                        self.git(repository, "add", "tracked.txt")
++                    elif dirty_state == "unstaged":
++                        (repository / "tracked.txt").write_text(
++                            "unstaged\n",
++                            encoding="utf-8",
++                        )
++                    else:
++                        (repository / "untracked.txt").write_text(
++                            "untracked\n",
++                            encoding="utf-8",
++                        )
++
++                    check = self.git_evidence(repository)
++
++                    self.assertFalse(check["passed"], check)
++
++    def test_unmerged_entries_fail(self) -> None:
++        with tempfile.TemporaryDirectory() as temporary:
++            repository = Path(temporary)
++            original_branch = self.init_repository(repository)
++            self.git(repository, "branch", "conflict-other")
++            (repository / "tracked.txt").write_text("main\n", encoding="utf-8")
++            self.git(repository, "add", "tracked.txt")
++            self.git(repository, "commit", "-q", "-m", "main change")
++            self.git(repository, "checkout", "-q", "conflict-other")
++            (repository / "tracked.txt").write_text("other\n", encoding="utf-8")
++            self.git(repository, "add", "tracked.txt")
++            self.git(repository, "commit", "-q", "-m", "other change")
++            self.git(repository, "checkout", "-q", original_branch)
++            merge = self.git(
++                repository,
++                "merge",
++                "conflict-other",
++                check=False,
++            )
++            self.assertNotEqual(0, merge.returncode, merge.stdout + merge.stderr)
++
++            check = self.git_evidence(repository)
++
++            self.assertFalse(check["passed"], check)
++            self.assertGreater(
++                check["details"].get("unmerged_entry_count", 0),
++                0,
++            )
++
++
++class GeneratedSummaryIgnoreContractTests(unittest.TestCase):
++    def test_generated_summary_path_is_ignored_exactly(self) -> None:
++        ignore_file = verifier.ROOT / ".gitignore"
++        rules = ignore_file.read_text(encoding="utf-8").splitlines()
++        exact_rule = (
++            "/artifacts/verification/kitchen-kernel-bootstrap-summary.json"
++        )
++
++        self.assertIn(exact_rule, rules)
++        ignored = subprocess.run(
++            [
++                "git",
++                "check-ignore",
++                "--quiet",
++                "--",
++                "artifacts/verification/kitchen-kernel-bootstrap-summary.json",
++            ],
++            cwd=verifier.ROOT,
++            check=False,
++        )
++        sibling = subprocess.run(
++            [
++                "git",
++                "check-ignore",
++                "--quiet",
++                "--",
++                "artifacts/verification/another-summary.json",
++            ],
++            cwd=verifier.ROOT,
++            check=False,
++        )
++        nested = subprocess.run(
++            [
++                "git",
++                "check-ignore",
++                "--quiet",
++                "--",
++                "nested/artifacts/verification/kitchen-kernel-bootstrap-summary.json",
++            ],
++            cwd=verifier.ROOT,
++            check=False,
++        )
++        self.assertEqual(0, ignored.returncode)
++        self.assertEqual(1, sibling.returncode)
++        self.assertEqual(1, nested.returncode)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/tools/verify_kitchen_kernel.py b/tools/verify_kitchen_kernel.py
+index a5d6b18a2d4b7912ea15281f82e8e581a6d38d48..2831b79f62c82750cf40579a689a197d805166eb 100644
+--- a/tools/verify_kitchen_kernel.py
++++ b/tools/verify_kitchen_kernel.py
+@@ -21,6 +21,9 @@ from typing import Any
+ ROOT = Path(__file__).resolve().parents[1]
+ OUTPUT = ROOT / "artifacts" / "verification" / "kitchen-kernel-bootstrap-summary.json"
+ PACKAGE_SOURCE = ROOT / "packages" / "component-master" / "src"
++GOVERNED_CORE_TEST_FLOOR = 27
++# 1.1.0 adds governed sub-suite evidence and replaces bootstrap Git evidence.
++OUTPUT_SCHEMA_VERSION = "1.1.0"
+ 
+ EXPECTED_CONTEXTS = {
+     "identity-tenancy",
+@@ -91,6 +94,40 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
+         return [json.loads(line) for line in source if line.strip()]
+ 
+ 
++def evaluate_unittest_result(
++    result: dict[str, Any],
++    *,
++    exact_count: int | None = None,
++    minimum_count: int | None = None,
++) -> tuple[bool, dict[str, Any]]:
++    matches = re.findall(r"Ran (\d+) tests?", result["output"])
++    test_count = int(matches[-1]) if matches else None
++    has_ok_summary = bool(
++        re.search(
++            r"(?m)^OK(?: \([^\r\n]+\))?\r?$",
++            result["output"],
++        )
++    )
++    count_passed = test_count is not None
++    if exact_count is not None:
++        count_passed = count_passed and test_count == exact_count
++    if minimum_count is not None:
++        count_passed = count_passed and test_count >= minimum_count
++    details = {
++        **result,
++        "test_count": test_count,
++        "has_unittest_ok_summary": has_ok_summary,
++    }
++    if exact_count is not None:
++        details["expected_test_count"] = exact_count
++    if minimum_count is not None:
++        details["minimum_test_count"] = minimum_count
++    return (
++        result["exit_code"] == 0 and count_passed and has_ok_summary,
++        details,
++    )
++
++
+ def check_commands(evidence: Evidence) -> None:
+     tests = run(
+         [
+@@ -103,12 +140,43 @@ def check_commands(evidence: Evidence) -> None:
+             "-v",
+         ]
+     )
+-    test_match = re.search(r"Ran (\d+) tests?", tests["output"])
+-    test_count = int(test_match.group(1)) if test_match else None
++    full_suite_passed, full_suite_details = evaluate_unittest_result(
++        tests,
++        minimum_count=GOVERNED_CORE_TEST_FLOOR,
++    )
+     evidence.add(
+         "unittest_full_suite",
+-        tests["exit_code"] == 0 and test_count == 27 and "OK" in tests["output"],
+-        {**tests, "test_count": test_count},
++        full_suite_passed,
++        full_suite_details,
++    )
++
++    governed_suites: dict[str, dict[str, Any]] = {}
++    for name, start_directory, expected_count in (
++        ("component_master", "tests/component_master", 20),
++        ("identity_tenancy", "tests/identity_tenancy", 7),
++    ):
++        result = run(
++            [
++                sys.executable,
++                "-m",
++                "unittest",
++                "discover",
++                "-s",
++                start_directory,
++                "-t",
++                ".",
++                "-v",
++            ]
++        )
++        passed, details = evaluate_unittest_result(
++            result,
++            exact_count=expected_count,
++        )
++        governed_suites[name] = {**details, "passed": passed}
++    evidence.add(
++        "governed_kernel_unittest_suites",
++        all(suite["passed"] for suite in governed_suites.values()),
++        {"suites": governed_suites},
+     )
+ 
+     compile_result = run(
+@@ -499,30 +567,75 @@ def check_secrets(evidence: Evidence) -> None:
+ 
+ 
+ def check_git(evidence: Evidence) -> None:
+-    status = run(["git", "status", "--short", "--branch"])
++    status = run(
++        ["git", "status", "--porcelain=v1", "--untracked-files=all"]
++    )
+     head = run(["git", "rev-parse", "--verify", "HEAD"])
+-    staged = run(["git", "ls-files", "--stage"])
++    staged = run(["git", "diff", "--cached", "--quiet", "--exit-code"])
++    unstaged = run(["git", "diff", "--quiet", "--exit-code"])
++    unmerged = run(["git", "ls-files", "--unmerged"])
+     remotes = run(["git", "remote"])
+-    lines = [line for line in status["output"].splitlines() if line.strip()]
++    branch = run(["git", "symbolic-ref", "--quiet", "--short", "HEAD"])
++    status_lines = [
++        line for line in status["output"].splitlines() if line.strip()
++    ]
++    unmerged_lines = [
++        line for line in unmerged["output"].splitlines() if line.strip()
++    ]
++    remote_names = (
++        [
++            line for line in remotes["output"].splitlines() if line.strip()
++        ]
++        if remotes["exit_code"] == 0
++        else []
++    )
++    head_exists = head["exit_code"] == 0
++    branch_query_valid = branch["exit_code"] in (0, 1)
++    branch_name = (
++        branch["output"].strip() if branch["exit_code"] == 0 else None
++    )
++    detached_head = head_exists and branch["exit_code"] == 1
+     evidence.add(
+-        "git_bootstrap_state",
++        "git_established_repository_state",
+         status["exit_code"] == 0
+-        and head["exit_code"] != 0
+-        and not staged["output"].strip()
+-        and not remotes["output"].strip(),
++        and not status_lines
++        and head_exists
++        and staged["exit_code"] == 0
++        and unstaged["exit_code"] == 0
++        and unmerged["exit_code"] == 0
++        and not unmerged_lines
++        and remotes["exit_code"] == 0
++        and branch_query_valid,
+         {
+             "status_command": status["command"],
+             "status_exit_code": status["exit_code"],
+-            "branch_line": lines[0] if lines else None,
+-            "status_line_count": len(lines),
+-            "head_exists": head["exit_code"] == 0,
+-            "staged_path_count": len(
+-                [line for line in staged["output"].splitlines() if line.strip()]
+-            ),
+-            "remote_count": len(
+-                [line for line in remotes["output"].splitlines() if line.strip()]
++            "porcelain_status": status_lines,
++            "status_line_count": len(status_lines),
++            "head_command": head["command"],
++            "head_exit_code": head["exit_code"],
++            "head_exists": head_exists,
++            "head": head["output"].strip() if head_exists else None,
++            "staged_diff_command": staged["command"],
++            "staged_diff_exit_code": staged["exit_code"],
++            "staged_diff_empty": staged["exit_code"] == 0,
++            "unstaged_diff_command": unstaged["command"],
++            "unstaged_diff_exit_code": unstaged["exit_code"],
++            "unstaged_diff_empty": unstaged["exit_code"] == 0,
++            "unmerged_command": unmerged["command"],
++            "unmerged_exit_code": unmerged["exit_code"],
++            "unmerged_entry_count": len(unmerged_lines),
++            "remote_command": remotes["command"],
++            "remote_exit_code": remotes["exit_code"],
++            "remote_names": remote_names,
++            "remote_count": len(remote_names),
++            "branch_command": branch["command"],
++            "branch_exit_code": branch["exit_code"],
++            "branch_name": branch_name,
++            "detached_head": detached_head,
++            "note": (
++                "Established repository state is verified locally; remote "
++                "presence is informational, and no push is claimed."
+             ),
+-            "note": "Repository initialized in place; no commit, staging, remote, or push is claimed.",
+         },
+     )
+ 
+@@ -538,7 +651,7 @@ def main() -> int:
+     check_git(evidence)
+ 
+     payload = {
+-        "schema_version": "1.0.0",
++        "schema_version": OUTPUT_SCHEMA_VERSION,
+         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+         "scope": "Governed reference-kernel bootstrap; no production or ratification claim",
+         "repository_root": str(ROOT),

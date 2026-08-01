@@ -1,0 +1,3745 @@
+diff --git a/packages/component-master/src/monolith_component_master/adapters/__init__.py b/packages/component-master/src/monolith_component_master/adapters/__init__.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..1981897e65782dc40411817f330a10400e5960d5
+--- /dev/null
++++ b/packages/component-master/src/monolith_component_master/adapters/__init__.py
+@@ -0,0 +1,17 @@
++"""Reviewed ingestion adapters for the Proposed connector registry."""
++
++from .reviewed_assertions import (
++    DocumentKind,
++    ReviewedAssertionAdapter,
++    RightsState,
++    SourceAuthority,
++    SourceContext,
++)
++
++__all__ = [
++    "DocumentKind",
++    "ReviewedAssertionAdapter",
++    "RightsState",
++    "SourceAuthority",
++    "SourceContext",
++]
+diff --git a/packages/component-master/src/monolith_component_master/adapters/reviewed_assertions.py b/packages/component-master/src/monolith_component_master/adapters/reviewed_assertions.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..bd8269e57b362a77078ba2d8125091d405c2266a
+--- /dev/null
++++ b/packages/component-master/src/monolith_component_master/adapters/reviewed_assertions.py
+@@ -0,0 +1,476 @@
++"""Fail-closed adapter for explicitly reviewed assertion candidates."""
++
++from __future__ import annotations
++
++from collections.abc import Iterable, Mapping
++from dataclasses import dataclass
++from decimal import Decimal
++from enum import Enum
++from fractions import Fraction
++
++from ..evidence import FieldAssertion
++from ..ingestion import (
++    CandidateRecord,
++    IngestionResult,
++    QuarantineRecord,
++    _QUARANTINE_OWNER_BY_REASON,
++    _require_canonical_id,
++    _snapshot_candidate,
++    _snapshot_iterable,
++)
++
++
++class SourceAuthority(str, Enum):
++    OEM = "OEM"
++    AUTHORIZED_DISTRIBUTOR = "AUTHORIZED_DISTRIBUTOR"
++    OTHER = "OTHER"
++
++
++class DocumentKind(str, Enum):
++    PDF = "PDF"
++    CAD = "CAD"
++    WEB = "WEB"
++    API = "API"
++    FEED = "FEED"
++    MANUAL = "MANUAL"
++
++
++class RightsState(str, Enum):
++    FACTUAL_INDEXING_ALLOWED = "FACTUAL_INDEXING_ALLOWED"
++    UNKNOWN = "UNKNOWN"
++    RESTRICTED = "RESTRICTED"
++    CONFLICTING = "CONFLICTING"
++
++
++def _require_enum_value(
++    value: object,
++    field_name: str,
++    enum_type: type[Enum],
++) -> str:
++    # These enums are exported in adapters.__all__, so a caller is meant to
++    # use their members. Normalize a member to its canonical value rather than
++    # refusing it, and return the normalized text so the field stores an exact
++    # primitive: these are str-subclass enums, and a str subclass could
++    # otherwise satisfy this lookup and the later authority/rights comparisons
++    # while holding different text.
++    if isinstance(value, enum_type):
++        normalized = enum_type(value).value
++        if type(normalized) is not str:
++            raise TypeError(f"{field_name} must be a string")
++        return normalized
++    if type(value) is not str:
++        raise TypeError(f"{field_name} must be a string")
++    try:
++        enum_type(value)
++    except ValueError as error:
++        supported = ", ".join(item.value for item in enum_type)
++        raise ValueError(
++            f"{field_name} must be one of: {supported}"
++        ) from error
++    return value
++
++
++@dataclass(frozen=True)
++class SourceContext:
++    source_id: str
++    authority: str
++    document_kind: str
++    rights_state: str
++
++    def __post_init__(self) -> None:
++        _require_canonical_id(self.source_id, "source_id")
++        # Store the normalized text, so an accepted enum member never survives
++        # as a str subclass inside the record.
++        for field_name, enum_type in (
++            ("authority", SourceAuthority),
++            ("document_kind", DocumentKind),
++            ("rights_state", RightsState),
++        ):
++            object.__setattr__(
++                self,
++                field_name,
++                _require_enum_value(
++                    getattr(self, field_name),
++                    field_name,
++                    enum_type,
++                ),
++            )
++
++
++_REASON_ORDER = (
++    "REVIEW_REQUIRED",
++    "ASSERTION_NOT_VERIFIED",
++    "SOURCE_CONTEXT_MISSING",
++    "RIGHTS_UNCERTAIN",
++    "UNITS_AMBIGUOUS",
++    "DIMENSION_SOURCE_CONFLICT",
++    "UNIT_CONFLICT",
++    "IDENTITY_SOURCE_CONFLICT",
++    "OEM_DISTRIBUTOR_IDENTITY_CONFLICT",
++    "PDF_CAD_GEOMETRY_CONFLICT",
++    "MATING_PART_SOURCE_CONFLICT",
++    "REQUIRED_MATING_PART_MISSING",
++)
++_DIMENSIONAL_PREFIXES = ("dimensions.", "geometry.")
++_MATING_REQUIRED_FIELD = "compatibility.requires_mating_part"
++_EXACT_MATING_PART_FIELD = "compatibility.exact_mating_part_id"
++
++
++def _dimension_parts(
++    assertion: FieldAssertion,
++) -> tuple[str | None, Fraction | None]:
++    value = assertion.value
++    if not isinstance(value, Mapping):
++        return None, None
++    unit = value.get("unit")
++    if unit not in {"mm", "in"}:
++        return None, None
++    # Fraction, not Decimal, for the inch factor. Decimal multiplication is
++    # rounded to the active context precision -- 28 significant digits by
++    # default -- so `number * Decimal("25.4")` made 10**30 in and 10**30+1 in
++    # compare equal, a silent 28-digit tolerance. The contradiction codes rest
++    # on exact equality, so the mechanism has to be exact: Fraction is exact
++    # and unbounded, and Fraction(127, 5) is 25.4 with no representation error.
++    # `Decimal(str(...))` is already exact and context-free, so mm is unchanged.
++    number = Fraction(Decimal(str(value["value"])))
++    millimetres = number if unit == "mm" else number * Fraction(127, 5)
++    return unit, millimetres
++
++
++def _normalized_scalar(value: object) -> object:
++    if isinstance(value, str):
++        return value.strip()
++    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
++        return Decimal(str(value))
++    return value
++
++
++def _group_by_field(
++    assertions: Iterable[FieldAssertion],
++) -> dict[str, list[FieldAssertion]]:
++    grouped: dict[str, list[FieldAssertion]] = {}
++    for assertion in assertions:
++        grouped.setdefault(assertion.field_path, []).append(assertion)
++    return grouped
++
++
++class ReviewedAssertionAdapter:
++    """Evaluate immutable reviewed candidates without publishing or mutation."""
++
++    def __init__(self, source_contexts: Iterable[SourceContext]) -> None:
++        supplied = _snapshot_iterable(source_contexts, "source_contexts")
++        snapshots: list[SourceContext] = []
++        for context in supplied:
++            # Exact type plus rebuild, for the same reason as the record
++            # snapshots: a subclass could answer the rebuild honestly and a
++            # later authority/rights read differently.
++            if type(context) is not SourceContext:
++                raise TypeError(
++                    "source_contexts must contain only SourceContext records"
++                )
++            snapshots.append(
++                SourceContext(
++                    source_id=context.source_id,
++                    authority=context.authority,
++                    document_kind=context.document_kind,
++                    rights_state=context.rights_state,
++                )
++            )
++        source_ids = tuple(context.source_id for context in snapshots)
++        if len(source_ids) != len(set(source_ids)):
++            raise ValueError("duplicate source context")
++        self._source_contexts = tuple(snapshots)
++        self._contexts_by_source = {
++            context.source_id: context for context in snapshots
++        }
++
++    def ingest(self, candidate: CandidateRecord) -> IngestionResult:
++        # Refuse subclasses and rebuild, so every rule below and the promoted
++        # record itself read one immutable record this library constructed.
++        candidate = _snapshot_candidate(candidate, "candidate")
++
++        evidence_by_reason: dict[str, set[str]] = {}
++
++        def add_reason(
++            reason_code: str,
++            evidence: Iterable[str],
++        ) -> None:
++            evidence_by_reason.setdefault(reason_code, set()).update(evidence)
++
++        all_evidence = tuple(
++            assertion.assertion_id
++            for assertion in candidate.assertions
++        )
++        if candidate.extraction_method != "HUMAN_REVIEWED":
++            add_reason("REVIEW_REQUIRED", all_evidence)
++
++        pending = tuple(
++            assertion.assertion_id
++            for assertion in candidate.assertions
++            if assertion.review_state != "VERIFIED"
++        )
++        if pending:
++            add_reason("ASSERTION_NOT_VERIFIED", pending)
++
++        missing_context = tuple(
++            assertion.assertion_id
++            for assertion in candidate.assertions
++            if assertion.source_id not in self._contexts_by_source
++        )
++        if missing_context:
++            add_reason("SOURCE_CONTEXT_MISSING", missing_context)
++
++        uncertain_rights = tuple(
++            assertion.assertion_id
++            for assertion in candidate.assertions
++            if (
++                (context := self._contexts_by_source.get(assertion.source_id))
++                is not None
++                and context.rights_state
++                != RightsState.FACTUAL_INDEXING_ALLOWED.value
++            )
++        )
++        if uncertain_rights:
++            add_reason("RIGHTS_UNCERTAIN", uncertain_rights)
++
++        dimensional = tuple(
++            assertion
++            for assertion in candidate.assertions
++            if assertion.field_path.startswith(_DIMENSIONAL_PREFIXES)
++        )
++        ambiguous_units = tuple(
++            assertion.assertion_id
++            for assertion in dimensional
++            if _dimension_parts(assertion)[0] is None
++        )
++        if ambiguous_units:
++            add_reason("UNITS_AMBIGUOUS", ambiguous_units)
++
++        for field_assertions in _group_by_field(dimensional).values():
++            # Owner-ordered rule: for one dimensional field, any two sources
++            # whose converted magnitudes differ contradict each other and must
++            # not promote silently. Exact decimal equality with no tolerance --
++            # a "close enough" threshold would be an engineering number with no
++            # provenance, which is the failure mode this registry exists to
++            # prevent. Ambiguous units are excluded: they have no comparable
++            # magnitude and already raise UNITS_AMBIGUOUS.
++            measured = tuple(
++                (assertion, _dimension_parts(assertion)[1])
++                for assertion in field_assertions
++                if _dimension_parts(assertion)[0] is not None
++            )
++            if len({magnitude for _assertion, magnitude in measured}) > 1:
++                add_reason(
++                    "DIMENSION_SOURCE_CONFLICT",
++                    (assertion.assertion_id for assertion, _ in measured),
++                )
++
++            metric = [
++                assertion
++                for assertion in field_assertions
++                if _dimension_parts(assertion)[0] == "mm"
++            ]
++            imperial = [
++                assertion
++                for assertion in field_assertions
++                if _dimension_parts(assertion)[0] == "in"
++            ]
++            if metric and imperial and any(
++                _dimension_parts(metric_assertion)[1]
++                != _dimension_parts(imperial_assertion)[1]
++                for metric_assertion in metric
++                for imperial_assertion in imperial
++            ):
++                add_reason(
++                    "UNIT_CONFLICT",
++                    (
++                        assertion.assertion_id
++                        for assertion in (*metric, *imperial)
++                    ),
++                )
++
++        identity_assertions = tuple(
++            assertion
++            for assertion in candidate.assertions
++            if assertion.field_path.startswith("identity.")
++        )
++        for field_assertions in _group_by_field(identity_assertions).values():
++            # Same owner-ordered rule for identity: two sources asserting
++            # different normalized scalars for one identity field contradict
++            # each other, whatever their authorities. Compared without regard
++            # to source context, because the contradiction exists regardless of
++            # who published it.
++            if (
++                len(
++                    {
++                        _normalized_scalar(assertion.value)
++                        for assertion in field_assertions
++                    }
++                )
++                > 1
++            ):
++                add_reason(
++                    "IDENTITY_SOURCE_CONFLICT",
++                    (
++                        assertion.assertion_id
++                        for assertion in field_assertions
++                    ),
++                )
++
++            oem = [
++                assertion
++                for assertion in field_assertions
++                if (
++                    (context := self._contexts_by_source.get(
++                        assertion.source_id
++                    ))
++                    is not None
++                    and context.authority == SourceAuthority.OEM.value
++                )
++            ]
++            distributor = [
++                assertion
++                for assertion in field_assertions
++                if (
++                    (context := self._contexts_by_source.get(
++                        assertion.source_id
++                    ))
++                    is not None
++                    and context.authority
++                    == SourceAuthority.AUTHORIZED_DISTRIBUTOR.value
++                )
++            ]
++            if oem and distributor and any(
++                _normalized_scalar(oem_assertion.value)
++                != _normalized_scalar(distributor_assertion.value)
++                for oem_assertion in oem
++                for distributor_assertion in distributor
++            ):
++                add_reason(
++                    "OEM_DISTRIBUTOR_IDENTITY_CONFLICT",
++                    (
++                        assertion.assertion_id
++                        for assertion in (*oem, *distributor)
++                    ),
++                )
++
++        # Both dimensional prefixes, not geometry.* alone: a PDF and a CAD
++        # source disagreeing under dimensions.* is the same disease, and every
++        # other rule in this module already treats the two prefixes alike.
++        geometry_assertions = tuple(
++            assertion
++            for assertion in candidate.assertions
++            if assertion.field_path.startswith(_DIMENSIONAL_PREFIXES)
++            and _dimension_parts(assertion)[0] is not None
++        )
++        for field_assertions in _group_by_field(geometry_assertions).values():
++            pdf = [
++                assertion
++                for assertion in field_assertions
++                if (
++                    (context := self._contexts_by_source.get(
++                        assertion.source_id
++                    ))
++                    is not None
++                    and context.document_kind == DocumentKind.PDF.value
++                )
++            ]
++            cad = [
++                assertion
++                for assertion in field_assertions
++                if (
++                    (context := self._contexts_by_source.get(
++                        assertion.source_id
++                    ))
++                    is not None
++                    and context.document_kind == DocumentKind.CAD.value
++                )
++            ]
++            if pdf and cad and any(
++                _dimension_parts(pdf_assertion)[1]
++                != _dimension_parts(cad_assertion)[1]
++                for pdf_assertion in pdf
++                for cad_assertion in cad
++            ):
++                add_reason(
++                    "PDF_CAD_GEOMETRY_CONFLICT",
++                    (
++                        assertion.assertion_id
++                        for assertion in (*pdf, *cad)
++                    ),
++                )
++
++        # The requirement follows the normalized marker, never a hardcoded
++        # entity_kind literal: entity_kind is deliberately open in Task 7, so a
++        # literal gate silently promotes every unlisted spelling. Entity kinds
++        # that cannot need a mating part simply do not carry the marker.
++        marker_assertions = tuple(
++            assertion
++            for assertion in candidate.assertions
++            if assertion.field_path == _MATING_REQUIRED_FIELD
++        )
++        required_markers = tuple(
++            assertion
++            for assertion in marker_assertions
++            if assertion.value is True
++        )
++        mating_ids = tuple(
++            assertion
++            for assertion in candidate.assertions
++            if assertion.field_path == _EXACT_MATING_PART_FIELD
++            and isinstance(assertion.value, str)
++            and assertion.value.strip()
++        )
++        if required_markers and not mating_ids:
++            add_reason(
++                "REQUIRED_MATING_PART_MISSING",
++                (
++                    assertion.assertion_id
++                    for assertion in required_markers
++                ),
++            )
++
++        # The owner-ordered contradiction rule covers both documented
++        # mating-part fields: two sources naming different mating parts, and two
++        # sources disagreeing on whether a mating part is required at all. Both
++        # promote a self-contradictory record otherwise.
++        #
++        # One code for both, because they are one documented convention family
++        # answering to one desk, exactly as DIMENSION_SOURCE_CONFLICT covers
++        # same-unit and cross-unit dimensional disagreement alike. `add_reason`
++        # merges evidence, so a candidate whose marker and whose part ID both
++        # contradict yields a single record naming every disagreeing assertion.
++        #
++        # Deliberately NOT generalized to arbitrary field paths. The brief says
++        # to use explicit documented normalized field conventions and not to
++        # guess conflicts from free text, so only the dimensional prefixes,
++        # `identity.` and these two `compatibility.` marker fields are compared.
++        for contradicting in (marker_assertions, mating_ids):
++            if (
++                len(
++                    {
++                        _normalized_scalar(assertion.value)
++                        for assertion in contradicting
++                    }
++                )
++                > 1
++            ):
++                add_reason(
++                    "MATING_PART_SOURCE_CONFLICT",
++                    (assertion.assertion_id for assertion in contradicting),
++                )
++
++        if evidence_by_reason:
++            quarantined = tuple(
++                QuarantineRecord(
++                    candidate_id=candidate.candidate_id,
++                    reason_code=reason_code,
++                    evidence_ids=tuple(evidence_by_reason[reason_code]),
++                    owner_role=_QUARANTINE_OWNER_BY_REASON[reason_code],
++                )
++                for reason_code in _REASON_ORDER
++                if reason_code in evidence_by_reason
++            )
++            return IngestionResult(promoted=(), quarantined=quarantined)
++
++        return IngestionResult(promoted=(candidate,), quarantined=())
+diff --git a/packages/component-master/src/monolith_component_master/ingestion.py b/packages/component-master/src/monolith_component_master/ingestion.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..eac5e0c66f0061f198267956d633a5ab5c0fe1d3
+--- /dev/null
++++ b/packages/component-master/src/monolith_component_master/ingestion.py
+@@ -0,0 +1,349 @@
++"""Immutable records for reviewed candidate ingestion and quarantine."""
++
++from __future__ import annotations
++
++from collections.abc import Iterable, Mapping, Set as AbstractSet
++from dataclasses import dataclass
++from decimal import Decimal, InvalidOperation
++import math
++import re
++from types import MappingProxyType
++
++from .evidence import FieldAssertion
++
++
++_CANONICAL_ID_PATTERN = re.compile(
++    r"[a-z][a-z0-9_-]*(?::[A-Za-z0-9][A-Za-z0-9._-]*)+"
++)
++_FIELD_PATH_PATTERN = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+")
++_DIMENSIONAL_PREFIXES = ("dimensions.", "geometry.")
++_MATING_REQUIRED_FIELD = "compatibility.requires_mating_part"
++_EXACT_MATING_PART_FIELD = "compatibility.exact_mating_part_id"
++_ADMITTED_VALUE_TYPES = frozenset({type(None), bool, int, float, str})
++_QUARANTINE_OWNER_BY_REASON = {
++    "REVIEW_REQUIRED": "OEM Evidence Curator",
++    "ASSERTION_NOT_VERIFIED": "Identity and SKU Reviewer",
++    "SOURCE_CONTEXT_MISSING": "OEM Evidence Curator",
++    "RIGHTS_UNCERTAIN": "Rights and Licensing Reviewer",
++    "UNITS_AMBIGUOUS": "Geometry and Units Reviewer",
++    # Two sources stating different values for one field. Owner-ordered scope
++    # addition: a contradiction between sources must never promote silently.
++    # These are general contradiction codes; UNIT_CONFLICT,
++    # PDF_CAD_GEOMETRY_CONFLICT and OEM_DISTRIBUTOR_IDENTITY_CONFLICT remain
++    # narrower refinements naming which pairing disagreed.
++    "DIMENSION_SOURCE_CONFLICT": "Geometry and Units Reviewer",
++    "UNIT_CONFLICT": "Geometry and Units Reviewer",
++    "IDENTITY_SOURCE_CONFLICT": "Identity and SKU Reviewer",
++    "OEM_DISTRIBUTOR_IDENTITY_CONFLICT": "Identity and SKU Reviewer",
++    "PDF_CAD_GEOMETRY_CONFLICT": "Geometry and Units Reviewer",
++    # Its own code rather than IDENTITY_SOURCE_CONFLICT: an exact mating part
++    # is not an identity of this candidate, it is a BOM/compatibility relation,
++    # so it belongs to the same reviewer as REQUIRED_MATING_PART_MISSING.
++    "MATING_PART_SOURCE_CONFLICT": "BOM and Compatibility Reviewer",
++    "REQUIRED_MATING_PART_MISSING": "BOM and Compatibility Reviewer",
++}
++
++
++def _require_text(value: object, field_name: str) -> str:
++    """Require an exact ``str``, allowing blank.
++
++    A ``str`` subclass is rejected because every text field here is later
++    compared: a subclass can override ``__eq__``/``__ne__`` and make a stored
++    review state, field path, brand, or owner role answer a comparison
++    differently from the text the record actually holds.
++    """
++
++    if type(value) is not str:
++        raise TypeError(f"{field_name} must be a string")
++    return value
++
++
++def _require_string(value: object, field_name: str) -> str:
++    text = _require_text(value, field_name)
++    if not text.strip():
++        raise ValueError(f"{field_name} must not be blank")
++    return text
++
++
++def _require_canonical_id(value: object, field_name: str) -> str:
++    identifier = _require_string(value, field_name)
++    if _CANONICAL_ID_PATTERN.fullmatch(identifier) is None:
++        raise ValueError(f"{field_name} must be a canonical colon-delimited ID")
++    return identifier
++
++
++def _snapshot_value(value: object, field_name: str) -> object:
++    """Return an immutable primitive snapshot, or refuse the value outright.
++
++    Assertion values are carried by the documented JSON/JSONL contract, so the
++    admitted set is exactly the value types that contract can represent: null,
++    boolean, finite number, string, object with string keys, and array.
++
++    Containers are rebuilt into immutable equivalents, so a container subclass
++    cannot smuggle its own behaviour into a stored record. Scalars are kept by
++    value, so they are admitted by exact type only: a subclass can carry mutable
++    state, and it can override ``__str__``, which would let the magnitude a
++    conflict rule normalizes disagree with the magnitude the record stores.
++    """
++
++    if isinstance(value, Mapping):
++        snapshot: dict[str, object] = {}
++        for key, item in value.items():
++            if type(key) is not str:
++                raise TypeError(f"{field_name} keys must be strings")
++            snapshot[key] = _snapshot_value(item, f"{field_name}.{key}")
++        return MappingProxyType(snapshot)
++    if isinstance(value, AbstractSet):
++        raise TypeError(
++            f"{field_name} must not be an unordered collection"
++        )
++    if isinstance(value, (list, tuple)):
++        return tuple(
++            _snapshot_value(item, f"{field_name}[{index}]")
++            for index, item in enumerate(value)
++        )
++    if type(value) not in _ADMITTED_VALUE_TYPES:
++        raise TypeError(
++            f"{field_name} must be exactly None, bool, int, float, str, an "
++            f"object with string keys, or an array, "
++            f"not {type(value).__name__}"
++        )
++    if isinstance(value, float) and not math.isfinite(value):
++        raise ValueError(f"{field_name} must be finite")
++    return value
++
++
++def _snapshot_iterable(
++    value: object,
++    field_name: str,
++) -> tuple[object, ...]:
++    if isinstance(value, (str, bytes, bytearray, Mapping)):
++        raise TypeError(f"{field_name} must be an iterable of records")
++    if isinstance(value, AbstractSet):
++        raise TypeError(
++            f"{field_name} must be an ordered iterable, not an unordered "
++            "collection: stored record order is observable output"
++        )
++    try:
++        return tuple(value)  # type: ignore[arg-type]
++    except TypeError as error:
++        raise TypeError(f"{field_name} must be an iterable of records") from error
++
++
++def _validate_numeric(value: object, field_name: str) -> None:
++    if isinstance(value, bool):
++        raise TypeError(f"{field_name} must be numeric, not boolean")
++    if not isinstance(value, (int, float, Decimal)):
++        raise TypeError(f"{field_name} must be numeric")
++    if isinstance(value, float) and not math.isfinite(value):
++        raise ValueError(f"{field_name} must be finite")
++    try:
++        if not Decimal(str(value)).is_finite():
++            raise ValueError(f"{field_name} must be finite")
++    except InvalidOperation as error:
++        raise ValueError(f"{field_name} must be finite") from error
++
++
++def _validate_assertion_value(field_path: str, value: object) -> None:
++    if field_path.startswith(_DIMENSIONAL_PREFIXES):
++        if not isinstance(value, Mapping):
++            raise TypeError(
++                f"{field_path} must be an object with value and unit"
++            )
++        if "value" not in value:
++            raise ValueError(f"{field_path} must contain value")
++        _validate_numeric(value["value"], f"{field_path}.value")
++        if "unit" in value and not isinstance(value["unit"], str):
++            raise TypeError(f"{field_path}.unit must be a string")
++        return
++
++    if field_path.startswith("identity."):
++        if isinstance(value, bool) or not isinstance(
++            value, (str, int, float, Decimal)
++        ):
++            raise TypeError(f"{field_path} must be a scalar value")
++        if isinstance(value, str) and not value.strip():
++            raise ValueError(f"{field_path} must not be blank")
++        if isinstance(value, (int, float, Decimal)):
++            _validate_numeric(value, field_path)
++        return
++
++    if field_path == _MATING_REQUIRED_FIELD:
++        if not isinstance(value, bool):
++            raise TypeError(f"{_MATING_REQUIRED_FIELD} must be a boolean")
++        return
++
++    if field_path == _EXACT_MATING_PART_FIELD:
++        if not isinstance(value, str):
++            raise TypeError(f"{_EXACT_MATING_PART_FIELD} must be a string")
++
++
++def _snapshot_assertion(assertion: object) -> FieldAssertion:
++    if not isinstance(assertion, FieldAssertion):
++        raise TypeError("assertions must contain only FieldAssertion records")
++    _require_canonical_id(assertion.assertion_id, "assertion_id")
++    _require_canonical_id(assertion.source_id, "source_id")
++    _require_string(assertion.entity_id, "entity_id")
++    _require_string(assertion.field_path, "field_path")
++    _require_string(assertion.review_state, "review_state")
++    _require_text(assertion.locator, "locator")
++    _require_text(assertion.reviewer, "reviewer")
++    if _FIELD_PATH_PATTERN.fullmatch(assertion.field_path) is None:
++        raise ValueError("field_path must use normalized lower-case dotted segments")
++    # Snapshot before validating so every rule inspects the exact value the
++    # record stores, never a caller object that could answer differently later.
++    value = _snapshot_value(assertion.value, assertion.field_path)
++    _validate_assertion_value(assertion.field_path, value)
++    return FieldAssertion(
++        assertion_id=assertion.assertion_id,
++        entity_id=assertion.entity_id,
++        field_path=assertion.field_path,
++        value=value,
++        source_id=assertion.source_id,
++        locator=assertion.locator,
++        reviewer=assertion.reviewer,
++        review_state=assertion.review_state,
++    )
++
++
++@dataclass(frozen=True)
++class CandidateRecord:
++    candidate_id: str
++    brand_id: str
++    entity_kind: str
++    assertions: tuple[FieldAssertion, ...]
++    extraction_method: str
++
++    def __post_init__(self) -> None:
++        _require_canonical_id(self.candidate_id, "candidate_id")
++        _require_canonical_id(self.brand_id, "brand_id")
++        _require_string(self.entity_kind, "entity_kind")
++        _require_string(self.extraction_method, "extraction_method")
++
++        supplied_assertions = _snapshot_iterable(self.assertions, "assertions")
++        if not supplied_assertions:
++            raise ValueError("assertions must not be empty")
++        snapshots = tuple(
++            _snapshot_assertion(assertion)
++            for assertion in supplied_assertions
++        )
++        assertion_ids = tuple(
++            assertion.assertion_id for assertion in snapshots
++        )
++        if len(assertion_ids) != len(set(assertion_ids)):
++            raise ValueError("duplicate assertion_id")
++        if any(
++            assertion.entity_id != self.candidate_id
++            for assertion in snapshots
++        ):
++            raise ValueError("assertion entity_id must match candidate_id")
++        object.__setattr__(self, "assertions", snapshots)
++
++
++@dataclass(frozen=True)
++class QuarantineRecord:
++    candidate_id: str
++    reason_code: str
++    evidence_ids: tuple[str, ...]
++    owner_role: str
++
++    def __post_init__(self) -> None:
++        _require_canonical_id(self.candidate_id, "candidate_id")
++        _require_string(self.reason_code, "reason_code")
++        _require_string(self.owner_role, "owner_role")
++        expected_owner = _QUARANTINE_OWNER_BY_REASON.get(self.reason_code)
++        if expected_owner is None:
++            raise ValueError(f"unsupported quarantine reason: {self.reason_code}")
++        if self.owner_role != expected_owner:
++            raise ValueError(
++                f"{self.reason_code} must be owned by {expected_owner}"
++            )
++        supplied_evidence = _snapshot_iterable(
++            self.evidence_ids,
++            "evidence_ids",
++        )
++        if not supplied_evidence:
++            raise ValueError("evidence_ids must not be empty")
++        canonical_ids = tuple(
++            _require_canonical_id(identifier, "evidence_id")
++            for identifier in supplied_evidence
++        )
++        object.__setattr__(
++            self,
++            "evidence_ids",
++            tuple(sorted(set(canonical_ids))),
++        )
++
++
++def _snapshot_candidate(value: object, field_name: str) -> CandidateRecord:
++    """Rebuild a candidate from an exact instance of this library's own class.
++
++    ``isinstance`` is not enough. A subclass can override ``__getattribute__``
++    and answer one way while a rule inspects it, then another way once a
++    consumer reads the stored record, which would make the review-state,
++    brand, and mating-part checks bypassable one level up. Requiring exact type
++    identity and rebuilding gives the consumer a record this library
++    constructed and validated, decoupled from the caller's instance.
++    """
++
++    if type(value) is not CandidateRecord:
++        raise TypeError(f"{field_name} must be exactly a CandidateRecord")
++    return CandidateRecord(
++        candidate_id=value.candidate_id,
++        brand_id=value.brand_id,
++        entity_kind=value.entity_kind,
++        assertions=value.assertions,
++        extraction_method=value.extraction_method,
++    )
++
++
++def _snapshot_quarantine(value: object, field_name: str) -> QuarantineRecord:
++    """Rebuild a quarantine record, refusing subclasses. See above."""
++
++    if type(value) is not QuarantineRecord:
++        raise TypeError(f"{field_name} must be exactly a QuarantineRecord")
++    return QuarantineRecord(
++        candidate_id=value.candidate_id,
++        reason_code=value.reason_code,
++        evidence_ids=value.evidence_ids,
++        owner_role=value.owner_role,
++    )
++
++
++@dataclass(frozen=True)
++class IngestionResult:
++    promoted: tuple[CandidateRecord, ...]
++    quarantined: tuple[QuarantineRecord, ...]
++
++    def __post_init__(self) -> None:
++        promoted = tuple(
++            _snapshot_candidate(item, "promoted")
++            for item in _snapshot_iterable(self.promoted, "promoted")
++        )
++        quarantined = tuple(
++            _snapshot_quarantine(item, "quarantined")
++            for item in _snapshot_iterable(self.quarantined, "quarantined")
++        )
++        if promoted and quarantined:
++            raise ValueError("promoted and quarantined are mutually exclusive")
++        if not promoted and not quarantined:
++            raise ValueError("ingestion result must contain one disposition")
++        if len(promoted) > 1:
++            raise ValueError(
++                "ingestion result can promote only one candidate"
++            )
++        if quarantined:
++            candidate_ids = {
++                record.candidate_id for record in quarantined
++            }
++            if len(candidate_ids) != 1:
++                raise ValueError(
++                    "quarantine records must describe one candidate"
++                )
++            reason_codes = tuple(
++                record.reason_code for record in quarantined
++            )
++            if len(reason_codes) != len(set(reason_codes)):
++                raise ValueError("quarantine reason codes must be unique")
++        object.__setattr__(self, "promoted", tuple(promoted))
++        object.__setattr__(self, "quarantined", tuple(quarantined))
+diff --git a/tests/component_master/registry/test_ingestion.py b/tests/component_master/registry/test_ingestion.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..d824fcfd74d96766a58a87931dc1c8b36a2598da
+--- /dev/null
++++ b/tests/component_master/registry/test_ingestion.py
+@@ -0,0 +1,2593 @@
++"""Contracts for reviewed exact-SKU ingestion and fail-closed quarantine."""
++
++from __future__ import annotations
++
++from collections.abc import Mapping
++from dataclasses import FrozenInstanceError, fields
++from decimal import Decimal
++import json
++from pathlib import Path
++import subprocess
++import sys
++import tempfile
++import unittest
++from unittest import mock
++
++
++REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
++PACKAGE_SOURCE = REPOSITORY_ROOT / "packages" / "component-master" / "src"
++sys.path.insert(0, str(PACKAGE_SOURCE))
++
++from monolith_component_master.adapters.reviewed_assertions import (  # noqa: E402
++    DocumentKind,
++    ReviewedAssertionAdapter,
++    RightsState,
++    SourceAuthority,
++    SourceContext,
++)
++from monolith_component_master.evidence import FieldAssertion  # noqa: E402
++from monolith_component_master.ingestion import (  # noqa: E402
++    CandidateRecord,
++    IngestionResult,
++    QuarantineRecord,
++)
++from tools.connector_registry import ingest_reviewed as ingestion_cli  # noqa: E402
++
++
++CANDIDATE_ID = "candidate:demo:connector-1"
++BRAND_ID = "brand:demo"
++OWNER_BY_REASON = {
++    "REVIEW_REQUIRED": "OEM Evidence Curator",
++    "ASSERTION_NOT_VERIFIED": "Identity and SKU Reviewer",
++    "SOURCE_CONTEXT_MISSING": "OEM Evidence Curator",
++    "RIGHTS_UNCERTAIN": "Rights and Licensing Reviewer",
++    "UNITS_AMBIGUOUS": "Geometry and Units Reviewer",
++    "DIMENSION_SOURCE_CONFLICT": "Geometry and Units Reviewer",
++    "UNIT_CONFLICT": "Geometry and Units Reviewer",
++    "IDENTITY_SOURCE_CONFLICT": "Identity and SKU Reviewer",
++    "OEM_DISTRIBUTOR_IDENTITY_CONFLICT": "Identity and SKU Reviewer",
++    "PDF_CAD_GEOMETRY_CONFLICT": "Geometry and Units Reviewer",
++    "MATING_PART_SOURCE_CONFLICT": "BOM and Compatibility Reviewer",
++    "REQUIRED_MATING_PART_MISSING": "BOM and Compatibility Reviewer",
++}
++
++
++def make_assertion(
++    assertion_id: str = "assertion:demo:identity:sku",
++    *,
++    entity_id: str = CANDIDATE_ID,
++    field_path: str = "identity.exact_sku",
++    value: object = "DEMO-001",
++    source_id: str = "source:demo:oem:web",
++    review_state: str = "VERIFIED",
++) -> FieldAssertion:
++    return FieldAssertion(
++        assertion_id=assertion_id,
++        entity_id=entity_id,
++        field_path=field_path,
++        value=value,
++        source_id=source_id,
++        locator="page 1, row DEMO-001" if review_state == "VERIFIED" else "",
++        reviewer="reviewer:registry" if review_state == "VERIFIED" else "",
++        review_state=review_state,
++    )
++
++
++def make_candidate(
++    assertions: object | None = None,
++    **overrides: object,
++) -> CandidateRecord:
++    arguments: dict[str, object] = {
++        "candidate_id": CANDIDATE_ID,
++        "brand_id": BRAND_ID,
++        "entity_kind": "CONNECTOR_ASSEMBLY",
++        "assertions": (
++            make_assertion(),
++        )
++        if assertions is None
++        else assertions,
++        "extraction_method": "HUMAN_REVIEWED",
++    }
++    arguments.update(overrides)
++    return CandidateRecord(**arguments)
++
++
++def make_context(
++    source_id: str = "source:demo:oem:web",
++    *,
++    authority: str = SourceAuthority.OEM.value,
++    document_kind: str = DocumentKind.WEB.value,
++    rights_state: str = RightsState.FACTUAL_INDEXING_ALLOWED.value,
++) -> SourceContext:
++    return SourceContext(
++        source_id=source_id,
++        authority=authority,
++        document_kind=document_kind,
++        rights_state=rights_state,
++    )
++
++
++def reason_codes(result: IngestionResult) -> tuple[str, ...]:
++    return tuple(record.reason_code for record in result.quarantined)
++
++
++ADMITTED_LEAF_TYPES = frozenset({type(None), bool, int, float, str})
++
++
++class Tamperable:
++    """A caller-owned mutable object that must never be stored by reference."""
++
++    def __init__(self, marker: str) -> None:
++        self.marker = marker
++
++    def __repr__(self) -> str:
++        return f"Tamperable({self.marker!r})"
++
++
++class LyingInteger(int):
++    """An int subclass whose text form disagrees with its true magnitude."""
++
++    def __str__(self) -> str:
++        return "1"
++
++    __repr__ = __str__
++
++
++class LyingText(str):
++    """A str subclass whose comparisons disagree with its own stored text."""
++
++    def __eq__(self, other: object) -> bool:
++        return True
++
++    def __ne__(self, other: object) -> bool:
++        return False
++
++    def __hash__(self) -> int:
++        return hash(str(self))
++
++
++def leaf_types(value: object) -> frozenset[type]:
++    """Collect the concrete types of every key and leaf inside a snapshot."""
++
++    if isinstance(value, Mapping):
++        found: set[type] = set()
++        for key, item in value.items():
++            found.add(type(key))
++            found |= leaf_types(item)
++        return frozenset(found)
++    if isinstance(value, tuple):
++        collected: set[type] = set()
++        for item in value:
++            collected |= leaf_types(item)
++        return frozenset(collected)
++    return frozenset({type(value)})
++
++
++class RecordContractTests(unittest.TestCase):
++    def test_plan_records_preserve_exact_frozen_field_shapes(self) -> None:
++        candidate = make_candidate()
++        quarantine = QuarantineRecord(
++            candidate_id=CANDIDATE_ID,
++            reason_code="REVIEW_REQUIRED",
++            evidence_ids=("assertion:demo:identity:sku",),
++            owner_role="OEM Evidence Curator",
++        )
++        result = IngestionResult(promoted=(candidate,), quarantined=())
++
++        self.assertEqual(
++            [
++                "candidate_id",
++                "brand_id",
++                "entity_kind",
++                "assertions",
++                "extraction_method",
++            ],
++            [field.name for field in fields(CandidateRecord)],
++        )
++        self.assertEqual(
++            ["candidate_id", "reason_code", "evidence_ids", "owner_role"],
++            [field.name for field in fields(QuarantineRecord)],
++        )
++        self.assertEqual(
++            ["promoted", "quarantined"],
++            [field.name for field in fields(IngestionResult)],
++        )
++        for record, field_name in (
++            (candidate, "entity_kind"),
++            (quarantine, "owner_role"),
++            (result, "promoted"),
++        ):
++            with self.subTest(record=type(record).__name__):
++                with self.assertRaises(FrozenInstanceError):
++                    setattr(record, field_name, "changed")
++
++    def test_source_context_is_the_smallest_frozen_explicit_contract(self) -> None:
++        context = make_context()
++
++        self.assertEqual(
++            ["source_id", "authority", "document_kind", "rights_state"],
++            [field.name for field in fields(SourceContext)],
++        )
++        with self.assertRaises(FrozenInstanceError):
++            context.authority = SourceAuthority.OTHER.value
++
++    def test_source_context_enums_have_only_the_approved_values(self) -> None:
++        self.assertEqual(
++            {"OEM", "AUTHORIZED_DISTRIBUTOR", "OTHER"},
++            {item.value for item in SourceAuthority},
++        )
++        self.assertEqual(
++            {"PDF", "CAD", "WEB", "API", "FEED", "MANUAL"},
++            {item.value for item in DocumentKind},
++        )
++        self.assertEqual(
++            {
++                "FACTUAL_INDEXING_ALLOWED",
++                "UNKNOWN",
++                "RESTRICTED",
++                "CONFLICTING",
++            },
++            {item.value for item in RightsState},
++        )
++
++    def test_candidate_takes_defensive_immutable_assertion_snapshots(self) -> None:
++        dimensional_value = {"value": 25.4, "unit": "mm"}
++        assertions = [
++            make_assertion(
++                "assertion:demo:geometry:diameter",
++                field_path="geometry.bore_diameter",
++                value=dimensional_value,
++            )
++        ]
++
++        candidate = make_candidate(assertions)
++        assertions.clear()
++        dimensional_value["value"] = 999
++
++        self.assertIsInstance(candidate.assertions, tuple)
++        self.assertEqual(1, len(candidate.assertions))
++        self.assertEqual(
++            25.4,
++            candidate.assertions[0].value["value"],
++        )
++        with self.assertRaises(TypeError):
++            candidate.assertions[0].value["value"] = 1
++
++    def test_result_and_quarantine_take_deterministic_tuple_snapshots(self) -> None:
++        evidence_ids = [
++            "assertion:demo:z",
++            "assertion:demo:a",
++            "assertion:demo:z",
++        ]
++        quarantine = QuarantineRecord(
++            candidate_id=CANDIDATE_ID,
++            reason_code="REVIEW_REQUIRED",
++            evidence_ids=evidence_ids,
++            owner_role="OEM Evidence Curator",
++        )
++        promoted = [make_candidate()]
++        result = IngestionResult(promoted=promoted, quarantined=[])
++        evidence_ids.clear()
++        promoted.clear()
++
++        self.assertEqual(
++            ("assertion:demo:a", "assertion:demo:z"),
++            quarantine.evidence_ids,
++        )
++        self.assertEqual(1, len(result.promoted))
++        self.assertEqual((), result.quarantined)
++
++    def test_ingestion_result_rejects_promoted_and_quarantined_together(self) -> None:
++        with self.assertRaises(ValueError):
++            IngestionResult(
++                promoted=(make_candidate(),),
++                quarantined=(
++                    QuarantineRecord(
++                        candidate_id=CANDIDATE_ID,
++                        reason_code="REVIEW_REQUIRED",
++                        evidence_ids=("assertion:demo:identity:sku",),
++                        owner_role="OEM Evidence Curator",
++                    ),
++                ),
++            )
++
++    def test_quarantine_reason_and_owner_mapping_is_closed_and_authoritative(
++        self,
++    ) -> None:
++        for reason_code, owner_role in OWNER_BY_REASON.items():
++            with self.subTest(reason_code=reason_code):
++                record = QuarantineRecord(
++                    candidate_id=CANDIDATE_ID,
++                    reason_code=reason_code,
++                    evidence_ids=("assertion:demo:identity:sku",),
++                    owner_role=owner_role,
++                )
++                self.assertEqual(owner_role, record.owner_role)
++                with self.assertRaises(ValueError):
++                    QuarantineRecord(
++                        candidate_id=CANDIDATE_ID,
++                        reason_code=reason_code,
++                        evidence_ids=("assertion:demo:identity:sku",),
++                        owner_role="Wrong Reviewer",
++                    )
++
++        with self.assertRaises(ValueError):
++            QuarantineRecord(
++                candidate_id=CANDIDATE_ID,
++                reason_code="UNKNOWN_REASON",
++                evidence_ids=("assertion:demo:identity:sku",),
++                owner_role="OEM Evidence Curator",
++            )
++
++    def test_ingestion_result_requires_one_single_candidate_disposition(
++        self,
++    ) -> None:
++        with self.assertRaises(ValueError):
++            IngestionResult(promoted=(), quarantined=())
++        with self.assertRaises(ValueError):
++            IngestionResult(
++                promoted=(make_candidate(), make_candidate()),
++                quarantined=(),
++            )
++
++        first = QuarantineRecord(
++            candidate_id=CANDIDATE_ID,
++            reason_code="REVIEW_REQUIRED",
++            evidence_ids=("assertion:demo:identity:sku",),
++            owner_role="OEM Evidence Curator",
++        )
++        second = QuarantineRecord(
++            candidate_id="candidate:demo:connector-2",
++            reason_code="RIGHTS_UNCERTAIN",
++            evidence_ids=("assertion:demo:identity:sku-2",),
++            owner_role="Rights and Licensing Reviewer",
++        )
++        with self.assertRaises(ValueError):
++            IngestionResult(promoted=(), quarantined=(first, second))
++
++    def test_ingestion_result_rejects_duplicate_quarantine_reasons(self) -> None:
++        quarantine = QuarantineRecord(
++            candidate_id=CANDIDATE_ID,
++            reason_code="REVIEW_REQUIRED",
++            evidence_ids=("assertion:demo:identity:sku",),
++            owner_role="OEM Evidence Curator",
++        )
++        with self.assertRaises(ValueError):
++            IngestionResult(
++                promoted=(),
++                quarantined=(quarantine, quarantine),
++            )
++
++
++class ConstructionValidationTests(unittest.TestCase):
++    def test_candidate_rejects_blank_malformed_and_wrong_identifier_types(self) -> None:
++        for field_name, invalid_value, error_type in (
++            ("candidate_id", "candidate id", ValueError),
++            ("candidate_id", "candidate:", ValueError),
++            ("candidate_id", None, TypeError),
++            ("brand_id", "demo", ValueError),
++            ("brand_id", "brand:   ", ValueError),
++            ("brand_id", 1, TypeError),
++        ):
++            with self.subTest(field=field_name, value=invalid_value):
++                with self.assertRaises(error_type):
++                    make_candidate(**{field_name: invalid_value})
++
++    def test_candidate_keeps_entity_kind_open_but_nonblank(self) -> None:
++        self.assertEqual(
++            "FUTURE_CONNECTOR_FAMILY",
++            make_candidate(entity_kind="FUTURE_CONNECTOR_FAMILY").entity_kind,
++        )
++        for invalid_value, error_type in (
++            ("", ValueError),
++            ("   ", ValueError),
++            (None, TypeError),
++        ):
++            with self.subTest(value=invalid_value):
++                with self.assertRaises(error_type):
++                    make_candidate(entity_kind=invalid_value)
++
++    def test_candidate_rejects_empty_wrong_duplicate_or_mismatched_assertions(
++        self,
++    ) -> None:
++        duplicate = make_assertion()
++        cases = (
++            ((), ValueError),
++            (["not-an-assertion"], TypeError),
++            ((duplicate, duplicate), ValueError),
++            (
++                (
++                    make_assertion(
++                        entity_id="candidate:demo:different-connector"
++                    ),
++                ),
++                ValueError,
++            ),
++            (
++                (
++                    make_assertion(
++                        assertion_id="assertion:contains whitespace"
++                    ),
++                ),
++                ValueError,
++            ),
++        )
++        for assertions, error_type in cases:
++            with self.subTest(assertions=assertions):
++                with self.assertRaises(error_type):
++                    make_candidate(assertions)
++
++    def test_candidate_rejects_blank_or_wrong_extraction_method(self) -> None:
++        for invalid_value, error_type in (
++            ("", ValueError),
++            ("   ", ValueError),
++            (None, TypeError),
++        ):
++            with self.subTest(value=invalid_value):
++                with self.assertRaises(error_type):
++                    make_candidate(extraction_method=invalid_value)
++
++    def test_dimensional_fields_reject_wrong_values_and_boolean_numbers(self) -> None:
++        for value, error_type in (
++            (True, TypeError),
++            ({"value": True, "unit": "mm"}, TypeError),
++            ({"value": "25.4", "unit": "mm"}, TypeError),
++            ({"value": float("inf"), "unit": "mm"}, ValueError),
++            ({"value": 25.4, "unit": 1}, TypeError),
++        ):
++            with self.subTest(value=value):
++                with self.assertRaises(error_type):
++                    make_candidate(
++                        (
++                            make_assertion(
++                                field_path="geometry.bore_diameter",
++                                value=value,
++                            ),
++                        )
++                    )
++
++    def test_source_context_rejects_malformed_ids_and_unsupported_values(
++        self,
++    ) -> None:
++        cases = (
++            ({"source_id": "source name"}, ValueError),
++            ({"source_id": "source:"}, ValueError),
++            ({"source_id": None}, TypeError),
++            ({"authority": "DISTRIBUTOR"}, ValueError),
++            ({"authority": None}, TypeError),
++            ({"document_kind": "XLSX"}, ValueError),
++            ({"document_kind": None}, TypeError),
++            ({"rights_state": "ALLOWED"}, ValueError),
++            ({"rights_state": None}, TypeError),
++        )
++        for overrides, error_type in cases:
++            with self.subTest(overrides=overrides):
++                with self.assertRaises(error_type):
++                    make_context(**overrides)
++
++    def test_adapter_rejects_wrong_and_duplicate_source_contexts(self) -> None:
++        context = make_context()
++        with self.assertRaises(TypeError):
++            ReviewedAssertionAdapter(("not-a-context",))
++        with self.assertRaises(ValueError):
++            ReviewedAssertionAdapter((context, context))
++
++    def test_quarantine_rejects_malformed_evidence_ids(self) -> None:
++        with self.assertRaises(ValueError):
++            QuarantineRecord(
++                candidate_id=CANDIDATE_ID,
++                reason_code="REVIEW_REQUIRED",
++                evidence_ids=("assertion:bad id",),
++                owner_role="OEM Evidence Curator",
++            )
++
++
++class ValueSnapshotContractTests(unittest.TestCase):
++    """The stored value must be an immutable primitive, never a caller reference."""
++
++    @staticmethod
++    def unvalidated_field_candidate(value: object) -> CandidateRecord:
++        """Build a candidate on a field path no conflict validator inspects."""
++
++        return make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:notes:internal",
++                    field_path="notes.internal",
++                    value=value,
++                ),
++            )
++        )
++
++    def test_candidate_refuses_values_outside_the_primitive_json_contract(
++        self,
++    ) -> None:
++        for value, error_type in (
++            (Tamperable("BEFORE"), TypeError),
++            (LyingInteger(999), TypeError),
++            (Decimal("25.4"), TypeError),
++            (b"25.4", TypeError),
++            (bytearray(b"25.4"), TypeError),
++            ({25.4, 1.0}, TypeError),
++            (frozenset({25.4}), TypeError),
++            (complex(1, 2), TypeError),
++            ({1: "non-string key"}, TypeError),
++            ([{"nested": Tamperable("BEFORE")}], TypeError),
++            (("ok", {"nested": [LyingInteger(2)]}), TypeError),
++            (float("nan"), ValueError),
++            (float("inf"), ValueError),
++            (float("-inf"), ValueError),
++        ):
++            with self.subTest(value=value):
++                with self.assertRaises(error_type):
++                    self.unvalidated_field_candidate(value)
++
++    def test_candidate_admits_exactly_the_documented_primitive_value_types(
++        self,
++    ) -> None:
++        for value in (
++            None,
++            True,
++            18,
++            18.0,
++            "MINIFIX",
++            {"value": 25.4, "unit": "mm"},
++            ["a", "b"],
++            ("a", "b"),
++            {"rows": [{"depth": 18, "tags": ["a"], "flag": None}]},
++        ):
++            with self.subTest(value=value):
++                candidate = self.unvalidated_field_candidate(value)
++                stored = candidate.assertions[0].value
++
++                self.assertLessEqual(leaf_types(stored), ADMITTED_LEAF_TYPES)
++
++    def test_nested_container_values_cannot_be_tampered_after_construction(
++        self,
++    ) -> None:
++        inner_row = {"depth": 18, "tags": ["mm"]}
++        raw_value = {"rows": [inner_row]}
++
++        candidate = self.unvalidated_field_candidate(raw_value)
++        stored = candidate.assertions[0].value
++        raw_value["rows"].append({"depth": 999})
++        inner_row["depth"] = 999
++        inner_row["tags"].append("TAMPERED")
++
++        self.assertEqual(1, len(stored["rows"]))
++        self.assertEqual(18, stored["rows"][0]["depth"])
++        self.assertEqual(("mm",), stored["rows"][0]["tags"])
++        with self.assertRaises(TypeError):
++            stored["rows"] = ()
++        with self.assertRaises(TypeError):
++            stored["rows"][0]["depth"] = 999
++
++    def test_a_caller_object_can_never_be_promoted_by_reference(self) -> None:
++        tamperable = Tamperable("BEFORE")
++
++        with self.assertRaises(TypeError):
++            ReviewedAssertionAdapter((make_context(),)).ingest(
++                self.unvalidated_field_candidate(tamperable)
++            )
++
++    def test_numeric_subclass_cannot_bypass_unit_conflict_detection(self) -> None:
++        liar = LyingInteger(999)
++        self.assertEqual("1", str(liar))
++        self.assertEqual(
++            Decimal("25374.6"),
++            Decimal(int(liar)) * Decimal("25.4"),
++        )
++
++        with self.assertRaises(TypeError):
++            make_candidate(
++                (
++                    make_assertion(
++                        "assertion:demo:geometry:mm",
++                        field_path="geometry.width",
++                        value={"value": 25.4, "unit": "mm"},
++                    ),
++                    make_assertion(
++                        "assertion:demo:geometry:in",
++                        field_path="geometry.width",
++                        value={"value": liar, "unit": "in"},
++                        source_id="source:demo:other:api",
++                    ),
++                )
++            )
++
++    def test_stored_values_are_the_values_the_conflict_rules_compare(self) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:dimension:mm",
++                    field_path="dimensions.panel_thickness",
++                    value={"value": 25.4, "unit": "mm"},
++                ),
++                make_assertion(
++                    "assertion:demo:dimension:in",
++                    field_path="dimensions.panel_thickness",
++                    value={"value": 1, "unit": "in"},
++                    source_id="source:demo:other:api",
++                ),
++            )
++        )
++
++        result = ReviewedAssertionAdapter(
++            (
++                make_context(),
++                make_context(
++                    "source:demo:other:api",
++                    authority=SourceAuthority.OTHER.value,
++                    document_kind=DocumentKind.API.value,
++                ),
++            )
++        ).ingest(candidate)
++
++        self.assertEqual((candidate,), result.promoted)
++        for assertion in result.promoted[0].assertions:
++            with self.subTest(assertion_id=assertion.assertion_id):
++                self.assertLessEqual(
++                    leaf_types(assertion.value),
++                    ADMITTED_LEAF_TYPES,
++                )
++        self.assertEqual(
++            (Decimal("25.4"), Decimal("1")),
++            tuple(
++                Decimal(str(assertion.value["value"]))
++                for assertion in result.promoted[0].assertions
++            ),
++        )
++
++    def test_unordered_collections_are_refused_wherever_order_is_observable(
++        self,
++    ) -> None:
++        first = make_assertion("assertion:demo:identity:a", value="A")
++        second = make_assertion(
++            "assertion:demo:identity:b",
++            field_path="identity.finish_code",
++            value="B",
++        )
++
++        with self.assertRaises(TypeError):
++            make_candidate({first, second})
++        with self.assertRaises(TypeError):
++            make_candidate(frozenset((first, second)))
++        with self.assertRaises(TypeError):
++            QuarantineRecord(
++                candidate_id=CANDIDATE_ID,
++                reason_code="REVIEW_REQUIRED",
++                evidence_ids={"assertion:demo:identity:a"},
++                owner_role="OEM Evidence Curator",
++            )
++        with self.assertRaises(TypeError):
++            IngestionResult(promoted={make_candidate()}, quarantined=())
++        with self.assertRaises(TypeError):
++            ReviewedAssertionAdapter({make_context()})
++
++    def test_ordered_assertion_input_keeps_its_exact_input_order(self) -> None:
++        first = make_assertion("assertion:demo:identity:a", value="A")
++        second = make_assertion(
++            "assertion:demo:identity:b",
++            field_path="identity.finish_code",
++            value="B",
++        )
++
++        self.assertEqual(
++            ("assertion:demo:identity:b", "assertion:demo:identity:a"),
++            tuple(
++                assertion.assertion_id
++                for assertion in make_candidate([second, first]).assertions
++            ),
++        )
++
++
++class ExoticSubclassRefusalTests(unittest.TestCase):
++    """Text fields are compared, so a lying subclass must never be stored."""
++
++    @staticmethod
++    def assertion_with(**overrides: object) -> FieldAssertion:
++        arguments: dict[str, object] = {
++            "assertion_id": "assertion:demo:identity:sku",
++            "entity_id": CANDIDATE_ID,
++            "field_path": "identity.exact_sku",
++            "value": "DEMO-001",
++            "source_id": "source:demo:oem:web",
++            "locator": "page 1, row DEMO-001",
++            "reviewer": "reviewer:registry",
++            "review_state": "VERIFIED",
++        }
++        arguments.update(overrides)
++        return FieldAssertion(**arguments)
++
++    def test_the_lying_subclass_really_does_defeat_plain_comparison(self) -> None:
++        impostor = LyingText("brand:impostor")
++
++        self.assertEqual("brand:impostor", str(impostor))
++        self.assertEqual(impostor, BRAND_ID)
++        self.assertFalse(impostor != BRAND_ID)
++
++    def test_candidate_text_fields_refuse_lying_string_subclasses(self) -> None:
++        for field_name in (
++            "candidate_id",
++            "brand_id",
++            "entity_kind",
++            "extraction_method",
++        ):
++            with self.subTest(field=field_name):
++                with self.assertRaises(TypeError):
++                    make_candidate(
++                        **{field_name: LyingText("brand:impostor")}
++                    )
++
++    def test_assertion_text_fields_refuse_lying_string_subclasses(self) -> None:
++        for overrides in (
++            {"assertion_id": LyingText("assertion:demo:impostor")},
++            {"entity_id": LyingText("candidate:demo:impostor")},
++            {"field_path": LyingText("identity.exact_sku")},
++            {"source_id": LyingText("source:demo:impostor")},
++            {"locator": LyingText("page 1")},
++            {"reviewer": LyingText("reviewer:registry")},
++        ):
++            with self.subTest(field=tuple(overrides)[0]):
++                with self.assertRaises(TypeError):
++                    make_candidate((self.assertion_with(**overrides),))
++
++    def test_pending_assertion_cannot_be_promoted_by_a_lying_review_state(
++        self,
++    ) -> None:
++        pending = self.assertion_with(review_state=LyingText("PENDING"))
++        self.assertEqual("PENDING", str(pending.review_state))
++        self.assertFalse(pending.review_state != "VERIFIED")
++
++        with self.assertRaises(TypeError):
++            make_candidate((pending,))
++
++    def test_quarantine_text_fields_refuse_lying_string_subclasses(self) -> None:
++        for overrides in (
++            {"candidate_id": LyingText(CANDIDATE_ID)},
++            {"reason_code": LyingText("REVIEW_REQUIRED")},
++            {"owner_role": LyingText("Wrong Reviewer")},
++            {"evidence_ids": (LyingText("assertion:demo:identity:sku"),)},
++        ):
++            with self.subTest(field=tuple(overrides)[0]):
++                arguments: dict[str, object] = {
++                    "candidate_id": CANDIDATE_ID,
++                    "reason_code": "REVIEW_REQUIRED",
++                    "evidence_ids": ("assertion:demo:identity:sku",),
++                    "owner_role": "OEM Evidence Curator",
++                }
++                arguments.update(overrides)
++                with self.assertRaises(TypeError):
++                    QuarantineRecord(**arguments)
++
++    def test_source_context_fields_refuse_lying_string_subclasses(self) -> None:
++        for overrides in (
++            {"source_id": LyingText("source:demo:impostor")},
++            {"authority": LyingText(SourceAuthority.OEM.value)},
++            {"document_kind": LyingText(DocumentKind.WEB.value)},
++            {
++                "rights_state": LyingText(
++                    RightsState.FACTUAL_INDEXING_ALLOWED.value
++                )
++            },
++        ):
++            with self.subTest(field=tuple(overrides)[0]):
++                with self.assertRaises(TypeError):
++                    make_context(**overrides)
++
++
++class RecordSubstitutionRefusalTests(unittest.TestCase):
++    """A stored record must be one this library built, not a caller subclass."""
++
++    @staticmethod
++    def switching_candidate_class(budget: int) -> type:
++        clean = (make_assertion("assertion:demo:clean"),)
++        dirty = (
++            make_assertion("assertion:demo:dirty", review_state="PENDING"),
++        )
++
++        class SwitchingCandidate(CandidateRecord):
++            """Answers honestly while inspected, then swaps the assertions."""
++
++            _reads = 0
++
++            def __getattribute__(self, name: str) -> object:
++                if name == "assertions":
++                    seen = object.__getattribute__(self, "_reads")
++                    object.__setattr__(self, "_reads", seen + 1)
++                    return clean if seen < budget else dirty
++                return object.__getattribute__(self, name)
++
++        return SwitchingCandidate
++
++    def test_ingest_refuses_a_candidate_record_subclass(self) -> None:
++        hostile = self.switching_candidate_class(budget=10)(
++            candidate_id=CANDIDATE_ID,
++            brand_id=BRAND_ID,
++            entity_kind="CONNECTOR_ASSEMBLY",
++            assertions=(make_assertion("assertion:demo:clean"),),
++            extraction_method="HUMAN_REVIEWED",
++        )
++        self.assertIsInstance(hostile, CandidateRecord)
++
++        with self.assertRaises(TypeError):
++            ReviewedAssertionAdapter((make_context(),)).ingest(hostile)
++
++    def test_ingestion_result_refuses_a_candidate_record_subclass(self) -> None:
++        hostile = self.switching_candidate_class(budget=10_000)(
++            candidate_id=CANDIDATE_ID,
++            brand_id=BRAND_ID,
++            entity_kind="CONNECTOR_ASSEMBLY",
++            assertions=(make_assertion("assertion:demo:clean"),),
++            extraction_method="HUMAN_REVIEWED",
++        )
++
++        with self.assertRaises(TypeError):
++            IngestionResult(promoted=(hostile,), quarantined=())
++
++    def test_ingestion_result_refuses_a_quarantine_record_subclass(self) -> None:
++        class SwitchingQuarantine(QuarantineRecord):
++            """Honest reason_code while validated, another one afterwards."""
++
++            _reads = 0
++
++            def __getattribute__(self, name: str) -> object:
++                if name == "reason_code":
++                    seen = object.__getattribute__(self, "_reads")
++                    object.__setattr__(self, "_reads", seen + 1)
++                    if seen < 3:
++                        return "REVIEW_REQUIRED"
++                    return "TOTALLY_UNMAPPED_REASON"
++                return object.__getattribute__(self, name)
++
++        hostile = SwitchingQuarantine(
++            candidate_id=CANDIDATE_ID,
++            reason_code="REVIEW_REQUIRED",
++            evidence_ids=("assertion:demo:identity:sku",),
++            owner_role="OEM Evidence Curator",
++        )
++        self.assertIsInstance(hostile, QuarantineRecord)
++
++        with self.assertRaises(TypeError):
++            IngestionResult(promoted=(), quarantined=(hostile,))
++
++    def test_adapter_refuses_a_source_context_subclass(self) -> None:
++        class SneakyContext(SourceContext):
++            pass
++
++        with self.assertRaises(TypeError):
++            ReviewedAssertionAdapter(
++                (
++                    SneakyContext(
++                        source_id="source:demo:oem:web",
++                        authority=SourceAuthority.OEM.value,
++                        document_kind=DocumentKind.WEB.value,
++                        rights_state=(
++                            RightsState.FACTUAL_INDEXING_ALLOWED.value
++                        ),
++                    ),
++                )
++            )
++
++    def test_stored_records_are_rebuilt_not_the_caller_instance(self) -> None:
++        candidate = make_candidate()
++        quarantine = QuarantineRecord(
++            candidate_id=CANDIDATE_ID,
++            reason_code="REVIEW_REQUIRED",
++            evidence_ids=("assertion:demo:identity:sku",),
++            owner_role="OEM Evidence Curator",
++        )
++
++        promoted_result = ReviewedAssertionAdapter((make_context(),)).ingest(
++            candidate
++        )
++        quarantined_result = IngestionResult(
++            promoted=(),
++            quarantined=(quarantine,),
++        )
++
++        self.assertEqual((candidate,), promoted_result.promoted)
++        self.assertIsNot(candidate, promoted_result.promoted[0])
++        self.assertIs(type(promoted_result.promoted[0]), CandidateRecord)
++        self.assertEqual((quarantine,), quarantined_result.quarantined)
++        self.assertIsNot(quarantine, quarantined_result.quarantined[0])
++        self.assertIs(
++            type(quarantined_result.quarantined[0]),
++            QuarantineRecord,
++        )
++
++    def test_exported_enum_members_normalize_to_exact_strings(self) -> None:
++        context = SourceContext(
++            source_id="source:demo:oem:pdf",
++            authority=SourceAuthority.OEM,
++            document_kind=DocumentKind.PDF,
++            rights_state=RightsState.FACTUAL_INDEXING_ALLOWED,
++        )
++
++        for field_name, expected in (
++            ("authority", "OEM"),
++            ("document_kind", "PDF"),
++            ("rights_state", "FACTUAL_INDEXING_ALLOWED"),
++        ):
++            with self.subTest(field=field_name):
++                stored = getattr(context, field_name)
++                self.assertEqual(expected, stored)
++                self.assertIs(str, type(stored))
++
++    def test_enum_normalized_context_still_drives_conflict_rules(self) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:geometry:pdf",
++                    field_path="geometry.bore_diameter",
++                    value={"value": 10, "unit": "mm"},
++                    source_id="source:demo:oem:pdf",
++                ),
++                make_assertion(
++                    "assertion:demo:geometry:cad",
++                    field_path="geometry.bore_diameter",
++                    value={"value": 10.1, "unit": "mm"},
++                    source_id="source:demo:oem:cad",
++                ),
++            )
++        )
++
++        result = ReviewedAssertionAdapter(
++            (
++                SourceContext(
++                    source_id="source:demo:oem:pdf",
++                    authority=SourceAuthority.OEM,
++                    document_kind=DocumentKind.PDF,
++                    rights_state=RightsState.FACTUAL_INDEXING_ALLOWED,
++                ),
++                SourceContext(
++                    source_id="source:demo:oem:cad",
++                    authority=SourceAuthority.OEM,
++                    document_kind=DocumentKind.CAD,
++                    rights_state=RightsState.FACTUAL_INDEXING_ALLOWED,
++                ),
++            )
++        ).ingest(candidate)
++
++        self.assertEqual(
++            ("DIMENSION_SOURCE_CONFLICT", "PDF_CAD_GEOMETRY_CONFLICT"),
++            reason_codes(result),
++        )
++
++
++class ReviewedIngestionTests(unittest.TestCase):
++    def test_human_reviewed_verified_rights_cleared_candidate_promotes(self) -> None:
++        candidate = make_candidate()
++
++        result = ReviewedAssertionAdapter((make_context(),)).ingest(candidate)
++
++        self.assertEqual((candidate,), result.promoted)
++        self.assertEqual((), result.quarantined)
++
++    def test_unreviewed_ai_candidate_requires_review(self) -> None:
++        candidate = make_candidate(extraction_method="AI_EXTRACTED")
++
++        result = ReviewedAssertionAdapter((make_context(),)).ingest(candidate)
++
++        self.assertEqual((), result.promoted)
++        self.assertEqual(("REVIEW_REQUIRED",), reason_codes(result))
++        self.assertEqual(
++            ("assertion:demo:identity:sku",),
++            result.quarantined[0].evidence_ids,
++        )
++        self.assertEqual("OEM Evidence Curator", result.quarantined[0].owner_role)
++
++    def test_only_pending_assertions_own_not_verified_evidence(self) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(),
++                make_assertion(
++                    "assertion:demo:identity:finish",
++                    field_path="identity.finish_code",
++                    value="NI",
++                    review_state="PENDING",
++                ),
++            )
++        )
++
++        result = ReviewedAssertionAdapter((make_context(),)).ingest(candidate)
++
++        self.assertEqual(("ASSERTION_NOT_VERIFIED",), reason_codes(result))
++        self.assertEqual(
++            ("assertion:demo:identity:finish",),
++            result.quarantined[0].evidence_ids,
++        )
++        self.assertEqual(
++            "Identity and SKU Reviewer",
++            result.quarantined[0].owner_role,
++        )
++
++    def test_missing_source_context_fails_closed(self) -> None:
++        candidate = make_candidate()
++
++        result = ReviewedAssertionAdapter(()).ingest(candidate)
++
++        self.assertEqual((), result.promoted)
++        self.assertEqual(("SOURCE_CONTEXT_MISSING",), reason_codes(result))
++        self.assertEqual(
++            ("assertion:demo:identity:sku",),
++            result.quarantined[0].evidence_ids,
++        )
++        self.assertEqual("OEM Evidence Curator", result.quarantined[0].owner_role)
++
++    def test_rights_must_be_explicitly_cleared_for_factual_indexing(self) -> None:
++        for rights_state in (
++            RightsState.UNKNOWN.value,
++            RightsState.RESTRICTED.value,
++            RightsState.CONFLICTING.value,
++        ):
++            with self.subTest(rights_state=rights_state):
++                result = ReviewedAssertionAdapter(
++                    (make_context(rights_state=rights_state),)
++                ).ingest(make_candidate())
++
++                self.assertEqual((), result.promoted)
++                self.assertEqual(("RIGHTS_UNCERTAIN",), reason_codes(result))
++                self.assertEqual(
++                    "Rights and Licensing Reviewer",
++                    result.quarantined[0].owner_role,
++                )
++                self.assertEqual(
++                    ("assertion:demo:identity:sku",),
++                    result.quarantined[0].evidence_ids,
++                )
++
++    def test_adapter_snapshots_constructor_contexts(self) -> None:
++        contexts = [make_context()]
++        adapter = ReviewedAssertionAdapter(contexts)
++        contexts.clear()
++
++        result = adapter.ingest(make_candidate())
++
++        self.assertEqual(1, len(result.promoted))
++
++    def test_ingest_does_not_mutate_candidate_assertion_or_review_state(
++        self,
++    ) -> None:
++        raw_value = {"value": 25.4, "unit": "mm"}
++        original_assertion = make_assertion(
++            "assertion:demo:geometry:diameter",
++            field_path="geometry.bore_diameter",
++            value=raw_value,
++        )
++        candidate = make_candidate((original_assertion,))
++        before_candidate = repr(candidate)
++        before_assertion = repr(original_assertion)
++
++        ReviewedAssertionAdapter((make_context(),)).ingest(candidate)
++
++        self.assertEqual(before_candidate, repr(candidate))
++        self.assertEqual(before_assertion, repr(original_assertion))
++        self.assertEqual("VERIFIED", original_assertion.review_state)
++        self.assertEqual({"value": 25.4, "unit": "mm"}, raw_value)
++
++    def test_adapter_exposes_no_registry_release_or_manufacturing_authority(
++        self,
++    ) -> None:
++        adapter = ReviewedAssertionAdapter((make_context(),))
++
++        for prohibited_name in (
++            "publish",
++            "release",
++            "write_registry",
++            "manufacturing_allowed",
++            "promote_pending",
++        ):
++            with self.subTest(name=prohibited_name):
++                self.assertFalse(hasattr(adapter, prohibited_name))
++
++
++class UnitConflictTests(unittest.TestCase):
++    def test_exact_metric_and_imperial_equality_is_not_a_conflict(self) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:dimension:mm",
++                    field_path="dimensions.panel_thickness",
++                    value={"value": 25.4, "unit": "mm"},
++                    source_id="source:demo:oem:web",
++                ),
++                make_assertion(
++                    "assertion:demo:dimension:in",
++                    field_path="dimensions.panel_thickness",
++                    value={"value": 1, "unit": "in"},
++                    source_id="source:demo:other:api",
++                ),
++            )
++        )
++        adapter = ReviewedAssertionAdapter(
++            (
++                make_context(),
++                make_context(
++                    "source:demo:other:api",
++                    authority=SourceAuthority.OTHER.value,
++                    document_kind=DocumentKind.API.value,
++                ),
++            )
++        )
++
++        result = adapter.ingest(candidate)
++
++        self.assertEqual((candidate,), result.promoted)
++
++    def test_metric_and_imperial_disagreement_quarantines(self) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:dimension:mm",
++                    field_path="dimensions.panel_thickness",
++                    value={"value": 25.4, "unit": "mm"},
++                ),
++                make_assertion(
++                    "assertion:demo:dimension:in",
++                    field_path="dimensions.panel_thickness",
++                    value={"value": 1.01, "unit": "in"},
++                    source_id="source:demo:other:api",
++                ),
++            )
++        )
++        adapter = ReviewedAssertionAdapter(
++            (
++                make_context(),
++                make_context(
++                    "source:demo:other:api",
++                    authority=SourceAuthority.OTHER.value,
++                    document_kind=DocumentKind.API.value,
++                ),
++            )
++        )
++
++        result = adapter.ingest(candidate)
++
++        self.assertEqual((), result.promoted)
++        self.assertEqual(
++            ("DIMENSION_SOURCE_CONFLICT", "UNIT_CONFLICT"),
++            reason_codes(result),
++        )
++        self.assertEqual(
++            (
++                "assertion:demo:dimension:in",
++                "assertion:demo:dimension:mm",
++            ),
++            result.quarantined[0].evidence_ids,
++        )
++        self.assertEqual(
++            "Geometry and Units Reviewer",
++            result.quarantined[0].owner_role,
++        )
++
++    def test_absent_or_unsupported_unit_is_ambiguous(self) -> None:
++        for value in (
++            {"value": 25.4},
++            {"value": 2.54, "unit": "cm"},
++        ):
++            with self.subTest(value=value):
++                assertion = make_assertion(
++                    "assertion:demo:dimension:ambiguous",
++                    field_path="dimensions.panel_thickness",
++                    value=value,
++                )
++                result = ReviewedAssertionAdapter(
++                    (make_context(),)
++                ).ingest(make_candidate((assertion,)))
++
++                self.assertEqual(("UNITS_AMBIGUOUS",), reason_codes(result))
++                self.assertEqual(
++                    ("assertion:demo:dimension:ambiguous",),
++                    result.quarantined[0].evidence_ids,
++                )
++
++    def test_decimal_conversion_uses_exact_boundary_arithmetic(self) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:dimension:mm",
++                    field_path="dimensions.offset",
++                    value={"value": 2.54, "unit": "mm"},
++                ),
++                make_assertion(
++                    "assertion:demo:dimension:in",
++                    field_path="dimensions.offset",
++                    value={"value": 0.1, "unit": "in"},
++                    source_id="source:demo:other:feed",
++                ),
++            )
++        )
++        result = ReviewedAssertionAdapter(
++            (
++                make_context(),
++                make_context(
++                    "source:demo:other:feed",
++                    authority=SourceAuthority.OTHER.value,
++                    document_kind=DocumentKind.FEED.value,
++                ),
++            )
++        ).ingest(candidate)
++
++        self.assertEqual((candidate,), result.promoted)
++        self.assertNotIn("UNIT_CONFLICT", reason_codes(result))
++
++
++class AuthorityAndDocumentConflictTests(unittest.TestCase):
++    def test_equal_oem_and_distributor_identity_is_not_a_conflict(self) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:identity:oem",
++                    source_id="source:demo:oem:web",
++                ),
++                make_assertion(
++                    "assertion:demo:identity:distributor",
++                    source_id="source:demo:distributor:api",
++                ),
++            )
++        )
++        result = ReviewedAssertionAdapter(
++            (
++                make_context(),
++                make_context(
++                    "source:demo:distributor:api",
++                    authority=SourceAuthority.AUTHORIZED_DISTRIBUTOR.value,
++                    document_kind=DocumentKind.API.value,
++                ),
++            )
++        ).ingest(candidate)
++
++        self.assertEqual((candidate,), result.promoted)
++
++    def test_different_oem_and_distributor_identity_quarantines(self) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:identity:oem",
++                    value="DEMO-001",
++                ),
++                make_assertion(
++                    "assertion:demo:identity:distributor",
++                    value="DEMO-001-B",
++                    source_id="source:demo:distributor:api",
++                ),
++            )
++        )
++        result = ReviewedAssertionAdapter(
++            (
++                make_context(),
++                make_context(
++                    "source:demo:distributor:api",
++                    authority=SourceAuthority.AUTHORIZED_DISTRIBUTOR.value,
++                    document_kind=DocumentKind.API.value,
++                ),
++            )
++        ).ingest(candidate)
++
++        self.assertEqual(
++            ("IDENTITY_SOURCE_CONFLICT", "OEM_DISTRIBUTOR_IDENTITY_CONFLICT"),
++            reason_codes(result),
++        )
++        self.assertEqual(
++            "Identity and SKU Reviewer",
++            result.quarantined[0].owner_role,
++        )
++
++    def test_equal_pdf_and_cad_geometry_is_not_a_conflict(self) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:geometry:pdf",
++                    field_path="geometry.bore_diameter",
++                    value={"value": 10, "unit": "mm"},
++                    source_id="source:demo:oem:pdf",
++                ),
++                make_assertion(
++                    "assertion:demo:geometry:cad",
++                    field_path="geometry.bore_diameter",
++                    value={"value": 10, "unit": "mm"},
++                    source_id="source:demo:oem:cad",
++                ),
++            )
++        )
++        result = ReviewedAssertionAdapter(
++            (
++                make_context(
++                    "source:demo:oem:pdf",
++                    document_kind=DocumentKind.PDF.value,
++                ),
++                make_context(
++                    "source:demo:oem:cad",
++                    document_kind=DocumentKind.CAD.value,
++                ),
++            )
++        ).ingest(candidate)
++
++        self.assertEqual((candidate,), result.promoted)
++
++    def test_different_pdf_and_cad_geometry_quarantines(self) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:geometry:pdf",
++                    field_path="geometry.bore_diameter",
++                    value={"value": 10, "unit": "mm"},
++                    source_id="source:demo:oem:pdf",
++                ),
++                make_assertion(
++                    "assertion:demo:geometry:cad",
++                    field_path="geometry.bore_diameter",
++                    value={"value": 10.1, "unit": "mm"},
++                    source_id="source:demo:oem:cad",
++                ),
++            )
++        )
++        result = ReviewedAssertionAdapter(
++            (
++                make_context(
++                    "source:demo:oem:pdf",
++                    document_kind=DocumentKind.PDF.value,
++                ),
++                make_context(
++                    "source:demo:oem:cad",
++                    document_kind=DocumentKind.CAD.value,
++                ),
++            )
++        ).ingest(candidate)
++
++        self.assertEqual(
++            ("DIMENSION_SOURCE_CONFLICT", "PDF_CAD_GEOMETRY_CONFLICT"),
++            reason_codes(result),
++        )
++        self.assertEqual(
++            (
++                "assertion:demo:geometry:cad",
++                "assertion:demo:geometry:pdf",
++            ),
++            result.quarantined[0].evidence_ids,
++        )
++
++
++class SourceContradictionTests(unittest.TestCase):
++    """Owner ruling: two sources contradicting each other is never silent."""
++
++    @staticmethod
++    def dimensional_candidate(
++        first: object,
++        second: object,
++        *,
++        field_path: str = "geometry.width",
++        first_source: str = "source:demo:oem:pdf",
++        second_source: str = "source:demo:oem:pdf2",
++    ) -> CandidateRecord:
++        return make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:dimension:first",
++                    field_path=field_path,
++                    value=first,
++                    source_id=first_source,
++                ),
++                make_assertion(
++                    "assertion:demo:dimension:second",
++                    field_path=field_path,
++                    value=second,
++                    source_id=second_source,
++                ),
++            )
++        )
++
++    @staticmethod
++    def two_pdf_adapter() -> ReviewedAssertionAdapter:
++        return ReviewedAssertionAdapter(
++            (
++                make_context(
++                    "source:demo:oem:pdf",
++                    document_kind=DocumentKind.PDF.value,
++                ),
++                make_context(
++                    "source:demo:oem:pdf2",
++                    document_kind=DocumentKind.PDF.value,
++                ),
++            )
++        )
++
++    def test_same_unit_dimensional_contradiction_quarantines(self) -> None:
++        candidate = self.dimensional_candidate(
++            {"value": 10, "unit": "mm"},
++            {"value": 999, "unit": "mm"},
++        )
++
++        result = self.two_pdf_adapter().ingest(candidate)
++
++        self.assertEqual((), result.promoted)
++        self.assertIn("DIMENSION_SOURCE_CONFLICT", reason_codes(result))
++        record = next(
++            item
++            for item in result.quarantined
++            if item.reason_code == "DIMENSION_SOURCE_CONFLICT"
++        )
++        self.assertEqual(
++            (
++                "assertion:demo:dimension:first",
++                "assertion:demo:dimension:second",
++            ),
++            record.evidence_ids,
++        )
++        self.assertEqual("Geometry and Units Reviewer", record.owner_role)
++
++    def test_agreeing_same_unit_sources_still_promote(self) -> None:
++        for first, second in (
++            ({"value": 10, "unit": "mm"}, {"value": 10, "unit": "mm"}),
++            ({"value": 10, "unit": "mm"}, {"value": 10.0, "unit": "mm"}),
++            ({"value": 25.4, "unit": "mm"}, {"value": 1, "unit": "in"}),
++            ({"value": 2.54, "unit": "mm"}, {"value": 0.1, "unit": "in"}),
++        ):
++            with self.subTest(first=first, second=second):
++                candidate = self.dimensional_candidate(first, second)
++
++                result = self.two_pdf_adapter().ingest(candidate)
++
++                self.assertEqual((candidate,), result.promoted)
++                self.assertEqual((), result.quarantined)
++
++    def test_no_tolerance_is_applied_to_dimensional_equality(self) -> None:
++        candidate = self.dimensional_candidate(
++            {"value": 0.3, "unit": "mm"},
++            {"value": 0.30000000000000004, "unit": "mm"},
++        )
++
++        result = self.two_pdf_adapter().ingest(candidate)
++
++        self.assertEqual((), result.promoted)
++        self.assertIn("DIMENSION_SOURCE_CONFLICT", reason_codes(result))
++
++    def test_pdf_cad_contradiction_is_detected_under_dimensions_prefix(
++        self,
++    ) -> None:
++        candidate = self.dimensional_candidate(
++            {"value": 18, "unit": "mm"},
++            {"value": 19, "unit": "mm"},
++            field_path="dimensions.panel_thickness",
++            first_source="source:demo:oem:pdf",
++            second_source="source:demo:oem:cad",
++        )
++
++        result = ReviewedAssertionAdapter(
++            (
++                make_context(
++                    "source:demo:oem:pdf",
++                    document_kind=DocumentKind.PDF.value,
++                ),
++                make_context(
++                    "source:demo:oem:cad",
++                    document_kind=DocumentKind.CAD.value,
++                ),
++            )
++        ).ingest(candidate)
++
++        self.assertEqual((), result.promoted)
++        self.assertEqual(
++            ("DIMENSION_SOURCE_CONFLICT", "PDF_CAD_GEOMETRY_CONFLICT"),
++            reason_codes(result),
++        )
++
++    @staticmethod
++    def identity_candidate(
++        first_value: object,
++        second_value: object,
++        *,
++        first_source: str,
++        second_source: str,
++    ) -> CandidateRecord:
++        return make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:identity:first",
++                    value=first_value,
++                    source_id=first_source,
++                ),
++                make_assertion(
++                    "assertion:demo:identity:second",
++                    value=second_value,
++                    source_id=second_source,
++                ),
++            )
++        )
++
++    def test_oem_versus_other_identity_contradiction_quarantines(self) -> None:
++        candidate = self.identity_candidate(
++            "DEMO-001",
++            "DEMO-999",
++            first_source="source:demo:oem:web",
++            second_source="source:demo:other:web",
++        )
++
++        result = ReviewedAssertionAdapter(
++            (
++                make_context(),
++                make_context(
++                    "source:demo:other:web",
++                    authority=SourceAuthority.OTHER.value,
++                ),
++            )
++        ).ingest(candidate)
++
++        self.assertEqual((), result.promoted)
++        self.assertIn("IDENTITY_SOURCE_CONFLICT", reason_codes(result))
++        record = next(
++            item
++            for item in result.quarantined
++            if item.reason_code == "IDENTITY_SOURCE_CONFLICT"
++        )
++        self.assertEqual("Identity and SKU Reviewer", record.owner_role)
++        self.assertEqual(
++            (
++                "assertion:demo:identity:first",
++                "assertion:demo:identity:second",
++            ),
++            record.evidence_ids,
++        )
++
++    def test_same_authority_identity_contradiction_quarantines(self) -> None:
++        candidate = self.identity_candidate(
++            "DEMO-001",
++            "DEMO-999",
++            first_source="source:demo:oem:pdf",
++            second_source="source:demo:oem:pdf2",
++        )
++
++        result = self.two_pdf_adapter().ingest(candidate)
++
++        self.assertEqual((), result.promoted)
++        self.assertEqual(("IDENTITY_SOURCE_CONFLICT",), reason_codes(result))
++
++    def test_distributor_versus_other_identity_contradiction_quarantines(
++        self,
++    ) -> None:
++        candidate = self.identity_candidate(
++            "DEMO-001",
++            "DEMO-999",
++            first_source="source:demo:distributor:api",
++            second_source="source:demo:other:web",
++        )
++
++        result = ReviewedAssertionAdapter(
++            (
++                make_context(
++                    "source:demo:distributor:api",
++                    authority=SourceAuthority.AUTHORIZED_DISTRIBUTOR.value,
++                ),
++                make_context(
++                    "source:demo:other:web",
++                    authority=SourceAuthority.OTHER.value,
++                ),
++            )
++        ).ingest(candidate)
++
++        self.assertEqual((), result.promoted)
++        self.assertIn("IDENTITY_SOURCE_CONFLICT", reason_codes(result))
++
++    def test_agreeing_identity_sources_still_promote(self) -> None:
++        candidate = self.identity_candidate(
++            "DEMO-001",
++            "DEMO-001",
++            first_source="source:demo:oem:pdf",
++            second_source="source:demo:oem:pdf2",
++        )
++
++        result = self.two_pdf_adapter().ingest(candidate)
++
++        self.assertEqual((candidate,), result.promoted)
++
++    def test_different_identity_fields_are_never_compared(self) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:identity:sku",
++                    field_path="identity.exact_sku",
++                    value="DEMO-001",
++                    source_id="source:demo:oem:pdf",
++                ),
++                make_assertion(
++                    "assertion:demo:identity:finish",
++                    field_path="identity.finish_code",
++                    value="NI",
++                    source_id="source:demo:oem:pdf2",
++                ),
++            )
++        )
++
++        result = self.two_pdf_adapter().ingest(candidate)
++
++        self.assertEqual((candidate,), result.promoted)
++
++    def test_new_reason_codes_map_to_consistent_owner_roles(self) -> None:
++        for reason_code, owner_role in (
++            ("DIMENSION_SOURCE_CONFLICT", "Geometry and Units Reviewer"),
++            ("IDENTITY_SOURCE_CONFLICT", "Identity and SKU Reviewer"),
++        ):
++            with self.subTest(reason_code=reason_code):
++                record = QuarantineRecord(
++                    candidate_id=CANDIDATE_ID,
++                    reason_code=reason_code,
++                    evidence_ids=("assertion:demo:identity:sku",),
++                    owner_role=owner_role,
++                )
++                self.assertEqual(owner_role, record.owner_role)
++                with self.assertRaises(ValueError):
++                    QuarantineRecord(
++                        candidate_id=CANDIDATE_ID,
++                        reason_code=reason_code,
++                        evidence_ids=("assertion:demo:identity:sku",),
++                        owner_role="BOM and Compatibility Reviewer",
++                    )
++
++    def test_inch_conversion_is_exact_beyond_decimal_context_precision(
++        self,
++    ) -> None:
++        """25.4 scaling must not round: the rule rests on exact equality."""
++
++        candidate = self.dimensional_candidate(
++            {"value": 10**30, "unit": "in"},
++            {"value": 10**30 + 1, "unit": "in"},
++        )
++
++        result = self.two_pdf_adapter().ingest(candidate)
++
++        self.assertEqual((), result.promoted)
++        self.assertIn("DIMENSION_SOURCE_CONFLICT", reason_codes(result))
++
++    def test_exact_unit_multiples_still_compare_equal(self) -> None:
++        for millimetres, inches in (
++            (25.4, 1),
++            (2.54, 0.1),
++            (254, 10),
++            (25400, 1000),
++        ):
++            with self.subTest(millimetres=millimetres, inches=inches):
++                candidate = self.dimensional_candidate(
++                    {"value": millimetres, "unit": "mm"},
++                    {"value": inches, "unit": "in"},
++                )
++
++                result = self.two_pdf_adapter().ingest(candidate)
++
++                self.assertEqual((candidate,), result.promoted)
++
++    def test_ambiguous_unit_assertions_are_not_compared_as_contradictions(
++        self,
++    ) -> None:
++        candidate = self.dimensional_candidate(
++            {"value": 10, "unit": "mm"},
++            {"value": 2.54, "unit": "cm"},
++        )
++
++        result = self.two_pdf_adapter().ingest(candidate)
++
++        self.assertEqual(("UNITS_AMBIGUOUS",), reason_codes(result))
++
++
++class MatingPartContradictionTests(unittest.TestCase):
++    """The contradiction rule reaches the documented mating-part field only."""
++
++    @staticmethod
++    def two_source_adapter() -> ReviewedAssertionAdapter:
++        return ReviewedAssertionAdapter(
++            (
++                make_context(
++                    "source:demo:oem:pdf",
++                    document_kind=DocumentKind.PDF.value,
++                ),
++                make_context(
++                    "source:demo:oem:cad",
++                    document_kind=DocumentKind.CAD.value,
++                ),
++            )
++        )
++
++    @staticmethod
++    def mating_candidate(
++        first_part: object,
++        second_part: object,
++    ) -> CandidateRecord:
++        return make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:compatibility:required",
++                    field_path="compatibility.requires_mating_part",
++                    value=True,
++                    source_id="source:demo:oem:pdf",
++                ),
++                make_assertion(
++                    "assertion:demo:compatibility:part-a",
++                    field_path="compatibility.exact_mating_part_id",
++                    value=first_part,
++                    source_id="source:demo:oem:pdf",
++                ),
++                make_assertion(
++                    "assertion:demo:compatibility:part-b",
++                    field_path="compatibility.exact_mating_part_id",
++                    value=second_part,
++                    source_id="source:demo:oem:cad",
++                ),
++            )
++        )
++
++    def test_contradicting_exact_mating_parts_quarantine(self) -> None:
++        result = self.two_source_adapter().ingest(
++            self.mating_candidate("sku:demo:mate:MP-1", "sku:demo:mate:MP-2")
++        )
++
++        self.assertEqual((), result.promoted)
++        self.assertEqual(
++            ("MATING_PART_SOURCE_CONFLICT",),
++            reason_codes(result),
++        )
++        self.assertEqual(
++            (
++                "assertion:demo:compatibility:part-a",
++                "assertion:demo:compatibility:part-b",
++            ),
++            result.quarantined[0].evidence_ids,
++        )
++        self.assertEqual(
++            "BOM and Compatibility Reviewer",
++            result.quarantined[0].owner_role,
++        )
++
++    def test_agreeing_exact_mating_parts_promote(self) -> None:
++        candidate = self.mating_candidate(
++            "sku:demo:mate:MP-1",
++            "sku:demo:mate:MP-1",
++        )
++
++        result = self.two_source_adapter().ingest(candidate)
++
++        self.assertEqual((candidate,), result.promoted)
++        self.assertEqual((), result.quarantined)
++
++    def test_mating_part_ids_are_compared_after_normalization(self) -> None:
++        candidate = self.mating_candidate(
++            "sku:demo:mate:MP-1",
++            "  sku:demo:mate:MP-1  ",
++        )
++
++        result = self.two_source_adapter().ingest(candidate)
++
++        self.assertEqual((candidate,), result.promoted)
++
++    def test_a_single_mating_part_source_is_never_a_contradiction(self) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:compatibility:required",
++                    field_path="compatibility.requires_mating_part",
++                    value=True,
++                    source_id="source:demo:oem:pdf",
++                ),
++                make_assertion(
++                    "assertion:demo:compatibility:part-a",
++                    field_path="compatibility.exact_mating_part_id",
++                    value="sku:demo:mate:MP-1",
++                    source_id="source:demo:oem:pdf",
++                ),
++            )
++        )
++
++        result = self.two_source_adapter().ingest(candidate)
++
++        self.assertEqual((candidate,), result.promoted)
++
++    @staticmethod
++    def marker_candidate(
++        first: object,
++        second: object,
++        *,
++        with_part: bool = True,
++    ) -> CandidateRecord:
++        assertions = [
++            make_assertion(
++                "assertion:demo:compatibility:marker-a",
++                field_path="compatibility.requires_mating_part",
++                value=first,
++                source_id="source:demo:oem:pdf",
++            ),
++            make_assertion(
++                "assertion:demo:compatibility:marker-b",
++                field_path="compatibility.requires_mating_part",
++                value=second,
++                source_id="source:demo:oem:cad",
++            ),
++        ]
++        if with_part:
++            assertions.append(
++                make_assertion(
++                    "assertion:demo:compatibility:part-a",
++                    field_path="compatibility.exact_mating_part_id",
++                    value="sku:demo:mate:MP-1",
++                    source_id="source:demo:oem:pdf",
++                )
++            )
++        return make_candidate(tuple(assertions))
++
++    def test_contradicting_mating_markers_quarantine(self) -> None:
++        result = self.two_source_adapter().ingest(
++            self.marker_candidate(True, False)
++        )
++
++        self.assertEqual((), result.promoted)
++        self.assertEqual(
++            ("MATING_PART_SOURCE_CONFLICT",),
++            reason_codes(result),
++        )
++        self.assertEqual(
++            (
++                "assertion:demo:compatibility:marker-a",
++                "assertion:demo:compatibility:marker-b",
++            ),
++            result.quarantined[0].evidence_ids,
++        )
++        self.assertEqual(
++            "BOM and Compatibility Reviewer",
++            result.quarantined[0].owner_role,
++        )
++
++    def test_agreeing_mating_markers_promote(self) -> None:
++        for first, second, with_part in (
++            (True, True, True),
++            (False, False, False),
++        ):
++            with self.subTest(first=first, second=second):
++                candidate = self.marker_candidate(
++                    first,
++                    second,
++                    with_part=with_part,
++                )
++
++                result = self.two_source_adapter().ingest(candidate)
++
++                self.assertEqual((candidate,), result.promoted)
++                self.assertEqual((), result.quarantined)
++
++    def test_marker_and_part_contradictions_share_one_record(self) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:compatibility:marker-a",
++                    field_path="compatibility.requires_mating_part",
++                    value=True,
++                    source_id="source:demo:oem:pdf",
++                ),
++                make_assertion(
++                    "assertion:demo:compatibility:marker-b",
++                    field_path="compatibility.requires_mating_part",
++                    value=False,
++                    source_id="source:demo:oem:cad",
++                ),
++                make_assertion(
++                    "assertion:demo:compatibility:part-a",
++                    field_path="compatibility.exact_mating_part_id",
++                    value="sku:demo:mate:MP-1",
++                    source_id="source:demo:oem:pdf",
++                ),
++                make_assertion(
++                    "assertion:demo:compatibility:part-b",
++                    field_path="compatibility.exact_mating_part_id",
++                    value="sku:demo:mate:MP-2",
++                    source_id="source:demo:oem:cad",
++                ),
++            )
++        )
++
++        result = self.two_source_adapter().ingest(candidate)
++
++        self.assertEqual(
++            ("MATING_PART_SOURCE_CONFLICT",),
++            reason_codes(result),
++        )
++        self.assertEqual(
++            (
++                "assertion:demo:compatibility:marker-a",
++                "assertion:demo:compatibility:marker-b",
++                "assertion:demo:compatibility:part-a",
++                "assertion:demo:compatibility:part-b",
++            ),
++            result.quarantined[0].evidence_ids,
++        )
++
++    def test_marker_contradiction_and_missing_part_co_fire_in_order(
++        self,
++    ) -> None:
++        """Both mating codes can now apply at once, deterministically ordered."""
++
++        result = self.two_source_adapter().ingest(
++            self.marker_candidate(True, False, with_part=False)
++        )
++
++        self.assertEqual((), result.promoted)
++        self.assertEqual(
++            ("MATING_PART_SOURCE_CONFLICT", "REQUIRED_MATING_PART_MISSING"),
++            reason_codes(result),
++        )
++        self.assertEqual(
++            (
++                "assertion:demo:compatibility:marker-a",
++                "assertion:demo:compatibility:marker-b",
++            ),
++            result.quarantined[0].evidence_ids,
++        )
++        self.assertEqual(
++            ("assertion:demo:compatibility:marker-a",),
++            result.quarantined[1].evidence_ids,
++        )
++        self.assertEqual(
++            (
++                "BOM and Compatibility Reviewer",
++                "BOM and Compatibility Reviewer",
++            ),
++            tuple(record.owner_role for record in result.quarantined),
++        )
++
++    def test_undocumented_field_contradictions_are_not_guessed(self) -> None:
++        """The brief forbids guessing conflicts from free text.
++
++        Only documented normalized conventions are compared: the dimensional
++        prefixes, ``identity.``, and the two ``compatibility.`` marker fields.
++        Every other field path must stay uncompared in this foundation.
++        """
++
++        for field_path in (
++            "material.core",
++            "notes.internal",
++            "packaging.carton_code",
++            "compatibility.freeform_remark",
++        ):
++            with self.subTest(field_path=field_path):
++                candidate = make_candidate(
++                    (
++                        make_assertion(
++                            "assertion:demo:free:a",
++                            field_path=field_path,
++                            value="X",
++                            source_id="source:demo:oem:pdf",
++                        ),
++                        make_assertion(
++                            "assertion:demo:free:b",
++                            field_path=field_path,
++                            value="Y",
++                            source_id="source:demo:oem:cad",
++                        ),
++                    )
++                )
++
++                result = self.two_source_adapter().ingest(candidate)
++
++                self.assertEqual((candidate,), result.promoted)
++                self.assertEqual((), result.quarantined)
++
++    def test_mating_conflict_code_maps_to_the_bom_owner(self) -> None:
++        record = QuarantineRecord(
++            candidate_id=CANDIDATE_ID,
++            reason_code="MATING_PART_SOURCE_CONFLICT",
++            evidence_ids=("assertion:demo:compatibility:part-a",),
++            owner_role="BOM and Compatibility Reviewer",
++        )
++
++        self.assertEqual("BOM and Compatibility Reviewer", record.owner_role)
++        with self.assertRaises(ValueError):
++            QuarantineRecord(
++                candidate_id=CANDIDATE_ID,
++                reason_code="MATING_PART_SOURCE_CONFLICT",
++                evidence_ids=("assertion:demo:compatibility:part-a",),
++                owner_role="Identity and SKU Reviewer",
++            )
++
++
++class MatingPartAndMultiReasonTests(unittest.TestCase):
++    def test_connector_assembly_with_required_exact_mating_part_promotes(
++        self,
++    ) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:compatibility:required",
++                    field_path="compatibility.requires_mating_part",
++                    value=True,
++                ),
++                make_assertion(
++                    "assertion:demo:compatibility:exact-part",
++                    field_path="compatibility.exact_mating_part_id",
++                    value="sku:demo:mating-part:EU",
++                ),
++            )
++        )
++
++        result = ReviewedAssertionAdapter((make_context(),)).ingest(candidate)
++
++        self.assertEqual((candidate,), result.promoted)
++
++    def test_connector_assembly_missing_required_exact_mating_part_quarantines(
++        self,
++    ) -> None:
++        marker = make_assertion(
++            "assertion:demo:compatibility:required",
++            field_path="compatibility.requires_mating_part",
++            value=True,
++        )
++
++        result = ReviewedAssertionAdapter((make_context(),)).ingest(
++            make_candidate((marker,))
++        )
++
++        self.assertEqual(
++            ("REQUIRED_MATING_PART_MISSING",),
++            reason_codes(result),
++        )
++        self.assertEqual(
++            ("assertion:demo:compatibility:required",),
++            result.quarantined[0].evidence_ids,
++        )
++        self.assertEqual(
++            "BOM and Compatibility Reviewer",
++            result.quarantined[0].owner_role,
++        )
++
++    def test_mating_part_is_not_required_for_unrelated_entity_kinds(self) -> None:
++        unrelated_without_marker = make_candidate(
++            entity_kind="CABINET_MATERIAL",
++            assertions=(
++                make_assertion(),
++            ),
++        )
++        connector_without_marker = make_candidate()
++        marker_explicitly_false = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:compatibility:not-required",
++                    field_path="compatibility.requires_mating_part",
++                    value=False,
++                ),
++            ),
++            entity_kind="CABINET_MATERIAL",
++        )
++
++        for candidate in (
++            unrelated_without_marker,
++            connector_without_marker,
++            marker_explicitly_false,
++        ):
++            with self.subTest(
++                entity_kind=candidate.entity_kind,
++                field_paths=tuple(
++                    assertion.field_path for assertion in candidate.assertions
++                ),
++            ):
++                result = ReviewedAssertionAdapter((make_context(),)).ingest(
++                    candidate
++                )
++
++                self.assertEqual((candidate,), result.promoted)
++                self.assertEqual((), result.quarantined)
++
++    def test_mating_part_requirement_follows_the_marker_not_the_entity_kind(
++        self,
++    ) -> None:
++        for entity_kind in (
++            "CONNECTOR_ASSEMBLY",
++            "connector_assembly",
++            "CONNECTOR_ASSEMBLY_MINIFIX",
++            "FUTURE_CONNECTOR_FAMILY",
++            "CABINET_MATERIAL",
++        ):
++            with self.subTest(entity_kind=entity_kind):
++                result = ReviewedAssertionAdapter((make_context(),)).ingest(
++                    make_candidate(
++                        (
++                            make_assertion(
++                                "assertion:demo:compatibility:required",
++                                field_path="compatibility.requires_mating_part",
++                                value=True,
++                            ),
++                        ),
++                        entity_kind=entity_kind,
++                    )
++                )
++
++                self.assertEqual((), result.promoted)
++                self.assertEqual(
++                    ("REQUIRED_MATING_PART_MISSING",),
++                    reason_codes(result),
++                )
++                self.assertEqual(
++                    ("assertion:demo:compatibility:required",),
++                    result.quarantined[0].evidence_ids,
++                )
++                self.assertEqual(
++                    "BOM and Compatibility Reviewer",
++                    result.quarantined[0].owner_role,
++                )
++
++    def test_satisfied_marker_promotes_for_any_entity_kind(self) -> None:
++        for entity_kind in (
++            "connector_assembly",
++            "CONNECTOR_ASSEMBLY_MINIFIX",
++        ):
++            with self.subTest(entity_kind=entity_kind):
++                candidate = make_candidate(
++                    (
++                        make_assertion(
++                            "assertion:demo:compatibility:required",
++                            field_path="compatibility.requires_mating_part",
++                            value=True,
++                        ),
++                        make_assertion(
++                            "assertion:demo:compatibility:exact-part",
++                            field_path="compatibility.exact_mating_part_id",
++                            value="sku:demo:mating-part:EU",
++                        ),
++                    ),
++                    entity_kind=entity_kind,
++                )
++
++                result = ReviewedAssertionAdapter((make_context(),)).ingest(
++                    candidate
++                )
++
++                self.assertEqual((candidate,), result.promoted)
++
++    def test_all_simultaneous_reasons_are_deduplicated_and_ordered(
++        self,
++    ) -> None:
++        candidate = make_candidate(
++            (
++                make_assertion(
++                    "assertion:demo:identity:pending",
++                    value="DEMO-001",
++                    review_state="PENDING",
++                ),
++                make_assertion(
++                    "assertion:demo:dimension:ambiguous",
++                    field_path="dimensions.panel_thickness",
++                    value={"value": 2.54, "unit": "cm"},
++                    source_id="source:demo:missing:web",
++                ),
++                make_assertion(
++                    "assertion:demo:compatibility:required",
++                    field_path="compatibility.requires_mating_part",
++                    value=True,
++                ),
++            ),
++            extraction_method="AI_EXTRACTED",
++        )
++        adapter = ReviewedAssertionAdapter(
++            (
++                make_context(rights_state=RightsState.UNKNOWN.value),
++            )
++        )
++
++        result = adapter.ingest(candidate)
++
++        self.assertEqual((), result.promoted)
++        self.assertEqual(
++            (
++                "REVIEW_REQUIRED",
++                "ASSERTION_NOT_VERIFIED",
++                "SOURCE_CONTEXT_MISSING",
++                "RIGHTS_UNCERTAIN",
++                "UNITS_AMBIGUOUS",
++                "REQUIRED_MATING_PART_MISSING",
++            ),
++            reason_codes(result),
++        )
++        self.assertEqual(
++            (
++                "OEM Evidence Curator",
++                "Identity and SKU Reviewer",
++                "OEM Evidence Curator",
++                "Rights and Licensing Reviewer",
++                "Geometry and Units Reviewer",
++                "BOM and Compatibility Reviewer",
++            ),
++            tuple(record.owner_role for record in result.quarantined),
++        )
++        self.assertEqual(
++            ("assertion:demo:identity:pending",),
++            result.quarantined[1].evidence_ids,
++        )
++        self.assertEqual(
++            ("assertion:demo:dimension:ambiguous",),
++            result.quarantined[2].evidence_ids,
++        )
++
++
++class CliContractTests(unittest.TestCase):
++    def run_cli(
++        self,
++        *arguments: object,
++        cwd: Path | None = None,
++    ) -> subprocess.CompletedProcess[str]:
++        script = (
++            REPOSITORY_ROOT
++            / "tools"
++            / "connector_registry"
++            / "ingest_reviewed.py"
++        )
++        return subprocess.run(
++            [sys.executable, "-B", str(script), *(str(item) for item in arguments)],
++            cwd=cwd or REPOSITORY_ROOT,
++            capture_output=True,
++            text=True,
++            check=False,
++        )
++
++    @staticmethod
++    def write_jsonl(path: Path, records: list[object]) -> None:
++        path.write_text(
++            "".join(
++                json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n"
++                for record in records
++            ),
++            encoding="utf-8",
++        )
++
++    @staticmethod
++    def candidate_payload(
++        *,
++        candidate_id: str,
++        assertion_id: str,
++        source_id: str,
++        extraction_method: str = "HUMAN_REVIEWED",
++        brand_id: str = BRAND_ID,
++        field_path: str = "identity.exact_sku",
++        value: object | None = None,
++    ) -> dict[str, object]:
++        return {
++            "candidate_id": candidate_id,
++            "brand_id": brand_id,
++            "entity_kind": "CONNECTOR_ASSEMBLY",
++            "extraction_method": extraction_method,
++            "assertions": [
++                {
++                    "assertion_id": assertion_id,
++                    "entity_id": candidate_id,
++                    "field_path": field_path,
++                    "value": (
++                        candidate_id.rsplit(":", 1)[-1].upper()
++                        if value is None
++                        else value
++                    ),
++                    "source_id": source_id,
++                    "locator": "page 1",
++                    "reviewer": "reviewer:registry",
++                    "review_state": "VERIFIED",
++                }
++            ],
++        }
++
++    def test_help_lists_every_required_local_io_flag(self) -> None:
++        result = self.run_cli("--help")
++
++        self.assertEqual(0, result.returncode, result.stderr)
++        for flag in (
++            "--brand",
++            "--source-manifest",
++            "--assertions",
++            "--out",
++            "--quarantine",
++        ):
++            with self.subTest(flag=flag):
++                self.assertIn(flag, result.stdout)
++
++    def test_cli_writes_separate_deterministic_promoted_and_quarantine_jsonl(
++        self,
++    ) -> None:
++        with tempfile.TemporaryDirectory() as temporary_directory:
++            root = Path(temporary_directory)
++            manifest = root / "sources.json"
++            assertions = root / "candidates.jsonl"
++            promoted = root / "promoted.jsonl"
++            quarantine = root / "quarantine.jsonl"
++            manifest.write_text(
++                json.dumps(
++                    [
++                        {
++                            "source_id": "source:demo:oem:web",
++                            "authority": "OEM",
++                            "document_kind": "WEB",
++                            "rights_state": "FACTUAL_INDEXING_ALLOWED",
++                        },
++                        {
++                            "source_id": "source:demo:other:web",
++                            "authority": "OTHER",
++                            "document_kind": "WEB",
++                            "rights_state": "UNKNOWN",
++                        },
++                    ]
++                ),
++                encoding="utf-8",
++            )
++            self.write_jsonl(
++                assertions,
++                [
++                    self.candidate_payload(
++                        candidate_id="candidate:demo:promoted",
++                        assertion_id="assertion:demo:promoted:identity",
++                        source_id="source:demo:oem:web",
++                        field_path="dimensions.panel_thickness",
++                        value={"value": 25.4, "unit": "mm"},
++                    ),
++                    self.candidate_payload(
++                        candidate_id="candidate:demo:quarantined",
++                        assertion_id="assertion:demo:quarantined:identity",
++                        source_id="source:demo:other:web",
++                        extraction_method="AI_EXTRACTED",
++                    ),
++                ],
++            )
++
++            result = self.run_cli(
++                "--brand",
++                BRAND_ID,
++                "--source-manifest",
++                manifest,
++                "--assertions",
++                assertions,
++                "--out",
++                promoted,
++                "--quarantine",
++                quarantine,
++                cwd=root,
++            )
++
++            self.assertEqual(0, result.returncode, result.stderr)
++            promoted_records = [
++                json.loads(line)
++                for line in promoted.read_text(encoding="utf-8").splitlines()
++            ]
++            quarantine_records = [
++                json.loads(line)
++                for line in quarantine.read_text(encoding="utf-8").splitlines()
++            ]
++            self.assertEqual(
++                ["candidate:demo:promoted"],
++                [record["candidate_id"] for record in promoted_records],
++            )
++            self.assertEqual(
++                ["REVIEW_REQUIRED", "RIGHTS_UNCERTAIN"],
++                [record["reason_code"] for record in quarantine_records],
++            )
++            self.assertEqual(
++                {
++                    "candidates.jsonl",
++                    "promoted.jsonl",
++                    "quarantine.jsonl",
++                    "sources.json",
++                },
++                {path.name for path in root.iterdir()},
++            )
++
++    def test_brand_flag_must_be_canonical_before_any_output_is_written(
++        self,
++    ) -> None:
++        for brand in ("hafele", " ", "brand:", "brand id:x", "Brand:demo"):
++            with self.subTest(brand=brand):
++                with tempfile.TemporaryDirectory() as temporary_directory:
++                    root = Path(temporary_directory)
++                    manifest = root / "sources.json"
++                    assertions = root / "candidates.jsonl"
++                    promoted = root / "promoted.jsonl"
++                    quarantine = root / "quarantine.jsonl"
++                    manifest.write_text("[]", encoding="utf-8")
++                    assertions.write_text("", encoding="utf-8")
++
++                    result = self.run_cli(
++                        "--brand",
++                        brand,
++                        "--source-manifest",
++                        manifest,
++                        "--assertions",
++                        assertions,
++                        "--out",
++                        promoted,
++                        "--quarantine",
++                        quarantine,
++                    )
++
++                    self.assertNotEqual(0, result.returncode)
++                    self.assertFalse(promoted.exists())
++                    self.assertFalse(quarantine.exists())
++                    self.assertEqual(
++                        {"candidates.jsonl", "sources.json"},
++                        {path.name for path in root.iterdir()},
++                    )
++
++    def test_canonical_brand_with_zero_candidates_writes_two_empty_outputs(
++        self,
++    ) -> None:
++        with tempfile.TemporaryDirectory() as temporary_directory:
++            root = Path(temporary_directory)
++            manifest = root / "sources.json"
++            assertions = root / "candidates.jsonl"
++            promoted = root / "promoted.jsonl"
++            quarantine = root / "quarantine.jsonl"
++            manifest.write_text("[]", encoding="utf-8")
++            assertions.write_text("", encoding="utf-8")
++
++            result = self.run_cli(
++                "--brand",
++                BRAND_ID,
++                "--source-manifest",
++                manifest,
++                "--assertions",
++                assertions,
++                "--out",
++                promoted,
++                "--quarantine",
++                quarantine,
++            )
++
++            self.assertEqual(0, result.returncode, result.stderr)
++            self.assertEqual("", promoted.read_text(encoding="utf-8"))
++            self.assertEqual("", quarantine.read_text(encoding="utf-8"))
++
++    def test_brand_mismatch_or_malformed_input_creates_no_outputs(self) -> None:
++        for case in ("brand", "malformed"):
++            with self.subTest(case=case):
++                with tempfile.TemporaryDirectory() as temporary_directory:
++                    root = Path(temporary_directory)
++                    manifest = root / "sources.json"
++                    assertions = root / "candidates.jsonl"
++                    promoted = root / "promoted.jsonl"
++                    quarantine = root / "quarantine.jsonl"
++                    manifest.write_text(
++                        json.dumps(
++                            [
++                                {
++                                    "source_id": "source:demo:oem:web",
++                                    "authority": "OEM",
++                                    "document_kind": "WEB",
++                                    "rights_state": "FACTUAL_INDEXING_ALLOWED",
++                                }
++                            ]
++                        ),
++                        encoding="utf-8",
++                    )
++                    if case == "brand":
++                        self.write_jsonl(
++                            assertions,
++                            [
++                                self.candidate_payload(
++                                    candidate_id="candidate:other:item",
++                                    assertion_id="assertion:other:item:identity",
++                                    source_id="source:demo:oem:web",
++                                    brand_id="brand:other",
++                                )
++                            ],
++                        )
++                    else:
++                        assertions.write_text("{not-json}\n", encoding="utf-8")
++
++                    result = self.run_cli(
++                        "--brand",
++                        BRAND_ID,
++                        "--source-manifest",
++                        manifest,
++                        "--assertions",
++                        assertions,
++                        "--out",
++                        promoted,
++                        "--quarantine",
++                        quarantine,
++                    )
++
++                    self.assertNotEqual(0, result.returncode)
++                    self.assertFalse(promoted.exists())
++                    self.assertFalse(quarantine.exists())
++
++    def test_output_collision_fails_without_partial_promoted_release(self) -> None:
++        with tempfile.TemporaryDirectory() as temporary_directory:
++            root = Path(temporary_directory)
++            manifest = root / "sources.json"
++            assertions = root / "candidates.jsonl"
++            promoted = root / "promoted.jsonl"
++            quarantine = root / "quarantine.jsonl"
++            manifest.write_text("[]", encoding="utf-8")
++            assertions.write_text("", encoding="utf-8")
++            promoted.write_text("existing\n", encoding="utf-8")
++
++            result = self.run_cli(
++                "--brand",
++                BRAND_ID,
++                "--source-manifest",
++                manifest,
++                "--assertions",
++                assertions,
++                "--out",
++                promoted,
++                "--quarantine",
++                quarantine,
++            )
++
++            self.assertNotEqual(0, result.returncode)
++            self.assertEqual("existing\n", promoted.read_text(encoding="utf-8"))
++            self.assertFalse(quarantine.exists())
++
++    def test_second_publication_failure_rolls_back_first_output(self) -> None:
++        with tempfile.TemporaryDirectory() as temporary_directory:
++            root = Path(temporary_directory)
++            promoted = root / "promoted.jsonl"
++            quarantine = root / "quarantine.jsonl"
++            real_link = ingestion_cli.os.link
++            calls = 0
++
++            def fail_second_link(source: object, destination: object) -> None:
++                nonlocal calls
++                calls += 1
++                if calls == 2:
++                    raise OSError("injected second publication failure")
++                real_link(source, destination)
++
++            with mock.patch.object(
++                ingestion_cli.os,
++                "link",
++                side_effect=fail_second_link,
++            ):
++                with self.assertRaisesRegex(
++                    OSError,
++                    "injected second publication failure",
++                ):
++                    ingestion_cli._write_new_outputs(
++                        promoted,
++                        b'{"candidate_id":"candidate:demo:one"}\n',
++                        quarantine,
++                        b'{"reason_code":"REVIEW_REQUIRED"}\n',
++                    )
++
++            self.assertFalse(promoted.exists())
++            self.assertFalse(quarantine.exists())
++            self.assertEqual((), tuple(root.glob("*.tmp")))
++
++    def test_destination_race_never_overwrites_racer_or_leaves_first_output(
++        self,
++    ) -> None:
++        with tempfile.TemporaryDirectory() as temporary_directory:
++            root = Path(temporary_directory)
++            promoted = root / "promoted.jsonl"
++            quarantine = root / "quarantine.jsonl"
++            real_link = ingestion_cli.os.link
++            calls = 0
++
++            def race_second_destination(
++                source: object,
++                destination: object,
++            ) -> None:
++                nonlocal calls
++                calls += 1
++                if calls == 2:
++                    Path(destination).write_text("racer\n", encoding="utf-8")
++                real_link(source, destination)
++
++            with mock.patch.object(
++                ingestion_cli.os,
++                "link",
++                side_effect=race_second_destination,
++            ):
++                with self.assertRaises(FileExistsError):
++                    ingestion_cli._write_new_outputs(
++                        promoted,
++                        b'{"candidate_id":"candidate:demo:one"}\n',
++                        quarantine,
++                        b'{"reason_code":"REVIEW_REQUIRED"}\n',
++                    )
++
++            self.assertEqual(
++                "racer\n",
++                promoted.read_text(encoding="utf-8"),
++            )
++            self.assertFalse(quarantine.exists())
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/tools/connector_registry/ingest_reviewed.py b/tools/connector_registry/ingest_reviewed.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..bc6201fc18405bf88b0e0d93b3337407e8bb6a10
+--- /dev/null
++++ b/tools/connector_registry/ingest_reviewed.py
+@@ -0,0 +1,280 @@
++"""Ingest local reviewed candidates into separate promoted/quarantine JSONL.
++
++Input contract:
++- ``--source-manifest`` is a JSON array of SourceContext objects.
++- ``--assertions`` is JSONL with one CandidateRecord object per nonblank line,
++  including a nested ``assertions`` array of FieldAssertion objects.
++- ``--out`` receives promoted candidate JSONL.
++- ``--quarantine`` receives reason-coded QuarantineRecord JSONL.
++
++The command performs no network access, review-state changes, registry writes,
++release mutation, or manufacturing authorization.
++"""
++
++from __future__ import annotations
++
++import argparse
++import json
++import os
++from pathlib import Path
++import sys
++import tempfile
++from types import MappingProxyType
++from typing import Any
++
++
++REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
++PACKAGE_SOURCE = REPOSITORY_ROOT / "packages" / "component-master" / "src"
++sys.path.insert(0, str(PACKAGE_SOURCE))
++
++from monolith_component_master.adapters.reviewed_assertions import (  # noqa: E402
++    ReviewedAssertionAdapter,
++    SourceContext,
++)
++from monolith_component_master.evidence import FieldAssertion  # noqa: E402
++from monolith_component_master.ingestion import (  # noqa: E402
++    CandidateRecord,
++    QuarantineRecord,
++    _require_canonical_id,
++)
++
++
++def _parser() -> argparse.ArgumentParser:
++    parser = argparse.ArgumentParser(
++        description=(
++            "Validate local HUMAN_REVIEWED assertions and write separate "
++            "deterministic promoted and quarantine JSONL files."
++        )
++    )
++    parser.add_argument("--brand", required=True, help="canonical brand ID")
++    parser.add_argument(
++        "--source-manifest",
++        required=True,
++        type=Path,
++        help="JSON array of explicit source context objects",
++    )
++    parser.add_argument(
++        "--assertions",
++        required=True,
++        type=Path,
++        help="JSONL candidate records with nested field assertions",
++    )
++    parser.add_argument(
++        "--out",
++        required=True,
++        type=Path,
++        help="new promoted-candidate JSONL output",
++    )
++    parser.add_argument(
++        "--quarantine",
++        required=True,
++        type=Path,
++        help="new quarantine-record JSONL output",
++    )
++    return parser
++
++
++def _require_object(value: object, label: str) -> dict[str, Any]:
++    if not isinstance(value, dict):
++        raise TypeError(f"{label} must be a JSON object")
++    return value
++
++
++def _load_source_contexts(path: Path) -> tuple[SourceContext, ...]:
++    payload = json.loads(path.read_text(encoding="utf-8"))
++    if not isinstance(payload, list):
++        raise TypeError("source manifest must be a JSON array")
++    return tuple(
++        SourceContext(**_require_object(item, "source context"))
++        for item in payload
++    )
++
++
++def _load_candidates(path: Path, brand_id: str) -> tuple[CandidateRecord, ...]:
++    candidates: list[CandidateRecord] = []
++    for line_number, raw_line in enumerate(
++        path.read_text(encoding="utf-8").splitlines(),
++        start=1,
++    ):
++        if not raw_line.strip():
++            continue
++        payload = _require_object(
++            json.loads(raw_line),
++            f"assertions line {line_number}",
++        )
++        assertion_payloads = payload.get("assertions")
++        if not isinstance(assertion_payloads, list):
++            raise TypeError(
++                f"assertions line {line_number} must contain an assertions array"
++            )
++        candidate_payload = dict(payload)
++        candidate_payload["assertions"] = tuple(
++            FieldAssertion(
++                **_require_object(
++                    assertion,
++                    f"assertions line {line_number} assertion",
++                )
++            )
++            for assertion in assertion_payloads
++        )
++        candidate = CandidateRecord(**candidate_payload)
++        if candidate.brand_id != brand_id:
++            raise ValueError(
++                f"candidate {candidate.candidate_id} brand_id "
++                f"{candidate.brand_id!r} does not match --brand {brand_id!r}"
++            )
++        candidates.append(candidate)
++    return tuple(candidates)
++
++
++def _jsonable(value: object) -> object:
++    if isinstance(value, MappingProxyType):
++        return {str(key): _jsonable(item) for key, item in value.items()}
++    if isinstance(value, dict):
++        return {str(key): _jsonable(item) for key, item in value.items()}
++    if isinstance(value, (tuple, list)):
++        return [_jsonable(item) for item in value]
++    return value
++
++
++def _candidate_payload(candidate: CandidateRecord) -> dict[str, object]:
++    return {
++        "assertions": [
++            {
++                "assertion_id": assertion.assertion_id,
++                "entity_id": assertion.entity_id,
++                "field_path": assertion.field_path,
++                "locator": assertion.locator,
++                "review_state": assertion.review_state,
++                "reviewer": assertion.reviewer,
++                "source_id": assertion.source_id,
++                "value": _jsonable(assertion.value),
++            }
++            for assertion in candidate.assertions
++        ],
++        "brand_id": candidate.brand_id,
++        "candidate_id": candidate.candidate_id,
++        "entity_kind": candidate.entity_kind,
++        "extraction_method": candidate.extraction_method,
++    }
++
++
++def _quarantine_payload(record: QuarantineRecord) -> dict[str, object]:
++    return {
++        "candidate_id": record.candidate_id,
++        "evidence_ids": list(record.evidence_ids),
++        "owner_role": record.owner_role,
++        "reason_code": record.reason_code,
++    }
++
++
++def _jsonl_bytes(records: list[dict[str, object]]) -> bytes:
++    return "".join(
++        json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n"
++        for record in records
++    ).encode("utf-8")
++
++
++def _write_new_outputs(
++    promoted_path: Path,
++    promoted_bytes: bytes,
++    quarantine_path: Path,
++    quarantine_bytes: bytes,
++) -> None:
++    promoted_parent = promoted_path.parent
++    quarantine_parent = quarantine_path.parent
++    if not promoted_parent.is_dir() or not quarantine_parent.is_dir():
++        raise FileNotFoundError("output parent directories must already exist")
++
++    temporary_outputs: list[tuple[Path, Path]] = []
++    published_outputs: list[tuple[Path, Path]] = []
++    try:
++        for destination, content in (
++            (quarantine_path, quarantine_bytes),
++            (promoted_path, promoted_bytes),
++        ):
++            with tempfile.NamedTemporaryFile(
++                mode="wb",
++                prefix=f".{destination.name}.",
++                suffix=".tmp",
++                dir=destination.parent,
++                delete=False,
++            ) as temporary:
++                temporary.write(content)
++                temporary.flush()
++                os.fsync(temporary.fileno())
++                temporary_outputs.append((Path(temporary.name), destination))
++
++        for temporary_path, destination in temporary_outputs:
++            os.link(temporary_path, destination)
++            published_outputs.append((temporary_path, destination))
++    except BaseException:
++        for temporary_path, destination in reversed(published_outputs):
++            try:
++                if os.path.samefile(temporary_path, destination):
++                    destination.unlink()
++            except OSError:
++                pass
++        raise
++    finally:
++        for temporary_path, _destination in temporary_outputs:
++            temporary_path.unlink(missing_ok=True)
++
++
++def main(argv: list[str] | None = None) -> int:
++    parser = _parser()
++    arguments = parser.parse_args(argv)
++    promoted_path = arguments.out.resolve()
++    quarantine_path = arguments.quarantine.resolve()
++
++    try:
++        # Validate the flag itself, not only each candidate: with zero
++        # candidates no per-candidate comparison runs, so an uncanonical brand
++        # would otherwise write two unattributed output files and exit zero.
++        _require_canonical_id(arguments.brand, "--brand")
++        if promoted_path == quarantine_path:
++            raise ValueError("--out and --quarantine must be different paths")
++        collisions = tuple(
++            path for path in (promoted_path, quarantine_path) if path.exists()
++        )
++        if collisions:
++            raise FileExistsError(
++                "output path already exists: "
++                + ", ".join(str(path) for path in collisions)
++            )
++
++        source_contexts = _load_source_contexts(
++            arguments.source_manifest.resolve()
++        )
++        candidates = _load_candidates(
++            arguments.assertions.resolve(),
++            arguments.brand,
++        )
++        adapter = ReviewedAssertionAdapter(source_contexts)
++        promoted: list[dict[str, object]] = []
++        quarantined: list[dict[str, object]] = []
++        for candidate in candidates:
++            result = adapter.ingest(candidate)
++            promoted.extend(
++                _candidate_payload(record)
++                for record in result.promoted
++            )
++            quarantined.extend(
++                _quarantine_payload(record)
++                for record in result.quarantined
++            )
++
++        _write_new_outputs(
++            promoted_path,
++            _jsonl_bytes(promoted),
++            quarantine_path,
++            _jsonl_bytes(quarantined),
++        )
++    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
++        parser.exit(2, f"error: {error}\n")
++
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())

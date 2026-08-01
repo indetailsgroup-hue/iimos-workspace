@@ -1,0 +1,300 @@
+diff --git a/.superpowers/sdd/global-connector-registry-progress.en.html b/.superpowers/sdd/global-connector-registry-progress.en.html
+index 49b7a3fbd4bdf808dbd63e14ab2081c8547e47e0..3a2e75df1cb1efe44998dfea78a3f877fb0e9247 100644
+--- a/.superpowers/sdd/global-connector-registry-progress.en.html
++++ b/.superpowers/sdd/global-connector-registry-progress.en.html
+@@ -434,5 +434,64 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
+ <li>No push or merge was performed.</li>
+ <li>Task 6 is next and has not started.</li>
+ </ul>
++<h2>Task 6 closeout — 27 July 2026</h2>
++<p><strong>Status:</strong> COMPLETE <strong>Task 6 base:</strong> <code>12af68acf9aa0add75cd329480911d14a85fe3b1</code> <strong>Implementation commit:</strong> <code>1a4971a59622517577dc2a6f8760165395f91f77</code> — <code>feat(registry): evaluate parametric cabinet configurations</code> <strong>First review-fix commit:</strong> <code>e6680415c68d0944d7cc6d2c90e32d2bb26f13d1</code> — <code>fix(registry): close parametric qualification gaps</code> <strong>Second review-fix and accepted HEAD:</strong> <code>6663cc9901b961defdb0b781228f701591b97df5</code> — <code>fix(registry): normalize conditional reason ordering</code> <strong>Current boundary:</strong> Task 7 is next and has not started. This closeout supersedes only the Task 5 current-boundary statement that recorded Task 6 as next or not started; all earlier Task 1–5 statements remain preserved as historical snapshots.</p>
++<h3>Exact tracked Task 6 scope</h3>
++<p>The combined three-commit range from the Task 6 base changes exactly two paths:</p>
++<div class="tablewrap"><table><thead><tr><th>Status</th><th>Path</th><th>Insertions</th><th>Deletions</th></tr></thead><tbody>
++<tr><td>Modified</td><td><code>packages/component-master/src/monolith_component_master/qualification.py</code></td><td align="right">842</td><td align="right">0</td></tr>
++<tr><td>Added</td><td><code>tests/component_master/registry/test_parametric_cabinets.py</code></td><td align="right">1,743</td><td align="right">0</td></tr>
++</tbody></table></div>
++<p>No owner governance-root, nested product-runtime, seed-data, verifier, export, or other product path was changed. No push, merge, rebase, or branch change was performed.</p>
++<h3>Exact immutable interfaces and configuration contract</h3>
++<ul>
++<li><code>SpacingAxis</code> has exactly <code>WIDTH</code>, <code>DEPTH</code>, and <code>HEIGHT</code>, with identical uppercase values.</li>
++<li>Frozen <code>CabinetConfiguration</code> has exactly <code>width_mm</code>, <code>depth_mm</code>, <code>height_mm</code>, <code>topology</code>, <code>joints</code>, <code>load_cases</code>, <code>mounting</code>, and <code>wall_substrate</code>.</li>
++<li>Frozen, evidence-bearing <code>CabinetPolicy</code> has exactly <code>policy_id</code>, <code>connector_sku_id</code>, <code>topology</code>, the inclusive minimum and maximum bounds for width, depth, and height, <code>spacing_axis</code>, <code>max_spacing_mm</code>, <code>min_connector_count</code>, <code>max_connector_count</code>, <code>required_machine_capabilities</code>, <code>reinforcement_requirement</code>, <code>anchor_requirement</code>, and <code>evidence_assertion_ids</code>.</li>
++<li>Frozen <code>ConnectorPlacement</code> has exactly <code>joint_index</code>, <code>connector_sku_id</code>, <code>policy_id</code>, <code>connector_count</code>, and <code>spacing_mm</code>. Frozen <code>CabinetEvaluation</code> has exactly <code>verdict</code>, <code>policy_ids</code>, <code>placements</code>, <code>reinforcement_requirements</code>, <code>anchor_requirements</code>, <code>reason_codes</code>, and <code>evidence_assertion_ids</code>.</li>
++<li><code>evaluate_cabinet</code> retains the three positional arguments <code>cabinet</code>, <code>registry</code>, and <code>machine_capabilities</code>; <code>qualification_envelopes=()</code> and <code>policies=()</code> are explicit keyword-only inputs. The legacy three-argument call remains valid and fails closed because evidence and policy are absent.</li>
++<li>Configuration dimensions accept arbitrary positive finite W × D × H values, including fractional values. Topology is exactly one of <code>base</code>, <code>wall</code>, <code>tall</code>, <code>wardrobe</code>, or <code>custom</code>. Joints and load cases must be nonempty, typed, defensively snapshotted immutable tuples.</li>
++<li>Mounting is exactly <code>FLOOR</code>, <code>WALL</code>, or <code>MOBILE</code>. <code>WALL</code> requires a nonblank wall substrate; <code>FLOOR</code> and <code>MOBILE</code> require <code>wall_substrate=None</code>. IDs and machine capabilities use the strict canonical identifier contract.</li>
++</ul>
++<h3>Exact evidence-bound evaluation semantics</h3>
++<ul>
++<li>Every connector is resolved by its exact SKU and model. SKU <code>VerificationDimension.LIFECYCLE</code> permits only <code>VERIFIED</code> or <code>REGION_ONLY</code>; <code>PENDING</code> returns insufficient evidence, while <code>DISCONTINUED</code> or <code>BLOCKED</code> is unavailable. Model lifecycle permits only <code>ACTIVE</code> or <code>REGION_ONLY</code>; all other model lifecycle states are unavailable.</li>
++<li>Every joint is qualified against the explicit Task 5 envelopes before policy selection. Each joint must then have exactly one unambiguous explicit policy matching its exact connector SKU, topology, and inclusive W × D × H bounds. Missing evidence or policy fails closed, and overlapping policies are ambiguous.</li>
++<li>Required machine capabilities are matched exactly. There is no global, built-in, guessed, inferred, nearest-match, or fabricated rule source, no exact-SKU substitution, and no partial manufacturing output on refusal.</li>
++<li>For the selected axis, <code>connector_count = max(min_connector_count, ceil(axis_length / max_spacing_mm) + 1)</code>. Accepted floats are governed by their canonical shortest decimal spelling and checked integer-ratio arithmetic, so the decimal boundary <code>0.918 / 0.102</code> is exactly nine while the immediately greater float is above nine; finite extreme ratios do not overflow.</li>
++<li>A concrete placement is emitted only with positive finite spacing, calculated as <code>axis_length / (connector_count - 1)</code>. An unrepresentable positive finite result refuses with <code>PARAMETRIC_ARITHMETIC_UNREPRESENTABLE</code> and no authorization.</li>
++<li>A count above <code>max_connector_count</code> refuses unless that exact evidence-bearing policy supplies a reinforcement or anchor requirement. In that allowed conditional case, the placement remains unresolved with both <code>connector_count=None</code> and <code>spacing_mm=None</code>; no machining value is guessed.</li>
++<li>Any selected reinforcement or anchor requirement keeps the evaluation <code>CONDITIONALLY_QUALIFIED</code> even when the count fits. Conditional reason categories are exact and canonical: reinforcement yields <code>REINFORCEMENT_REQUIRED</code>, anchor yields <code>ANCHOR_REQUIRED</code>, and both yield that two-code tuple in category order regardless of joint order.</li>
++<li>Tall cabinets receive no automatic anchor or reinforcement. Any refusal returns reasons but no policy IDs, placements, reinforcement requirements, anchor requirements, or evidence IDs.</li>
++</ul>
++<h3>Honest TDD and independent-review chronology</h3>
++<div class="tablewrap"><table><thead><tr><th>Stage</th><th>Verdict / result</th><th>Disposition</th></tr></thead><tbody>
++<tr><td>Initial RED</td><td>Expected <code>ImportError</code> because <code>evaluate_cabinet</code> did not exist</td><td><code>qualification.py</code> remained unchanged at the RED checkpoint.</td></tr>
++<tr><td>Initial implementation GREEN</td><td>Task 6 + Task 5 passed 88/88: 37 + 51; full discovery passed 452 tests</td><td>The implementation was not yet accepted.</td></tr>
++<tr><td>First independent review</td><td><code>NEEDS_FIXES</code></td><td>P1: SKU lifecycle was ignored. P1: raw-float arithmetic mishandled the <code>0.918 / 0.102</code> boundary and finite <code>1e308 / 1e-308</code> extremes. P2: contradictory conditional reason/requirement states were constructible.</td></tr>
++<tr><td>First review-fix RED</td><td>Lifecycle: 1/1 failure. Arithmetic: 4 failing methods exposed the decimal boundary, two overflow cases, and subnormal-zero spacing. Conditional shape: 1 method with 6 failing subtests.</td><td>Production code was unchanged for each RED reproduction.</td></tr>
++<tr><td>First review-fix GREEN</td><td>Task 6 + Task 5 passed 94/94: 43 + 51; regressions 104/104; verifier contracts 12/12; full discovery 458/458; clean-HEAD verifier 13/13</td><td>Closed the first review findings without claiming final acceptance.</td></tr>
++<tr><td>Independent re-review</td><td><code>NEEDS_FIXES</code></td><td>P2: anchor-first then reinforcement in a multi-joint cabinet produced noncanonical reason order and crashed both concrete and unresolved placement cases.</td></tr>
++<tr><td>Second review-fix RED and GREEN</td><td>RED: 2/2 failures. GREEN: 2/2 passed.</td><td>Canonical category reasons are derived after all requirements are aggregated, independent of joint order.</td></tr>
++<tr><td>Final implementation gates</td><td>Task 6 + Task 5 passed 96/96: 45 + 51; regressions 104/104; verifier contracts 12/12; full discovery 460/460</td><td>The clean-HEAD verifier reported schema <code>1.1.0</code>, PASS 13/13, dynamic 460, and governed cohorts exact at 20 + 7.</td></tr>
++<tr><td>Final independent rereview</td><td><code>ACCEPTED</code> — no findings</td><td>Eight focused reproductions passed, diff-check passed, and exact scope plus clean-tree checks passed.</td></tr>
++</tbody></table></div>
++<h3>Accepted evidence integrity and cleanup</h3>
++<p>These are the accepted implementation/fix results recorded by the Task 6 evidence; this docs-only ledger closeout did not rerun product tests.</p>
++<ul>
++<li>Accepted report: <code>.superpowers/sdd/task-6-parametric-report.md</code>; 12,859 bytes; SHA-256 <code>c11933ad60f634571b72edea67ca271a4524069eab47adbc177e9545aea0d747</code>.</li>
++<li>Accepted native full-index binary review package: <code>.superpowers/sdd/task-6-parametric-review-package.diff</code>; 91,796 bytes; SHA-256 <code>d16757f5843b572a9e7ebb75aa6d975cc35f25b127022586a72583e0ca17de0e</code>; it contains exactly the two Task 6 paths and reverse-applies cleanly at the accepted HEAD.</li>
++<li>Accepted clean-HEAD verifier summary before removal: 94,668 bytes; SHA-256 <code>731108a34fdb2e42e98e93fc4b10cb9701299be3add1fc548f3afa3a0b4ac30c</code>.</li>
++<li>The verifier summary was removed after capture. Accepted cleanup left zero cache directories and zero <code>.pyc</code> files, and the accepted implementation worktree was clean at <code>6663cc9901b961defdb0b781228f701591b97df5</code>.</li>
++</ul>
++<h3>Task 6 authority boundary</h3>
++<ul>
++<li>Task 6 establishes only evidence-bound parametric rule selection plus connector count and spacing.</li>
++<li>It is not full racking, overturning, center-of-gravity, FEA, physical/coupon/machine/first-article/field qualification, populated worldwide policies or evidence, ingestion, release authority, runtime integration, freeze/export authority, or production readiness.</li>
++<li>NOT-FOR-PRODUCTION remains active. Software evidence does not grant manufacturing, installation, operational, or production authority.</li>
++<li>Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.</li>
++<li>No push, merge, rebase, or branch change was performed.</li>
++<li>Task 7 is next and has not started.</li>
++</ul>
+ </main></body>
+ </html>
+diff --git a/.superpowers/sdd/global-connector-registry-progress.md b/.superpowers/sdd/global-connector-registry-progress.md
+index 0f28fa712444d445e7864208b16b2d15c22f7a90..3bc288a3ee289c977faa090b4fa337a5de1cf9ed 100644
+--- a/.superpowers/sdd/global-connector-registry-progress.md
++++ b/.superpowers/sdd/global-connector-registry-progress.md
+@@ -489,3 +489,76 @@ These are the accepted Task 5 implementation/fix gates recorded in the refreshed
+ - Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.
+ - No push or merge was performed.
+ - Task 6 is next and has not started.
++
++## Task 6 closeout — 27 July 2026
++
++**Status:** COMPLETE
++**Task 6 base:** `12af68acf9aa0add75cd329480911d14a85fe3b1`
++**Implementation commit:** `1a4971a59622517577dc2a6f8760165395f91f77` — `feat(registry): evaluate parametric cabinet configurations`
++**First review-fix commit:** `e6680415c68d0944d7cc6d2c90e32d2bb26f13d1` — `fix(registry): close parametric qualification gaps`
++**Second review-fix and accepted HEAD:** `6663cc9901b961defdb0b781228f701591b97df5` — `fix(registry): normalize conditional reason ordering`
++**Current boundary:** Task 7 is next and has not started. This closeout supersedes only the Task 5 current-boundary statement that recorded Task 6 as next or not started; all earlier Task 1–5 statements remain preserved as historical snapshots.
++
++### Exact tracked Task 6 scope
++
++The combined three-commit range from the Task 6 base changes exactly two paths:
++
++| Status | Path | Insertions | Deletions |
++| --- | --- | ---: | ---: |
++| Modified | `packages/component-master/src/monolith_component_master/qualification.py` | 842 | 0 |
++| Added | `tests/component_master/registry/test_parametric_cabinets.py` | 1,743 | 0 |
++
++No owner governance-root, nested product-runtime, seed-data, verifier, export, or other product path was changed. No push, merge, rebase, or branch change was performed.
++
++### Exact immutable interfaces and configuration contract
++
++- `SpacingAxis` has exactly `WIDTH`, `DEPTH`, and `HEIGHT`, with identical uppercase values.
++- Frozen `CabinetConfiguration` has exactly `width_mm`, `depth_mm`, `height_mm`, `topology`, `joints`, `load_cases`, `mounting`, and `wall_substrate`.
++- Frozen, evidence-bearing `CabinetPolicy` has exactly `policy_id`, `connector_sku_id`, `topology`, the inclusive minimum and maximum bounds for width, depth, and height, `spacing_axis`, `max_spacing_mm`, `min_connector_count`, `max_connector_count`, `required_machine_capabilities`, `reinforcement_requirement`, `anchor_requirement`, and `evidence_assertion_ids`.
++- Frozen `ConnectorPlacement` has exactly `joint_index`, `connector_sku_id`, `policy_id`, `connector_count`, and `spacing_mm`. Frozen `CabinetEvaluation` has exactly `verdict`, `policy_ids`, `placements`, `reinforcement_requirements`, `anchor_requirements`, `reason_codes`, and `evidence_assertion_ids`.
++- `evaluate_cabinet` retains the three positional arguments `cabinet`, `registry`, and `machine_capabilities`; `qualification_envelopes=()` and `policies=()` are explicit keyword-only inputs. The legacy three-argument call remains valid and fails closed because evidence and policy are absent.
++- Configuration dimensions accept arbitrary positive finite W × D × H values, including fractional values. Topology is exactly one of `base`, `wall`, `tall`, `wardrobe`, or `custom`. Joints and load cases must be nonempty, typed, defensively snapshotted immutable tuples.
++- Mounting is exactly `FLOOR`, `WALL`, or `MOBILE`. `WALL` requires a nonblank wall substrate; `FLOOR` and `MOBILE` require `wall_substrate=None`. IDs and machine capabilities use the strict canonical identifier contract.
++
++### Exact evidence-bound evaluation semantics
++
++- Every connector is resolved by its exact SKU and model. SKU `VerificationDimension.LIFECYCLE` permits only `VERIFIED` or `REGION_ONLY`; `PENDING` returns insufficient evidence, while `DISCONTINUED` or `BLOCKED` is unavailable. Model lifecycle permits only `ACTIVE` or `REGION_ONLY`; all other model lifecycle states are unavailable.
++- Every joint is qualified against the explicit Task 5 envelopes before policy selection. Each joint must then have exactly one unambiguous explicit policy matching its exact connector SKU, topology, and inclusive W × D × H bounds. Missing evidence or policy fails closed, and overlapping policies are ambiguous.
++- Required machine capabilities are matched exactly. There is no global, built-in, guessed, inferred, nearest-match, or fabricated rule source, no exact-SKU substitution, and no partial manufacturing output on refusal.
++- For the selected axis, `connector_count = max(min_connector_count, ceil(axis_length / max_spacing_mm) + 1)`. Accepted floats are governed by their canonical shortest decimal spelling and checked integer-ratio arithmetic, so the decimal boundary `0.918 / 0.102` is exactly nine while the immediately greater float is above nine; finite extreme ratios do not overflow.
++- A concrete placement is emitted only with positive finite spacing, calculated as `axis_length / (connector_count - 1)`. An unrepresentable positive finite result refuses with `PARAMETRIC_ARITHMETIC_UNREPRESENTABLE` and no authorization.
++- A count above `max_connector_count` refuses unless that exact evidence-bearing policy supplies a reinforcement or anchor requirement. In that allowed conditional case, the placement remains unresolved with both `connector_count=None` and `spacing_mm=None`; no machining value is guessed.
++- Any selected reinforcement or anchor requirement keeps the evaluation `CONDITIONALLY_QUALIFIED` even when the count fits. Conditional reason categories are exact and canonical: reinforcement yields `REINFORCEMENT_REQUIRED`, anchor yields `ANCHOR_REQUIRED`, and both yield that two-code tuple in category order regardless of joint order.
++- Tall cabinets receive no automatic anchor or reinforcement. Any refusal returns reasons but no policy IDs, placements, reinforcement requirements, anchor requirements, or evidence IDs.
++
++### Honest TDD and independent-review chronology
++
++| Stage | Verdict / result | Disposition |
++| --- | --- | --- |
++| Initial RED | Expected `ImportError` because `evaluate_cabinet` did not exist | `qualification.py` remained unchanged at the RED checkpoint. |
++| Initial implementation GREEN | Task 6 + Task 5 passed 88/88: 37 + 51; full discovery passed 452 tests | The implementation was not yet accepted. |
++| First independent review | `NEEDS_FIXES` | P1: SKU lifecycle was ignored. P1: raw-float arithmetic mishandled the `0.918 / 0.102` boundary and finite `1e308 / 1e-308` extremes. P2: contradictory conditional reason/requirement states were constructible. |
++| First review-fix RED | Lifecycle: 1/1 failure. Arithmetic: 4 failing methods exposed the decimal boundary, two overflow cases, and subnormal-zero spacing. Conditional shape: 1 method with 6 failing subtests. | Production code was unchanged for each RED reproduction. |
++| First review-fix GREEN | Task 6 + Task 5 passed 94/94: 43 + 51; regressions 104/104; verifier contracts 12/12; full discovery 458/458; clean-HEAD verifier 13/13 | Closed the first review findings without claiming final acceptance. |
++| Independent re-review | `NEEDS_FIXES` | P2: anchor-first then reinforcement in a multi-joint cabinet produced noncanonical reason order and crashed both concrete and unresolved placement cases. |
++| Second review-fix RED and GREEN | RED: 2/2 failures. GREEN: 2/2 passed. | Canonical category reasons are derived after all requirements are aggregated, independent of joint order. |
++| Final implementation gates | Task 6 + Task 5 passed 96/96: 45 + 51; regressions 104/104; verifier contracts 12/12; full discovery 460/460 | The clean-HEAD verifier reported schema `1.1.0`, PASS 13/13, dynamic 460, and governed cohorts exact at 20 + 7. |
++| Final independent rereview | `ACCEPTED` — no findings | Eight focused reproductions passed, diff-check passed, and exact scope plus clean-tree checks passed. |
++
++### Accepted evidence integrity and cleanup
++
++These are the accepted implementation/fix results recorded by the Task 6 evidence; this docs-only ledger closeout did not rerun product tests.
++
++- Accepted report: `.superpowers/sdd/task-6-parametric-report.md`; 12,859 bytes; SHA-256 `c11933ad60f634571b72edea67ca271a4524069eab47adbc177e9545aea0d747`.
++- Accepted native full-index binary review package: `.superpowers/sdd/task-6-parametric-review-package.diff`; 91,796 bytes; SHA-256 `d16757f5843b572a9e7ebb75aa6d975cc35f25b127022586a72583e0ca17de0e`; it contains exactly the two Task 6 paths and reverse-applies cleanly at the accepted HEAD.
++- Accepted clean-HEAD verifier summary before removal: 94,668 bytes; SHA-256 `731108a34fdb2e42e98e93fc4b10cb9701299be3add1fc548f3afa3a0b4ac30c`.
++- The verifier summary was removed after capture. Accepted cleanup left zero cache directories and zero `.pyc` files, and the accepted implementation worktree was clean at `6663cc9901b961defdb0b781228f701591b97df5`.
++
++### Task 6 authority boundary
++
++- Task 6 establishes only evidence-bound parametric rule selection plus connector count and spacing.
++- It is not full racking, overturning, center-of-gravity, FEA, physical/coupon/machine/first-article/field qualification, populated worldwide policies or evidence, ingestion, release authority, runtime integration, freeze/export authority, or production readiness.
++- NOT-FOR-PRODUCTION remains active. Software evidence does not grant manufacturing, installation, operational, or production authority.
++- Daph remains one tenant/pilot only and does not own the shared registry or canonical platform data.
++- No push, merge, rebase, or branch change was performed.
++- Task 7 is next and has not started.
+diff --git a/.superpowers/sdd/global-connector-registry-progress.th.html b/.superpowers/sdd/global-connector-registry-progress.th.html
+index ede03ca9be7a969133ea4ba714593b912eb719c0..a454b55649a6e781645ca737e33d5e5584387672 100644
+--- a/.superpowers/sdd/global-connector-registry-progress.th.html
++++ b/.superpowers/sdd/global-connector-registry-progress.th.html
+@@ -434,5 +434,64 @@ ImportError: Start directory is not importable: 'tests/component_master'</code><
+ <li>ไม่ได้ push หรือ merge</li>
+ <li>งานที่ 6 เป็นงานถัดไปและยังไม่ได้เริ่ม</li>
+ </ul>
++<h2>การปิดงานที่ 6 — 27 กรกฎาคม 2026</h2>
++<p><strong>สถานะ:</strong> COMPLETE <strong>Base ของงานที่ 6:</strong> <code>12af68acf9aa0add75cd329480911d14a85fe3b1</code> <strong>Implementation commit:</strong> <code>1a4971a59622517577dc2a6f8760165395f91f77</code> — <code>feat(registry): evaluate parametric cabinet configurations</code> <strong>Review-fix commit แรก:</strong> <code>e6680415c68d0944d7cc6d2c90e32d2bb26f13d1</code> — <code>fix(registry): close parametric qualification gaps</code> <strong>Review-fix commit ที่สองและ accepted HEAD:</strong> <code>6663cc9901b961defdb0b781228f701591b97df5</code> — <code>fix(registry): normalize conditional reason ordering</code> <strong>ขอบเขตปัจจุบัน:</strong> งานที่ 7 เป็นงานถัดไปและยังไม่ได้เริ่ม การปิดงานนี้แทนที่เฉพาะข้อความขอบเขตปัจจุบันของงานที่ 5 ที่บันทึกว่างานที่ 6 เป็นงานถัดไปหรือยังไม่ได้เริ่ม โดยยังรักษาข้อความงานที่ 1–5 ก่อนหน้านี้ทั้งหมดไว้เป็น snapshot ทางประวัติศาสตร์</p>
++<h3>ขอบเขต tracked ของงานที่ 6 แบบ exact</h3>
++<p>ช่วงรวมสาม commit จาก base ของงานที่ 6 เปลี่ยน exactly สองพาธ:</p>
++<div class="tablewrap"><table><thead><tr><th>สถานะ</th><th>พาธ</th><th>เพิ่มบรรทัด</th><th>ลบบรรทัด</th></tr></thead><tbody>
++<tr><td>แก้ไข</td><td><code>packages/component-master/src/monolith_component_master/qualification.py</code></td><td align="right">842</td><td align="right">0</td></tr>
++<tr><td>เพิ่ม</td><td><code>tests/component_master/registry/test_parametric_cabinets.py</code></td><td align="right">1,743</td><td align="right">0</td></tr>
++</tbody></table></div>
++<p>ไม่มีการเปลี่ยนพาธใน owner governance root, nested product runtime, seed data, verifier, export หรือพาธผลิตภัณฑ์อื่น และไม่ได้ push, merge, rebase หรือเปลี่ยน branch</p>
++<h3>Interface แบบ immutable และ contract ของ configuration แบบ exact</h3>
++<ul>
++<li><code>SpacingAxis</code> มี exactly <code>WIDTH</code>, <code>DEPTH</code> และ <code>HEIGHT</code> พร้อม value ตัวพิมพ์ใหญ่ตรงกับชื่อ</li>
++<li><code>CabinetConfiguration</code> แบบ frozen มี exactly <code>width_mm</code>, <code>depth_mm</code>, <code>height_mm</code>, <code>topology</code>, <code>joints</code>, <code>load_cases</code>, <code>mounting</code> และ <code>wall_substrate</code></li>
++<li><code>CabinetPolicy</code> แบบ frozen ที่ผูกกับหลักฐานมี exactly <code>policy_id</code>, <code>connector_sku_id</code>, <code>topology</code>, ขอบเขตต่ำสุดและสูงสุดแบบ inclusive ของ width, depth และ height, <code>spacing_axis</code>, <code>max_spacing_mm</code>, <code>min_connector_count</code>, <code>max_connector_count</code>, <code>required_machine_capabilities</code>, <code>reinforcement_requirement</code>, <code>anchor_requirement</code> และ <code>evidence_assertion_ids</code></li>
++<li><code>ConnectorPlacement</code> แบบ frozen มี exactly <code>joint_index</code>, <code>connector_sku_id</code>, <code>policy_id</code>, <code>connector_count</code> และ <code>spacing_mm</code> ส่วน <code>CabinetEvaluation</code> แบบ frozen มี exactly <code>verdict</code>, <code>policy_ids</code>, <code>placements</code>, <code>reinforcement_requirements</code>, <code>anchor_requirements</code>, <code>reason_codes</code> และ <code>evidence_assertion_ids</code></li>
++<li><code>evaluate_cabinet</code> ยังคงรับ positional argument สามตัวคือ <code>cabinet</code>, <code>registry</code> และ <code>machine_capabilities</code> ส่วน <code>qualification_envelopes=()</code> และ <code>policies=()</code> เป็น input แบบ keyword-only ที่ explicit การเรียกแบบเดิมด้วยสาม argument ยัง valid และ fail closed เพราะไม่มีหลักฐานและ policy</li>
++<li>มิติของ configuration ยอมรับค่า W × D × H ที่เป็นบวกและ finite ได้โดยอิสระ รวมถึงค่าทศนิยม Topology ต้องเป็น exactly หนึ่งค่าใน <code>base</code>, <code>wall</code>, <code>tall</code>, <code>wardrobe</code> หรือ <code>custom</code> ส่วน joints และ load cases ต้องไม่ว่าง มี type ถูกต้อง และถูกทำ defensive snapshot เป็น tuple แบบ immutable</li>
++<li>Mounting ต้องเป็น exactly <code>FLOOR</code>, <code>WALL</code> หรือ <code>MOBILE</code> โดย <code>WALL</code> ต้องมี wall substrate ที่ไม่ว่าง ส่วน <code>FLOOR</code> และ <code>MOBILE</code> ต้องมี <code>wall_substrate=None</code> ทั้ง ID และ machine capability ใช้ contract ของ canonical identifier แบบ strict</li>
++</ul>
++<h3>Semantics การประเมินที่ผูกกับหลักฐานแบบ exact</h3>
++<ul>
++<li>Connector ทุกตัวถูก resolve ด้วย SKU และ model แบบ exact โดย <code>VerificationDimension.LIFECYCLE</code> ของ SKU อนุญาตเฉพาะ <code>VERIFIED</code> หรือ <code>REGION_ONLY</code>; <code>PENDING</code> คืนหลักฐานไม่เพียงพอ ส่วน <code>DISCONTINUED</code> หรือ <code>BLOCKED</code> ถือว่าไม่พร้อมใช้ Lifecycle ของ model อนุญาตเฉพาะ <code>ACTIVE</code> หรือ <code>REGION_ONLY</code>; สถานะอื่นทั้งหมดถือว่าไม่พร้อมใช้</li>
++<li>ทุก joint ต้องผ่าน qualification กับ envelope ของงานที่ 5 ที่ส่งมาอย่าง explicit ก่อนเลือก policy จากนั้นแต่ละ joint ต้องมี policy แบบ explicit ที่ไม่กำกวม exactly หนึ่งรายการ ซึ่งตรงกับ connector SKU, topology และขอบเขต W × D × H แบบ inclusive ของตน หลักฐานหรือ policy ที่หายไปจะ fail closed และ policy ที่ซ้อนกันถือว่ากำกวม</li>
++<li>Required machine capability ต้อง match แบบ exact ไม่มีแหล่งกฎจาก global, built-in, การเดา, inference, nearest match หรือการสร้างขึ้นเอง ไม่มีการแทน exact SKU และไม่มี manufacturing output บางส่วนเมื่อระบบปฏิเสธ</li>
++<li>สำหรับ axis ที่เลือก <code>connector_count = max(min_connector_count, ceil(axis_length / max_spacing_mm) + 1)</code> ค่า float ที่ยอมรับใช้การสะกดทศนิยมสั้นที่สุดแบบ canonical เป็นขอบเขตที่กำกับและคำนวณด้วย checked integer-ratio ดังนั้นขอบเขตทศนิยม <code>0.918 / 0.102</code> เท่ากับเก้า exactly ขณะที่ float ที่มากกว่าทันทีมีค่ามากกว่าเก้า และอัตราส่วน finite ขนาดสุดขั้วไม่ overflow</li>
++<li>ระบบสร้าง placement แบบ concrete เฉพาะเมื่อ spacing เป็นบวกและ finite โดยคำนวณเป็น <code>axis_length / (connector_count - 1)</code> หากผลจาก input ที่เป็นบวกและ finite ไม่สามารถแทนค่าได้ ระบบปฏิเสธด้วย <code>PARAMETRIC_ARITHMETIC_UNREPRESENTABLE</code> โดยไม่มี authorization</li>
++<li>Count ที่มากกว่า <code>max_connector_count</code> จะถูกปฏิเสธ เว้นแต่ policy exact ที่ผูกกับหลักฐานนั้นมีข้อกำหนด reinforcement หรือ anchor ในกรณี conditional ที่อนุญาตนี้ placement จะยังไม่ resolve โดยทั้ง <code>connector_count=None</code> และ <code>spacing_mm=None</code>; ระบบไม่เดาค่า machining</li>
++<li>ข้อกำหนด reinforcement หรือ anchor ที่ถูกเลือกทำให้ evaluation ยังคงเป็น <code>CONDITIONALLY_QUALIFIED</code> แม้ count อยู่ในขอบเขต หมวด reason แบบ conditional เป็น exact และ canonical: reinforcement ให้ <code>REINFORCEMENT_REQUIRED</code>, anchor ให้ <code>ANCHOR_REQUIRED</code> และเมื่อมีทั้งคู่ต้องเป็น tuple สอง code ตามลำดับหมวดนี้โดยไม่ขึ้นกับลำดับ joint</li>
++<li>ตู้ tall ไม่ได้รับ anchor หรือ reinforcement อัตโนมัติ การปฏิเสธทุกกรณีคืน reasons แต่ไม่มี policy ID, placement, reinforcement requirement, anchor requirement หรือ evidence ID</li>
++</ul>
++<h3>ลำดับ TDD และ independent review ตามจริง</h3>
++<div class="tablewrap"><table><thead><tr><th>ขั้น</th><th>คำตัดสิน / ผล</th><th>การจัดการ</th></tr></thead><tbody>
++<tr><td>RED เริ่มต้น</td><td>ได้ <code>ImportError</code> ตามที่คาดเพราะยังไม่มี <code>evaluate_cabinet</code></td><td><code>qualification.py</code> ยังไม่เปลี่ยนที่ RED checkpoint</td></tr>
++<tr><td>GREEN ของ implementation เริ่มต้น</td><td>งานที่ 6 + งานที่ 5 ผ่าน 88/88: 37 + 51; full discovery ผ่าน 452 tests</td><td>Implementation ยังไม่ได้รับการยอมรับ</td></tr>
++<tr><td>Independent review แรก</td><td><code>NEEDS_FIXES</code></td><td>P1: ไม่ได้ตรวจ SKU lifecycle; P1: arithmetic จาก raw float จัดการขอบเขต <code>0.918 / 0.102</code> และค่า finite สุดขั้ว <code>1e308 / 1e-308</code> ผิด; P2: สามารถสร้างสถานะ reason/requirement แบบ conditional ที่ขัดแย้งกันได้</td></tr>
++<tr><td>RED ของ review fix แรก</td><td>Lifecycle: ล้มเหลว 1/1; arithmetic: 4 methods ล้มเหลวและเปิดเผยขอบเขตทศนิยม, overflow สองกรณี และ spacing ที่กลายเป็นศูนย์จาก subnormal; conditional shape: 1 method มี subtests ล้มเหลว 6 รายการ</td><td>Production code ยังไม่เปลี่ยนใน RED reproduction แต่ละรอบ</td></tr>
++<tr><td>GREEN ของ review fix แรก</td><td>งานที่ 6 + งานที่ 5 ผ่าน 94/94: 43 + 51; regressions 104/104; verifier contracts 12/12; full discovery 458/458; clean-HEAD verifier 13/13</td><td>ปิด finding จาก review แรกโดยยังไม่อ้างการยอมรับสุดท้าย</td></tr>
++<tr><td>Independent re-review</td><td><code>NEEDS_FIXES</code></td><td>P2: ตู้หลาย joint ที่เรียง anchor ก่อน reinforcement สร้างลำดับ reason ที่ไม่ canonical และ crash ทั้งกรณี placement แบบ concrete และแบบ unresolved</td></tr>
++<tr><td>RED และ GREEN ของ review fix ที่สอง</td><td>RED: ล้มเหลว 2/2; GREEN: ผ่าน 2/2</td><td>สร้าง reason ตามหมวดแบบ canonical หลัง aggregate requirement ทั้งหมด โดยไม่ขึ้นกับลำดับ joint</td></tr>
++<tr><td>Gate สุดท้ายของ implementation</td><td>งานที่ 6 + งานที่ 5 ผ่าน 96/96: 45 + 51; regressions 104/104; verifier contracts 12/12; full discovery 460/460</td><td>Clean-HEAD verifier รายงาน schema <code>1.1.0</code>, PASS 13/13, dynamic 460 และ governed cohorts exact ที่ 20 + 7</td></tr>
++<tr><td>Independent rereview สุดท้าย</td><td><code>ACCEPTED</code> — ไม่มี finding</td><td>Focused reproduction แปดรายการผ่าน, diff-check ผ่าน และการตรวจ exact scope กับ clean tree ผ่าน</td></tr>
++</tbody></table></div>
++<h3>ความสมบูรณ์และ cleanup ของหลักฐานที่ยอมรับแล้ว</h3>
++<p>รายการต่อไปนี้คือผลของ implementation/fix ที่ยอมรับและบันทึกในหลักฐานงานที่ 6 การปิด ledger แบบ docs-only นี้ไม่ได้รัน product test ซ้ำ</p>
++<ul>
++<li>รายงานที่ยอมรับแล้ว: <code>.superpowers/sdd/task-6-parametric-report.md</code>; 12,859 ไบต์; SHA-256 <code>c11933ad60f634571b72edea67ca271a4524069eab47adbc177e9545aea0d747</code></li>
++<li>Native full-index binary review package ที่ยอมรับแล้ว: <code>.superpowers/sdd/task-6-parametric-review-package.diff</code>; 91,796 ไบต์; SHA-256 <code>d16757f5843b572a9e7ebb75aa6d975cc35f25b127022586a72583e0ca17de0e</code>; มี exactly สองพาธของงานที่ 6 และ reverse apply ผ่านที่ accepted HEAD</li>
++<li>Clean-HEAD verifier summary ที่ยอมรับแล้วก่อนลบ: 94,668 ไบต์; SHA-256 <code>731108a34fdb2e42e98e93fc4b10cb9701299be3add1fc548f3afa3a0b4ac30c</code></li>
++<li>Verifier summary ถูกลบหลังบันทึกหลักฐาน Cleanup ที่ยอมรับแล้วเหลือ cache directory ศูนย์รายการและไฟล์ <code>.pyc</code> ศูนย์รายการ และ implementation worktree ที่ยอมรับแล้วสะอาดที่ <code>6663cc9901b961defdb0b781228f701591b97df5</code></li>
++</ul>
++<h3>ขอบเขตอำนาจของงานที่ 6</h3>
++<ul>
++<li>งานที่ 6 สร้างเฉพาะการเลือกกฎ parametric ที่ผูกกับหลักฐาน รวมถึง connector count และ spacing</li>
++<li>งานนี้ไม่ใช่ full racking, overturning, center-of-gravity, FEA, การ qualify ทางกายภาพ/coupon/machine/first-article/field, policy หรือหลักฐานทั่วโลกที่มีข้อมูลแล้ว, ingestion, release authority, runtime integration, freeze/export authority หรือ production readiness</li>
++<li>NOT-FOR-PRODUCTION ยังคงทำงานอยู่ หลักฐาน software ไม่ได้ให้อำนาจด้าน manufacturing, installation, operational หรือ production</li>
++<li>Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data</li>
++<li>ไม่ได้ push, merge, rebase หรือเปลี่ยน branch</li>
++<li>งานที่ 7 เป็นงานถัดไปและยังไม่ได้เริ่ม</li>
++</ul>
+ </main></body>
+ </html>
+diff --git a/.superpowers/sdd/global-connector-registry-progress.th.md b/.superpowers/sdd/global-connector-registry-progress.th.md
+index 2daebbe1c32bf43ac052dd437fcbda91967bb612..16b9c24460648bbc7b32c61a00d4cac5ac7c3e36 100644
+--- a/.superpowers/sdd/global-connector-registry-progress.th.md
++++ b/.superpowers/sdd/global-connector-registry-progress.th.md
+@@ -489,3 +489,76 @@ Implementation commit สร้างทั้งสี่พาธ ส่วน
+ - Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data
+ - ไม่ได้ push หรือ merge
+ - งานที่ 6 เป็นงานถัดไปและยังไม่ได้เริ่ม
++
++## การปิดงานที่ 6 — 27 กรกฎาคม 2026
++
++**สถานะ:** COMPLETE
++**Base ของงานที่ 6:** `12af68acf9aa0add75cd329480911d14a85fe3b1`
++**Implementation commit:** `1a4971a59622517577dc2a6f8760165395f91f77` — `feat(registry): evaluate parametric cabinet configurations`
++**Review-fix commit แรก:** `e6680415c68d0944d7cc6d2c90e32d2bb26f13d1` — `fix(registry): close parametric qualification gaps`
++**Review-fix commit ที่สองและ accepted HEAD:** `6663cc9901b961defdb0b781228f701591b97df5` — `fix(registry): normalize conditional reason ordering`
++**ขอบเขตปัจจุบัน:** งานที่ 7 เป็นงานถัดไปและยังไม่ได้เริ่ม การปิดงานนี้แทนที่เฉพาะข้อความขอบเขตปัจจุบันของงานที่ 5 ที่บันทึกว่างานที่ 6 เป็นงานถัดไปหรือยังไม่ได้เริ่ม โดยยังรักษาข้อความงานที่ 1–5 ก่อนหน้านี้ทั้งหมดไว้เป็น snapshot ทางประวัติศาสตร์
++
++### ขอบเขต tracked ของงานที่ 6 แบบ exact
++
++ช่วงรวมสาม commit จาก base ของงานที่ 6 เปลี่ยน exactly สองพาธ:
++
++| สถานะ | พาธ | เพิ่มบรรทัด | ลบบรรทัด |
++| --- | --- | ---: | ---: |
++| แก้ไข | `packages/component-master/src/monolith_component_master/qualification.py` | 842 | 0 |
++| เพิ่ม | `tests/component_master/registry/test_parametric_cabinets.py` | 1,743 | 0 |
++
++ไม่มีการเปลี่ยนพาธใน owner governance root, nested product runtime, seed data, verifier, export หรือพาธผลิตภัณฑ์อื่น และไม่ได้ push, merge, rebase หรือเปลี่ยน branch
++
++### Interface แบบ immutable และ contract ของ configuration แบบ exact
++
++- `SpacingAxis` มี exactly `WIDTH`, `DEPTH` และ `HEIGHT` พร้อม value ตัวพิมพ์ใหญ่ตรงกับชื่อ
++- `CabinetConfiguration` แบบ frozen มี exactly `width_mm`, `depth_mm`, `height_mm`, `topology`, `joints`, `load_cases`, `mounting` และ `wall_substrate`
++- `CabinetPolicy` แบบ frozen ที่ผูกกับหลักฐานมี exactly `policy_id`, `connector_sku_id`, `topology`, ขอบเขตต่ำสุดและสูงสุดแบบ inclusive ของ width, depth และ height, `spacing_axis`, `max_spacing_mm`, `min_connector_count`, `max_connector_count`, `required_machine_capabilities`, `reinforcement_requirement`, `anchor_requirement` และ `evidence_assertion_ids`
++- `ConnectorPlacement` แบบ frozen มี exactly `joint_index`, `connector_sku_id`, `policy_id`, `connector_count` และ `spacing_mm` ส่วน `CabinetEvaluation` แบบ frozen มี exactly `verdict`, `policy_ids`, `placements`, `reinforcement_requirements`, `anchor_requirements`, `reason_codes` และ `evidence_assertion_ids`
++- `evaluate_cabinet` ยังคงรับ positional argument สามตัวคือ `cabinet`, `registry` และ `machine_capabilities` ส่วน `qualification_envelopes=()` และ `policies=()` เป็น input แบบ keyword-only ที่ explicit การเรียกแบบเดิมด้วยสาม argument ยัง valid และ fail closed เพราะไม่มีหลักฐานและ policy
++- มิติของ configuration ยอมรับค่า W × D × H ที่เป็นบวกและ finite ได้โดยอิสระ รวมถึงค่าทศนิยม Topology ต้องเป็น exactly หนึ่งค่าใน `base`, `wall`, `tall`, `wardrobe` หรือ `custom` ส่วน joints และ load cases ต้องไม่ว่าง มี type ถูกต้อง และถูกทำ defensive snapshot เป็น tuple แบบ immutable
++- Mounting ต้องเป็น exactly `FLOOR`, `WALL` หรือ `MOBILE` โดย `WALL` ต้องมี wall substrate ที่ไม่ว่าง ส่วน `FLOOR` และ `MOBILE` ต้องมี `wall_substrate=None` ทั้ง ID และ machine capability ใช้ contract ของ canonical identifier แบบ strict
++
++### Semantics การประเมินที่ผูกกับหลักฐานแบบ exact
++
++- Connector ทุกตัวถูก resolve ด้วย SKU และ model แบบ exact โดย `VerificationDimension.LIFECYCLE` ของ SKU อนุญาตเฉพาะ `VERIFIED` หรือ `REGION_ONLY`; `PENDING` คืนหลักฐานไม่เพียงพอ ส่วน `DISCONTINUED` หรือ `BLOCKED` ถือว่าไม่พร้อมใช้ Lifecycle ของ model อนุญาตเฉพาะ `ACTIVE` หรือ `REGION_ONLY`; สถานะอื่นทั้งหมดถือว่าไม่พร้อมใช้
++- ทุก joint ต้องผ่าน qualification กับ envelope ของงานที่ 5 ที่ส่งมาอย่าง explicit ก่อนเลือก policy จากนั้นแต่ละ joint ต้องมี policy แบบ explicit ที่ไม่กำกวม exactly หนึ่งรายการ ซึ่งตรงกับ connector SKU, topology และขอบเขต W × D × H แบบ inclusive ของตน หลักฐานหรือ policy ที่หายไปจะ fail closed และ policy ที่ซ้อนกันถือว่ากำกวม
++- Required machine capability ต้อง match แบบ exact ไม่มีแหล่งกฎจาก global, built-in, การเดา, inference, nearest match หรือการสร้างขึ้นเอง ไม่มีการแทน exact SKU และไม่มี manufacturing output บางส่วนเมื่อระบบปฏิเสธ
++- สำหรับ axis ที่เลือก `connector_count = max(min_connector_count, ceil(axis_length / max_spacing_mm) + 1)` ค่า float ที่ยอมรับใช้การสะกดทศนิยมสั้นที่สุดแบบ canonical เป็นขอบเขตที่กำกับและคำนวณด้วย checked integer-ratio ดังนั้นขอบเขตทศนิยม `0.918 / 0.102` เท่ากับเก้า exactly ขณะที่ float ที่มากกว่าทันทีมีค่ามากกว่าเก้า และอัตราส่วน finite ขนาดสุดขั้วไม่ overflow
++- ระบบสร้าง placement แบบ concrete เฉพาะเมื่อ spacing เป็นบวกและ finite โดยคำนวณเป็น `axis_length / (connector_count - 1)` หากผลจาก input ที่เป็นบวกและ finite ไม่สามารถแทนค่าได้ ระบบปฏิเสธด้วย `PARAMETRIC_ARITHMETIC_UNREPRESENTABLE` โดยไม่มี authorization
++- Count ที่มากกว่า `max_connector_count` จะถูกปฏิเสธ เว้นแต่ policy exact ที่ผูกกับหลักฐานนั้นมีข้อกำหนด reinforcement หรือ anchor ในกรณี conditional ที่อนุญาตนี้ placement จะยังไม่ resolve โดยทั้ง `connector_count=None` และ `spacing_mm=None`; ระบบไม่เดาค่า machining
++- ข้อกำหนด reinforcement หรือ anchor ที่ถูกเลือกทำให้ evaluation ยังคงเป็น `CONDITIONALLY_QUALIFIED` แม้ count อยู่ในขอบเขต หมวด reason แบบ conditional เป็น exact และ canonical: reinforcement ให้ `REINFORCEMENT_REQUIRED`, anchor ให้ `ANCHOR_REQUIRED` และเมื่อมีทั้งคู่ต้องเป็น tuple สอง code ตามลำดับหมวดนี้โดยไม่ขึ้นกับลำดับ joint
++- ตู้ tall ไม่ได้รับ anchor หรือ reinforcement อัตโนมัติ การปฏิเสธทุกกรณีคืน reasons แต่ไม่มี policy ID, placement, reinforcement requirement, anchor requirement หรือ evidence ID
++
++### ลำดับ TDD และ independent review ตามจริง
++
++| ขั้น | คำตัดสิน / ผล | การจัดการ |
++| --- | --- | --- |
++| RED เริ่มต้น | ได้ `ImportError` ตามที่คาดเพราะยังไม่มี `evaluate_cabinet` | `qualification.py` ยังไม่เปลี่ยนที่ RED checkpoint |
++| GREEN ของ implementation เริ่มต้น | งานที่ 6 + งานที่ 5 ผ่าน 88/88: 37 + 51; full discovery ผ่าน 452 tests | Implementation ยังไม่ได้รับการยอมรับ |
++| Independent review แรก | `NEEDS_FIXES` | P1: ไม่ได้ตรวจ SKU lifecycle; P1: arithmetic จาก raw float จัดการขอบเขต `0.918 / 0.102` และค่า finite สุดขั้ว `1e308 / 1e-308` ผิด; P2: สามารถสร้างสถานะ reason/requirement แบบ conditional ที่ขัดแย้งกันได้ |
++| RED ของ review fix แรก | Lifecycle: ล้มเหลว 1/1; arithmetic: 4 methods ล้มเหลวและเปิดเผยขอบเขตทศนิยม, overflow สองกรณี และ spacing ที่กลายเป็นศูนย์จาก subnormal; conditional shape: 1 method มี subtests ล้มเหลว 6 รายการ | Production code ยังไม่เปลี่ยนใน RED reproduction แต่ละรอบ |
++| GREEN ของ review fix แรก | งานที่ 6 + งานที่ 5 ผ่าน 94/94: 43 + 51; regressions 104/104; verifier contracts 12/12; full discovery 458/458; clean-HEAD verifier 13/13 | ปิด finding จาก review แรกโดยยังไม่อ้างการยอมรับสุดท้าย |
++| Independent re-review | `NEEDS_FIXES` | P2: ตู้หลาย joint ที่เรียง anchor ก่อน reinforcement สร้างลำดับ reason ที่ไม่ canonical และ crash ทั้งกรณี placement แบบ concrete และแบบ unresolved |
++| RED และ GREEN ของ review fix ที่สอง | RED: ล้มเหลว 2/2; GREEN: ผ่าน 2/2 | สร้าง reason ตามหมวดแบบ canonical หลัง aggregate requirement ทั้งหมด โดยไม่ขึ้นกับลำดับ joint |
++| Gate สุดท้ายของ implementation | งานที่ 6 + งานที่ 5 ผ่าน 96/96: 45 + 51; regressions 104/104; verifier contracts 12/12; full discovery 460/460 | Clean-HEAD verifier รายงาน schema `1.1.0`, PASS 13/13, dynamic 460 และ governed cohorts exact ที่ 20 + 7 |
++| Independent rereview สุดท้าย | `ACCEPTED` — ไม่มี finding | Focused reproduction แปดรายการผ่าน, diff-check ผ่าน และการตรวจ exact scope กับ clean tree ผ่าน |
++
++### ความสมบูรณ์และ cleanup ของหลักฐานที่ยอมรับแล้ว
++
++รายการต่อไปนี้คือผลของ implementation/fix ที่ยอมรับและบันทึกในหลักฐานงานที่ 6 การปิด ledger แบบ docs-only นี้ไม่ได้รัน product test ซ้ำ
++
++- รายงานที่ยอมรับแล้ว: `.superpowers/sdd/task-6-parametric-report.md`; 12,859 ไบต์; SHA-256 `c11933ad60f634571b72edea67ca271a4524069eab47adbc177e9545aea0d747`
++- Native full-index binary review package ที่ยอมรับแล้ว: `.superpowers/sdd/task-6-parametric-review-package.diff`; 91,796 ไบต์; SHA-256 `d16757f5843b572a9e7ebb75aa6d975cc35f25b127022586a72583e0ca17de0e`; มี exactly สองพาธของงานที่ 6 และ reverse apply ผ่านที่ accepted HEAD
++- Clean-HEAD verifier summary ที่ยอมรับแล้วก่อนลบ: 94,668 ไบต์; SHA-256 `731108a34fdb2e42e98e93fc4b10cb9701299be3add1fc548f3afa3a0b4ac30c`
++- Verifier summary ถูกลบหลังบันทึกหลักฐาน Cleanup ที่ยอมรับแล้วเหลือ cache directory ศูนย์รายการและไฟล์ `.pyc` ศูนย์รายการ และ implementation worktree ที่ยอมรับแล้วสะอาดที่ `6663cc9901b961defdb0b781228f701591b97df5`
++
++### ขอบเขตอำนาจของงานที่ 6
++
++- งานที่ 6 สร้างเฉพาะการเลือกกฎ parametric ที่ผูกกับหลักฐาน รวมถึง connector count และ spacing
++- งานนี้ไม่ใช่ full racking, overturning, center-of-gravity, FEA, การ qualify ทางกายภาพ/coupon/machine/first-article/field, policy หรือหลักฐานทั่วโลกที่มีข้อมูลแล้ว, ingestion, release authority, runtime integration, freeze/export authority หรือ production readiness
++- NOT-FOR-PRODUCTION ยังคงทำงานอยู่ หลักฐาน software ไม่ได้ให้อำนาจด้าน manufacturing, installation, operational หรือ production
++- Daph ยังคงเป็นเพียงหนึ่ง tenant/pilot และไม่ได้เป็นเจ้าของ shared registry หรือ canonical platform data
++- ไม่ได้ push, merge, rebase หรือเปลี่ยน branch
++- งานที่ 7 เป็นงานถัดไปและยังไม่ได้เริ่ม

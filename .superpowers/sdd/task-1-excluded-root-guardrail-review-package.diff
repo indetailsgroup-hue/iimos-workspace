@@ -1,0 +1,106 @@
+# Review package: a6a8d8bd18a871784e806cf54c3a2d6836a540fa..929bb9413ee1f49a7f057dbf4b6911195423cca2
+
+## Commits
+929bb941 fix(guardrails): refuse excluded paths before existence
+
+## Files changed
+ tools/lint_certifications.py | 12 ++++++------
+ tools/lint_claims.py         | 12 ++++++------
+ 2 files changed, 12 insertions(+), 12 deletions(-)
+
+## Diff
+diff --git a/tools/lint_certifications.py b/tools/lint_certifications.py
+index 3390b6ad..3f7514d8 100644
+--- a/tools/lint_certifications.py
++++ b/tools/lint_certifications.py
+@@ -441,37 +441,37 @@ def main(argv: list[str]) -> int:
+     ap.add_argument("--write-allowlist", dest="write_allowlist", action="store_true",
+                     help="(re)capture the shrinking allowlist from this run's counts and exit.")
+     ap.add_argument("--accept-regression", dest="accept_regression", action="store_true",
+                     help="with --write-allowlist, permit raising a count or grandfathering a new "
+                          "dirty file. Off by default: the ledger may only shrink.")
+     ap.add_argument("--allowlist", type=Path, default=DEFAULT_ALLOWLIST_PATH,
+                     help="path to the ledger (default: tools/.lint_allowlist).")
+     a = ap.parse_args(argv)
+ 
+     paths = a.paths or [DEFAULT_PATH]
+-    missing = [p for p in paths if not Path(p).exists()]
+-    if missing:
+-        for p in missing:
+-            print(f"no such path: {p}", file=sys.stderr)
+-        return 2
+-
+     # An explicitly named excluded path is refused with exit 2, not skipped.
+     # `collect_files` still skips them defensively for library callers, but at
+     # the CLI a silent skip prints "every certification carries evidence" over
+     # a tree this tool refused to read — a green light it has no right to give.
+     refused = [p for p in paths if _is_excluded(Path(p))]
+     if refused:
+         for p in refused:
+             print(f"refusing excluded path: {p} (third-party tree; see EXCLUDED_DIR_NAMES)",
+                   file=sys.stderr)
+         return 2
+ 
++    missing = [p for p in paths if not Path(p).exists()]
++    if missing:
++        for p in missing:
++            print(f"no such path: {p}", file=sys.stderr)
++        return 2
++
+     files = collect_files(paths)
+     findings_by_file = {rel_key(fp): lint_file(fp) for fp in files}
+     counts = {k: len(v) for k, v in findings_by_file.items()}
+ 
+     if a.write_allowlist:
+         return _write_allowlist(counts, a.allowlist, a.accept_regression)
+ 
+     allowlist = Allowlist.load(a.allowlist)
+     ev = allowlist.evaluate(LINT_CERTIFICATIONS, counts)
+ 
+diff --git a/tools/lint_claims.py b/tools/lint_claims.py
+index ccc8832e..7f98d791 100644
+--- a/tools/lint_claims.py
++++ b/tools/lint_claims.py
+@@ -414,36 +414,36 @@ def main(argv: list[str]) -> int:
+ 
+     # The corpus is bilingual; a Windows console defaults to a code page that
+     # cannot encode Thai, and a linter that crashes while reporting is a linter
+     # that gets removed.
+     try:
+         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+     except (AttributeError, ValueError):
+         pass
+ 
+     paths = args.paths or default_paths()
+-    missing = [p for p in paths if not p.exists()]
+-    if missing:
+-        for p in missing:
+-            print(f"no such path: {p}", file=sys.stderr)
+-        return 2
+-
+     # An explicitly named excluded path is refused, not skipped. Skipping would
+     # print a clean summary and exit 0 — a green light for a tree this tool is
+     # forbidden to inspect, which is a stronger false claim than any it lints.
+     refused = [p for p in paths if is_excluded(p)]
+     if refused:
+         for p in refused:
+             print(f"refusing excluded path: {p} (third-party tree; see EXCLUDED_DIRS)",
+                   file=sys.stderr)
+         return 2
+ 
++    missing = [p for p in paths if not p.exists()]
++    if missing:
++        for p in missing:
++            print(f"no such path: {p}", file=sys.stderr)
++        return 2
++
+     files = iter_markdown_files(paths)
+     findings_by_file = {display_path(f): lint_file(f) for f in files}
+     counts = {dp: len(fs) for dp, fs in findings_by_file.items()}
+ 
+     if args.write_allowlist:
+         return _write_allowlist(counts, args.allowlist, args.accept_regression)
+ 
+     allowlist = Allowlist.load(args.allowlist)
+     ev = allowlist.evaluate(LINT_CLAIMS, counts)
+ 
