@@ -2058,23 +2058,24 @@ class CoverageSnapshot:
         because every comparison downstream is over a *set* of labels and a
         set cannot see a duplicate.
 
-        **What this does not close, stated rather than claimed.** Each is
-        exercised by
-        ``tests.component_master.registry.test_first_cohort_denominator.CountEnrollmentResidualTests``.
+        **What this does not close, stated rather than claimed.** Each
+        unreached shape is exercised by
+        ``tests.component_master.registry.test_first_cohort_denominator.CountEnrollmentResidualTests``;
+        the non-homogeneous mapping is driven through publication by
+        ``tests.component_master.registry.test_first_cohort_denominator.PublicationGuardSeamTests``.
 
         - **A count reached through any other shape.** A property returning a
           ``tuple`` of counts, or a mapping of mappings, is not walked. Adding
           one more level would only move the boundary, so the boundary is
           named here instead of chased.
-        - **A count-bearing mapping that is empty or not homogeneous.** A
-          mapping is enrolled only when it is nonempty and every value is an
-          actual ``MeasuredCount``. ``snapshot_payload`` publishes the values
-          of ``classification_counts`` and ``dimension_verified_counts``
+        - **A count-bearing mapping that is not homogeneous.** A mapping is
+          enrolled only when every value is an actual ``MeasuredCount``.
+          ``snapshot_payload`` publishes the values of
+          ``classification_counts`` and ``dimension_verified_counts``
           unconditionally, including a duck-typed value that merely offers
           ``as_payload``; the publication comparison turns that asymmetry into
           an ``unexpected`` refusal. The public-path test installs exactly that
-          descriptor and proves publication would pass if the refusal were
-          removed.
+          descriptor.
         - **A count held in something that is not one of those descriptors** —
           a plain class attribute or a dataclass field — is not reached at all.
           This walk asks the class for properties and cached properties and

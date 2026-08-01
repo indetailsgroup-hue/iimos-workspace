@@ -157,11 +157,9 @@ def _published_count_payloads(
 
     Two counts sharing a label are refused rather than merged, because a
     mapping keyed by label can carry only one of them, and the one silently
-    dropped would be a count the comparison never saw. This arm is
-    defence-in-depth at this seam: every publication path builds the record
-    enumeration first, whose own duplicate-label refusal fires before this
-    collector can run. ``PublicationGuardSeamTests`` hands the collector a
-    duplicate payload directly so that deleting this arm cannot stay green.
+    dropped would be a count the comparison never saw.
+    ``PublicationGuardSeamTests`` hands the collector a duplicate payload
+    directly so that deleting this arm cannot stay green.
 
     **What this does not close, stated rather than claimed.** Each residual
     is exercised by
@@ -176,6 +174,13 @@ def _published_count_payloads(
       fields, while this guard compares only objects that are exactly a
       published count — and the difference is stated on both walks so the
       two definitions cannot drift apart unnoticed.
+    - **A payload that contains itself is not refused; it exhausts the
+      stack.** A container this walk descends into that holds itself makes the
+      walk recurse until ``RecursionError``, which names no field and gives no
+      reason, while every refusal in this module does both. Nothing here
+      detects the cycle. :func:`canonical_json_bytes` fails the same way on the
+      same payload, so such a payload is unrenderable rather than merely
+      uncollected — but by stack exhaustion, not by a rule.
     - This collector sees only the payload. On the record side,
       :attr:`~monolith_component_master.coverage.CoverageSnapshot.counts`
       enrols a count-bearing mapping only when it is nonempty and every value

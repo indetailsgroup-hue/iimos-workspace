@@ -2236,9 +2236,10 @@ class CountEnrollmentDerivationTests(RootCase):
 class CountEnrollmentResidualTests(RootCase):
     """What the derivation does **not** reach, asserted so the list cannot rot.
 
-    Same shape as :class:`DeclaredUrlResidualTests`: every residual the
-    docstring names is exercised here and asserted **still open**, so the list
-    cannot be wrong in either direction.
+    Same shape as :class:`DeclaredUrlResidualTests`: each count *shape* the
+    docstring names as unreached is exercised here and asserted **still open**.
+    The one named residual bound elsewhere is the non-homogeneous mapping,
+    which :class:`PublicationGuardSeamTests` drives through ``snapshot_payload``.
     """
 
     def add(self, name: str, label: str, shape: str) -> None:
@@ -2426,20 +2427,37 @@ class PublicationGuardSeamTests(RootCase):
                 )
 
     def test_a_count_is_not_a_leaf_to_the_production_walk(self) -> None:
-        """Canonical JSON walks a count's values, so the collector must too."""
+        """Canonical JSON walks a count's values, so the collector must too.
 
-        inner = doctored_count_payload("inner_count_inside_a_count")
-        outer = doctored_count_payload("outer_count")
-        outer["measured_by"] = [inner]
-        payload = {"wrapper": outer}
-        self.assertTrue(canonical_json_bytes(payload).endswith(b"\n"))
-        self.assertEqual(
-            {"outer_count", "inner_count_inside_a_count"},
-            set(releases_module._published_count_payloads(payload)),
-        )
+        The claim is the canonical container set, not a level count, so the
+        depths run past any plausible cap and the containers are mixed: a walk
+        capped at one or two levels below a count fails the deeper rows, and a
+        walk that descends only some container types fails the mixed ones."""
+
+        def nest(value: object, depth: int) -> object:
+            for level in range(depth):
+                if level % 3 == 0:
+                    value = [value]
+                elif level % 3 == 1:
+                    value = {f"level_{level}": value}
+                else:
+                    value = (value,)
+            return value
+
+        for depth in (1, 2, 4, 7):
+            with self.subTest(depth=depth):
+                inner = doctored_count_payload("inner_count_inside_a_count")
+                outer = doctored_count_payload("outer_count")
+                outer["measured_by"] = nest(inner, depth)
+                payload = {"wrapper": outer}
+                self.assertTrue(canonical_json_bytes(payload).endswith(b"\n"))
+                self.assertEqual(
+                    {"outer_count", "inner_count_inside_a_count"},
+                    set(releases_module._published_count_payloads(payload)),
+                )
 
     def test_the_collectors_own_duplicate_label_arm_refuses(self) -> None:
-        """Direct seam attack: record-side refusal fires first in publication."""
+        """Direct seam attack: two five-field counts under one label."""
 
         first = doctored_count_payload("duplicate_at_collector_seam")
         second = doctored_count_payload("duplicate_at_collector_seam")
@@ -2657,6 +2675,28 @@ class PublicationGuardResidualTests(RootCase):
             COMMITTED_SNAPSHOT.read_bytes(), release.payload_bytes
         )
 
+    def test_a_cyclic_payload_exhausts_the_stack_instead_of_being_refused(
+        self,
+    ) -> None:
+        """The residual is the failure mode, not a bypass.
+
+        A container that holds itself is walked forever. Both the collector and
+        the canonical serialiser stop only at the recursion limit, so the
+        payload is unpublishable — by ``RecursionError``, which names no field,
+        rather than by a refusal that says what is wrong."""
+
+        cycle: list[object] = []
+        cycle.append(cycle)
+        count = doctored_count_payload("cyclic_count")
+        count["measured_by"] = cycle
+        payload = {"wrapper": count}
+        for name, call in (
+            ("collector", releases_module._published_count_payloads),
+            ("canonical serialiser", canonical_json_bytes),
+        ):
+            with self.subTest(walk=name), self.assertRaises(RecursionError):
+                call(payload)
+
     def test_test_walkers_and_the_collector_require_a_string_label(self) -> None:
         """The attacker and guard agree on the label-type boundary."""
 
@@ -2683,7 +2723,7 @@ class PublicationGuardResidualTests(RootCase):
             "superset",
             "``list``",
             "does not make that mapping a leaf",
-            "defence-in-depth",
+            "contains itself",
             "nonempty and every value",
         ):
             with self.subTest(fragment=fragment):
