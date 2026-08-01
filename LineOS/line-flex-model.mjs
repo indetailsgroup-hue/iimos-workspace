@@ -1,8 +1,15 @@
 export function deepFreeze(value) {
-  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const child of Object.values(value)) deepFreeze(child);
-  return value;
+  const seen = new WeakSet();
+
+  function freeze(current) {
+    if (!current || typeof current !== "object" || seen.has(current)) return current;
+    seen.add(current);
+    for (const child of Object.values(current)) freeze(child);
+    if (!Object.isFrozen(current)) Object.freeze(current);
+    return current;
+  }
+
+  return freeze(value);
 }
 
 export function cloneDraft(value) {
@@ -20,13 +27,25 @@ export function createDraft(preset, language) {
 }
 
 export function updateDraftAtPath(draft, path, value) {
+  const forbiddenSegments = new Set(["__proto__", "prototype", "constructor"]);
+  if (!Array.isArray(path) || path.length === 0 ||
+      path.some((segment) => forbiddenSegments.has(String(segment)))) {
+    throw new Error("invalid_path");
+  }
+
   const next = cloneDraft(draft);
   let cursor = next;
-  for (let index = 0; index < path.length - 1; index += 1) {
-    cursor = cursor[path[index]];
+  for (let index = 0; index < path.length; index += 1) {
+    const segment = path[index];
+    if (!cursor || typeof cursor !== "object" || !Object.hasOwn(cursor, segment)) {
+      throw new Error("invalid_path");
+    }
+    if (index === path.length - 1) {
+      cursor[segment] = value;
+      return next;
+    }
+    cursor = cursor[segment];
   }
-  cursor[path.at(-1)] = value;
-  return next;
 }
 
 export function canonicalize(value) {
