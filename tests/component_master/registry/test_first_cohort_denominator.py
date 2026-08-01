@@ -1168,13 +1168,17 @@ def payload_count_labels(node: object) -> set[str]:
     production side, and ``PublicationGuardResidualTests`` asserts the
     divergent verdict the two definitions give one six-key mapping, so the
     difference cannot drift unnoticed. ``payload_count_objects`` below
-    matches the same way.
+    matches the same way. Both attackers require the label to be a real
+    ``str``, exactly as the production collector does.
     """
 
     found: set[str] = set()
     if isinstance(node, Mapping):
         if MEASURED_COUNT_KEYS <= set(node):
-            found.add(str(node["label"]))
+            label = node["label"]
+            if not isinstance(label, str):
+                raise TypeError("a payload count label must be a string")
+            found.add(label)
         for value in node.values():
             found |= payload_count_labels(value)
     elif isinstance(node, (list, tuple)):
@@ -1201,6 +1205,8 @@ def payload_count_objects(node: object) -> set[CountFingerprint]:
     found: set[CountFingerprint] = set()
     if isinstance(node, Mapping):
         if MEASURED_COUNT_KEYS <= set(node):
+            if not isinstance(node["label"], str):
+                raise TypeError("a payload count label must be a string")
             found.add(
                 tuple(sorted((key, node[key]) for key in MEASURED_COUNT_KEYS))
             )
@@ -2315,6 +2321,9 @@ class CountEnrollmentResidualTests(RootCase):
         )
 
     def test_the_docstring_names_each_residual(self) -> None:
+        """Secondary deletion guard; the preceding residual tests exercise
+        every claim against ``CoverageSnapshot.counts`` itself."""
+
         text = prose(coverage_module.CoverageSnapshot.counts.fget.__doc__)
         for fragment in (
             "what this does not close",
@@ -2322,6 +2331,7 @@ class CountEnrollmentResidualTests(RootCase):
             "mapping of mappings",
             "not one of those descriptors",
             "dataclass field",
+            "not homogeneous",
             "does not check that a count is right",
         ):
             with self.subTest(fragment=fragment):
@@ -2330,8 +2340,12 @@ class CountEnrollmentResidualTests(RootCase):
     def test_the_module_docstring_says_the_payload_list_is_hand_written(
         self,
     ) -> None:
-        """The record side is derived; the payload side is not, and the module
-        docstring must say which is which rather than claim both."""
+        """Secondary deletion guard for behavior attacked above.
+
+        The property-installation tests prove the record side is derived and
+        that omitting it from the hand-written payload makes publication
+        refuse; these fragments are not credited as that attack.
+        """
 
         text = coverage_module.__doc__ or ""
         self.assertIn("enumerated by introspection", text)
@@ -2372,14 +2386,14 @@ class PublicationGuardSeamTests(RootCase):
     Wave 4 shipped ``_require_count_publication_matches`` with a docstring
     claiming refusals in both directions and a wrong-field refusal, while the
     only arm any test drove was ``missing``; deleting the ``unexpected`` and
-    ``changed`` computations left the whole suite green. Through
-    ``snapshot_payload`` those two arms are unreachable by construction — the
-    payload's count objects and the record's enumeration read the same
-    properties through the same ``as_payload`` — so they are attacked here at
-    the guard seam, with a doctored payload handed to the comparison, which
-    is the only caller that can reach them. The collector's list hole is
-    attacked here too: ``canonical_value`` admits ``list`` and ``tuple``
-    alike, and the wave-4 walk descended into mappings and tuples only.
+    ``changed`` computations left the whole suite green. Wave 5 then called
+    ``unexpected`` and ``changed`` unreachable through
+    ``snapshot_payload``. They are not: the builder publishes its two count
+    mappings unconditionally while the record enrolls them conditionally, and
+    it reads descriptors before the record enumeration reads them again. This
+    class attacks both mechanisms through the public builder, keeps the direct
+    seam attacks that bind each refusal independently, and attacks the
+    collector's own traversal and duplicate-label branches at their seam.
     """
 
     def snapshot_and_payload(
@@ -2411,9 +2425,100 @@ class PublicationGuardSeamTests(RootCase):
                     {"doctored_count_nobody_measured"}, set(collected)
                 )
 
+    def test_a_count_is_not_a_leaf_to_the_production_walk(self) -> None:
+        """Canonical JSON walks a count's values, so the collector must too."""
+
+        inner = doctored_count_payload("inner_count_inside_a_count")
+        outer = doctored_count_payload("outer_count")
+        outer["measured_by"] = [inner]
+        payload = {"wrapper": outer}
+        self.assertTrue(canonical_json_bytes(payload).endswith(b"\n"))
+        self.assertEqual(
+            {"outer_count", "inner_count_inside_a_count"},
+            set(releases_module._published_count_payloads(payload)),
+        )
+
+    def test_the_collectors_own_duplicate_label_arm_refuses(self) -> None:
+        """Direct seam attack: record-side refusal fires first in publication."""
+
+        first = doctored_count_payload("duplicate_at_collector_seam")
+        second = doctored_count_payload("duplicate_at_collector_seam")
+        second["count"] = 1
+        with self.assertRaises(ValueError) as caught:
+            releases_module._published_count_payloads(
+                {"first": first, "second": second}
+            )
+        message = str(caught.exception)
+        self.assertIn("two counts with the same label", message)
+        self.assertIn("duplicate_at_collector_seam", message)
+
+    def test_snapshot_payload_refuses_a_mapping_the_record_does_not_enrol(
+        self,
+    ) -> None:
+        """A duck-typed payload value makes the mapping non-homogeneous."""
+
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        label = "published_but_not_enrolled"
+
+        class PayloadOnlyCount:
+            def as_payload(self) -> Mapping[str, object]:
+                return doctored_count_payload(label)
+
+        original = CoverageSnapshot.classification_counts
+        setattr(
+            CoverageSnapshot,
+            "classification_counts",
+            property(lambda _snapshot: {"PAYLOAD_ONLY": PayloadOnlyCount()}),
+        )
+        self.addCleanup(
+            setattr, CoverageSnapshot, "classification_counts", original
+        )
+        self.assertNotIn(label, {count.label for count in snapshot.counts})
+
+        with self.assertRaises(ValueError) as caught:
+            snapshot_payload(snapshot)
+        message = str(caught.exception)
+        self.assertIn("published counts absent from the record", message)
+        self.assertIn(label, message)
+
+    def test_snapshot_payload_refuses_a_descriptor_that_changes_between_reads(
+        self,
+    ) -> None:
+        """The builder and record enumeration read the descriptor separately."""
+
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        reads = 0
+
+        def changing(_snapshot: CoverageSnapshot) -> Mapping[str, MeasuredCount]:
+            nonlocal reads
+            reads += 1
+            return {
+                "STATEFUL": MeasuredCount(
+                    label="stateful_public_count",
+                    count=reads - 1,
+                    denominator=2,
+                    denominator_label="descriptor_reads",
+                    measured_by="test.stateful_descriptor",
+                )
+            }
+
+        original = CoverageSnapshot.classification_counts
+        setattr(CoverageSnapshot, "classification_counts", property(changing))
+        self.addCleanup(
+            setattr, CoverageSnapshot, "classification_counts", original
+        )
+
+        with self.assertRaises(ValueError) as caught:
+            snapshot_payload(snapshot)
+        self.assertEqual(2, reads)
+        message = str(caught.exception)
+        self.assertIn(
+            "four non-label fields differ under their shared label", message
+        )
+        self.assertIn("stateful_public_count", message)
+
     def test_an_unexpected_count_is_refused_at_the_comparison(self) -> None:
-        """The `unexpected` arm, driven at the seam because no payload this
-        module builds can carry a count the record lacks."""
+        """The `unexpected` arm driven independently at the comparison seam."""
 
         cases = (
             ("list-nested", lambda count: [count]),
@@ -2436,13 +2541,16 @@ class PublicationGuardSeamTests(RootCase):
     def test_a_right_label_count_with_one_changed_field_is_refused(
         self,
     ) -> None:
-        """The `changed` arm. One field at a time, because a comparison that
-        happened to read only the count value would pass a wrong denominator
-        or a wrong ``measured_by`` under the right label."""
+        """The `changed` arm. One field at a time, because the label is the
+        lookup key and the other four fields must all be compared as values."""
 
         cases = (
             ("count", lambda entry: entry["count"] + 1),
             ("denominator", lambda entry: entry["denominator"] + 1),
+            (
+                "denominator_label",
+                lambda entry: entry["denominator_label"] + "_wrong",
+            ),
             ("measured_by", lambda entry: "coverage.discover_registry_root"),
         )
         for field_name, doctor in cases:
@@ -2457,43 +2565,36 @@ class PublicationGuardSeamTests(RootCase):
                     )
                 message = str(caught.exception)
                 self.assertIn(
-                    "counts whose five published fields differ", message
+                    "four non-label fields differ under their shared label",
+                    message,
                 )
                 self.assertIn(
                     "verified_items_with_backing_evidence", message
                 )
 
     def test_the_comparison_is_green_without_the_doctoring(self) -> None:
-        """The control. The undoctored payload passes the same seam, so the
-        refusals above are the doctoring and not a broken comparison."""
+        """The control also proves the comparison body actually runs."""
 
         snapshot, payload = self.snapshot_and_payload()
-        self.assertIsNone(
-            releases_module._require_count_publication_matches(
-                snapshot, payload
-            )
-        )
+        calls: list[Mapping[str, Mapping[str, object]]] = []
+        original = releases_module._published_count_payloads
 
-    def test_the_guard_docstring_states_which_arms_a_publication_can_exhibit(
-        self,
-    ) -> None:
-        """Prose may not credit a test that does not attack, and it may not
-        imply an arm is publication-reachable when no publication can reach
-        it."""
+        def observed(
+            candidate: object,
+        ) -> Mapping[str, Mapping[str, object]]:
+            collected = original(candidate)
+            calls.append(collected)
+            return collected
 
-        text = prose(
-            releases_module._require_count_publication_matches.__doc__
+        releases_module._published_count_payloads = observed
+        self.addCleanup(
+            setattr, releases_module, "_published_count_payloads", original
         )
-        for fragment in (
-            "missing",
-            "unexpected",
-            "changed",
-            "the one arm a publication can exhibit",
-            "by construction",
-            "defence-in-depth",
-        ):
-            with self.subTest(fragment=fragment):
-                self.assertIn(fragment, text)
+        releases_module._require_count_publication_matches(snapshot, payload)
+        self.assertEqual(1, len(calls))
+        self.assertEqual(
+            {count.label for count in snapshot.counts}, set(calls[0])
+        )
 
 
 class PublicationGuardResidualTests(RootCase):
@@ -2556,9 +2657,24 @@ class PublicationGuardResidualTests(RootCase):
             COMMITTED_SNAPSHOT.read_bytes(), release.payload_bytes
         )
 
+    def test_test_walkers_and_the_collector_require_a_string_label(self) -> None:
+        """The attacker and guard agree on the label-type boundary."""
+
+        count = doctored_count_payload()
+        count["label"] = 7
+        for name, walk in (
+            ("collector", releases_module._published_count_payloads),
+            ("label attacker", payload_count_labels),
+            ("fingerprint attacker", payload_count_objects),
+        ):
+            with self.subTest(walk=name), self.assertRaises(TypeError):
+                walk({"wrapper": count})
+
     def test_the_collector_docstring_records_what_it_does_not_close(
         self,
     ) -> None:
+        """Secondary deletion guard for the collector behaviors above."""
+
         text = prose(releases_module._published_count_payloads.__doc__)
         for fragment in (
             "what this does not close",
@@ -2566,6 +2682,9 @@ class PublicationGuardResidualTests(RootCase):
             "a container, not a count",
             "superset",
             "``list``",
+            "does not make that mapping a leaf",
+            "defence-in-depth",
+            "nonempty and every value",
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
@@ -2573,6 +2692,8 @@ class PublicationGuardResidualTests(RootCase):
     def test_the_comparison_docstring_records_what_it_does_not_close(
         self,
     ) -> None:
+        """Secondary deletion guard for the direct-constructor behavior."""
+
         text = prose(
             releases_module._require_count_publication_matches.__doc__
         )
@@ -2606,6 +2727,7 @@ USERINFO_URL_CASES: tuple[tuple[str, str], ...] = (
 # escape, and an escape that is not exactly two hex digits is not an escape.
 MALFORMED_PERCENT_URL_CASES: tuple[tuple[str, str], ...] = (
     ("non-hex pair", "https://example.invalid/%zz"),
+    ("non-hex pair after bracket-port colon", "https://[::1]:%zz/x"),
     ("one hex digit then end", "https://example.invalid/%e"),
     ("bare trailing percent", "https://example.invalid/x%"),
     ("percent then delimiter", "https://example.invalid/%/a"),
@@ -2672,11 +2794,17 @@ STILL_OPEN_URL_CASES: tuple[tuple[str, str], ...] = (
     # Filed under host well-formedness: it has no opening bracket.
     ("unmatched closing bracket", "https://]/x"),
     # Added in wave 5. The bracket rule admits any suffix whose first
-    # character is `:` and parses nothing after it, so the port residual
-    # reaches bracketed hosts too.
+    # character is `:` and applies no port grammar or range after it, so the
+    # port residual reaches bracketed hosts too.
     (
         "bracketed host with an unparsed port suffix",
         "https://[::1]:8080extra/x",
+    ),
+    # Wave 6 names the embedded-bracket branch instead of implying the
+    # bracketed-host refusal sees a bracket that does not start the authority.
+    (
+        "opening bracket embedded after reg-name text",
+        "https://a[::1]:8443/x",
     ),
 )
 
@@ -2952,6 +3080,8 @@ class DeclaredUrlHostTests(RootCase):
                     self.refuse_url(f"matrix-{index}", url)
 
     def test_the_host_rule_records_what_it_does_not_close(self) -> None:
+        """Secondary deletion guard for the residual table's behavior."""
+
         text = prose(
             coverage_module._require_hostful_authority_without_userinfo.__doc__
         )
@@ -2965,6 +3095,8 @@ class DeclaredUrlHostTests(RootCase):
             # `":" port` may stand after the bracket, which overstates what
             # is enforced — the suffix's content is never parsed.
             "https://[::1]:8080extra/x",
+            "https://a[::1]:8443/x",
+            "no port grammar or range",
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
@@ -2991,10 +3123,10 @@ class DeclaredUrlResidualTests(RootCase):
                 self.assertEqual(url, entry.url)
 
     def test_the_docstring_names_each_residual_class(self) -> None:
-        """The list must name what remains and must be findable.
+        """Secondary deletion guard; the residual table is the attack.
 
-        This asserts the statement and the tested behaviour land in one commit.
-        It does not assert the list is exhaustive, and nothing here claims it.
+        It asserts the statement and tested behaviour land in one commit. It
+        does not assert the list is exhaustive, and nothing here claims it.
         """
 
         text = coverage_module._require_declared_url.__doc__ or ""
@@ -3012,6 +3144,8 @@ class DeclaredUrlResidualTests(RootCase):
             "https://]/x",
             # Added in wave 5: the port residual reaches bracketed hosts.
             "https://[::1]:8080extra/x",
+            "https://a[::1]:8443/x",
+            "no port grammar or range",
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
@@ -3335,6 +3469,8 @@ class BrandNameNormalizationTests(RootCase):
         self.assertNotIn(self.NFD_NAME.encode("utf-8"), raw)
 
     def test_the_docstring_states_the_categories_and_the_form(self) -> None:
+        """Secondary deletion guard for the category and NFC tests above."""
+
         text = coverage_module.BrandUniverseEntry.__doc__ or ""
         for fragment in (
             "``Cc``",
@@ -3568,7 +3704,7 @@ class BrandNameInvisibleTranscriptionTests(RootCase):
         self.assert_refused(root, f"{BRAND_UNIVERSE_FILENAME}:2", "U+3164")
 
     def test_the_docstring_states_that_it_is_a_transcription(self) -> None:
-        """The narrowing, asserted. The old prose claimed the class."""
+        """Secondary deletion guard for the transcription tests above."""
 
         text = prose(coverage_module.BrandUniverseEntry.__doc__)
         for fragment in (
@@ -3764,6 +3900,8 @@ class BrandNameWhitespaceTests(RootCase):
                 self.assertEqual(brand_name, entry.brand_name)
 
     def test_the_docstring_states_what_is_trimmed(self) -> None:
+        """Secondary deletion guard for the trim/refusal tests above."""
+
         text = prose(coverage_module.BrandUniverseEntry.__doc__)
         for fragment in (
             "leading and trailing",
@@ -3872,6 +4010,8 @@ class BrandNameResidualTests(RootCase):
         )
 
     def test_the_docstring_names_each_residual(self) -> None:
+        """Secondary deletion guard for the admitted residuals above."""
+
         text = prose(coverage_module.BrandUniverseEntry.__doc__)
         for fragment in (
             "what this does not close",
@@ -3973,9 +4113,11 @@ class AnchorResolvedPathTests(RootCase):
         )
 
     def test_the_residual_is_recorded_rather_than_claimed_closed(self) -> None:
-        """Resolving and then opening still leaves a window a rename could
-        use. The record must say so; this wave narrows it, it does not prove
-        it closed."""
+        """Secondary deletion guard for the resolved-path and junction tests.
+
+        Resolving and then opening still leaves a window a rename could use;
+        this fragment check is not credited as the behavioral attack.
+        """
 
         text = coverage_module._require_inside_root.__doc__ or ""
         self.assertIn("resolved path", text)

@@ -598,9 +598,15 @@ def _require_declared_url(value: object, field_name: str) -> str:
       ``*DIGIT`` permits zero digits, while ``https://:/x`` is still refused by
       the empty-host rule. The residual reaches bracketed hosts too:
       ``https://[::1]:8080extra/x`` is admitted, because the suffix after
-      ``]`` need only begin with ``:`` and nothing after that colon is
-      parsed. ``https://]/x`` is filed under host well-formedness,
-      not under this port residual.
+      ``]`` need only begin with ``:`` and no port grammar or range is parsed.
+      The general character and percent-escape rules above still apply.
+      ``https://]/x`` is filed under host well-formedness, not under this port
+      residual.
+    - **An opening bracket after reg-name text is not parsed as an IP-literal.**
+      ``https://a[::1]:8443/x`` is admitted: the unbracketed branch treats
+      ``a[`` before the first colon as a nonempty host. This is a remaining
+      reviewer/fetcher divergence in the host-well-formedness class, named
+      rather than implied closed.
     """
 
     text = _require_string(value, field_name)
@@ -693,9 +699,11 @@ def _require_hostful_authority_without_userinfo(
     none and the host is what stands before an optional ``":" port``. An
     IP-literal is bracketed and holds colons of its own, so a closing ``]`` is
     what ends it; the suffix after the bracket must be empty or begin with
-    ``:``, and nothing after that ``:`` is parsed — the suffix is admitted
-    whole on its first character alone, so the port residual below reaches
-    bracketed hosts too and ``https://[::1]:8080extra/x`` is admitted. Text
+    ``:``. This helper applies no port grammar or range after that colon. When
+    reached through ``_require_declared_url``, the general character and
+    percent-escape checks have already run. The port residual below therefore
+    reaches bracketed hosts too and
+    ``https://[::1]:8080extra/x`` is admitted. Text
     immediately after the bracket makes a reviewer read host text that a .NET
     ``System.Uri`` consumer does not send its fetcher to, so it is refused by
     the same reader/fetcher rule as userinfo. Every other host ends at the first
@@ -712,6 +720,9 @@ def _require_hostful_authority_without_userinfo(
       above and all three are admitted. A reg-name and an IP-literal each have
       their own grammar in RFC 3986 section 3.2.2; this rule implements neither,
       and says so rather than implying it does.
+      ``https://a[::1]:8443/x`` is admitted by the same boundary: because the
+      authority does not start with ``[``, the unbracketed branch treats ``a[``
+      before the first colon as the host and never parses the embedded bracket.
     - **The port is not parsed.** RFC 3986 section 3.2.3 writes
       ``port = *DIGIT``. Non-digit, negative, over-range and multiply-coloned
       spellings remain admitted and are named in the residual table.
@@ -2055,6 +2066,15 @@ class CoverageSnapshot:
           ``tuple`` of counts, or a mapping of mappings, is not walked. Adding
           one more level would only move the boundary, so the boundary is
           named here instead of chased.
+        - **A count-bearing mapping that is empty or not homogeneous.** A
+          mapping is enrolled only when it is nonempty and every value is an
+          actual ``MeasuredCount``. ``snapshot_payload`` publishes the values
+          of ``classification_counts`` and ``dimension_verified_counts``
+          unconditionally, including a duck-typed value that merely offers
+          ``as_payload``; the publication comparison turns that asymmetry into
+          an ``unexpected`` refusal. The public-path test installs exactly that
+          descriptor and proves publication would pass if the refusal were
+          removed.
         - **A count held in something that is not one of those descriptors** —
           a plain class attribute or a dataclass field — is not reached at all.
           This walk asks the class for properties and cached properties and

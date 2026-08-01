@@ -143,7 +143,11 @@ def _published_count_payloads(
     emits. The match is on shape rather than on field name, because the
     defect this guard exists for is a count nobody remembered to look for.
     The walk descends into every container the canonical allowlist admits:
-    mappings, and both sequence types, ``list`` and ``tuple``.
+    mappings, and both sequence types, ``list`` and ``tuple``. Recognising a
+    count does not make that mapping a leaf: its values are walked too, because
+    ``canonical_value`` also keeps descending and therefore permits another
+    count-shaped mapping inside one of the five fields. The traversal boundary
+    is the canonical container set, not one arbitrary level below a count.
     ``canonical_value`` admits the two sequence types alike, so a count
     nested in either is publishable through canonical JSON; the previous
     version of this walk descended into mappings and tuples only, and a
@@ -153,7 +157,11 @@ def _published_count_payloads(
 
     Two counts sharing a label are refused rather than merged, because a
     mapping keyed by label can carry only one of them, and the one silently
-    dropped would be a count the comparison never saw.
+    dropped would be a count the comparison never saw. This arm is
+    defence-in-depth at this seam: every publication path builds the record
+    enumeration first, whose own duplicate-label refusal fires before this
+    collector can run. ``PublicationGuardSeamTests`` hands the collector a
+    duplicate payload directly so that deleting this arm cannot stay green.
 
     **What this does not close, stated rather than claimed.** Each residual
     is exercised by
@@ -168,6 +176,12 @@ def _published_count_payloads(
       fields, while this guard compares only objects that are exactly a
       published count — and the difference is stated on both walks so the
       two definitions cannot drift apart unnoticed.
+    - This collector sees only the payload. On the record side,
+      :attr:`~monolith_component_master.coverage.CoverageSnapshot.counts`
+      enrols a count-bearing mapping only when it is nonempty and every value
+      is a ``MeasuredCount``; :func:`snapshot_payload` publishes both of its
+      count mappings unconditionally. The comparison below is what turns that
+      asymmetry into a refusal rather than a silent omission.
     - This function reads whatever payload it is handed and binds nothing
       else; which callers are bound is stated on
       :func:`_require_count_publication_matches`.
@@ -179,7 +193,7 @@ def _published_count_payloads(
         if isinstance(value, Mapping):
             if frozenset(value) == _MEASURED_COUNT_PAYLOAD_KEYS:
                 label = value["label"]
-                if not isinstance(label, str):  # pragma: no cover - internal shape
+                if not isinstance(label, str):
                     raise TypeError("a published count label must be a string")
                 if label in collected:
                     raise ValueError(
@@ -187,7 +201,6 @@ def _published_count_payloads(
                         + label
                     )
                 collected[label] = value
-                return
             for nested in value.values():
                 walk(nested)
         elif isinstance(value, (list, tuple)):
@@ -206,30 +219,33 @@ def _require_count_publication_matches(
     The record side is
     :attr:`~monolith_component_master.coverage.CoverageSnapshot.counts`
     rendered through ``as_payload``; the payload side is whatever
-    :func:`_published_count_payloads` collects. The comparison carries all
-    five fields of each count, and its three refusal arms are not equally
-    reachable:
+    :func:`_published_count_payloads` collects. The label is the comparison
+    key; equality of the two payload mappings then compares the other four
+    fields as values. Its three refusal arms are all reachable through
+    publication, but by different mechanisms:
 
-    - ``missing`` — a count the record holds and the payload does not — is
-      the one arm a publication can exhibit. :func:`snapshot_payload` names
+    - ``missing`` — a count the record holds and the payload does not — is the
+      ordinary hand-written-list divergence. :func:`snapshot_payload` names
       its fields by hand, so a count enrolled on the record and absent from
-      that hand-written list reaches this refusal through the public path.
+      that list reaches this refusal through the public path.
       ``tests.component_master.registry.test_first_cohort_denominator.CountEnrollmentDerivationTests``
       drives it there.
-    - ``unexpected`` and ``changed`` are unreachable through
-      :func:`snapshot_payload` **by construction**: that builder's count
-      objects and the record's enumeration read the same properties through
-      the same ``as_payload``, so no snapshot can publish a count the record
-      lacks, or a right-label count with a wrong field, through it. Both
-      arms are defence-in-depth, live only if the payload builder itself
-      diverges from the record's enumeration, and each is driven to refusal
-      at this seam — a doctored payload handed straight to this comparison —
-      by
-      ``tests.component_master.registry.test_first_cohort_denominator.PublicationGuardSeamTests``.
-      The previous version of this module credited
-      ``PayloadCountCompletenessTests`` with attacking these refusals; that
-      class re-walks the released bytes and asserts equality, and has never
-      made this function refuse anything.
+    - ``unexpected`` is reachable through :func:`snapshot_payload` because
+      its two count-bearing mappings are published unconditionally, while the
+      record enrols such a mapping only when it is nonempty and homogeneous in
+      ``MeasuredCount`` values. A duck-typed value with ``as_payload`` is
+      therefore published but causes the whole mapping to be absent from the
+      record enumeration.
+    - ``changed`` is reachable because the builder and the later record
+      enumeration read a descriptor at different times. A stateful descriptor
+      can return the same label with different field values on those reads.
+
+    ``tests.component_master.registry.test_first_cohort_denominator.PublicationGuardSeamTests``
+    drives both construction mechanisms through :func:`snapshot_payload` and
+    also drives all three arms directly at this seam with doctored payloads.
+    The direct seam tests bind each refusal independently of a particular
+    builder. ``PayloadCountCompletenessTests`` only re-walks the released bytes
+    and asserts equality; it has never made this function refuse anything.
 
     **What this does not close, stated rather than claimed.** Each residual
     is exercised by
@@ -245,7 +261,8 @@ def _require_count_publication_matches(
     - What is a count object at all is decided by
       :func:`_published_count_payloads`, its residuals included: a
       count-shaped mapping carrying a sixth key is walked as a container and
-      never compared here.
+      never compared here. An exact five-key count is not a leaf: its values
+      are still walked for nested count objects.
     """
 
     record = {count.label: count.as_payload() for count in snapshot.counts}
@@ -269,7 +286,8 @@ def _require_count_publication_matches(
         )
     if changed:
         details.append(
-            "counts whose five published fields differ: " + ", ".join(changed)
+            "counts whose four non-label fields differ under their shared "
+            "label: " + ", ".join(changed)
         )
     raise ValueError(
         "the snapshot count enumeration and payload count objects disagree: "
@@ -292,12 +310,15 @@ def snapshot_payload(snapshot: CoverageSnapshot) -> Mapping[str, object]:
     The guarantee runs here on every publication: every count object reachable
     in the payload is compared against
     :attr:`~monolith_component_master.coverage.CoverageSnapshot.counts` in both
-    directions, and the comparison carries all five fields of each count, not
-    only its label. Which of its refusals this builder can actually exhibit
-    is not claimed here: through this function only the missing-count arm is
-    reachable, and :func:`_require_count_publication_matches` states which
-    arms are defence-in-depth and names the tests that drive each one to
-    refusal.
+    directions: the label is the comparison key and the other four fields are
+    compared as values. This builder can exhibit all three refusal arms:
+    ``missing`` when a derived count property is absent from this hand-written
+    payload; ``unexpected`` when one of the mappings published unconditionally
+    is not enrolled because it contains a non-``MeasuredCount`` value; and
+    ``changed`` when a descriptor returns different values to this builder and
+    the later record enumeration. The publication-path tests exercise both
+    non-missing mechanisms, while the seam tests bind each comparison arm
+    independently.
     ``tests.component_master.registry.test_first_cohort_denominator.PayloadCountCompletenessTests``
     independently re-walks the record and the released bytes and asserts the
     two enumerations are identical; it makes nothing refuse, and is credited
