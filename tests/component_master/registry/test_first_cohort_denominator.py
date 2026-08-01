@@ -2746,7 +2746,11 @@ class PublicationGuardResidualTests(RootCase):
             "superset",
             "``list``",
             "does not make that mapping a leaf",
-            "contains itself",
+            # Not "contains itself": that phrase appeared in the falsified
+            # universal this bullet replaced, so it cannot tell the retracted
+            # wording from the corrected one. These two can.
+            "accident of that arm",
+            "whether or not there is a cycle",
             "nonempty and every value",
         ):
             with self.subTest(fragment=fragment):

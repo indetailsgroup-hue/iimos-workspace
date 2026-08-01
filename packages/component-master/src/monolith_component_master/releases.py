@@ -178,17 +178,17 @@ def _published_count_payloads(
       fields, while this guard compares only objects that are exactly a
       published count — and the difference is stated on both walks so the
       two definitions cannot drift apart unnoticed.
-    - **A cycle through a container this walk does not recognise as a count
-      is not refused; it exhausts the stack.** Such a container holding itself
-      makes the walk recurse until ``RecursionError``, which names no field
-      and gives no reason. Nothing here detects the cycle.
-      :func:`canonical_json_bytes` fails the same way on the same payload, so
-      such a payload is unrenderable rather than merely uncollected — but by
-      stack exhaustion, not by a rule. A count-shaped mapping that contains
-      itself is refused instead: the second visit finds its label already
-      collected, so the duplicate-label arm names the field and the reason
-      while :func:`canonical_json_bytes` still exhausts the stack on the same
-      payload. That refusal is an accident of that arm, not cycle handling.
+    - **Nothing here detects a cycle.** A cyclic payload exhausts the stack
+      unless the walk stops first for a reason of its own: revisiting a count
+      it has already collected, which the duplicate-label arm refuses by name,
+      or meeting a count-shaped mapping whose label is not a string, which the
+      label rule refuses on the first visit whether or not there is a cycle.
+      Neither is cycle handling; the first is an accident of that arm, and
+      which one a mixed payload hits depends on what the walk reaches first.
+      Otherwise the walk recurses until ``RecursionError``, which names no
+      field and gives no reason. :func:`canonical_json_bytes` exhausts the
+      stack on a cyclic payload either way, so such a payload is unrenderable
+      rather than merely uncollected — but by stack exhaustion, not a rule.
     - This collector sees only the payload. On the record side,
       :attr:`~monolith_component_master.coverage.CoverageSnapshot.counts`
       enrols a count-bearing mapping only when it is nonempty and every value
