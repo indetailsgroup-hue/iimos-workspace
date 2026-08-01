@@ -2060,8 +2060,9 @@ class CoverageSnapshot:
 
         **What this does not close, stated rather than claimed.** Each
         unreached shape is exercised by
-        ``tests.component_master.registry.test_first_cohort_denominator.CountEnrollmentResidualTests``;
-        the non-homogeneous mapping is driven through publication by
+        ``tests.component_master.registry.test_first_cohort_denominator.CountEnrollmentResidualTests``,
+        **except** the non-homogeneous mapping, which is driven through
+        publication by
         ``tests.component_master.registry.test_first_cohort_denominator.PublicationGuardSeamTests``.
 
         - **A count reached through any other shape.** A property returning a

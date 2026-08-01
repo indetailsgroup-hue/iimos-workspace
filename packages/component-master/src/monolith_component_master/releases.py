@@ -164,7 +164,11 @@ def _published_count_payloads(
     **What this does not close, stated rather than claimed.** Each residual
     is exercised by
     ``tests.component_master.registry.test_first_cohort_denominator.PublicationGuardResidualTests``
-    and asserted genuinely still open.
+    and asserted genuinely still open, **except** the record/payload enrolment
+    asymmetry below, which
+    ``tests.component_master.registry.test_first_cohort_denominator.PublicationGuardSeamTests``
+    drives through ``snapshot_payload``; the residual class holds only a
+    prose-fragment assertion for it.
 
     - **A count-shaped mapping carrying a sixth key is a container, not a
       count.** The match is the exact five-key set, so an object holding the
@@ -174,13 +178,17 @@ def _published_count_payloads(
       fields, while this guard compares only objects that are exactly a
       published count — and the difference is stated on both walks so the
       two definitions cannot drift apart unnoticed.
-    - **A payload that contains itself is not refused; it exhausts the
-      stack.** A container this walk descends into that holds itself makes the
-      walk recurse until ``RecursionError``, which names no field and gives no
-      reason, while every refusal in this module does both. Nothing here
-      detects the cycle. :func:`canonical_json_bytes` fails the same way on the
-      same payload, so such a payload is unrenderable rather than merely
-      uncollected — but by stack exhaustion, not by a rule.
+    - **A cycle through a container this walk does not recognise as a count
+      is not refused; it exhausts the stack.** Such a container holding itself
+      makes the walk recurse until ``RecursionError``, which names no field
+      and gives no reason. Nothing here detects the cycle.
+      :func:`canonical_json_bytes` fails the same way on the same payload, so
+      such a payload is unrenderable rather than merely uncollected — but by
+      stack exhaustion, not by a rule. A count-shaped mapping that contains
+      itself is refused instead: the second visit finds its label already
+      collected, so the duplicate-label arm names the field and the reason
+      while :func:`canonical_json_bytes` still exhausts the stack on the same
+      payload. That refusal is an accident of that arm, not cycle handling.
     - This collector sees only the payload. On the record side,
       :attr:`~monolith_component_master.coverage.CoverageSnapshot.counts`
       enrols a count-bearing mapping only when it is nonempty and every value
