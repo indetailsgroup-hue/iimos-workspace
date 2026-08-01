@@ -596,7 +596,10 @@ def _require_declared_url(value: object, field_name: str) -> str:
       This rule establishes that a host is present; it does not validate the
       port grammar or range. ``https://host:/x`` stays admitted because
       ``*DIGIT`` permits zero digits, while ``https://:/x`` is still refused by
-      the empty-host rule. ``https://]/x`` is filed under host well-formedness,
+      the empty-host rule. The residual reaches bracketed hosts too:
+      ``https://[::1]:8080extra/x`` is admitted, because the suffix after
+      ``]`` need only begin with ``:`` and nothing after that colon is
+      parsed. ``https://]/x`` is filed under host well-formedness,
       not under this port residual.
     """
 
@@ -689,7 +692,10 @@ def _require_hostful_authority_without_userinfo(
     Userinfo is refused first, so the authority the host rule reads carries
     none and the host is what stands before an optional ``":" port``. An
     IP-literal is bracketed and holds colons of its own, so a closing ``]`` is
-    what ends it; after that only an optional ``":" port`` may stand. Text
+    what ends it; the suffix after the bracket must be empty or begin with
+    ``:``, and nothing after that ``:`` is parsed — the suffix is admitted
+    whole on its first character alone, so the port residual below reaches
+    bracketed hosts too and ``https://[::1]:8080extra/x`` is admitted. Text
     immediately after the bracket makes a reviewer read host text that a .NET
     ``System.Uri`` consumer does not send its fetcher to, so it is refused by
     the same reader/fetcher rule as userinfo. Every other host ends at the first
@@ -711,6 +717,9 @@ def _require_hostful_authority_without_userinfo(
       spellings remain admitted and are named in the residual table.
       ``https://host:/x`` remains admitted because ``*DIGIT`` permits zero
       digits; ``https://:/x`` remains an empty-host refusal.
+      ``https://[::1]:8080extra/x`` is the bracketed spelling of the same
+      residual, admitted because the bracket rule reads only the suffix's
+      first character.
     - **No percent-escape is decoded before the authority is read**, so
       ``https://www.hafele.com%40evil.invalid/`` is one reg-name here. That is
       also what RFC 3986 makes of it, so no fetcher reaches ``evil.invalid``;

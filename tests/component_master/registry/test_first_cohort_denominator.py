@@ -1159,6 +1159,16 @@ def payload_count_labels(node: object) -> set[str]:
     A walk finds counts nested inside ``classification_counts`` and
     ``dimension_verified_counts`` as readily as top-level ones, and it does not
     have to be updated when a count moves.
+
+    Matching is by **superset** here, deliberately wider than the exact
+    five-key match in the production collector
+    ``releases._published_count_payloads``: an attacker flags anything that
+    carries the five fields, while the guard compares only objects that are
+    exactly a published count. The same difference is stated on the
+    production side, and ``PublicationGuardResidualTests`` asserts the
+    divergent verdict the two definitions give one six-key mapping, so the
+    difference cannot drift unnoticed. ``payload_count_objects`` below
+    matches the same way.
     """
 
     found: set[str] = set()
@@ -2332,6 +2342,250 @@ class CountEnrollmentResidualTests(RootCase):
 
 
 # ---------------------------------------------------------------------------
+# Wave 5, F1/F2/F5. The publication guard itself: what its collector walks,
+# what each of its three refusal arms refuses, and what stays open.
+# ---------------------------------------------------------------------------
+
+
+def doctored_count_payload(
+    label: str = "doctored_count_nobody_measured",
+) -> dict[str, object]:
+    """A count-shaped mapping the record does not hold.
+
+    Exactly the five keys ``MeasuredCount.as_payload`` emits and no sixth,
+    because the production collector matches on the exact five-key set and
+    anything wider is a container to it rather than a count.
+    """
+
+    return {
+        "count": 0,
+        "denominator": SOURCE_COUNT,
+        "denominator_label": "sources_in_denominator",
+        "label": label,
+        "measured_by": "coverage.discover_registry_root",
+    }
+
+
+class PublicationGuardSeamTests(RootCase):
+    """The guard's three refusal arms, each driven to refusal directly.
+
+    Wave 4 shipped ``_require_count_publication_matches`` with a docstring
+    claiming refusals in both directions and a wrong-field refusal, while the
+    only arm any test drove was ``missing``; deleting the ``unexpected`` and
+    ``changed`` computations left the whole suite green. Through
+    ``snapshot_payload`` those two arms are unreachable by construction — the
+    payload's count objects and the record's enumeration read the same
+    properties through the same ``as_payload`` — so they are attacked here at
+    the guard seam, with a doctored payload handed to the comparison, which
+    is the only caller that can reach them. The collector's list hole is
+    attacked here too: ``canonical_value`` admits ``list`` and ``tuple``
+    alike, and the wave-4 walk descended into mappings and tuples only.
+    """
+
+    def snapshot_and_payload(
+        self,
+    ) -> tuple[CoverageSnapshot, dict[str, object]]:
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        return snapshot, dict(snapshot_payload(snapshot))
+
+    def test_a_list_nested_count_is_collected_by_the_production_walk(
+        self,
+    ) -> None:
+        """The F1 hole. This exact probe collected zero labels at `a46c5e85`:
+        a count nested in a `list` was publishable through canonical JSON
+        while standing invisible to the guard, and the test-side walkers
+        already descended into lists, so the attacker and the guard disagreed
+        about what "reachable" means."""
+
+        cases = (
+            ("list", lambda count: [count]),
+            ("list inside a tuple", lambda count: ([count],)),
+            ("tuple inside a list", lambda count: [(count,)]),
+        )
+        for container, wrap in cases:
+            with self.subTest(container=container):
+                collected = releases_module._published_count_payloads(
+                    {"wrapper": wrap(doctored_count_payload())}
+                )
+                self.assertEqual(
+                    {"doctored_count_nobody_measured"}, set(collected)
+                )
+
+    def test_an_unexpected_count_is_refused_at_the_comparison(self) -> None:
+        """The `unexpected` arm, driven at the seam because no payload this
+        module builds can carry a count the record lacks."""
+
+        cases = (
+            ("list-nested", lambda count: [count]),
+            ("mapping-nested", lambda count: {"inner": count}),
+        )
+        for container, wrap in cases:
+            with self.subTest(container=container):
+                snapshot, payload = self.snapshot_and_payload()
+                payload["doctored"] = wrap(doctored_count_payload())
+                with self.assertRaises(ValueError) as caught:
+                    releases_module._require_count_publication_matches(
+                        snapshot, payload
+                    )
+                message = str(caught.exception)
+                self.assertIn(
+                    "published counts absent from the record", message
+                )
+                self.assertIn("doctored_count_nobody_measured", message)
+
+    def test_a_right_label_count_with_one_changed_field_is_refused(
+        self,
+    ) -> None:
+        """The `changed` arm. One field at a time, because a comparison that
+        happened to read only the count value would pass a wrong denominator
+        or a wrong ``measured_by`` under the right label."""
+
+        cases = (
+            ("count", lambda entry: entry["count"] + 1),
+            ("denominator", lambda entry: entry["denominator"] + 1),
+            ("measured_by", lambda entry: "coverage.discover_registry_root"),
+        )
+        for field_name, doctor in cases:
+            with self.subTest(field=field_name):
+                snapshot, payload = self.snapshot_and_payload()
+                doctored = dict(payload["verified_item_count"])
+                doctored[field_name] = doctor(doctored)
+                payload["verified_item_count"] = doctored
+                with self.assertRaises(ValueError) as caught:
+                    releases_module._require_count_publication_matches(
+                        snapshot, payload
+                    )
+                message = str(caught.exception)
+                self.assertIn(
+                    "counts whose five published fields differ", message
+                )
+                self.assertIn(
+                    "verified_items_with_backing_evidence", message
+                )
+
+    def test_the_comparison_is_green_without_the_doctoring(self) -> None:
+        """The control. The undoctored payload passes the same seam, so the
+        refusals above are the doctoring and not a broken comparison."""
+
+        snapshot, payload = self.snapshot_and_payload()
+        self.assertIsNone(
+            releases_module._require_count_publication_matches(
+                snapshot, payload
+            )
+        )
+
+    def test_the_guard_docstring_states_which_arms_a_publication_can_exhibit(
+        self,
+    ) -> None:
+        """Prose may not credit a test that does not attack, and it may not
+        imply an arm is publication-reachable when no publication can reach
+        it."""
+
+        text = prose(
+            releases_module._require_count_publication_matches.__doc__
+        )
+        for fragment in (
+            "missing",
+            "unexpected",
+            "changed",
+            "the one arm a publication can exhibit",
+            "by construction",
+            "defence-in-depth",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
+
+class PublicationGuardResidualTests(RootCase):
+    """What the publication guard does **not** close, asserted still open.
+
+    Same shape as :class:`DeclaredUrlResidualTests`. Wave 4 shipped the guard
+    as the lane's only rule without a `what this does not close` section;
+    these are its reproduced residuals, each exercised so the new section
+    cannot be wrong in either direction.
+    """
+
+    def test_a_sixth_key_makes_a_count_shaped_mapping_a_container(
+        self,
+    ) -> None:
+        """The guard and the test helpers hold two definitions of what a
+        count *is*: exact five-key set here, superset in
+        ``payload_count_labels``. The divergent verdict on one object is
+        asserted so the stated difference cannot drift unnoticed."""
+
+        carrier = doctored_count_payload("smuggled_under_a_sixth_key")
+        carrier["sixth_key"] = doctored_count_payload(
+            "nested_inside_the_carrier"
+        )
+        collected = releases_module._published_count_payloads(
+            {"wrapper": carrier}
+        )
+        # To the guard the carrier is a container: never compared itself,
+        # walked for nested counts, so only the inner one is collected.
+        self.assertEqual({"nested_inside_the_carrier"}, set(collected))
+        # The test helper's superset match flags the carrier as a count too.
+        self.assertEqual(
+            {"smuggled_under_a_sixth_key", "nested_inside_the_carrier"},
+            payload_count_labels({"wrapper": carrier}),
+        )
+
+    def test_direct_release_construction_bypasses_the_guard(self) -> None:
+        """Pre-existing at base and now named rather than implied closed: the
+        guard binds ``snapshot_payload`` and everything that calls it, not
+        the ``RegistryRelease`` constructor. Self-consistent doctored bytes
+        construct a release without the comparison ever running."""
+
+        snapshot = build_snapshot(LIVE_REGISTRY_ROOT)
+        payload = dict(snapshot_payload(snapshot))
+        doctored = dict(payload["verified_item_count"])
+        doctored["count"] = doctored["count"] + 1
+        payload["verified_item_count"] = doctored
+        raw = canonical_json_bytes(payload)
+        release = releases_module.RegistryRelease(
+            release_id=releases_module.RELEASE_ID_PREFIX + "0.1.0",
+            version="0.1.0",
+            payload_sha256=hashlib.sha256(raw).hexdigest(),
+            source_denominator_sha256=releases_module.source_denominator_digest(
+                snapshot
+            ),
+            created_at_utc=CREATED_AT,
+            payload_bytes=raw,
+        )
+        self.assertEqual(raw, release.payload_bytes)
+        self.assertNotEqual(
+            COMMITTED_SNAPSHOT.read_bytes(), release.payload_bytes
+        )
+
+    def test_the_collector_docstring_records_what_it_does_not_close(
+        self,
+    ) -> None:
+        text = prose(releases_module._published_count_payloads.__doc__)
+        for fragment in (
+            "what this does not close",
+            "sixth key",
+            "a container, not a count",
+            "superset",
+            "``list``",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
+    def test_the_comparison_docstring_records_what_it_does_not_close(
+        self,
+    ) -> None:
+        text = prose(
+            releases_module._require_count_publication_matches.__doc__
+        )
+        for fragment in (
+            "what this does not close",
+            "not the ``registryrelease`` constructor",
+            "pre-existing at base",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, text)
+
+
+# ---------------------------------------------------------------------------
 # G2. The declared-URL rule: userinfo, the percent grammar, and an accurate
 # statement of what stays open.
 # ---------------------------------------------------------------------------
@@ -2417,6 +2671,13 @@ STILL_OPEN_URL_CASES: tuple[tuple[str, str], ...] = (
     ("empty port", "https://host:/x"),
     # Filed under host well-formedness: it has no opening bracket.
     ("unmatched closing bracket", "https://]/x"),
+    # Added in wave 5. The bracket rule admits any suffix whose first
+    # character is `:` and parses nothing after it, so the port residual
+    # reaches bracketed hosts too.
+    (
+        "bracketed host with an unparsed port suffix",
+        "https://[::1]:8080extra/x",
+    ),
 )
 
 # The ten-case matrix `_require_hostful_authority_without_userinfo` is judged
@@ -2655,6 +2916,24 @@ class DeclaredUrlHostTests(RootCase):
                 )
                 self.assertEqual(url, entry.url)
 
+    def test_a_bracketed_host_with_a_port_is_admitted(self) -> None:
+        """The admitted side of the bracket-suffix boundary, which no test
+        drove until this wave: the suffix after ``]`` must be empty or begin
+        with ``:``, and an over-broad refusal of any suffix at all would have
+        passed the whole suite while refusing every bracketed host that names
+        a port. ``https://[::1]:/x`` attacks the exact boundary — the suffix
+        is one character, and that character is ``:``."""
+
+        for url in ("https://[::1]:8443/x", "https://[::1]:/x"):
+            with self.subTest(url=url):
+                entry = SourceDenominatorEntry(
+                    source_id=DECLARED_ID,
+                    sha256=None,
+                    state=DECLARED_UNREAD,
+                    url=url,
+                )
+                self.assertEqual(url, entry.url)
+
     def test_the_ten_case_matrix_is_unchanged(self) -> None:
         """Every currently-refused case still refused, every currently-admitted
         case still admitted. This is the regression surface the brief names."""
@@ -2682,6 +2961,10 @@ class DeclaredUrlHostTests(RootCase):
             "ip-literal",
             "port = *digit",
             "https://]/x",
+            # Added in wave 5: the clause used to say only an optional
+            # `":" port` may stand after the bracket, which overstates what
+            # is enforced — the suffix's content is never parsed.
+            "https://[::1]:8080extra/x",
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
@@ -2727,6 +3010,8 @@ class DeclaredUrlResidualTests(RootCase):
             "well formed",
             "port = *DIGIT",
             "https://]/x",
+            # Added in wave 5: the port residual reaches bracketed hosts.
+            "https://[::1]:8080extra/x",
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
