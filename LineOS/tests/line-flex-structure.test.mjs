@@ -247,6 +247,25 @@ test("runtime shell rejects entity-encoded meta refresh directives", async () =>
   );
 });
 
+test("responsive grid keeps 1440 three-column and makes 1024 a two-row layout", async () => {
+  const css = await read("line-flex-studio.css");
+  const desktopGrid = css.match(/\.studio-grid\{[^}]*grid-template-columns:([^;}]+)/);
+  assert.ok(desktopGrid, "base Studio grid declaration must exist");
+  assert.equal(
+    (desktopGrid[1].match(/minmax\(/g) ?? []).length,
+    3,
+    "the layout above the tablet breakpoint must retain three columns"
+  );
+
+  const tabletGrid = css.match(
+    /@media\(max-width:(\d+)px\)\{\.studio-grid\{grid-template-columns:1fr 1fr\}\.code-pane\{grid-column:1\/-1\}\}/
+  );
+  assert.ok(tabletGrid, "tablet rule must make two columns with the code pane on a second row");
+  const tabletMaxWidth = Number(tabletGrid[1]);
+  assert.equal(tabletMaxWidth, 1024, "1024px must enter the approved two-row layout");
+  assert.ok(1440 > tabletMaxWidth, "1440px must remain outside the two-row tablet rule");
+});
+
 test("all five local SVG assets are self-contained", async () => {
   for (const name of [
     "design-approval-hero.svg", "quote-order-hero.svg", "sla-escalation-hero.svg",

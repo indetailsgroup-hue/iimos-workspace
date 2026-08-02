@@ -37,7 +37,7 @@ dialog{width:min(620px,calc(100% - 28px));border:0;border-radius:18px;box-shadow
 dialog::backdrop{background:rgba(10,25,21,.62)}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
   clip:rect(0,0,0,0);white-space:nowrap;border:0}
-@media(max-width:1000px){.studio-grid{grid-template-columns:1fr 1fr}.code-pane{grid-column:1/-1}}
+@media(max-width:1024px){.studio-grid{grid-template-columns:1fr 1fr}.code-pane{grid-column:1/-1}}
 @media(max-width:720px){.studio-grid{display:block}.studio-grid>section{margin-bottom:10px}
   .app-header{align-items:flex-start;flex-wrap:wrap}.phone-frame{width:360px;max-width:100%}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;
