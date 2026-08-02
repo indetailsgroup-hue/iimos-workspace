@@ -151,6 +151,27 @@ for (const [description, changes] of forbiddenArtifactCases) {
   });
 }
 
+test("rejects a sparse review artifacts array", () => {
+  const snapshot = reviewSnapshot();
+  snapshot.reviewArtifacts = new Array(1);
+  assert.throws(() => assertReviewSnapshot(snapshot), new Error("invalid_review_snapshot"));
+});
+
+test("rejects a non-enumerable extra own key on the review artifacts array", () => {
+  const snapshot = reviewSnapshot();
+  Object.defineProperty(snapshot.reviewArtifacts, "tenantId", {
+    value: "tenant_demo",
+    enumerable: false
+  });
+  assert.throws(() => assertReviewSnapshot(snapshot), new Error("invalid_review_snapshot"));
+});
+
+test("rejects a symbol extra own key on the review artifacts array", () => {
+  const snapshot = reviewSnapshot();
+  snapshot.reviewArtifacts[Symbol("tenantId")] = "tenant_demo";
+  assert.throws(() => assertReviewSnapshot(snapshot), new Error("invalid_review_snapshot"));
+});
+
 test("rejects top-level and nested authority fields in review snapshots", () => {
   const topLevelCases = [
     ["tenantId", "tenant_demo"],

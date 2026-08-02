@@ -81,6 +81,20 @@ const hasExactOwnKeys = (value, expected) => {
   return canonicalize(actual.sort()) === canonicalize([...expected].sort());
 };
 
+const hasDenseExactArrayKeys = (value) => {
+  if (!Array.isArray(value)) return false;
+  const actual = Reflect.ownKeys(value);
+  if (actual.length !== value.length + 1 ||
+      !actual.every((key) => typeof key === "string")) return false;
+  const indexKeys = new Set(actual);
+  if (!indexKeys.delete("length") || indexKeys.size !== value.length) return false;
+  return [...indexKeys].every((key) => {
+    const index = Number(key);
+    return Number.isSafeInteger(index) && index >= 0 && index < value.length &&
+      String(index) === key;
+  });
+};
+
 const hasForbiddenAuthorityField = (value, seen = new WeakSet()) => {
   if (!value || typeof value !== "object" || seen.has(value)) return false;
   seen.add(value);
@@ -142,6 +156,7 @@ export function assertReviewSnapshot(snapshot) {
     snapshot.expectedWorkflowVersion >= 0 &&
     Array.isArray(snapshot.reviewArtifacts) &&
     snapshot.reviewArtifacts.length > 0 &&
+    hasDenseExactArrayKeys(snapshot.reviewArtifacts) &&
     snapshot.reviewArtifacts.every(isReviewArtifact) &&
     isNonEmptyString(snapshot.requestedCanonicalAction) &&
     isNonEmptyString(snapshot.plainLanguageConsequence) &&
