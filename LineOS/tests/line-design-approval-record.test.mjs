@@ -69,6 +69,14 @@ test("creates the exact deterministic Sandbox Verification Record", async () => 
   assert.match(first.recordDigest, /^[0-9a-f]{64}$/);
 });
 
+test("accepts the legitimate approval request reference prefix without authority semantics", async () => {
+  const record = await createSandboxVerificationRecord({
+    ...recordInput(),
+    approvalRequestRef: "approval_request_demo_001"
+  });
+  assert.equal(record.approvalRequestRef, "approval_request_demo_001");
+});
+
 test("changes the digest when every caller-bound field changes", async () => {
   const baseline = await createSandboxVerificationRecord(recordInput());
   const changes = {
@@ -225,6 +233,27 @@ test("rejects authority-like claims in record-visible input", async () => {
   }
 });
 
+for (const [description, unsafeValue] of [
+  ["a Thai authority claim", "อนุมัติแล้ว"],
+  ["the literal secret", "secret"],
+  ["a tenant-prefixed value", "tenant123"],
+  ["an email address", "reviewer@example.com"],
+  ["a phone number", "0812345678"]
+]) {
+  test(`rejects ${description} from every visible caller-bound field`, async () => {
+    for (const field of Object.keys(recordInput())) {
+      await assert.rejects(
+        () => createSandboxVerificationRecord({
+          ...recordInput(),
+          [field]: unsafeValue
+        }),
+        new Error("invalid_sandbox_verification_record_input"),
+        field
+      );
+    }
+  });
+}
+
 test("requires canonical ordered UTC timestamps", async () => {
   for (const [field, value] of [
     ["createdAt", "2026-08-02T03:00:00Z"],
@@ -268,8 +297,9 @@ test("exposes only scalar textContent-ready English and Thai rows", async () => 
     assert.equal(rows.length, 18);
     assert.equal(rows.flat().every((value) => typeof value === "string"), true);
     assert.equal(rows.flat().every((value) => !/[\u0000-\u001f\u007f]/u.test(value)), true);
-    assert.deepEqual(rows.at(-1), ["SHA-256 record digest", record.recordDigest]);
   }
+  assert.deepEqual(en.at(-1), ["SHA-256 record digest", record.recordDigest]);
+  assert.deepEqual(th.at(-1), ["ค่าแฮช SHA-256 ของบันทึก", record.recordDigest]);
 });
 
 test("omits authority claims and rejects non-authentic records or languages", async () => {

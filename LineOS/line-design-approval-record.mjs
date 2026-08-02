@@ -20,10 +20,27 @@ const INPUT_KEYS = deepFreeze([
   "confirmedAt"
 ]);
 const INPUT_KEY_SET = new Set(INPUT_KEYS);
-const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SHA256_HEX = /^[a-f0-9]{64}$/;
-const CANONICAL_ACTION = /^[a-z][a-z0-9_-]{0,31}\.[a-z][a-z0-9_.-]{0,95}$/;
 const CANONICAL_UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const REFERENCE_PATTERNS = {
+  recordId: /^record_demo_\d{3}$/,
+  correlationId: /^correlation_demo_\d{3}$/,
+  reviewSessionId: /^review_session_demo_\d{3}$/,
+  workItemRef: /^work_item_demo_\d{3}$/,
+  approvalRequestRef: /^(?:request|approval_request)_demo_\d{3}$/
+};
+const PROVIDER_CONTEXTS = new Set([
+  "Daph Studio · A1 sandbox fixture",
+  "Other Studio · A1 sandbox fixture"
+]);
+const SCOPE_CONTEXTS = new Set([
+  "Main kitchen review scope",
+  "Guest bedroom review scope"
+]);
+const CANONICAL_ACTIONS = new Set([
+  "design.approve_revision",
+  "design.request_revision_changes"
+]);
 const RECORD_OUTCOMES = new Set(["sandbox_recorded", "sandbox_replayed"]);
 const authenticRecords = new WeakSet();
 
@@ -52,16 +69,8 @@ const inputValuesFor = (input) => {
   return Object.fromEntries(INPUT_KEYS.map((key) => [key, descriptors[key].value]));
 };
 
-const isBoundedVisibleText = (value, maxLength) => typeof value === "string" &&
-  value.length > 0 && value.length <= maxLength && value.trim() === value &&
-  !/[\p{Cc}\p{Cf}\p{Cs}]/u.test(value);
-
-const isIdentifier = (value) => typeof value === "string" && IDENTIFIER.test(value);
-const hasAuthorityClaim = (value) => {
-  if (typeof value !== "string") return false;
-  const words = value.toLowerCase().replace(/[^a-z0-9]+/g, " ");
-  return /\b(?:approval|approved|audit|audited|key|signature|signed|tenant|token)\b/.test(words);
-};
+const matchesReference = (field, value) => typeof value === "string" &&
+  REFERENCE_PATTERNS[field].test(value);
 
 const timestampMilliseconds = (value) => {
   if (typeof value !== "string" || !CANONICAL_UTC_TIMESTAMP.test(value)) return null;
@@ -76,23 +85,18 @@ const assertValidInput = (input) => {
   const value = inputValuesFor(input);
   const createdAt = timestampMilliseconds(value.createdAt);
   const confirmedAt = timestampMilliseconds(value.confirmedAt);
-  const valid = isIdentifier(value.recordId) &&
-    isIdentifier(value.correlationId) &&
-    isIdentifier(value.reviewSessionId) &&
-    isBoundedVisibleText(value.providerContext, 256) &&
-    isBoundedVisibleText(value.scopeContext, 256) &&
-    isIdentifier(value.workItemRef) &&
-    isIdentifier(value.approvalRequestRef) &&
-    isBoundedVisibleText(value.revisionLabel, 128) &&
-    ![value.recordId, value.correlationId, value.reviewSessionId,
-      value.providerContext, value.scopeContext, value.workItemRef,
-      value.approvalRequestRef, value.revisionLabel,
-      value.requestedCanonicalAction].some(hasAuthorityClaim) &&
+  const valid = matchesReference("recordId", value.recordId) &&
+    matchesReference("correlationId", value.correlationId) &&
+    matchesReference("reviewSessionId", value.reviewSessionId) &&
+    PROVIDER_CONTEXTS.has(value.providerContext) &&
+    SCOPE_CONTEXTS.has(value.scopeContext) &&
+    matchesReference("workItemRef", value.workItemRef) &&
+    matchesReference("approvalRequestRef", value.approvalRequestRef) &&
+    typeof value.revisionLabel === "string" && /^D-\d{2}$/.test(value.revisionLabel) &&
     SHA256_HEX.test(value.revisionId) &&
     SHA256_HEX.test(value.artifactManifestSha256) &&
     value.canonicalizationVersion === CANONICALIZATION_VERSION &&
-    typeof value.requestedCanonicalAction === "string" &&
-    CANONICAL_ACTION.test(value.requestedCanonicalAction) &&
+    CANONICAL_ACTIONS.has(value.requestedCanonicalAction) &&
     RECORD_OUTCOMES.has(value.outcome) &&
     createdAt !== null && confirmedAt !== null && confirmedAt >= createdAt;
   if (!valid) fail();
@@ -175,7 +179,7 @@ const LABELS = deepFreeze({
     "เวลาสร้าง",
     "เวลายืนยัน",
     "เวอร์ชัน canonicalization",
-    "SHA-256 record digest"
+    "ค่าแฮช SHA-256 ของบันทึก"
   ]
 });
 
