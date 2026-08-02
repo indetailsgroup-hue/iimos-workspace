@@ -1,14 +1,19 @@
 import { canonicalize, deepFreeze } from "./line-flex-model.mjs";
 
 const ACTION_MODES = new Set(["message", "postback", "uri", "liff_uri"]);
+const CANONICAL_UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const MAX_DATE_MILLISECONDS = 8.64e15;
 const transactionSnapshots = new WeakMap();
 const confirmationSnapshots = new WeakMap();
 
 const parseTime = (value, errorMessage) => {
-  if (typeof value !== "string") throw new Error(errorMessage);
+  if (typeof value !== "string" || !CANONICAL_UTC_TIMESTAMP.test(value)) {
+    throw new Error(errorMessage);
+  }
   const milliseconds = Date.parse(value);
-  if (!Number.isFinite(milliseconds)) throw new Error(errorMessage);
+  if (!Number.isFinite(milliseconds) || new Date(milliseconds).toISOString() !== value) {
+    throw new Error(errorMessage);
+  }
   return milliseconds;
 };
 

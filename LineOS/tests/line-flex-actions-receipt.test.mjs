@@ -9,6 +9,14 @@ import {
 import { createDemoReceipt } from "../line-flex-receipt.mjs";
 
 const approval = () => createDraft(getPreset("design-approval"), "th");
+const NON_CANONICAL_PARSEABLE_TIMESTAMPS = [
+  "0",
+  "2026-02-30T00:00:00.000Z",
+  "2026-08-01T10:00:00.000",
+  "2026-08-01T17:00:00.000+07:00",
+  "2026-08-01T10:00:00Z",
+  "2026-08-01t10:00:00.000z"
+];
 
 test("routes every consequential action through LIFF URI", () => {
   for (const requestedActionType of ["message", "postback", "uri", "liff_uri"]) {
@@ -155,6 +163,23 @@ test("rejects invalid creation time and transaction TTL", () => {
   }
 });
 
+test("rejects parseable noncanonical creation timestamps", () => {
+  for (const now of NON_CANONICAL_PARSEABLE_TIMESTAMPS) {
+    assert.equal(Number.isFinite(Date.parse(now)), true, now);
+    assert.throws(
+      () => createDemoTransaction(approval(), { id: "tx_noncanonical_time", now }),
+      new Error("invalid_created_at"),
+      now
+    );
+  }
+});
+
+test("accepts its internally generated canonical creation timestamp", () => {
+  const tx = createDemoTransaction(approval(), { id: "tx_default_time" });
+  assert.match(tx.createdAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  assert.equal(new Date(tx.createdAt).toISOString(), tx.createdAt);
+});
+
 test("allows the expiry instant and rejects time after it", () => {
   const tx = createDemoTransaction(approval(), {
     id: "tx_demo_003",
@@ -183,6 +208,28 @@ test("rejects invalid confirmation time and transaction expiry", () => {
     assert.throws(
       () => confirmDemoTransaction({ ...tx, expiresAt }, approval(), "2026-08-01T11:00:00.000Z"),
       new Error("invalid_transaction_expiry")
+    );
+  }
+});
+
+test("rejects parseable noncanonical confirmation and expiry timestamps", () => {
+  const tx = createDemoTransaction(approval(), {
+    id: "tx_demo_noncanonical_time",
+    now: "2026-08-01T10:00:00.000Z"
+  });
+  for (const timestamp of NON_CANONICAL_PARSEABLE_TIMESTAMPS) {
+    assert.equal(Number.isFinite(Date.parse(timestamp)), true, timestamp);
+    assert.throws(
+      () => confirmDemoTransaction(tx, approval(), timestamp),
+      new Error("invalid_confirmation_time"),
+      `confirmation ${timestamp}`
+    );
+    assert.throws(
+      () => confirmDemoTransaction(
+        { ...tx, expiresAt: timestamp }, approval(), "2026-08-01T11:00:00.000Z"
+      ),
+      new Error("invalid_transaction_expiry"),
+      `expiry ${timestamp}`
     );
   }
 });
