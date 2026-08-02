@@ -20,6 +20,17 @@ test("allows low-risk acknowledgement postback", () => {
   assert.equal(selectActionMode({ risk: "low", requestedActionType: "postback" }), "postback");
 });
 
+test("fails closed to LIFF URI for unknown or malformed risk", () => {
+  for (const intent of [
+    { requestedActionType: "postback" },
+    { risk: "medium", requestedActionType: "postback" },
+    { risk: null, requestedActionType: "postback" },
+    null
+  ]) {
+    assert.equal(selectActionMode(intent), "liff_uri");
+  }
+});
+
 test("binds tenant recipient revision action and expiry", () => {
   const tx = createDemoTransaction(approval(), {
     id: "tx_demo_001",
@@ -44,6 +55,7 @@ test("binds tenant recipient revision action and expiry", () => {
     amount: tx.amount,
     deadline: tx.deadline
   }));
+  assert.equal(Object.isFrozen(tx), true);
 });
 
 test("fails closed when any bound value changes", () => {
@@ -71,6 +83,78 @@ test("fails closed when any bound value changes", () => {
   }
 });
 
+test("rejects cloned tampered and rebound transactions", () => {
+  const tx = createDemoTransaction(approval(), {
+    id: "tx_demo_tamper",
+    now: "2026-08-01T10:00:00.000Z"
+  });
+  const mutations = [
+    ["tenantId", "tenant_other_demo"],
+    ["recipientRef", "customer_demo_002"],
+    ["targetRef", "project_other"],
+    ["revision", "D-08"],
+    ["canonicalAction", "design.reject_revision"],
+    ["amount", "฿487,000"],
+    ["deadline", "4 ส.ค. 2026 · 18:00"],
+    ["actionMode", "postback"],
+    ["boundPayload", "{}"]
+  ];
+
+  for (const [field, value] of mutations) {
+    assert.throws(() => {
+      tx[field] = value;
+    }, TypeError, `frozen ${field}`);
+    assert.throws(
+      () => confirmDemoTransaction(
+        { ...tx, [field]: value }, approval(), "2026-08-01T11:00:00.000Z"
+      ),
+      new Error("unknown_transaction"),
+      `cloned ${field}`
+    );
+  }
+
+  const reboundDraft = updateDraftAtPath(
+    approval(), ["context", "tenantId"], "tenant_other_demo"
+  );
+  const rebound = {
+    ...tx,
+    tenantId: reboundDraft.context.tenantId,
+    boundPayload: canonicalize({
+      tenantId: reboundDraft.context.tenantId,
+      recipientRef: reboundDraft.context.recipientRef,
+      targetRef: reboundDraft.intent.targetRef,
+      revision: reboundDraft.body.revision,
+      canonicalAction: reboundDraft.intent.canonicalAction,
+      amount: reboundDraft.body.amount,
+      deadline: reboundDraft.body.deadline
+    })
+  };
+  assert.throws(
+    () => confirmDemoTransaction(rebound, reboundDraft, "2026-08-01T11:00:00.000Z"),
+    new Error("unknown_transaction")
+  );
+});
+
+test("rejects invalid creation time and transaction TTL", () => {
+  for (const now of ["not-a-date", Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(
+      () => createDemoTransaction(approval(), { id: "tx_bad_time", now }),
+      new Error("invalid_created_at")
+    );
+  }
+
+  for (const ttl of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, "1440"]) {
+    const invalid = updateDraftAtPath(approval(), ["intent", "expiresInMinutes"], ttl);
+    assert.throws(
+      () => createDemoTransaction(invalid, {
+        id: "tx_bad_ttl",
+        now: "2026-08-01T10:00:00.000Z"
+      }),
+      new Error("invalid_transaction_ttl")
+    );
+  }
+});
+
 test("allows the expiry instant and rejects time after it", () => {
   const tx = createDemoTransaction(approval(), {
     id: "tx_demo_003",
@@ -81,6 +165,51 @@ test("allows the expiry instant and rejects time after it", () => {
   assert.throws(
     () => confirmDemoTransaction(tx, approval(), "2026-08-02T10:00:00.001Z"),
     new Error("transaction_expired")
+  );
+});
+
+test("rejects invalid confirmation time and transaction expiry", () => {
+  const tx = createDemoTransaction(approval(), {
+    id: "tx_demo_time_validation",
+    now: "2026-08-01T10:00:00.000Z"
+  });
+  for (const now of ["not-a-date", Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(
+      () => confirmDemoTransaction(tx, approval(), now),
+      new Error("invalid_confirmation_time")
+    );
+  }
+  for (const expiresAt of ["not-a-date", Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(
+      () => confirmDemoTransaction({ ...tx, expiresAt }, approval(), "2026-08-01T11:00:00.000Z"),
+      new Error("invalid_transaction_expiry")
+    );
+  }
+});
+
+test("rejects a receipt made from a different transaction confirmation pair", async () => {
+  const firstTx = createDemoTransaction(approval(), {
+    id: "tx_demo_pair_001",
+    now: "2026-08-01T10:00:00.000Z"
+  });
+  const secondTx = createDemoTransaction(approval(), {
+    id: "tx_demo_pair_002",
+    now: "2026-08-01T10:00:00.000Z"
+  });
+  const firstConfirmation = confirmDemoTransaction(
+    firstTx, approval(), "2026-08-01T11:00:00.000Z"
+  );
+  const secondConfirmation = confirmDemoTransaction(
+    secondTx, approval(), "2026-08-01T11:00:00.000Z"
+  );
+
+  await assert.rejects(
+    () => createDemoReceipt(firstTx, secondConfirmation),
+    new Error("transaction_confirmation_mismatch")
+  );
+  await assert.rejects(
+    () => createDemoReceipt(firstTx, { ...firstConfirmation }),
+    new Error("unknown_confirmation")
   );
 });
 
@@ -100,6 +229,8 @@ test("creates a labelled deterministic SHA-256 digest that changes on bound inpu
     targetRef: confirmed.targetRef,
     revision: confirmed.revision,
     canonicalAction: confirmed.canonicalAction,
+    amount: confirmed.amount,
+    deadline: confirmed.deadline,
     createdAt: tx.createdAt,
     confirmedAt: confirmed.confirmedAt,
     outcome: confirmed.outcome
@@ -115,6 +246,35 @@ test("creates a labelled deterministic SHA-256 digest that changes on bound inpu
     "Production signing and audit require the MONOLITH Trust Kernel."
   );
   assert.equal(Object.hasOwn(first, "signature"), false);
-  const changed = { ...confirmed, recipientRef: "customer_demo_002" };
-  assert.notEqual(first.digest, (await createDemoReceipt(tx, changed)).digest);
+  assert.equal(first.amount, "฿486,000");
+  assert.equal(first.deadline, "3 ส.ค. 2026 · 18:00");
+  assert.equal(Object.isFrozen(confirmed), true);
+});
+
+test("changes the digest when confirmed amount or deadline changes", async () => {
+  const baselineDraft = approval();
+  const baselineTx = createDemoTransaction(baselineDraft, {
+    id: "tx_demo_digest_bound",
+    now: "2026-08-01T10:00:00.000Z"
+  });
+  const baselineConfirmation = confirmDemoTransaction(
+    baselineTx, baselineDraft, "2026-08-01T11:00:00.000Z"
+  );
+  const baselineReceipt = await createDemoReceipt(baselineTx, baselineConfirmation);
+
+  for (const [path, value] of [
+    [["body", "amount"], "฿487,000"],
+    [["body", "deadline"], "4 ส.ค. 2026 · 18:00"]
+  ]) {
+    const changedDraft = updateDraftAtPath(approval(), path, value);
+    const changedTx = createDemoTransaction(changedDraft, {
+      id: "tx_demo_digest_bound",
+      now: "2026-08-01T10:00:00.000Z"
+    });
+    const changedConfirmation = confirmDemoTransaction(
+      changedTx, changedDraft, "2026-08-01T11:00:00.000Z"
+    );
+    const changedReceipt = await createDemoReceipt(changedTx, changedConfirmation);
+    assert.notEqual(baselineReceipt.digest, changedReceipt.digest, path.join("."));
+  }
 });
