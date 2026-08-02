@@ -17,10 +17,26 @@ const guideStems = [
   "docs/guides/line-flex-performance-rendering-checklist"
 ];
 const documentStems = [spec, plan, research, ...guideStems];
-const publishedContentStems = [research, ...guideStems];
 const read = (path) => readFile(resolve(root, path), "utf8");
 const editions = ["en", "th"];
 const exactConclusion = "MONOLITH should be a multi-tenant, revision-controlled project and product operating system. LINE is a replaceable Human Surface. Daph is one pilot tenant. Broader customer messaging remains NO-GO until every Trust P0 gate passes with fresh evidence.";
+const readinessBoundaries = {
+  en: "Source presence does not prove deployment or production readiness.",
+  th: "การมี source ไม่ได้พิสูจน์ deployment หรือความพร้อมใช้งานจริงระดับ production"
+};
+const templateMarker = /\b(TBD|TODO|FIXME|implement later|fill in details)\b/i;
+const unsafeReadinessClaim = /production[- ]ready because|tests exist, therefore production/i;
+
+const proseOnly = (markdown) => markdown
+  .replace(/^(`{3,}|~{3,})[^\r\n]*(?:\r?\n)[\s\S]*?^\1[ \t]*$/gm, "")
+  .replace(/(`+)([^`\r\n]*?)\1/g, "");
+
+const requireReadinessBoundary = (markdown, language) => {
+  assert.ok(
+    markdown.includes(readinessBoundaries[language]),
+    `${language}: missing exact source-presence readiness boundary`
+  );
+};
 
 const section = (markdown, number) => {
   const start = markdown.search(new RegExp(`^## ${number}\\. `, "m"));
@@ -48,55 +64,76 @@ const stripHtml = (value) => value
   .replaceAll("&quot;", '"')
   .replaceAll("&#39;", "'");
 
-test("deep research exists in bilingual Markdown and standalone HTML", async () => {
-  for (const suffix of [".en.md", ".th.md", ".en.html", ".th.html"]) {
-    await access(resolve(root, research + suffix));
-  }
-  const enHtml = await read(research + ".en.html");
-  const thHtml = await read(research + ".th.html");
-  assert.match(enHtml, /^<!doctype html>/);
-  assert.match(enHtml, /<html lang="en">/);
-  assert.match(thHtml, /^<!doctype html>/);
-  assert.match(thHtml, /<html lang="th">/);
-});
+test("approved document manifest is bilingual, standalone, and deterministically rendered", async () => {
+  const scratch = await mkdtemp(join(tmpdir(), "lineos-document-manifest-"));
+  try {
+    for (const stem of documentStems) {
+      for (const language of editions) {
+        const sourceMd = resolve(root, `${stem}.${language}.md`);
+        const sourceHtml = resolve(root, `${stem}.${language}.html`);
+        await access(sourceMd);
+        await access(sourceHtml);
 
-test("every guide has English and Thai Markdown and HTML", async () => {
-  for (const stem of guideStems) {
-    for (const suffix of [".en.md", ".th.md", ".en.html", ".th.html"]) {
-      await access(resolve(root, stem + suffix));
+        const html = await readFile(sourceHtml, "utf8");
+        assert.match(html, /^<!doctype html>/);
+        assert.match(html, /<meta name="viewport"/);
+        assert.match(html, new RegExp(`<html lang="${language}">`));
+
+        const tempMd = join(scratch, basename(sourceMd));
+        const tempHtml = tempMd.replace(/\.md$/, ".html");
+        await copyFile(sourceMd, tempMd);
+        const rendered = spawnSync("python", [resolve(repo, "tools", "render_docs.py"), tempMd], { encoding: "utf8" });
+        assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout);
+        assert.equal(await readFile(tempHtml, "utf8"), html, `${stem}.${language}.html is not deterministic`);
+      }
     }
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
   }
 });
 
-test("project documents contain no unfilled template markers or replacement characters", async () => {
-  for (const stem of publishedContentStems) {
-    for (const language of editions) {
-      const text = await read(`${stem}.${language}.md`);
-      assert.doesNotMatch(text, /\b(TBD|TODO|FIXME|implement later|fill in details)\b/i);
-      assert.doesNotMatch(text, /\uFFFD/);
-    }
-  }
+test("prose normalization ignores code fixtures but preserves policy violations", () => {
+  const fixtures = [
+    "Safe prose.",
+    "```js",
+    "const marker = 'TODO';",
+    "const unsafe = 'tests exist, therefore production';",
+    "```",
+    "The inline examples `FIXME` and `production-ready because` are intentional fixtures."
+  ].join("\n");
+  assert.doesNotMatch(proseOnly(fixtures), templateMarker);
+  assert.doesNotMatch(proseOnly(fixtures), unsafeReadinessClaim);
+  assert.match(proseOnly(`${fixtures}\nTODO: assign a release owner.`), templateMarker);
+  assert.match(proseOnly(`${fixtures}\nTests exist, therefore production is approved.`), unsafeReadinessClaim);
 });
 
-test("HTML editions are standalone and language-correct", async () => {
+test("project Markdown has no prose markers or replacement characters", async () => {
   for (const stem of documentStems) {
     for (const language of editions) {
-      const html = await read(`${stem}.${language}.html`);
-      assert.match(html, /^<!doctype html>/);
-      assert.match(html, /<meta name="viewport"/);
-      assert.match(html, new RegExp(`<html lang="${language}">`));
+      const markdown = await read(`${stem}.${language}.md`);
+      assert.doesNotMatch(markdown, /\uFFFD/);
+      assert.doesNotMatch(proseOnly(markdown), templateMarker);
     }
   }
 });
 
-test("no document promotes source presence to production readiness", async () => {
-  const en = await read(research + ".en.md");
-  assert.match(en, /Source presence does not prove deployment or production readiness/);
+test("both research editions require the exact source-presence readiness boundary", async () => {
+  for (const language of editions) {
+    requireReadinessBoundary(await read(`${research}.${language}.md`), language);
+  }
 
-  for (const stem of publishedContentStems) {
+  const thaiFixture = `ก่อน\n${readinessBoundaries.th}\nหลัง`;
+  assert.doesNotThrow(() => requireReadinessBoundary(thaiFixture, "th"));
+  assert.throws(
+    () => requireReadinessBoundary(thaiFixture.replace(readinessBoundaries.th, ""), "th"),
+    /th: missing exact source-presence readiness boundary/
+  );
+});
+
+test("no document prose promotes source or test presence to production readiness", async () => {
+  for (const stem of documentStems) {
     for (const language of editions) {
-      const markdown = await read(`${stem}.${language}.md`);
-      assert.doesNotMatch(markdown, /production[- ]ready because|tests exist, therefore production/i);
+      assert.doesNotMatch(proseOnly(await read(`${stem}.${language}.md`)), unsafeReadinessClaim);
     }
   }
 });
@@ -380,46 +417,5 @@ test("standalone HTML matches Markdown headings and key claims", async () => {
     const htmlHeadings = [...html.matchAll(/<h2>(.*?)<\/h2>/g)].map((match) => stripHtml(match[1]));
     assert.deepEqual(htmlHeadings, mdHeadings);
     for (const claim of keyClaims) assert.ok(html.includes(claim), `${language} HTML missing key claim: ${claim}`);
-  }
-});
-
-test("committed HTML is a deterministic render of each Markdown source", async () => {
-  const scratch = await mkdtemp(join(tmpdir(), "lineos-doc-contract-"));
-  try {
-    for (const language of editions) {
-      const sourceMd = resolve(root, research + `.${language}.md`);
-      const sourceHtml = resolve(root, research + `.${language}.html`);
-      const tempMd = join(scratch, basename(sourceMd));
-      const tempHtml = tempMd.replace(/\.md$/, ".html");
-      await copyFile(sourceMd, tempMd);
-      const rendered = spawnSync("python", [resolve(repo, "tools", "render_docs.py"), tempMd], { encoding: "utf8" });
-      assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout);
-      assert.equal(await readFile(tempHtml, "utf8"), await readFile(sourceHtml, "utf8"));
-    }
-  } finally {
-    await rm(scratch, { recursive: true, force: true });
-  }
-});
-
-test("guide HTML is standalone, language-tagged, and deterministically rendered", async () => {
-  const scratch = await mkdtemp(join(tmpdir(), "lineos-guide-contract-"));
-  try {
-    for (const stem of guideStems) {
-      for (const language of editions) {
-        const sourceMd = resolve(root, `${stem}.${language}.md`);
-        const sourceHtml = resolve(root, `${stem}.${language}.html`);
-        const html = await readFile(sourceHtml, "utf8");
-        assert.match(html, /^<!doctype html>/);
-        assert.match(html, new RegExp(`<html lang="${language}">`));
-        const tempMd = join(scratch, basename(sourceMd));
-        const tempHtml = tempMd.replace(/\.md$/, ".html");
-        await copyFile(sourceMd, tempMd);
-        const rendered = spawnSync("python", [resolve(repo, "tools", "render_docs.py"), tempMd], { encoding: "utf8" });
-        assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout);
-        assert.equal(await readFile(tempHtml, "utf8"), html);
-      }
-    }
-  } finally {
-    await rm(scratch, { recursive: true, force: true });
   }
 });
