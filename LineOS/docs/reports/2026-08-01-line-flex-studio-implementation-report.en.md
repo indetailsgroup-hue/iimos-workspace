@@ -1,8 +1,8 @@
 # MONOLITH LINE Flex Studio — implementation evidence report
 
-**Decision date:** 2 August 2026<br>
-**Tested runtime commit:** `b66699aedf0ef5f8e333f603aa22b5e3e4f1e66b`<br>
-**Decision:** `NO-GO_PENDING_TRUST_P0`
+- **Decision date:** 2 August 2026
+- **Tested runtime commit:** `b66699aedf0ef5f8e333f603aa22b5e3e4f1e66b`
+- **Decision:** `NO-GO_PENDING_TRUST_P0`
 
 This report records a standalone prototype verification, not a production deployment or an authorization to message customers. LINE remains a replaceable Human Surface; authoritative business state must remain in MONOLITH workflow, permission, data and audit controls.
 

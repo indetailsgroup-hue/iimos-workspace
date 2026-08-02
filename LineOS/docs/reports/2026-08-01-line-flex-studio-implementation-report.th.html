@@ -54,7 +54,11 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 </head>
 <body><main>
 <h1>MONOLITH LINE Flex Studio — รายงานหลักฐานการติดตั้งใช้งานต้นแบบ</h1>
-<p><strong>วันที่ตัดสินใจ:</strong> 2 สิงหาคม 2026&lt;br&gt; <strong>คอมมิต runtime ที่ทดสอบ:</strong> <code>b66699aedf0ef5f8e333f603aa22b5e3e4f1e66b</code>&lt;br&gt; <strong>คำตัดสิน:</strong> <code>NO-GO_PENDING_TRUST_P0</code></p>
+<ul>
+<li><strong>วันที่ตัดสินใจ:</strong> 2 สิงหาคม 2026</li>
+<li><strong>คอมมิต runtime ที่ทดสอบ:</strong> <code>b66699aedf0ef5f8e333f603aa22b5e3e4f1e66b</code></li>
+<li><strong>คำตัดสิน:</strong> <code>NO-GO_PENDING_TRUST_P0</code></li>
+</ul>
 <p>รายงานนี้บันทึกผลตรวจต้นแบบแบบ standalone ไม่ใช่หลักฐาน deployment ระดับ production และไม่ใช่การอนุญาตให้ส่งข้อความหาลูกค้า LINE ยังคงเป็น Human Surface ที่เปลี่ยนทดแทนได้ ส่วนสถานะธุรกิจที่เป็นจริงต้องอยู่ภายใต้ data, workflow, permission และ audit ของ MONOLITH</p>
 <h2>ขอบเขต</h2>
 <p>ขอบเขตที่ตรวจคือ Flex Studio สไตล์ Trust Concierge บนเครื่อง, preset ที่กำกับแล้ว 5 แบบ, การแก้ Header/Hero/Body/Footer แบบ real time, JSON และผล validation, copy/download และเส้นทางเดโมที่ปลอดภัย “แบบพร้อมอนุมัติ → เปิด Mock LIFF ตรวจ revision → ยืนยันเจตนาในเดโม → รับ Verification Receipt — Demo” การตรวจครอบคลุมภาษาไทยและอังกฤษ, CSS viewport 6 ขนาด, keyboard/focus, เนื้อหาขอบกรณี, missing-hero fallback และการแยกเครือข่ายของ browser</p>

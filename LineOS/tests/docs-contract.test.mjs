@@ -264,12 +264,20 @@ test("implementation reports expose the complete decision record", async () => {
   };
 
   for (const language of editions) {
-    const markdown = await read(`${implementationReport}.${language}.md`);
+    const [markdown, html] = await Promise.all([
+      read(`${implementationReport}.${language}.md`),
+      read(`${implementationReport}.${language}.html`),
+    ]);
     const headings = (markdown.match(/^## .+$/gm) ?? [])
       .map((line) => line.replace(/^## (?:\d+\. )?/, ""));
     for (const heading of requiredHeadings[language]) {
       assert.ok(headings.includes(heading), `${language} implementation report missing heading: ${heading}`);
     }
+    assert.doesNotMatch(
+      html,
+      /&lt;br\s*\/?&gt;/i,
+      `${language} implementation report HTML exposes escaped raw break markup`,
+    );
   }
 });
 
