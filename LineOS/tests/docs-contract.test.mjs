@@ -20,7 +20,7 @@ const guideStems = [
   "docs/guides/line-flex-performance-rendering-checklist"
 ];
 const documentStems = [spec, plan, research, ...guideStems, implementationReport];
-const read = (path) => readFile(resolve(root, path), "utf8");
+const read = (path) => readFile(resolve(root, path), "utf8").then((contents) => contents.replace(/\r\n?/g, "\n"));
 const editions = ["en", "th"];
 const exactConclusion = "MONOLITH should be a multi-tenant, revision-controlled project and product operating system. LINE is a replaceable Human Surface. Daph is one pilot tenant. Broader customer messaging remains NO-GO until every Trust P0 gate passes with fresh evidence.";
 const readinessBoundaries = {
