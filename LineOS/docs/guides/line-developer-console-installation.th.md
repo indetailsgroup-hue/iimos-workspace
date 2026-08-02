@@ -18,7 +18,7 @@
 |---|---|
 | LINE Official Account owner | Business ID, ความเป็นเจ้าของ account และ Manager access |
 | Provider/channel admin | การเลือก provider, channel membership และ configuration evidence |
-| Security owner | Secrets, redirect allowlist, `state`, `nonce`, signature และ step-up |
+| Security owner | Secrets, redirect allowlist, LIFF identity verification, MONOLITH transaction reference, OAuth/OIDC controls และ step-up |
 | Platform operator | Webhook endpoint, workers, idempotency, monitoring และ rollback |
 | Product owner | Trust P0 go/no-go และ journey ที่อนุมัติ |
 
@@ -45,6 +45,17 @@
 ### 4. ยืนยัน Messaging API channel
 
 เปิด LINE Developers Console เลือก provider จากข้อ 3 ตรวจ channel ที่สร้างให้ Official Account และบันทึก channel ID ใน controlled environment registry ตรวจ mapping ของ account/provider/channel แบบสองคน Channel ID เป็น identifier ไม่ใช่ secret แต่ยังต้องหลีกเลี่ยง screenshot ที่ควบคุมไม่ได้
+
+### 4A. ปิดหรือกำกับ default-message paths ของ Official Account
+
+เปิด LINE Official Account Manager ทันทีและตรวจ Messaging API response settings LINE ระบุว่าสองค่านี้ Enabled เป็นค่าเริ่มต้นตอนสร้าง channel และสามารถส่งข้อความนอก MONOLITH workers
+
+| Setting | Required state for a closed environment | Evidence |
+|---|---|---|
+| Greeting messages | Disabled | Dated, redacted Official Account Manager evidence |
+| Auto-reply messages | Disabled | Dated, redacted Official Account Manager evidence |
+
+**Every environment claiming delivery closed must keep both settings Disabled.** บันทึก environment, operator, timestamp และ setting view ที่ redact แล้ว หาก approved operating model ตั้งใจเปิดค่าใด ต้องกำกับ **ownership, content, audience, approval, and rollback** ทดสอบ duplicate/conflicting responses และ **remove the absolute closed-delivery claim** สำหรับ environment นั้น
 
 ### 5. กำหนด secret boundary
 
@@ -103,18 +114,27 @@ Endpoint ต้องคงที่สำหรับ environment นั้น 
 
 บันทึก LIFF ID และ LIFF URL ของ `development`, `review`, `production` แยกกัน พร้อม channel ID, provider, endpoint, scopes, owner, capture date และ approval status ถือ registry เป็น configuration evidence ห้ามใช้ review LIFF URL ใน production Flex โดยเงียบ ๆ
 
-### 12. ทำ server-side transaction verification
+### 12. ทำ supported LIFF identity path และ transaction verification ที่แยกกัน
 
-ก่อน bind LINE identity กับ MONOLITH principal หรือรับ command:
+ใช้ LIFF identity path ที่รองรับก่อน bind LINE identity กับ MONOLITH principal:
 
-1. สร้าง transaction `state` entropy สูง อายุสั้น เก็บฝั่ง server และ bind กับ tenant, intended recipient/audience, target resource, revision, canonical action และ exact approved redirect URI
-2. สร้าง one-time `nonce` ส่งใน authentication path ที่อนุมัติ แล้วตรวจ ID token `nonce`, issuer, audience, expiry และ signature ฝั่ง server
-3. รับ access token หรือ ID token จาก LIFF แล้ว verify กับ LINE/server libraries ห้ามเชื่อ profile data จาก client
-4. บังคับ callback/redirect URI ให้ตรง exact registered และ transaction-bound allowlist entry ปฏิเสธ open redirect และ path/query ที่ไม่คาดหมาย
-5. ตรวจ expiry, one-time status, tenant/principal/resource permission, revision freshness และ step-up result
-6. consume transaction แบบ atomic หนึ่งครั้งก่อนใช้ business command; retry ต้องคืน stored result ไม่ execute ซ้ำ
+1. เรียก `liff.init()` ที่ registered endpoint และเรียกอีกครั้งหลัง external-browser redirect ตามเอกสาร ใน external browser หรือ LINE in-app browser ให้ใช้ `liff.login()` เมื่อจำเป็น ส่วน LIFF browser จัดการ login ผ่าน initialization
+2. หลัง init/login ให้ส่ง **raw `liff.getIDToken()` ID token or access token** ไป server ผ่าน HTTPS ห้ามใช้ decoded profile เป็น identity proof
+3. ฝั่ง server ให้ **verify using LINE's documented server flow**: ตรวจ ID token กับ expected LINE Login channel ID รวม issuer/audience/expiry/signature ตามเอกสาร หรือ verify access token แล้วเรียก profile จาก LINE ตามเอกสาร
+4. Map เฉพาะ verified LINE subject กับ stored MONOLITH principal binding แล้วทำ tenant/resource authorization แยก
 
-ห้ามสับสน application transaction `state` กับ `liff.state` URL data ที่ยังไม่เชื่อถือ URL input และ forwarded-link context ทุกชนิดเป็น untrusted จน server verification ผ่าน
+**Direct LINE Login authorization requests inside the LIFF browser are not guaranteed**; LINE กำหนดให้ LIFF app ใช้ `liff.login()` ใน in-app/external-browser LIFF login path โดย documented input ของ `liff.login()` ระบุ `redirectUri` ส่วน application-supplied OAuth `state` หรือ OIDC `nonce` ต้องอยู่ใน separate supported authorization flow ที่รองรับค่าเหล่านั้น
+
+แยกสี่แนวคิดให้ชัด:
+
+| Concept | Meaning and required handling |
+|---|---|
+| MONOLITH transaction reference | opaque reference แบบ server-created, server-stored, high-entropy พร้อม CSRF/session binding; bind tenant, principal/audience, resource, revision, action, expiry และ exact return target; one-time consumed แบบ atomic และไม่ใช่ ID-token nonce |
+| LINE-managed liff.state | ข้อมูลเพิ่มเติมของ LIFF URL ที่ LINE ส่งต่อ เป็น untrusted routing input; not OAuth state, not permission และ not the MONOLITH transaction reference ประมวลผล routing หลัง `liff.init()` resolve เท่านั้น |
+| OAuth state | CSRF correlation สำหรับ separate supported authorization flow; flow นั้นสร้าง/เก็บเอง; not liff.state และไม่ใช่ business permission |
+| OIDC nonce | ID-token replay/correlation input; compare only when a separate supported authorization flow lets MONOLITH supply it และ LINE คืน claim; omit expected nonce เมื่อ flow ไม่ได้ส่ง nonce |
+
+สำหรับ approved LIFF path ให้สร้าง MONOLITH transaction reference ใน server session ก่อนแสดง exact-action review Bind กับ verified principal/audience และ business values ทั้งหมด บังคับ exact allowlisted return target ตรวจ authorization/revision freshness ใหม่ และ consume แบบ atomic พร้อม command/audit result ส่วน forwarded URL และ `liff.state` เลือกได้เพียง proposed route ไม่ให้ permission หรือ authoritative tenant/resource state
 
 ### 13. ตั้งปุ่ม Flex ให้ถูกชนิด
 
@@ -146,20 +166,21 @@ Simulator ช่วย prototype layout โดยไม่ส่ง ไม่ไ
 
 ### 16. ปิด customer delivery จน Trust P0 ผ่าน
 
-Live customer delivery ต้องปิดต่อจนทุก MONOLITH Trust P0 gate มี fresh evidence: tenant/principal/resource authorization, webhook signature verification ก่อน parse, replay/idempotency, secure identity binding, revision freshness, step-up สำหรับ consequential action, one-time command, durable audit, consent/preferences, delivery reconciliation, monitoring และ tested rollback Product approval ไม่สามารถยกเว้น gate ที่ fail
+Live customer delivery ถือว่าปิดได้เมื่อ Official Account default-message settings ทั้งสองเป็น Disabled และทุก MONOLITH Trust P0 gate มี fresh evidence: tenant/principal/resource authorization, webhook signature verification ก่อน parse, replay/idempotency, secure identity binding, revision freshness, step-up สำหรับ consequential action, one-time command, durable audit, consent/preferences, delivery reconciliation, monitoring และ tested rollback Product approval ไม่สามารถยกเว้น gate ที่ fail
 
 ### 17. Rollback อย่างปลอดภัย
 
 เมื่อ release ไม่ปลอดภัย มี compromise, ambiguous delivery หรือ uncontrolled error rate:
 
-1. ปิด affected command policy และ new LIFF entry point
-2. ปิด **Use webhook** เมื่อจำเป็นต้องหยุดรับ; มิฉะนั้น quarantine ingestion และหยุด business workers
-3. หยุด outbound/command workers โดยไม่ทิ้ง durable queue
-4. Revoke/rotate secrets เมื่อสงสัย compromise
-5. เก็บ audit, raw evidence, request/retry identifiers และ unknown-after-send state
-6. Reconcile accepted, failed, duplicate และ ambiguous outcomes ห้าม blind resend และห้าม delete unexplained delivery state
-7. ส่งผู้ใช้ไป authenticated web/operator fallback ที่อนุมัติ
-8. ต้องมี Trust P0 evidence ชุดใหม่ก่อน restore
+1. ใน Official Account Manager ตั้ง **Greeting messages** และ **Auto-reply messages** เป็น Disabled แล้วเก็บ dated, redacted evidence; หาก intentionally enabled ให้ใช้ approved owner/content/audience rollback และถอด closed-delivery claim
+2. ปิด affected command policy และ new LIFF entry point
+3. ปิด **Use webhook** เมื่อจำเป็นต้องหยุดรับ; มิฉะนั้น quarantine ingestion และหยุด business workers
+4. หยุด outbound/command workers โดยไม่ทิ้ง durable queue
+5. Revoke/rotate secrets เมื่อสงสัย compromise
+6. เก็บ audit, raw evidence, request/retry identifiers และ unknown-after-send state
+7. Reconcile accepted, failed, duplicate และ ambiguous outcomes ห้าม blind resend และห้าม delete unexplained delivery state
+8. ส่งผู้ใช้ไป authenticated web/operator fallback ที่อนุมัติ
+9. ต้องมี Trust P0 evidence ชุดใหม่ก่อน restore
 
 การลบ LIFF registration หรือ event history ไม่ใช่การตอบสนองแรก ต้อง preserve และ reconcile ก่อน retirement cleanup
 
@@ -172,10 +193,14 @@ Live customer delivery ต้องปิดต่อจนทุก MONOLITH Tr
 | Gate | Evidence | Owner | Result |
 |---|---|---|---|
 | Provider/channel mapping reviewed | Registry entry และ second reviewer | Channel admin | Pass/Fail |
+| Greeting messages | Disabled พร้อม dated, redacted Official Account Manager evidence หรือ approved governed exception ที่ถอด closed claim | OA owner | Pass/Fail |
+| Auto-reply messages | Disabled พร้อม dated, redacted Official Account Manager evidence หรือ approved governed exception ที่ถอด closed claim | OA owner | Pass/Fail |
 | Webhook verify + empty-event 200 | Timestamped non-secret result | Platform | Pass/Fail |
 | Signature-before-parse + idempotency | Test evidence | Security/Platform | Pass/Fail |
 | LIFF scopes/endpoint minimized | Configuration export/redacted capture | Security | Pass/Fail |
-| `state` / `nonce` / exact redirect / one-time consume | Adversarial tests | Security | Pass/Fail |
+| LIFF identity flow | `liff.init()` / `liff.login()` พร้อม raw-token server-verification evidence | Security | Pass/Fail |
+| MONOLITH transaction reference | CSRF/session binding, exact values/return target และ one-time-consume adversarial evidence | Security | Pass/Fail |
+| OAuth state / OIDC nonce | ใช้เฉพาะ separate supported flow ที่มีวิธี supply ตามเอกสาร | Security | Pass/Fail |
 | Real-client/fallback matrix | Device evidence | QA | Pass/Fail |
 | Trust P0 | Signed gate record | Product + Security | Pass/Fail |
 | Rollback drill | Drill/reconciliation record | Incident owner | Pass/Fail |
@@ -193,8 +218,10 @@ Retrieved 2026-08-02:
 - [Verify webhook signature](https://developers.line.biz/en/docs/messaging-api/verify-webhook-signature/)
 - [Webhook error statistics](https://developers.line.biz/en/docs/messaging-api/check-webhook-error-statistics/)
 - [Adding a LIFF app and scopes](https://developers.line.biz/en/docs/liff/registering-liff-apps/)
-- [Developing a LIFF app](https://developers.line.biz/en/docs/liff/developing-liff-apps)
+- [LIFF API reference: initialization และ login](https://developers.line.biz/en/reference/liff/)
+- [Developing a LIFF app](https://developers.line.biz/en/docs/liff/developing-liff-apps/)
+- [Opening a LIFF app และ `liff.state`](https://developers.line.biz/en/docs/liff/opening-liff-app/)
 - [Using user profile information safely](https://developers.line.biz/en/docs/liff/using-user-profile/)
 - [LIFF development guidelines](https://developers.line.biz/en/docs/liff/development-guidelines/)
-- [LINE Login API and ID-token nonce validation](https://developers.line.biz/en/reference/line-login/)
+- [LINE Login API: server token verification และ conditional ID-token nonce](https://developers.line.biz/en/reference/line-login/)
 - [Flex Message Simulator tutorial](https://developers.line.biz/en/docs/messaging-api/using-flex-message-simulator/)

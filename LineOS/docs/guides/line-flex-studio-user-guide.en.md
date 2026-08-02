@@ -110,7 +110,18 @@ The source link supports the rule; it does not certify the current draft or a pr
 5. Cancel if any value is unexpected. If values are exact, choose **Confirm demo intent** once.
 6. Editing a bound field, expiry, tampering or mismatching a transaction makes the confirmation fail closed and requires a new review.
 
-For real service, LIFF must authenticate the user, verify server-side transaction `state` and `nonce`, reload the authoritative revision and permission, perform MONOLITH step-up for consequential actions, consume the intent once, and append immutable audit evidence.
+For real service, initialize with `liff.init()` and use `liff.login()` when the documented external/in-app-browser path requires login. Send the **raw `liff.getIDToken()` ID token or access token** to the server over HTTPS, then **verify using LINE's documented server flow** before mapping the verified LINE subject to the stored MONOLITH principal. **Direct LINE Login authorization requests inside the LIFF browser are not guaranteed**; keep the supported LIFF login path instead of constructing a direct authorization request inside LIFF.
+
+Keep identity, routing, authorization correlation and business transaction authority separate:
+
+| Concept | Meaning and required handling |
+|---|---|
+| MONOLITH transaction reference | A server-created, server-stored, high-entropy opaque reference with CSRF/session binding; bound to tenant, principal/audience, resource, revision, action, expiry and exact return target; one-time consumed atomically. It is not an ID-token nonce. |
+| LINE-managed liff.state | Additional LIFF URL information carried by LINE; untrusted routing input; not OAuth state, not permission and not the MONOLITH transaction reference. Process routing only after `liff.init()` resolves. |
+| OAuth state | CSRF correlation for a separate supported authorization flow; created and stored by that flow; not liff.state and not business permission. |
+| OIDC nonce | ID-token replay/correlation input; compare only when a separate supported authorization flow lets MONOLITH supply it and LINE returns the ID-token claim. |
+
+After identity verification, the server must reload the authoritative revision and permission, bind the exact-action review to the MONOLITH transaction reference, perform MONOLITH step-up for consequential actions, atomically consume the reference with the command result, and append immutable audit evidence. Forwarded URLs and `liff.state` can propose routing only; they cannot grant permission or select authoritative tenant/resource/revision/action values.
 
 ## 10. Interpret Verification Receipt — Demo
 
@@ -158,3 +169,7 @@ Retrieved 2026-08-02:
 - [Messaging API reference](https://developers.line.biz/en/reference/messaging-api/nojs/)
 - [Messaging API actions](https://developers.line.biz/en/docs/messaging-api/actions/)
 - [Adding a LIFF app](https://developers.line.biz/en/docs/liff/registering-liff-apps/)
+- [LIFF API reference: initialization and login](https://developers.line.biz/en/reference/liff/)
+- [Developing a LIFF app](https://developers.line.biz/en/docs/liff/developing-liff-apps/)
+- [Opening a LIFF app and `liff.state`](https://developers.line.biz/en/docs/liff/opening-liff-app/)
+- [LINE Login API reference: server token verification](https://developers.line.biz/en/reference/line-login/)

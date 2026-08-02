@@ -76,7 +76,15 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <h3>URI</h3>
 <p>URI action เปิด <code>http</code>, <code>https</code>, <code>line</code> หรือ <code>tel</code> ที่ LINE รองรับ ใช้กับ read-only page, โทรศัพท์ และ LINE scheme ที่อนุมัติ ถือ query ทุกค่าเป็น untrusted และ read-only destination ห้าม mutate state ด้วย GET</p>
 <h3>URI opening LIFF</h3>
-<p>ใช้ URI action ปลายทางเป็น environment-approved LIFF URL สำหรับ form, identity, sensitive detail, comparison และ explicit confirmation Server ตรวจ token/ID token, <code>state</code>, <code>nonce</code>, transaction expiry, exact target/revision และ current permission ก่อนรับ intent</p>
+<p>ใช้ URI action ปลายทางเป็น environment-approved LIFF URL สำหรับ form, sensitive detail, comparison และ explicit confirmation ส่วน login เป็นเพียง identity step แรกและไม่ใช่ business authorization</p>
+<p>Supported identity sequence: เรียก <code>liff.init()</code>; ใช้ <code>liff.login()</code> ใน external/in-app-browser ตามเอกสาร; ส่ง <strong>raw <code>liff.getIDToken()</code> ID token or access token</strong> ไป server; แล้ว <strong>verify using LINE's documented server flow</strong> ก่อน map verified subject กับ stored principal ข้อกำหนดสำคัญคือ <strong>Direct LINE Login authorization requests inside the LIFF browser are not guaranteed</strong> จึงต้องรักษา <code>liff.login()</code> path ของ LINE แทนสร้าง authorization request ภายใน LIFF</p>
+<p>แยก identity, routing และ transaction values:</p>
+<div class="tablewrap"><table><thead><tr><th>Concept</th><th>Meaning and required handling</th></tr></thead><tbody>
+<tr><td>MONOLITH transaction reference</td><td>opaque reference แบบ server-created, server-stored, high-entropy พร้อม CSRF/session binding; bind tenant, principal/audience, resource, revision, action, expiry และ exact return target; one-time consumed แบบ atomic และไม่ใช่ ID-token nonce</td></tr>
+<tr><td>LINE-managed liff.state</td><td>ข้อมูลเพิ่มเติมของ LIFF URL ที่ LINE ส่งต่อ เป็น untrusted routing input; not OAuth state, not permission และ not the MONOLITH transaction reference</td></tr>
+<tr><td>OAuth state</td><td>CSRF correlation สำหรับ separate supported authorization flow; flow นั้นสร้าง/เก็บเอง; not liff.state และไม่ใช่ business permission</td></tr>
+<tr><td>OIDC nonce</td><td>ID-token replay/correlation input; compare only when a separate supported authorization flow lets MONOLITH supply it และ LINE คืน ID-token claim</td></tr>
+</tbody></table></div>
 <h3>LIFF plus MONOLITH step-up</h3>
 <p>งานด้าน money, access, release, policy, scope หรือเปลี่ยนแล้วย้อนกลับยาก ต้องให้ LIFF เรียก MONOLITH authorization path โหลด authoritative data ใหม่ อธิบาย consequence ทำ step-up/two-person control ตาม policy consume one-time command แบบ atomic แล้วออก durable Signed Receipt การ login LIFF สำเร็จเพียงอย่างเดียวไม่ใช่ approval</p>
 <h2>4. การตัดสินใจสำหรับห้า presets</h2>
@@ -124,7 +132,7 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
   "label": "Review and confirm",
   "uri": "https://liff.line.me/{environment-liff-id}"
 }</code></pre>
-<p>สร้าง transaction context ฝั่ง server หลังเข้า หรือแลก opaque single-use reference หลีกเลี่ยง business authority ที่อ่านหรือ reuse ได้ใน URI การตรวจ exact redirect, token, <code>state</code>, <code>nonce</code> ทำฝั่ง server</p>
+<p>สร้าง MONOLITH transaction reference ฝั่ง server หลังเข้าและ bind กับ authenticated session รวม exact return target หลีกเลี่ยง business authority ที่อ่านหรือ reuse ได้ใน URI ส่วน <code>liff.state</code> และ forwarded URL เสนอ routing ได้เท่านั้น Server ต้อง reload tenant/resource/revision/action และ authorization ก่อน one-time consumption</p>
 <h2>8. Prohibited anti-patterns</h2>
 <div class="tablewrap"><table><thead><tr><th>Anti-pattern</th><th>เหตุผลที่ fail</th><th>วิธีแทน</th></tr></thead><tbody>
 <tr><td>tenant/amount/role in postback data</td><td>Payload ที่ผู้ใช้ส่งต่อ/ควบคุมได้ดูเหมือน authority และ leak context</td><td>Opaque intent ID, authoritative lookup และ reauthorization</td></tr>
@@ -147,6 +155,8 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <li>[ ] One-time command และ audit atomic</li>
 <li>[ ] Reconcile <code>unknown-after-send</code> โดยไม่ blind resend</li>
 <li>[ ] Live delivery ปิดจน Trust P0 ผ่าน</li>
+<li>[ ] LIFF ใช้ <code>liff.init()</code> / <code>liff.login()</code> และ raw-token server verification; decoded client profile ไม่ใช่ identity proof</li>
+<li>[ ] MONOLITH transaction reference, LINE-managed <code>liff.state</code>, OAuth state และ OIDC nonce แยกจากกัน</li>
 </ul>
 <h2>แหล่งข้อมูลทางการ</h2>
 <p>Retrieved 2026-08-02:</p>
@@ -156,6 +166,9 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <li><a href="https://developers.line.biz/en/docs/messaging-api/receiving-messages/" target="_blank" rel="noopener">Receive messages และ webhook redelivery</a></li>
 <li><a href="https://developers.line.biz/en/docs/messaging-api/verify-webhook-signature/" target="_blank" rel="noopener">Verify webhook signature</a></li>
 <li><a href="https://developers.line.biz/en/docs/liff/registering-liff-apps/" target="_blank" rel="noopener">Adding a LIFF app and scopes</a></li>
+<li><a href="https://developers.line.biz/en/reference/liff/" target="_blank" rel="noopener">LIFF API reference: initialization และ login</a></li>
+<li><a href="https://developers.line.biz/en/docs/liff/developing-liff-apps/" target="_blank" rel="noopener">Developing a LIFF app</a></li>
+<li><a href="https://developers.line.biz/en/docs/liff/opening-liff-app/" target="_blank" rel="noopener">Opening a LIFF app และ <code>liff.state</code></a></li>
 <li><a href="https://developers.line.biz/en/docs/liff/using-user-profile/" target="_blank" rel="noopener">Using profile information in LIFF safely</a></li>
 <li><a href="https://developers.line.biz/en/docs/liff/development-guidelines/" target="_blank" rel="noopener">LIFF development guidelines</a></li>
 <li><a href="https://developers.line.biz/en/reference/line-login/" target="_blank" rel="noopener">LINE Login API: token and nonce</a></li>

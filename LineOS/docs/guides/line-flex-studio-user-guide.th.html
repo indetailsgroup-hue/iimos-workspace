@@ -133,7 +133,15 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <li>หากค่าใดผิดให้ Cancel หากตรงทั้งหมดให้เลือก <strong>Confirm demo intent</strong> หนึ่งครั้ง</li>
 <li>หาก bound field เปลี่ยน รายการหมดอายุ มี tampering หรือ transaction ไม่ตรงกัน ระบบจะ fail closed และต้องเริ่ม review ใหม่</li>
 </ol>
-<p>บริการจริงต้องให้ LIFF ยืนยันตัวตน ตรวจ transaction <code>state</code> และ <code>nonce</code> ฝั่ง server โหลด authoritative revision/permission ใหม่ ใช้ MONOLITH step-up สำหรับ consequential action consume intent ครั้งเดียว และเขียน immutable audit evidence</p>
+<p>บริการจริงเริ่มด้วย <code>liff.init()</code> และใช้ <code>liff.login()</code> เมื่อ documented external/in-app-browser path ต้อง login จากนั้นส่ง <strong>raw <code>liff.getIDToken()</code> ID token or access token</strong> ไป server ผ่าน HTTPS แล้ว <strong>verify using LINE's documented server flow</strong> ก่อน map verified LINE subject กับ stored MONOLITH principal ข้อจำกัดสำคัญคือ <strong>Direct LINE Login authorization requests inside the LIFF browser are not guaranteed</strong> จึงต้องใช้ supported LIFF login path แทนการสร้าง direct authorization request ภายใน LIFF</p>
+<p>แยก identity, routing, authorization correlation และ business transaction authority ดังนี้:</p>
+<div class="tablewrap"><table><thead><tr><th>Concept</th><th>Meaning and required handling</th></tr></thead><tbody>
+<tr><td>MONOLITH transaction reference</td><td>opaque reference แบบ server-created, server-stored, high-entropy พร้อม CSRF/session binding; bind tenant, principal/audience, resource, revision, action, expiry และ exact return target; one-time consumed แบบ atomic และไม่ใช่ ID-token nonce</td></tr>
+<tr><td>LINE-managed liff.state</td><td>ข้อมูลเพิ่มเติมของ LIFF URL ที่ LINE ส่งต่อ เป็น untrusted routing input; not OAuth state, not permission และ not the MONOLITH transaction reference ให้ประมวลผล routing หลัง <code>liff.init()</code> resolve แล้วเท่านั้น</td></tr>
+<tr><td>OAuth state</td><td>CSRF correlation สำหรับ separate supported authorization flow; flow นั้นสร้างและเก็บเอง; not liff.state และไม่ใช่ business permission</td></tr>
+<tr><td>OIDC nonce</td><td>ID-token replay/correlation input; compare only when a separate supported authorization flow lets MONOLITH supply it และ LINE คืน ID-token claim</td></tr>
+</tbody></table></div>
+<p>หลัง verify identity แล้ว server ต้องโหลด authoritative revision และ permission ใหม่ bind exact-action review กับ MONOLITH transaction reference ใช้ MONOLITH step-up สำหรับ consequential action consume reference พร้อม command result แบบ atomic และเขียน immutable audit evidence ส่วน forwarded URL และ <code>liff.state</code> เสนอ routing ได้เท่านั้น ไม่ให้ permission และไม่เลือก authoritative tenant/resource/revision/action values</p>
 <h2>10. ตีความ Verification Receipt — Demo</h2>
 <p>Receipt แบบ demo ผูก generated transaction ID กับ demo tenant, recipient, revision, canonical action, outcome และเวลา confirmation แล้วแสดง local digest พร้อมแถบ <code>DEMO — NOT A PRODUCTION SIGNATURE</code></p>
 <p>Receipt นี้พิสูจน์เพียงว่า browser demo ปัจจุบันเดินผ่าน exact-value path ในเครื่อง ไม่ใช่ LINE delivery receipt, human identity proof, legal signature, MONOLITH audit record หรือ authorization decision ส่วน Signed Receipt จริงต้องใช้ Trust Kernel, authoritative server records, approved signer/key management, one-time transaction consumption และ durable audit</p>
@@ -172,6 +180,10 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <li><a href="https://developers.line.biz/en/reference/messaging-api/nojs/" target="_blank" rel="noopener">Messaging API reference</a></li>
 <li><a href="https://developers.line.biz/en/docs/messaging-api/actions/" target="_blank" rel="noopener">Messaging API actions</a></li>
 <li><a href="https://developers.line.biz/en/docs/liff/registering-liff-apps/" target="_blank" rel="noopener">Adding a LIFF app</a></li>
+<li><a href="https://developers.line.biz/en/reference/liff/" target="_blank" rel="noopener">LIFF API reference: initialization และ login</a></li>
+<li><a href="https://developers.line.biz/en/docs/liff/developing-liff-apps/" target="_blank" rel="noopener">Developing a LIFF app</a></li>
+<li><a href="https://developers.line.biz/en/docs/liff/opening-liff-app/" target="_blank" rel="noopener">Opening a LIFF app และ <code>liff.state</code></a></li>
+<li><a href="https://developers.line.biz/en/reference/line-login/" target="_blank" rel="noopener">LINE Login API reference: server token verification</a></li>
 </ul>
 </main></body>
 </html>

@@ -78,6 +78,71 @@ test("installation guides preserve the console, LIFF, and secret-safety contract
   }
 });
 
+test("LIFF guides separate transaction, liff.state, OAuth state, and OIDC nonce semantics", async () => {
+  const stems = [
+    "docs/guides/line-developer-console-installation",
+    "docs/guides/line-flex-action-vs-liff-decision-guide",
+    "docs/guides/line-flex-studio-user-guide"
+  ];
+  for (const stem of stems) {
+    for (const language of editions) {
+      const markdown = await read(`${stem}.${language}.md`);
+      const transaction = tableRow(markdown, "MONOLITH transaction reference").join(" ");
+      assert.match(transaction, /server-created/i);
+      assert.match(transaction, /server-stored/i);
+      assert.match(transaction, /high-entropy/i);
+      assert.match(transaction, /CSRF\/session binding/i);
+      for (const binding of ["tenant", "principal/audience", "resource", "revision", "action", "expiry", "exact return target", "one-time consumed"]) {
+        assert.match(transaction, new RegExp(binding.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+      }
+
+      const liffState = tableRow(markdown, "LINE-managed liff.state").join(" ");
+      assert.match(liffState, /untrusted routing input/i);
+      assert.match(liffState, /not OAuth state/i);
+      assert.match(liffState, /not permission/i);
+      assert.match(liffState, /not the MONOLITH transaction reference/i);
+
+      const oauthState = tableRow(markdown, "OAuth state").join(" ");
+      assert.match(oauthState, /separate supported authorization flow/i);
+      assert.match(oauthState, /CSRF/i);
+      assert.match(oauthState, /not liff\.state/i);
+
+      const oidcNonce = tableRow(markdown, "OIDC nonce").join(" ");
+      assert.match(oidcNonce, /only when/i);
+      assert.match(oidcNonce, /lets MONOLITH supply/i);
+      assert.match(oidcNonce, /ID-token/i);
+
+      assert.match(markdown, /`liff\.init\(\)`/);
+      assert.match(markdown, /`liff\.login\(\)`/);
+      assert.match(markdown, /raw `liff\.getIDToken\(\)` ID token or access token/);
+      assert.match(markdown, /verify using LINE's documented server flow/);
+      assert.match(markdown, /Direct LINE Login authorization requests inside the LIFF browser are not guaranteed/);
+    }
+  }
+});
+
+test("closed-delivery environments disable Official Account default messages", async () => {
+  for (const language of editions) {
+    const markdown = await read(`docs/guides/line-developer-console-installation.${language}.md`);
+    const confirmIndex = markdown.indexOf("### 4.");
+    const defaultsIndex = markdown.indexOf("### 4A.");
+    const secretIndex = markdown.indexOf("### 5.");
+    assert.ok(confirmIndex >= 0 && confirmIndex < defaultsIndex && defaultsIndex < secretIndex,
+      `${language}: Official Account defaults step must immediately follow channel confirmation`);
+
+    for (const setting of ["Greeting messages", "Auto-reply messages"]) {
+      const row = tableRow(markdown, setting);
+      assert.equal(row[1], "Disabled");
+      assert.match(row[2], /dated, redacted Official Account Manager evidence/i);
+      assert.ok((markdown.match(new RegExp(setting, "g")) ?? []).length >= 3,
+        `${language}: ${setting} must appear in setup, sign-off, and rollback`);
+    }
+    assert.match(markdown, /Every environment claiming delivery closed must keep both settings Disabled/);
+    assert.match(markdown, /ownership, content, audience, approval, and rollback/);
+    assert.match(markdown, /remove the absolute closed-delivery claim/);
+  }
+});
+
 test("Studio user guides cover the complete safe operator journey", async () => {
   const required = [
     "local static server", "Header", "Hero", "Body", "Footer",

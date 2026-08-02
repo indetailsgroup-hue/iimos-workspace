@@ -40,7 +40,18 @@ A URI action opens `http`, `https`, `line` or `tel` destinations supported by LI
 
 ### URI opening LIFF
 
-Use a URI action whose destination is the environment-approved LIFF URL. LIFF provides an authenticated, private surface for forms, identity, sensitive details, comparisons and explicit confirmation. The server verifies token/ID token, `state`, `nonce`, transaction expiry, exact target/revision and current permission before accepting an intent.
+Use a URI action whose destination is the environment-approved LIFF URL. LIFF provides a private surface for forms, sensitive details, comparisons and explicit confirmation; login is only the first identity step and never business authorization.
+
+Supported identity sequence: run `liff.init()`; use `liff.login()` in the documented external/in-app-browser case; send the **raw `liff.getIDToken()` ID token or access token** to the server; then **verify using LINE's documented server flow** before mapping the verified subject to a stored principal. **Direct LINE Login authorization requests inside the LIFF browser are not guaranteed**; preserve LINE's `liff.login()` path instead of constructing an authorization request inside LIFF.
+
+Keep identity, routing and transaction values separate:
+
+| Concept | Meaning and required handling |
+|---|---|
+| MONOLITH transaction reference | A server-created, server-stored, high-entropy opaque reference with CSRF/session binding; bound to tenant, principal/audience, resource, revision, action, expiry and exact return target; one-time consumed atomically. It is not an ID-token nonce. |
+| LINE-managed liff.state | Additional LIFF URL information carried by LINE; untrusted routing input; not OAuth state, not permission and not the MONOLITH transaction reference. |
+| OAuth state | CSRF correlation for a separate supported authorization flow; created/stored by that flow; not liff.state and not business permission. |
+| OIDC nonce | ID-token replay/correlation input; compare only when a separate supported authorization flow lets MONOLITH supply it and LINE returns the ID-token claim. |
 
 ### LIFF plus MONOLITH step-up
 
@@ -108,7 +119,7 @@ The opaque value has no standalone meaning. The server record—not `data`—con
 }
 ```
 
-Create transaction context server-side after entry or exchange an opaque, single-use reference. Avoid readable or reusable business authority in the URI. Exact redirect, token, `state` and `nonce` verification occur server-side.
+Create the MONOLITH transaction reference server-side after entry and bind it to the authenticated session plus exact return target. Avoid readable or reusable business authority in the URI. `liff.state` and forwarded URL values can propose routing only; the server reloads tenant/resource/revision/action and authorization before one-time consumption.
 
 ## 8. Prohibited anti-patterns
 
@@ -135,6 +146,8 @@ Also prohibited: state-changing GET, reusable command ID, trusting LIFF-decoded 
 - [ ] One-time command and audit are atomic.
 - [ ] `unknown-after-send` is reconciled without blind resend.
 - [ ] Live delivery remains closed until Trust P0 passes.
+- [ ] LIFF uses `liff.init()` / `liff.login()` and raw-token server verification; decoded client profile is not identity proof.
+- [ ] MONOLITH transaction reference, LINE-managed `liff.state`, OAuth state and OIDC nonce remain separate.
 
 ## Official sources
 
@@ -145,8 +158,10 @@ Retrieved 2026-08-02:
 - [Receive messages and webhook redelivery](https://developers.line.biz/en/docs/messaging-api/receiving-messages/)
 - [Verify webhook signature](https://developers.line.biz/en/docs/messaging-api/verify-webhook-signature/)
 - [Adding a LIFF app and scopes](https://developers.line.biz/en/docs/liff/registering-liff-apps/)
+- [LIFF API reference: initialization and login](https://developers.line.biz/en/reference/liff/)
+- [Developing a LIFF app](https://developers.line.biz/en/docs/liff/developing-liff-apps/)
+- [Opening a LIFF app and `liff.state`](https://developers.line.biz/en/docs/liff/opening-liff-app/)
 - [Using profile information in LIFF safely](https://developers.line.biz/en/docs/liff/using-user-profile/)
 - [LIFF development guidelines](https://developers.line.biz/en/docs/liff/development-guidelines/)
 - [LINE Login API: token and nonce verification](https://developers.line.biz/en/reference/line-login/)
 - [Retrying a Messaging API request](https://developers.line.biz/en/docs/messaging-api/retrying-api-request/)
-

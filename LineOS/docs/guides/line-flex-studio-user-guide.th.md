@@ -110,7 +110,18 @@ Source classifications:
 5. หากค่าใดผิดให้ Cancel หากตรงทั้งหมดให้เลือก **Confirm demo intent** หนึ่งครั้ง
 6. หาก bound field เปลี่ยน รายการหมดอายุ มี tampering หรือ transaction ไม่ตรงกัน ระบบจะ fail closed และต้องเริ่ม review ใหม่
 
-บริการจริงต้องให้ LIFF ยืนยันตัวตน ตรวจ transaction `state` และ `nonce` ฝั่ง server โหลด authoritative revision/permission ใหม่ ใช้ MONOLITH step-up สำหรับ consequential action consume intent ครั้งเดียว และเขียน immutable audit evidence
+บริการจริงเริ่มด้วย `liff.init()` และใช้ `liff.login()` เมื่อ documented external/in-app-browser path ต้อง login จากนั้นส่ง **raw `liff.getIDToken()` ID token or access token** ไป server ผ่าน HTTPS แล้ว **verify using LINE's documented server flow** ก่อน map verified LINE subject กับ stored MONOLITH principal ข้อจำกัดสำคัญคือ **Direct LINE Login authorization requests inside the LIFF browser are not guaranteed** จึงต้องใช้ supported LIFF login path แทนการสร้าง direct authorization request ภายใน LIFF
+
+แยก identity, routing, authorization correlation และ business transaction authority ดังนี้:
+
+| Concept | Meaning and required handling |
+|---|---|
+| MONOLITH transaction reference | opaque reference แบบ server-created, server-stored, high-entropy พร้อม CSRF/session binding; bind tenant, principal/audience, resource, revision, action, expiry และ exact return target; one-time consumed แบบ atomic และไม่ใช่ ID-token nonce |
+| LINE-managed liff.state | ข้อมูลเพิ่มเติมของ LIFF URL ที่ LINE ส่งต่อ เป็น untrusted routing input; not OAuth state, not permission และ not the MONOLITH transaction reference ให้ประมวลผล routing หลัง `liff.init()` resolve แล้วเท่านั้น |
+| OAuth state | CSRF correlation สำหรับ separate supported authorization flow; flow นั้นสร้างและเก็บเอง; not liff.state และไม่ใช่ business permission |
+| OIDC nonce | ID-token replay/correlation input; compare only when a separate supported authorization flow lets MONOLITH supply it และ LINE คืน ID-token claim |
+
+หลัง verify identity แล้ว server ต้องโหลด authoritative revision และ permission ใหม่ bind exact-action review กับ MONOLITH transaction reference ใช้ MONOLITH step-up สำหรับ consequential action consume reference พร้อม command result แบบ atomic และเขียน immutable audit evidence ส่วน forwarded URL และ `liff.state` เสนอ routing ได้เท่านั้น ไม่ให้ permission และไม่เลือก authoritative tenant/resource/revision/action values
 
 ## 10. ตีความ Verification Receipt — Demo
 
@@ -158,3 +169,7 @@ Retrieved 2026-08-02:
 - [Messaging API reference](https://developers.line.biz/en/reference/messaging-api/nojs/)
 - [Messaging API actions](https://developers.line.biz/en/docs/messaging-api/actions/)
 - [Adding a LIFF app](https://developers.line.biz/en/docs/liff/registering-liff-apps/)
+- [LIFF API reference: initialization และ login](https://developers.line.biz/en/reference/liff/)
+- [Developing a LIFF app](https://developers.line.biz/en/docs/liff/developing-liff-apps/)
+- [Opening a LIFF app และ `liff.state`](https://developers.line.biz/en/docs/liff/opening-liff-app/)
+- [LINE Login API reference: server token verification](https://developers.line.biz/en/reference/line-login/)

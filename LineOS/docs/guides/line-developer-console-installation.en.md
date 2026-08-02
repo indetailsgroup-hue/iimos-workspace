@@ -18,7 +18,7 @@ Current platform note: official LINE documentation recommends LINE MINI App for 
 |---|---|
 | LINE Official Account owner | Business ID, account ownership and Manager access |
 | Provider/channel admin | Provider choice, channel membership and configuration evidence |
-| Security owner | Secrets, redirect allowlist, `state`, `nonce`, signature and step-up controls |
+| Security owner | Secrets, redirect allowlist, LIFF identity verification, MONOLITH transaction reference, OAuth/OIDC controls and step-up |
 | Platform operator | Webhook endpoint, workers, idempotency, monitoring and rollback |
 | Product owner | Trust P0 go/no-go and approved customer journey |
 
@@ -45,6 +45,17 @@ Stop if the intended provider is missing or the operator lacks Admin role. Escal
 ### 4. Confirm the Messaging API channel
 
 Open LINE Developers Console, select the provider chosen in step 3, confirm the channel created for the Official Account, and record its channel ID in the controlled environment registry. Verify account/provider/channel mapping with two-person review. A channel ID is an identifier, not a secret, but still avoid uncontrolled screenshots.
+
+### 4A. Close or govern Official Account default-message paths
+
+Immediately open LINE Official Account Manager and inspect the Messaging API response settings. LINE documents that both settings are Enabled by default when the channel is created and can send outside MONOLITH workers.
+
+| Setting | Required state for a closed environment | Evidence |
+|---|---|---|
+| Greeting messages | Disabled | Dated, redacted Official Account Manager evidence |
+| Auto-reply messages | Disabled | Dated, redacted Official Account Manager evidence |
+
+**Every environment claiming delivery closed must keep both settings Disabled.** Record environment, operator, timestamp and redacted setting view. If an approved operating model intentionally enables either setting, explicitly govern **ownership, content, audience, approval, and rollback**, test duplicate/conflicting responses, and **remove the absolute closed-delivery claim** for that environment.
 
 ### 5. Establish the secret boundary
 
@@ -103,18 +114,27 @@ Do not request email or other optional scopes without a defined purpose, privacy
 
 Record LIFF ID and LIFF URL separately for `development`, `review` and `production`, with channel ID, provider, endpoint, scopes, owner, capture date and approval status. Treat the registry as configuration evidence. Never silently reuse a review LIFF URL in a production Flex Message.
 
-### 12. Implement server-side transaction verification
+### 12. Implement the supported LIFF identity path and separate transaction verification
 
-Before binding LINE identity to a MONOLITH principal or accepting a command:
+Use this supported LIFF identity path before binding a LINE identity to a MONOLITH principal:
 
-1. Create a high-entropy, server-stored, short-lived transaction `state` bound to tenant, intended recipient/audience, target resource, revision, canonical action and exact approved redirect URI.
-2. Create a one-time `nonce`; send it through the approved authentication path and verify the returned ID token `nonce`, issuer, audience, expiry and signature server-side.
-3. Accept an access token or ID token from LIFF, then verify it with LINE/server libraries. Do not trust client-supplied profile data.
-4. Require the callback/redirect URI to match the exact registered and transaction-bound allowlist entry. Reject open redirects and unexpected path/query changes.
-5. Verify transaction expiry, one-time status, tenant/principal/resource permission, revision freshness and step-up result.
-6. Atomically consume the transaction once before applying the business command; retries return the stored result rather than executing again.
+1. Execute `liff.init()` at the registered endpoint (and again after the documented external-browser redirect). In an external browser or LINE in-app browser, use `liff.login()` when login is required; LIFF browser login is handled through initialization.
+2. After initialization/login, send the **raw `liff.getIDToken()` ID token or access token** to the server over HTTPS. Do not send a decoded profile as identity proof.
+3. On the server, **verify using LINE's documented server flow**: verify the ID token with the expected LINE Login channel ID and documented issuer/audience/expiry/signature checks, or verify the access token and retrieve the profile from LINE as documented.
+4. Map only the verified LINE subject to the stored MONOLITH principal binding, then perform tenant/resource authorization separately.
 
-Do not confuse application transaction `state` with untrusted `liff.state` URL data. Both URL input and all forwarded-link context are untrusted until server verification completes.
+**Direct LINE Login authorization requests inside the LIFF browser are not guaranteed**; LINE instructs LIFF apps to use `liff.login()` for the in-app/external-browser LIFF login path. The documented `liff.login()` input exposes `redirectUri`, not an application-supplied OAuth `state` or OIDC `nonce` parameter.
+
+Keep the four concepts separate:
+
+| Concept | Meaning and required handling |
+|---|---|
+| MONOLITH transaction reference | A server-created, server-stored, high-entropy opaque reference with CSRF/session binding; bound to tenant, principal/audience, resource, revision, action, expiry and exact return target; one-time consumed atomically. It is not an ID-token nonce. |
+| LINE-managed liff.state | Additional LIFF URL information carried by LINE; untrusted routing input; not OAuth state, not permission and not the MONOLITH transaction reference. Process routing only after `liff.init()` resolves. |
+| OAuth state | CSRF correlation for a separate supported authorization flow; created and stored by that flow; not liff.state and not business permission. |
+| OIDC nonce | ID-token replay/correlation input; compare only when a separate supported authorization flow lets MONOLITH supply it and LINE returns the claim. Omit the expected nonce when that flow supplied none. |
+
+For the approved LIFF path, create the MONOLITH transaction reference in the server session before showing the exact-action review. Bind it to the verified principal/audience and all business values above, require the exact allowlisted return target, recheck authorization and revision freshness, and atomically consume it with the command/audit result. Forwarded URLs and `liff.state` can select a proposed route only; they never grant permission or select authoritative tenant/resource state.
 
 ### 13. Configure the Flex button correctly
 
@@ -146,20 +166,21 @@ Do not treat the Studio preview or Flex Message Simulator as real-client equival
 
 ### 16. Keep customer delivery closed until Trust P0
 
-Live customer delivery remains disabled until every MONOLITH Trust P0 gate has fresh evidence: tenant/principal/resource authorization, webhook signature verification before parse, replay/idempotency, secure identity binding, revision freshness, step-up for consequential action, one-time command execution, durable audit, consent/preferences, delivery reconciliation, monitoring and tested rollback. Product approval alone cannot waive a failed gate.
+Live customer delivery remains disabled only when both Official Account default-message settings are Disabled and every MONOLITH Trust P0 gate has fresh evidence: tenant/principal/resource authorization, webhook signature verification before parse, replay/idempotency, secure identity binding, revision freshness, step-up for consequential action, one-time command execution, durable audit, consent/preferences, delivery reconciliation, monitoring and tested rollback. Product approval alone cannot waive a failed gate.
 
 ### 17. Roll back safely
 
 For an unsafe release, compromise, ambiguous delivery or uncontrolled error rate:
 
-1. Disable the affected command policy and new LIFF entry point.
-2. Disable **Use webhook** when reception itself must stop; otherwise keep ingestion quarantined while stopping business workers.
-3. Stop outbound and command workers without discarding the durable queue.
-4. Revoke/rotate affected secrets when compromise is suspected.
-5. Retain audit, raw evidence, request/retry identifiers and unknown-after-send state.
-6. Reconcile accepted, failed, duplicate and ambiguous outcomes. Never blind resend and never delete unexplained delivery state.
-7. Route users to the approved authenticated web/operator fallback.
-8. Require a new Trust P0 evidence set before restoration.
+1. In Official Account Manager, set **Greeting messages** and **Auto-reply messages** to Disabled and retain dated, redacted evidence; if either intentionally remains enabled, execute its approved owner/content/audience rollback and remove the closed-delivery claim.
+2. Disable the affected command policy and new LIFF entry point.
+3. Disable **Use webhook** when reception itself must stop; otherwise keep ingestion quarantined while stopping business workers.
+4. Stop outbound and command workers without discarding the durable queue.
+5. Revoke/rotate affected secrets when compromise is suspected.
+6. Retain audit, raw evidence, request/retry identifiers and unknown-after-send state.
+7. Reconcile accepted, failed, duplicate and ambiguous outcomes. Never blind resend and never delete unexplained delivery state.
+8. Route users to the approved authenticated web/operator fallback.
+9. Require a new Trust P0 evidence set before restoration.
 
 Deleting the LIFF registration or event history is not the first response: preservation and reconciliation come before retirement cleanup.
 
@@ -172,10 +193,14 @@ This edition contains no screenshot because no current official console screen w
 | Gate | Evidence | Owner | Result |
 |---|---|---|---|
 | Provider/channel mapping reviewed | Registry entry and second reviewer | Channel admin | Pass/Fail |
+| Greeting messages | Disabled plus dated, redacted Official Account Manager evidence; or approved governed exception with closed claim removed | OA owner | Pass/Fail |
+| Auto-reply messages | Disabled plus dated, redacted Official Account Manager evidence; or approved governed exception with closed claim removed | OA owner | Pass/Fail |
 | Webhook verify + empty-event 200 | Timestamped non-secret test result | Platform | Pass/Fail |
 | Signature-before-parse + idempotency | Test evidence | Security/Platform | Pass/Fail |
 | LIFF scopes and endpoint minimized | Configuration export/redacted capture | Security | Pass/Fail |
-| `state` / `nonce` / exact redirect / one-time consume | Adversarial test evidence | Security | Pass/Fail |
+| LIFF identity flow | `liff.init()` / `liff.login()` plus raw-token server-verification evidence | Security | Pass/Fail |
+| MONOLITH transaction reference | CSRF/session binding, exact values/return target and one-time-consume adversarial evidence | Security | Pass/Fail |
+| OAuth state / OIDC nonce | Applied only to a separately documented supported flow that supplies them | Security | Pass/Fail |
 | Real-client/fallback matrix | Device evidence | QA | Pass/Fail |
 | Trust P0 | Signed gate record | Product + Security | Pass/Fail |
 | Rollback drill | Drill record and reconciliation result | Incident owner | Pass/Fail |
@@ -193,8 +218,10 @@ Retrieved 2026-08-02:
 - [Verify webhook signature](https://developers.line.biz/en/docs/messaging-api/verify-webhook-signature/)
 - [Webhook error statistics](https://developers.line.biz/en/docs/messaging-api/check-webhook-error-statistics/)
 - [Adding a LIFF app and scopes](https://developers.line.biz/en/docs/liff/registering-liff-apps/)
-- [Developing a LIFF app](https://developers.line.biz/en/docs/liff/developing-liff-apps)
+- [LIFF API reference: initialization and login](https://developers.line.biz/en/reference/liff/)
+- [Developing a LIFF app](https://developers.line.biz/en/docs/liff/developing-liff-apps/)
+- [Opening a LIFF app and `liff.state`](https://developers.line.biz/en/docs/liff/opening-liff-app/)
 - [Using user profile information safely](https://developers.line.biz/en/docs/liff/using-user-profile/)
 - [LIFF development guidelines](https://developers.line.biz/en/docs/liff/development-guidelines/)
-- [LINE Login API and ID-token nonce validation](https://developers.line.biz/en/reference/line-login/)
+- [LINE Login API: server token verification and conditional ID-token nonce](https://developers.line.biz/en/reference/line-login/)
 - [Flex Message Simulator tutorial](https://developers.line.biz/en/docs/messaging-api/using-flex-message-simulator/)
