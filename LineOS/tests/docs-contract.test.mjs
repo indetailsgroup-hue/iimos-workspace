@@ -8,6 +8,12 @@ import { spawnSync } from "node:child_process";
 const root = resolve(import.meta.dirname, "..");
 const repo = resolve(root, "..");
 const research = "docs/research/2026-08-01-monolith-line-human-surface-deep-research";
+const guideStems = [
+  "docs/guides/line-flex-studio-user-guide",
+  "docs/guides/line-developer-console-installation",
+  "docs/guides/line-flex-action-vs-liff-decision-guide",
+  "docs/guides/line-flex-performance-rendering-checklist"
+];
 const read = (path) => readFile(resolve(root, path), "utf8");
 const editions = ["en", "th"];
 const exactConclusion = "MONOLITH should be a multi-tenant, revision-controlled project and product operating system. LINE is a replaceable Human Surface. Daph is one pilot tenant. Broader customer messaging remains NO-GO until every Trust P0 gate passes with fresh evidence.";
@@ -48,6 +54,91 @@ test("deep research exists in bilingual Markdown and standalone HTML", async () 
   assert.match(enHtml, /<html lang="en">/);
   assert.match(thHtml, /^<!doctype html>/);
   assert.match(thHtml, /<html lang="th">/);
+});
+
+test("every guide has English and Thai Markdown and HTML", async () => {
+  for (const stem of guideStems) {
+    for (const suffix of [".en.md", ".th.md", ".en.html", ".th.html"]) {
+      await access(resolve(root, stem + suffix));
+    }
+  }
+});
+
+test("installation guides preserve the console, LIFF, and secret-safety contract", async () => {
+  const required = [
+    "Flex Message Simulator", "Messaging API", "Use webhook", "Webhook redelivery",
+    "LIFF", "state", "nonce", "no production token",
+    "Flex JSON is not installed in Developer Console"
+  ];
+  for (const language of editions) {
+    const markdown = await read(`docs/guides/line-developer-console-installation.${language}.md`);
+    for (const phrase of required) {
+      assert.ok(markdown.includes(phrase), `${language} installation guide missing: ${phrase}`);
+    }
+  }
+});
+
+test("Studio user guides cover the complete safe operator journey", async () => {
+  const required = [
+    "local static server", "Header", "Hero", "Body", "Footer",
+    "design-approval", "quote-order", "sla-escalation", "site-update", "issue-evidence",
+    "320", "360", "390", "Mock LIFF", "Verification Receipt — Demo",
+    "error", "warning", "guidance", "official_constraint", "monolith_best_practice",
+    "clipboard", "no message was sent", "no business state changed"
+  ];
+  for (const language of editions) {
+    const markdown = await read(`docs/guides/line-flex-studio-user-guide.${language}.md`);
+    for (const phrase of required) {
+      assert.ok(markdown.includes(phrase), `${language} Studio guide missing: ${phrase}`);
+    }
+  }
+});
+
+test("action guides preserve the approved decision matrix and threat boundaries", async () => {
+  const rows = [
+    "| Visible conversational text | Message |",
+    "| Low-risk reversible choice, reauthorized server-side | Postback with opaque intent ID |",
+    "| Read-only web/tel/LINE scheme | URI |",
+    "| Form, identity, sensitive detail, comparison or explicit confirmation | URI opening LIFF |",
+    "| Money, access, release, policy, scope or hard-to-reverse change | LIFF plus MONOLITH step-up |"
+  ];
+  const required = [
+    ...rows, "design-approval", "quote-order", "sla-escalation", "site-update", "issue-evidence",
+    "duplicate", "replay", "transport", "authorization", "tenant", "amount", "role",
+    "free-text order truth", "one-tap approval", "bearer tokens in URLs",
+    "group membership as permission"
+  ];
+  for (const language of editions) {
+    const markdown = await read(`docs/guides/line-flex-action-vs-liff-decision-guide.${language}.md`);
+    for (const phrase of required) {
+      assert.ok(markdown.includes(phrase), `${language} action guide missing: ${phrase}`);
+    }
+  }
+});
+
+test("performance guides preserve LINE ceilings and MONOLITH rendering gates", async () => {
+  const required = [
+    "30 KB", "50 KB", "12", "one bubble only", "1,500", "1024×1024", "10 MB", "24 KB",
+    "no base64", "remote fonts", "third-party runtime", "320", "360", "390", "iOS", "Android",
+    "desktop", "Future production guidance", "4xx", "429", "5xx", "duplicate delivery",
+    "unknown-after-send"
+  ];
+  for (const language of editions) {
+    const markdown = await read(`docs/guides/line-flex-performance-rendering-checklist.${language}.md`);
+    for (const phrase of required) {
+      assert.ok(markdown.includes(phrase), `${language} performance guide missing: ${phrase}`);
+    }
+  }
+});
+
+test("all guides cite current official LINE primary sources", async () => {
+  for (const stem of guideStems) {
+    for (const language of editions) {
+      const markdown = await read(`${stem}.${language}.md`);
+      assert.match(markdown, /https:\/\/developers\.line\.biz\/en\//);
+      assert.match(markdown, /Retrieved 2026-08-02/);
+    }
+  }
 });
 
 test("both reports have exactly 20 numbered sections and the exact board decision", async () => {
@@ -202,6 +293,29 @@ test("committed HTML is a deterministic render of each Markdown source", async (
       const rendered = spawnSync("python", [resolve(repo, "tools", "render_docs.py"), tempMd], { encoding: "utf8" });
       assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout);
       assert.equal(await readFile(tempHtml, "utf8"), await readFile(sourceHtml, "utf8"));
+    }
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+});
+
+test("guide HTML is standalone, language-tagged, and deterministically rendered", async () => {
+  const scratch = await mkdtemp(join(tmpdir(), "lineos-guide-contract-"));
+  try {
+    for (const stem of guideStems) {
+      for (const language of editions) {
+        const sourceMd = resolve(root, `${stem}.${language}.md`);
+        const sourceHtml = resolve(root, `${stem}.${language}.html`);
+        const html = await readFile(sourceHtml, "utf8");
+        assert.match(html, /^<!doctype html>/);
+        assert.match(html, new RegExp(`<html lang="${language}">`));
+        const tempMd = join(scratch, basename(sourceMd));
+        const tempHtml = tempMd.replace(/\.md$/, ".html");
+        await copyFile(sourceMd, tempMd);
+        const rendered = spawnSync("python", [resolve(repo, "tools", "render_docs.py"), tempMd], { encoding: "utf8" });
+        assert.equal(rendered.status, 0, rendered.stderr || rendered.stdout);
+        assert.equal(await readFile(tempHtml, "utf8"), html);
+      }
     }
   } finally {
     await rm(scratch, { recursive: true, force: true });
