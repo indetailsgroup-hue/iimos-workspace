@@ -7,6 +7,8 @@ import { spawnSync } from "node:child_process";
 
 const root = resolve(import.meta.dirname, "..");
 const repo = resolve(root, "..");
+const spec = "docs/superpowers/specs/2026-08-01-monolith-line-flex-studio-design";
+const plan = "docs/superpowers/plans/2026-08-01-monolith-line-flex-studio-implementation";
 const research = "docs/research/2026-08-01-monolith-line-human-surface-deep-research";
 const guideStems = [
   "docs/guides/line-flex-studio-user-guide",
@@ -14,6 +16,8 @@ const guideStems = [
   "docs/guides/line-flex-action-vs-liff-decision-guide",
   "docs/guides/line-flex-performance-rendering-checklist"
 ];
+const documentStems = [spec, plan, research, ...guideStems];
+const publishedContentStems = [research, ...guideStems];
 const read = (path) => readFile(resolve(root, path), "utf8");
 const editions = ["en", "th"];
 const exactConclusion = "MONOLITH should be a multi-tenant, revision-controlled project and product operating system. LINE is a replaceable Human Surface. Daph is one pilot tenant. Broader customer messaging remains NO-GO until every Trust P0 gate passes with fresh evidence.";
@@ -60,6 +64,39 @@ test("every guide has English and Thai Markdown and HTML", async () => {
   for (const stem of guideStems) {
     for (const suffix of [".en.md", ".th.md", ".en.html", ".th.html"]) {
       await access(resolve(root, stem + suffix));
+    }
+  }
+});
+
+test("project documents contain no unfilled template markers or replacement characters", async () => {
+  for (const stem of publishedContentStems) {
+    for (const language of editions) {
+      const text = await read(`${stem}.${language}.md`);
+      assert.doesNotMatch(text, /\b(TBD|TODO|FIXME|implement later|fill in details)\b/i);
+      assert.doesNotMatch(text, /\uFFFD/);
+    }
+  }
+});
+
+test("HTML editions are standalone and language-correct", async () => {
+  for (const stem of documentStems) {
+    for (const language of editions) {
+      const html = await read(`${stem}.${language}.html`);
+      assert.match(html, /^<!doctype html>/);
+      assert.match(html, /<meta name="viewport"/);
+      assert.match(html, new RegExp(`<html lang="${language}">`));
+    }
+  }
+});
+
+test("no document promotes source presence to production readiness", async () => {
+  const en = await read(research + ".en.md");
+  assert.match(en, /Source presence does not prove deployment or production readiness/);
+
+  for (const stem of publishedContentStems) {
+    for (const language of editions) {
+      const markdown = await read(`${stem}.${language}.md`);
+      assert.doesNotMatch(markdown, /production[- ]ready because|tests exist, therefore production/i);
     }
   }
 });

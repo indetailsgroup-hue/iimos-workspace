@@ -245,6 +245,8 @@ Appliance instruction อาจกำหนด ventilation, clearance, local-con
 | Project/product truth — **[Verified local fact]** Nested เป็น active-product root ตาม scope correction | stable API สำหรับ revision/grants/audit | Product/domain lead | command/resource ontology | cross-root drift | authoritative revision หนึ่งชุดทุก surface |
 | Product/factory chain — **[Proposal]** หัวข้อ 12–13 | family/supplier/machine/first article ที่คุมได้ | Technical/factory lead | survey/catalogue/CAM/QA | unsafe/untraceable release | release provenance ครบและ first-article sign-off |
 
+การมี source ไม่ได้พิสูจน์ deployment หรือความพร้อมใช้งานจริงระดับ production
+
 **[Unknown]** Single executable cross-root pilot path, deployed-schema state, live credentials และ target telemetry รอการตรวจ Matrix นี้แยก repository presence จาก operational proof อย่างตั้งใจ
 
 ## 16. KPI hypotheses และ baseline plan

@@ -245,6 +245,8 @@ Appliance instructions may impose ventilation, clearances, local-condition check
 | Project/product truth — **[Verified local fact]** Nested is active-product root per scope correction | stable adapter API for revision/grants/audit | Product/domain lead | command/resource ontology | cross-root duplication/drift | one authoritative revision returned across surfaces |
 | Product/factory chain — **[Proposal]** Sections 12–13 | controlled family/supplier/machine/first article | Technical/factory lead | survey, catalogues, CAM post-processor, QA | unsafe or untraceable release | complete release provenance and first-article sign-off |
 
+Source presence does not prove deployment or production readiness.
+
 **[Unknown]** A single executable cross-root pilot path, current deployed-schema state, live platform credentials, and target-environment telemetry await verification. The matrix intentionally separates repository presence from operational proof.
 
 ## 16. KPI hypotheses and baseline plan
