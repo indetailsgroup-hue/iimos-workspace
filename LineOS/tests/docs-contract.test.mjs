@@ -10,13 +10,15 @@ const repo = resolve(root, "..");
 const spec = "docs/superpowers/specs/2026-08-01-monolith-line-flex-studio-design";
 const plan = "docs/superpowers/plans/2026-08-01-monolith-line-flex-studio-implementation";
 const research = "docs/research/2026-08-01-monolith-line-human-surface-deep-research";
+const implementationReport = "docs/reports/2026-08-01-line-flex-studio-implementation-report";
+const verificationSummary = "artifacts/line-flex-studio/verification-summary.json";
 const guideStems = [
   "docs/guides/line-flex-studio-user-guide",
   "docs/guides/line-developer-console-installation",
   "docs/guides/line-flex-action-vs-liff-decision-guide",
   "docs/guides/line-flex-performance-rendering-checklist"
 ];
-const documentStems = [spec, plan, research, ...guideStems];
+const documentStems = [spec, plan, research, ...guideStems, implementationReport];
 const read = (path) => readFile(resolve(root, path), "utf8");
 const editions = ["en", "th"];
 const exactConclusion = "MONOLITH should be a multi-tenant, revision-controlled project and product operating system. LINE is a replaceable Human Surface. Daph is one pilot tenant. Broader customer messaging remains NO-GO until every Trust P0 gate passes with fresh evidence.";
@@ -64,6 +66,40 @@ const stripHtml = (value) => value
   .replaceAll("&quot;", '"')
   .replaceAll("&#39;", "'");
 
+const validateVerificationSummary = (summary) => {
+  assert.equal(summary.schemaVersion, 1);
+  assert.match(summary.generatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/);
+  assert.equal(summary.repository?.root, "parent");
+  assert.match(summary.repository?.commit ?? "", /^[0-9a-f]{40}$/, "invalid repository commit");
+  assert.match(summary.repository?.branch ?? "", /\S/, "empty repository branch");
+  assert.match(summary.runtime?.node ?? "", /^v\d+\.\d+\.\d+/, "invalid Node version");
+  assert.match(summary.runtime?.browser ?? "", /\S/, "empty browser string");
+  assert.equal(summary.runtime?.url, "http://localhost:4177/line-flex-studio.html");
+  assert.equal(summary.automated?.command, "npm.cmd --prefix LineOS run test");
+  assert.equal(summary.automated?.exitCode, 0);
+  assert.ok(Number.isInteger(summary.automated?.tests) && summary.automated.tests > 0,
+    "non-positive automated test count");
+  assert.equal(summary.automated?.failures, 0);
+  assert.equal(summary.browser?.presetsChecked, 5);
+  assert.deepEqual(summary.browser?.languagesChecked, ["th", "en"]);
+  assert.deepEqual(summary.browser?.widthsChecked, [1440, 1024, 768, 390, 360, 320]);
+  assert.equal(summary.browser?.externalRequests, 0);
+  assert.ok(Array.isArray(summary.acceptanceGates) && summary.acceptanceGates.length === 10,
+    "acceptance gate count must be ten");
+  const allowedEvidence = /^(?:tests\/[a-z0-9-]+\.test\.mjs#[a-z0-9-]+|artifacts\/line-flex-studio\/(?:desktop-1440|mobile-390)\.png|artifacts\/line-flex-studio\/verification-summary\.json#\/browser\/networkRecord)$/;
+  const ids = [];
+  for (const gate of summary.acceptanceGates) {
+    assert.ok(Number.isInteger(gate.id), "acceptance gate id must be an integer");
+    ids.push(gate.id);
+    assert.equal(gate.status, "PASS", `gate ${gate.id} status must be PASS`);
+    assert.match(gate.evidence ?? "", allowedEvidence, `gate ${gate.id} has invalid evidence`);
+  }
+  assert.deepEqual(ids, Array.from({ length: 10 }, (_, index) => index + 1));
+  assert.equal(summary.liveLineMessageSent, false);
+  assert.equal(summary.productionSignatureCreated, false);
+  assert.equal(summary.broaderCustomerMessagingDecision, "NO-GO_PENDING_TRUST_P0");
+};
+
 test("approved document manifest is bilingual, standalone, and deterministically rendered", async () => {
   const scratch = await mkdtemp(join(tmpdir(), "lineos-document-manifest-"));
   try {
@@ -89,6 +125,52 @@ test("approved document manifest is bilingual, standalone, and deterministically
     }
   } finally {
     await rm(scratch, { recursive: true, force: true });
+  }
+});
+
+test("implementation reports expose the complete decision record", async () => {
+  const requiredHeadings = {
+    en: [
+      "Scope", "Commits", "Automated tests", "Browser checks", "Network evidence",
+      "Acceptance-gate matrix", "Residual risk", "NO-GO statement", "Next decision"
+    ],
+    th: [
+      "ขอบเขต", "คอมมิต", "การทดสอบอัตโนมัติ", "การตรวจด้วยเบราว์เซอร์", "หลักฐานเครือข่าย",
+      "เมทริกซ์เกณฑ์การยอมรับ", "ความเสี่ยงคงเหลือ", "คำตัดสิน NO-GO", "การตัดสินใจถัดไป"
+    ]
+  };
+
+  for (const language of editions) {
+    const markdown = await read(`${implementationReport}.${language}.md`);
+    const headings = (markdown.match(/^## .+$/gm) ?? [])
+      .map((line) => line.replace(/^## (?:\d+\. )?/, ""));
+    for (const heading of requiredHeadings[language]) {
+      assert.ok(headings.includes(heading), `${language} implementation report missing heading: ${heading}`);
+    }
+  }
+});
+
+test("verification evidence is complete and rejects unsafe substitutions", async () => {
+  const summary = JSON.parse(await read(verificationSummary));
+  assert.doesNotThrow(() => validateVerificationSummary(summary));
+
+  const invalidCases = [
+    ["invalid repository commit", (value) => { value.repository.commit = "short"; }],
+    ["empty browser string", (value) => { value.runtime.browser = ""; }],
+    ["non-positive automated test count", (value) => { value.automated.tests = 0; }],
+    ["acceptance gate count must be ten", (value) => { value.acceptanceGates.pop(); }],
+    ["status must be PASS", (value) => { value.acceptanceGates[0].status = "FAIL"; }],
+    ["invalid evidence", (value) => { value.acceptanceGates[0].evidence = "notes/no-real-evidence.txt"; }]
+  ];
+  for (const [message, mutate] of invalidCases) {
+    const candidate = structuredClone(summary);
+    mutate(candidate);
+    assert.throws(() => validateVerificationSummary(candidate), new RegExp(message));
+  }
+
+  for (const gate of summary.acceptanceGates) {
+    const artifact = gate.evidence.split("#", 1)[0];
+    await access(resolve(root, artifact));
   }
 });
 
