@@ -18,8 +18,9 @@ const allowedSvgAttributes = new Map([
   ["circle", new Set(["cx", "cy", "r", "fill", "opacity", "stroke", "stroke-width"])]
 ]);
 
-function decodeNumericXmlReferences(source, label) {
-  return source.replace(/&#(x[0-9a-f]+|\d+);/gi, (reference, encoded) => {
+function decodeNumericCharacterReferences(source, label, optionalSemicolon = false) {
+  const pattern = optionalSemicolon ? /&#(x[0-9a-f]+|\d+);?/gi : /&#(x[0-9a-f]+|\d+);/gi;
+  return source.replace(pattern, (reference, encoded) => {
     const hexadecimal = encoded[0].toLowerCase() === "x";
     const codePoint = Number.parseInt(hexadecimal ? encoded.slice(1) : encoded, hexadecimal ? 16 : 10);
     assert.ok(
@@ -29,6 +30,12 @@ function decodeNumericXmlReferences(source, label) {
     return String.fromCodePoint(codePoint);
   });
 }
+
+const decodeNumericXmlReferences = (source, label) =>
+  decodeNumericCharacterReferences(source, label);
+
+const decodeNumericHtmlReferences = (source, label) =>
+  decodeNumericCharacterReferences(source, label, true);
 
 function parseQuotedAttributes(source, label) {
   const attributes = new Map();
@@ -48,6 +55,48 @@ function parseQuotedAttributes(source, label) {
 
   assert.match(source.slice(offset), /^\s*$/, `${label}: unparsed attribute content`);
   return attributes;
+}
+
+function parseHtmlAttributes(source, label) {
+  const attributes = new Map();
+  const pattern = /\s*([A-Za-z_:][A-Za-z0-9_.:-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'))?/gy;
+  let offset = 0;
+
+  while (offset < source.length) {
+    if (/^\s*$/.test(source.slice(offset))) break;
+    pattern.lastIndex = offset;
+    const match = pattern.exec(source);
+    assert.ok(match, `${label}: malformed, unquoted, or unparsed attribute near ${source.slice(offset)}`);
+    const [, rawName, doubleQuoted, singleQuoted] = match;
+    const name = rawName.toLowerCase();
+    assert.ok(!attributes.has(name), `${label}: duplicate attribute ${name}`);
+    const rawValue = doubleQuoted ?? singleQuoted;
+    const value = rawValue === undefined ? null : decodeNumericHtmlReferences(rawValue, `${label} ${name}`);
+    if (value !== null) {
+      assert.doesNotMatch(value, /&#/i, `${label}: malformed numeric HTML character reference in ${name}`);
+    }
+    attributes.set(name, value);
+    offset = pattern.lastIndex;
+  }
+
+  assert.match(source.slice(offset), /^\s*$/, `${label}: unparsed attribute content`);
+  return attributes;
+}
+
+function scanHtmlOpeningTags(html) {
+  const tags = [];
+  const pattern = /<([A-Za-z][A-Za-z0-9:-]*)([^>]*)>/g;
+  let match;
+
+  while ((match = pattern.exec(html)) !== null) {
+    const name = match[1].toLowerCase();
+    tags.push({
+      name,
+      attributes: parseHtmlAttributes(match[2], `<${name}>`)
+    });
+  }
+
+  return tags;
 }
 
 function assertSafeSvg(source, label) {
@@ -104,34 +153,54 @@ function assertSafeSvg(source, label) {
 }
 
 function assertAllowedHtmlResources(html, css) {
-  const links = [...html.matchAll(/<link\b([^>]*)>/gi)];
-  assert.equal(links.length, 1, "shell must load exactly one linked resource");
+  const tags = scanHtmlOpeningTags(html);
+  const forbiddenLoaderElements = new Set([
+    "style", "img", "iframe", "frame", "object", "embed", "video", "audio",
+    "source", "track", "base", "portal", "svg"
+  ]);
+  const resourceAttributes = new Set([
+    "href", "src", "srcset", "poster", "data", "ping", "action", "formaction", "style"
+  ]);
+
+  for (const { name, attributes } of tags) {
+    assert.ok(!forbiddenLoaderElements.has(name), `extra resource-loading or inline style element <${name}>`);
+    for (const [attribute, value] of attributes) {
+      assert.doesNotMatch(attribute, /^on/i, `inline event-handler attribute ${attribute} is forbidden`);
+      if (!resourceAttributes.has(attribute)) continue;
+
+      const allowed =
+        (name === "link" && attribute === "href" && value === "./line-flex-studio.css") ||
+        (name === "script" && attribute === "src" && value === "./line-flex-studio.mjs") ||
+        (name === "a" && attribute === "href" && /^#[A-Za-z][A-Za-z0-9_.:-]*$/.test(value));
+      assert.ok(allowed, `unapproved resource attribute ${attribute} on <${name}>`);
+    }
+  }
+
+  const metas = tags.filter(({ name }) => name === "meta");
   assert.deepEqual(
-    Object.fromEntries(parseQuotedAttributes(links[0][1], "stylesheet link")),
-    { rel: "stylesheet", href: "./line-flex-studio.css" }
+    metas.map(({ attributes }) => Object.fromEntries(attributes)),
+    [
+      { charset: "utf-8" },
+      { name: "viewport", content: "width=device-width,initial-scale=1" },
+      { name: "color-scheme", content: "light" }
+    ],
+    "meta declarations must match the exact allowlist"
   );
+
+  const links = tags.filter(({ name }) => name === "link");
+  assert.equal(links.length, 1, "shell must load exactly one linked resource");
+  assert.deepEqual(Object.fromEntries(links[0].attributes),
+    { rel: "stylesheet", href: "./line-flex-studio.css" });
 
   const scriptOpenings = [...html.matchAll(/<script\b/gi)];
   const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
   assert.equal(scriptOpenings.length, 1, "shell must contain exactly one script opening tag");
   assert.equal(scripts.length, 1, "shell must load exactly one external module script");
-  assert.deepEqual(
-    Object.fromEntries(parseQuotedAttributes(scripts[0][1], "module script")),
-    { type: "module", src: "./line-flex-studio.mjs" }
-  );
+  const scriptTags = tags.filter(({ name }) => name === "script");
+  assert.equal(scriptTags.length, 1, "shell must contain exactly one parsed script tag");
+  assert.deepEqual(Object.fromEntries(scriptTags[0].attributes),
+    { type: "module", src: "./line-flex-studio.mjs" });
   assert.equal(scripts[0][2].trim(), "", "inline script content is forbidden");
-
-  const remaining = html.replace(links[0][0], "").replace(scripts[0][0], "");
-  assert.doesNotMatch(remaining, /<(?:link|script|style|img|iframe|frame|object|embed|video|audio|source|track|base|portal|svg)\b/i,
-    "extra resource-loading or inline style elements are forbidden");
-  assert.doesNotMatch(remaining, /\b(?:src|srcset|poster|data|ping|action|formaction|style)\s*=/i,
-    "extra resource-loading attributes are forbidden");
-  assert.doesNotMatch(remaining, /http-equiv\s*=\s*["']?refresh/i, "meta refresh is forbidden");
-
-  for (const href of remaining.matchAll(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi)) {
-    assert.match(href[1] ?? href[2] ?? href[3], /^#[A-Za-z][A-Za-z0-9_.:-]*$/,
-      "non-resource links must be same-document fragments");
-  }
 
   assert.doesNotMatch(css, /@import|url\s*\(/i, "CSS imports and URL resource loads are forbidden");
 }
@@ -155,6 +224,27 @@ test("runtime shell uses only the approved local stylesheet and module", async (
   const css = await read("line-flex-studio.css");
   assertAllowedHtmlResources(html, css);
   assert.doesNotMatch(html, /analytics|segment|pixel|gtag/i);
+});
+
+test("runtime shell rejects inline event-handler attributes", async () => {
+  const html = await read("line-flex-studio.html");
+  const css = await read("line-flex-studio.css");
+  const malicious = html.replace("<body>", `<body onload="location='https://attacker.invalid/'">`);
+  assert.throws(
+    () => assertAllowedHtmlResources(malicious, css),
+    /inline event-handler attribute/i
+  );
+});
+
+test("runtime shell rejects entity-encoded meta refresh directives", async () => {
+  const html = await read("line-flex-studio.html");
+  const css = await read("line-flex-studio.css");
+  const maliciousMeta = '<meta http-equiv="ref&#x72;esh" content="0;url=&#x68;ttps://attacker.invalid/">';
+  const malicious = html.replace("</head>", `  ${maliciousMeta}\n</head>`);
+  assert.throws(
+    () => assertAllowedHtmlResources(malicious, css),
+    /meta declaration/i
+  );
 });
 
 test("all five local SVG assets are self-contained", async () => {
