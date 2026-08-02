@@ -76,7 +76,9 @@ const isSha256Hex = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.tes
 
 const hasExactOwnKeys = (value, expected) => {
   if (!isRecord(value)) return false;
-  return canonicalize(Object.keys(value).sort()) === canonicalize([...expected].sort());
+  const actual = Reflect.ownKeys(value);
+  if (!actual.every((key) => typeof key === "string")) return false;
+  return canonicalize(actual.sort()) === canonicalize([...expected].sort());
 };
 
 const hasForbiddenAuthorityField = (value, seen = new WeakSet()) => {

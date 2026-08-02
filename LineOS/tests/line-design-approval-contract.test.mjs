@@ -173,6 +173,21 @@ test("rejects top-level and nested authority fields in review snapshots", () => 
   }
 });
 
+test("rejects a non-enumerable extra own key in a review snapshot", () => {
+  const snapshot = reviewSnapshot();
+  Object.defineProperty(snapshot, "tenantId", {
+    value: "tenant_demo",
+    enumerable: false
+  });
+  assert.throws(() => assertReviewSnapshot(snapshot), new Error("invalid_review_snapshot"));
+});
+
+test("rejects a symbol extra own key in a review snapshot", () => {
+  const snapshot = reviewSnapshot();
+  snapshot[Symbol("tenantId")] = "tenant_demo";
+  assert.throws(() => assertReviewSnapshot(snapshot), new Error("invalid_review_snapshot"));
+});
+
 test("accepts only the four-field confirm input with decision confirm", () => {
   const valid = {
     reviewSessionId: "review_session_demo_001",
@@ -215,6 +230,37 @@ test("rejects malformed expected revision content hashes", () => {
       new Error("invalid_confirm_review_input")
     );
   }
+});
+
+test("rejects a non-enumerable extra own key in confirm input", () => {
+  const input = {
+    reviewSessionId: "review_session_demo_001",
+    serverIssuedIdempotencyKey: "idempotency_demo_001",
+    expectedRevisionId: SHA256,
+    decision: "confirm"
+  };
+  Object.defineProperty(input, "tenantId", {
+    value: "tenant_demo",
+    enumerable: false
+  });
+  assert.throws(
+    () => assertConfirmReviewInput(input),
+    new Error("invalid_confirm_review_input")
+  );
+});
+
+test("rejects a symbol extra own key in confirm input", () => {
+  const input = {
+    reviewSessionId: "review_session_demo_001",
+    serverIssuedIdempotencyKey: "idempotency_demo_001",
+    expectedRevisionId: SHA256,
+    decision: "confirm"
+  };
+  input[Symbol("tenantId")] = "tenant_demo";
+  assert.throws(
+    () => assertConfirmReviewInput(input),
+    new Error("invalid_confirm_review_input")
+  );
 });
 
 test("exposes the exact deeply frozen A1 outcome registry", () => {
