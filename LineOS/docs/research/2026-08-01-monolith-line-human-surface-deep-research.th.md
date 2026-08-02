@@ -22,7 +22,7 @@ Perplexity Deep Research สาม track—LINE technical lifecycle; trust/secur
 
 | Label | ความหมายในรายงานนี้ |
 |---|---|
-| **Official constraint** | ข้อกำหนดหรือขีดจำกัดจาก standards body, platform owner หรือ manufacturer primary source |
+| **Official constraint** | ข้อบังคับหรือขีดจำกัดจาก standards body, platform owner, regulator หรือ manufacturer installation/compatibility document; คำอธิบาย catalogue/tool capability เพียงอย่างเดียวไม่เข้า classification นี้ |
 | **Verified local fact** | ไฟล์ test หรือ commit ที่ตรวจโดยตรงใน Git root ที่ระบุ |
 | **Inference** | ข้อสรุปแบบจำกัดขอบเขตจากหลักฐานที่อ้าง ไม่ใช่ platform guarantee |
 | **Proposal** | ทางเลือก control target หรือ workflow ที่รออนุมัติและลงมือทำ |
@@ -32,7 +32,7 @@ Perplexity Deep Research สาม track—LINE technical lifecycle; trust/secur
 
 ## 3. แผนที่ current state ของสอง Git root
 
-Repository-scope correction เป็นหลักฐาน topology ที่ใช้อ้างอิง: parent-root `CONTEXT.md` และ `docs/reports/2026-07-21-ima-schelling-monolith-repository-scope-correction.en.md` ซึ่งตรวจที่ parent commit `eca050ac8e7b76a1cb690e5d2cc4e3687c476bd7` ระบุ parent เป็น governance/bootstrap และ `determined-williams/` เป็น active-product Git root แยกต่างหาก
+ข้อสรุป topology อาศัยเอกสาร **untracked working-tree evidence** สองฉบับที่ inspected 2026-08-02 เอกสารทั้งสองไม่อยู่ใน parent commit `eca050ac8e7b76a1cb690e5d2cc4e3687c476bd7` และเป็น **not commit or deployment evidence**: `CONTEXT.md` มี SHA-256 `715E4865B1A4498AC08C6E9AC7A0C7881A54645A645C088B130FE0572A92DE99`; `docs/reports/2026-07-21-ima-schelling-monolith-repository-scope-correction.en.md` มี SHA-256 `6966AB9BB1C3B97E3856A66A35190E2D404627E5B88BFFE720462E96C296FD42` เนื้อหาที่ hash เหล่านี้ระบุ parent เป็น governance/bootstrap และ `determined-williams/` เป็น active-product Git root แยกต่างหาก รายงานรักษา provisional provenance นี้และไม่ได้ promote เอกสารทั้งสองเข้าสู่ commit history
 
 | Root และหลักฐาน | สิ่งที่รองรับ | ข้อสรุปที่บอร์ดใช้ได้ |
 |---|---|---|
@@ -138,7 +138,8 @@ Webhook redelivery อาจทำให้ event ซ้ำและลำดั
 | Forwarded link | authenticated link ไปถึงคนหรือ context อื่น | **[Proposal]** short life, audience binding, single-use/nonce ตามเหมาะสม และ server reauthorization |
 | Unknown group actor | principal binding ใน shared group ยัง unresolved | **[Proposal]** ตอบ read-only; `STEP_UP` ใน 1:1/authenticated web; actor authority ต้องใช้ explicit principal binding |
 | Wrong audience | ข้อมูล sensitive/tenant-specific ส่งผิด recipient/conversation | **[Proposal]** audience class, recipient preview, server binding, minimum-data template, reconciliation/incident route |
-| Lost/double send | database กับ API side effect แยกกัน | **[Proposal]** transactional outbox, idempotent sender, แยก acceptance/delivery/business state, reconciliation |
+| duplicate-send | webhook redelivery, client retry หรือ sender retry execute ซ้ำ | **[Proposal]** เก็บ stable retry key; บังคับ sender idempotency และ command uniqueness; วัด zero duplicate business execution |
+| unknown-after-send | timeout หรือ ambiguous response ทำให้ delivery acceptance ยัง unresolved | **[Proposal]** Persist request/retry identifiers and acceptance state; reconcile outcome; ส่ง ambiguity ไป operator resolution; never blind resend **[Official constraint]** LINE ระบุว่า accepted retry ยังอาจไม่ถึง user: [retry semantics](https://developers.line.biz/en/docs/messaging-api/retrying-api-request/) |
 | Identity substitution | เชื่อ client profile หรือ redirect result | **[Proposal]** server token validation, nonce, PKCE, exact redirect, short-lived command token |
 | Notification abuse | prompt มากเกินสร้างแรงกดดัน | **[Proposal]** quiet hours, digest, role relevance, opt-down, escalation cap, complaint/recovery |
 | Vendor/channel outage | LINE ใช้งานไม่ได้หรือ account ถูกปิด | **[Proposal]** durable queue, web fallback, operator runbook, replaceable adapter |
@@ -169,19 +170,19 @@ US FTC อธิบาย interface pattern ที่หลอกหรือช
 
 RIBA Plan of Work จัดงาน built environment ตั้งแต่ strategic definition, preparation/brief, concept, spatial coordination, technical design, manufacturing/construction, handover ถึง use **[Official constraint]** รายงานนี้ใช้เป็น lifecycle analogue ไม่ใช่ข้อบังคับสากลของ studio แหล่ง: [RIBA Plan of Work 2020](https://www.architecture.com/-/media/GatherContent/Test-resources-page/Additional-Documents/2020RIBAPlanofWorktemplatepdf.pdf)
 
-**[Proposal]** Project states และ control points ของ MONOLITH:
+**[Proposal]** Project states และ control points ของ MONOLITH โดย LINE is not the system of record: route ด้านล่างพาผู้ใช้ไปยัง action แต่ authoritative object และ decision ยัง revisioned อยู่ใน MONOLITH
 
-| State | Revision evidence | High-risk exit gate |
-|---|---|---|
-| Lead / qualify | source, consent basis, tenant, owner, intent | accepted brief owner |
-| Discover / survey | site, datum, units, tolerances, photos, constraints | survey approval และ issue log |
-| Brief / concept | requirements, options, assumptions, room/product links | selected concept และ budget band |
-| Spatial coordination | dimensions, interfaces, clashes, utilities, accessibility | coordinated revision |
-| Technical design | drawings, specs, schedules, compatibility, approvals | frozen issue package |
-| Price / contract / change | priced revision, inclusions, exclusions, taxes, dependencies | authorized commercial baseline |
-| Procurement / manufacture | BOM, supplier evidence, lead times, CAM/CNC, QA plan | release to manufacture |
-| Logistics / install | pack/location IDs, condition, site readiness, install checks | installed acceptance |
-| Handover / warranty / referral | as-built, manuals, defects, warranty, consented follow-up | closeout และ service ownership |
+| State | Human Surface path | Authoritative MONOLITH record/fields | Required revision evidence | High-risk exit gate |
+|---|---|---|---|---|
+| Lead / qualify | OA 1:1 intake; personal push หลัง consent เท่านั้น | tenant, project/lead, customer, consent, conversation, principal, owner, intent | source, consent version, qualification revision | accepted brief owner |
+| Discover / survey | OA 1:1 assignment; groups สำหรับ field coordination ที่อนุมัติ; Flex→LIFF เพื่อ upload survey | tenant/project, resource/revision, survey/evidence, principal, issue owner | site, datum, units, tolerances, photos, constraints | survey approval และ issue log |
+| Brief / concept | OA 1:1 และ personal push สำหรับ task; groups สำหรับ read-only coordination; Flex→LIFF เพื่อ selection | project/customer, consent, resource/revision, brief, option, decision, audit | requirements, options, assumptions, room/product links | selected concept และ budget band |
+| Spatial coordination | groups สำหรับ approved-team digest; OA 1:1 สำหรับ assigned issue; Flex→LIFF เพื่อ resolution | project, resource/revision, drawing/evidence, issue, decision, audit | dimensions, interfaces, clashes, utilities, accessibility | coordinated revision |
+| Technical design | personal push สำหรับ assigned review; groups สำหรับ safe digest; Flex→LIFF สำหรับ high-risk approval | project, resource/revision, drawing, spec, BOM, grant, decision, audit | drawings, specs, schedules, compatibility, approvals | frozen issue package |
+| Price / contract / change | OA 1:1 summary และ personal push; Flex→LIFF สำหรับ price/change acceptance | tenant/project/customer, price, change, resource/revision, grant, decision, audit | priced revision, inclusions, exclusions, taxes, dependencies | authorized commercial baseline |
+| Procurement / manufacture | personal push สำหรับ exception; groups สำหรับ approved operations; Flex→LIFF เพื่อ release | project, BOM, drawing, spec, supplier evidence, revision, grant, decision, audit, outbox | supplier, lead-time, CAM/CNC package, QA plan | release to manufacture |
+| Logistics / install | personal push สำหรับ assigned event; groups สำหรับ approved crew; Flex→LIFF เพื่อ exception/acceptance | project, logistics, delivery, install, QA/evidence, revision, outbox, audit | pack/location IDs, condition, site readiness, install checks | installed acceptance |
+| Handover / warranty / referral | OA 1:1 service; consented personal push; Flex→LIFF สำหรับ defect, acceptance หรือ privacy choice | tenant/project/customer, consent, as-built, warranty, defect, delivery, decision, audit | as-built, manuals, defects, warranty, consented follow-up | closeout และ service ownership |
 
 ISO 19650-1 กล่าวถึงการแลกเปลี่ยน บันทึก version และจัดระบบข้อมูลตลอด asset lifecycle; ฉบับ 2018 ที่เผยแพร่ถูกทำเครื่องหมายว่ารอ revision **[Official constraint]** แหล่ง: [ISO 19650-1](https://www.iso.org/standard/68078.html) ISO 10007 กล่าวถึง configuration management ตลอด product/service lifecycle **[Official constraint]** แหล่ง: [ISO 10007:2017](https://www.iso.org/standard/70400.html)
 
@@ -196,7 +197,7 @@ ISO 19650-1 กล่าวถึงการแลกเปลี่ยน บ�
 | Sink, hob, hood, oven, refrigerator, dishwasher, laundry | cutout, ventilation, heat/moisture clearance, utilities, service access | **[Proposal]** installation document ของ appliance เป็นหลัก; ใช้ safety clearance ที่มากกว่า |
 | Panel, stone, glass, metal, upholstery, finish | stock size, thickness, grain, edge, radius, seam, batch, care | **[Proposal]** source/batch/revision เดินทางเข้า BOM และ QA |
 
-IKEA Thailand METOD buying guide แสดง base, wall, high cabinet หลายขนาด เป็นตัวอย่างที่มีวันที่และเฉพาะตลาด ไม่ใช่มาตรฐานสากล **[Official constraint]** แหล่ง: [METOD guide](https://www.ikea.com/th/en/files/pdf/ea/22/ea22e971/metod_bg_apr21_th.pdf) Blum เผยแพร่ product data, technical drawing, CAD และ configurator collision checks; Häfele เผยแพร่ connector family ตาม application **[Official constraint]** แหล่ง: [Blum product database](https://www.blum.com/gb/en/services/planning-construction-product-selection/product-database/), [Blum configurator](https://www.blum.com/gb/en/services/planning-construction-product-selection/cabinet-configurator/index.html), [Häfele connectors](https://www.hafele.com/us/en/products/furniture-fittings-living-solutions/connectors-shelf-supports/connectors/50/)
+**Primary-source capability fact:** IKEA Thailand METOD buying guide แสดง base, wall, high cabinet หลายขนาด เป็นตัวอย่างที่มีวันที่และเฉพาะตลาด ไม่ใช่มาตรฐานสากล แหล่ง: [METOD guide](https://www.ikea.com/th/en/files/pdf/ea/22/ea22e971/metod_bg_apr21_th.pdf) Blum เผยแพร่ product data, technical drawing, CAD และ configurator collision checks; Häfele เผยแพร่ connector family ตาม application แหล่ง: [Blum product database](https://www.blum.com/gb/en/services/planning-construction-product-selection/product-database/), [Blum configurator](https://www.blum.com/gb/en/services/planning-construction-product-selection/cabinet-configurator/index.html), [Häfele connectors](https://www.hafele.com/us/en/products/furniture-fittings-living-solutions/connectors-shelf-supports/connectors/50/) คำอธิบาย catalogue/configurator นี้รองรับ schema/workflow design แต่ installation compatibility ต้องตรวจจาก current product/project document
 
 **[Inference]** Configuration ต้องเป็น data ที่มี provenance และ compatibility rules งานที่ generate แล้วยังคงเป็น revisioned instance ของ sourced parameters ไม่ใช่หลักฐานว่าขนาดของ brand หนึ่งใช้ได้กับทุก market/application
 
@@ -204,7 +205,7 @@ IKEA Thailand METOD buying guide แสดง base, wall, high cabinet หลา
 
 RICS measured-survey guidance กำหนดให้ client กับ surveyor ตกลง purpose, accuracy, control, datum, content และ deliverables **[Official constraint]** แหล่ง: [RICS measured surveys](https://www.rics.org/profession-standards/rics-standards-and-guidance/sector-standards/land-standards/measured-surveys-of-land-buildings-and-utilities) IFC เป็น open vendor-neutral schema สำหรับ built-environment data โดย IFC 4.3 ADD2 เผยแพร่เป็น ISO 16739-1:2024 **[Official constraint]** แหล่ง: [buildingSMART IFC](https://www.buildingsmart.org/standards/bsi-standards/industry-foundation-classes/?lang=en)
 
-HOMAG SmartWOP สร้าง CNC programs, panel-cutting parts lists, fitting lists และ technical drawings และส่ง production data ไป machine/production apps; woodWOP CAM import external 3D model พร้อมจำลอง machining/collision **[Official constraint]** แหล่ง: [HOMAG SmartWOP](https://digital.homag.com/en/smart-wop/) และ [woodWOP CAM plugin](https://www.homag.com/en/software-detail/software/work-preparation/woodwop-cam-plugin) Biesse อธิบาย B_SOLID เป็น 3D CAD/CAM พร้อม machining simulation และ virtual prototyping **[Official constraint]** แหล่ง: [Biesse B_SOLID](https://biesse.com/gb/en/software/b_solid/)
+**Primary-source capability fact:** HOMAG อธิบาย SmartWOP ว่าสร้าง CNC programs, panel-cutting parts lists, fitting lists และ technical drawings และส่ง production data ไป machine/production apps; woodWOP CAM import external 3D model พร้อมจำลอง machining/collision แหล่ง: [HOMAG SmartWOP](https://digital.homag.com/en/smart-wop/) และ [woodWOP CAM plugin](https://www.homag.com/en/software-detail/software/work-preparation/woodwop-cam-plugin) Biesse อธิบาย B_SOLID เป็น 3D CAD/CAM พร้อม machining simulation และ virtual prototyping แหล่ง: [Biesse B_SOLID](https://biesse.com/gb/en/software/b_solid/) Vendor capability เหล่านี้ไม่ qualify งาน MONOLITH, machine, tooling, material หรือ post-processor รายตัว
 
 **[Proposal]** Evidence chain คือ `survey source → coordinated model → approved product revision → drawing/specification/BOM → machine-specific post-process → simulation → first-article/QA → pack/location → installation → as-built/warranty` Native และ exchange file เชื่อมด้วย revision/checksum ผู้ควบคุมเครื่องอนุมัติ post-processed program สำหรับ machine/tooling/material ที่ระบุ CAD/BIM exchange เป็น coordination evidence ส่วน CAM output เป็น machine-context evidence
 
@@ -214,7 +215,7 @@ Appliance instruction อาจกำหนด ventilation, clearance, local-con
 
 | Role | Accountable outcomes | Human Surface default | Step-up events |
 |---|---|---|---|
-| Board / product owner | risk appetite, investment, tenant boundary, stop rules | portfolio digest | expansion/risk acceptance |
+| Executive / board / product owner | risk appetite, investment, tenant boundary, stop rules | portfolio digest | expansion/risk acceptance |
 | Tenant owner / studio director | policy, membership, retention, escalation | operational digest | role/grant/retention change |
 | Sales / relationship lead | qualified lead, consented contact, handoff | task/reminder | offer/discount approval |
 | Project manager | baseline, scope, schedule, dependency, change | exception/approval cards | baseline/change release |
@@ -313,7 +314,8 @@ Stop ทันทีเมื่อเกิด signature bypass, tenant ambigui
 | [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html) | IETF/RFC Editor | 2025 | Official constraint | redirect/PKCE/token protection | ใช้ตาม client/threat model |
 | [WCAG 2.2](https://www.w3.org/TR/WCAG22/) | W3C | Recommendation 2023 | Official constraint | accessible interaction | conformance ต้องตรวจ UI/content จริง |
 | [RIBA](https://www.architecture.com/-/media/GatherContent/Test-resources-page/Additional-Documents/2020RIBAPlanofWorktemplatepdf.pdf), [ISO 19650-1](https://www.iso.org/standard/68078.html), [RICS](https://www.rics.org/profession-standards/rics-standards-and-guidance/sector-standards/land-standards/measured-surveys-of-land-buildings-and-utilities) | RIBA / ISO / RICS | 2020 / 2018 / current page | Official constraint | lifecycle/revision/survey framing | analogue/guidance; project rule ยังเป็นหลัก |
-| [Blum](https://www.blum.com/gb/en/services/planning-construction-product-selection/product-database/), [Häfele](https://www.hafele.com/us/en/products/furniture-fittings-living-solutions/connectors-shelf-supports/connectors/50/), [Bosch](https://media3.bosch-home.com/Documents/9000952998_A.pdf), [HOMAG](https://digital.homag.com/en/smart-wop/), [Biesse](https://biesse.com/gb/en/software/b_solid/), [FSC](https://connect.fsc.org/certification/chain-custody-certification) | official manufacturers / FSC | retrieved 2026-08-02; document-specific | Official constraint | product parameter/manufacture chain | market/product/machine specific |
+| [IKEA METOD](https://www.ikea.com/th/en/files/pdf/ea/22/ea22e971/metod_bg_apr21_th.pdf), [Blum](https://www.blum.com/gb/en/services/planning-construction-product-selection/product-database/), [Häfele](https://www.hafele.com/us/en/products/furniture-fittings-living-solutions/connectors-shelf-supports/connectors/50/), [HOMAG](https://digital.homag.com/en/smart-wop/), [Biesse](https://biesse.com/gb/en/software/b_solid/) | official manufacturers | retrieved 2026-08-02; document-specific | Primary-source capability fact | catalogue dimensions, configuration, CAD/CAM tool capabilities | descriptive และ market/product/machine specific; ไม่ใช่ installation compatibility/qualification |
+| [Bosch installation instructions](https://media3.bosch-home.com/Documents/9000952998_A.pdf), [FSC chain of custody](https://connect.fsc.org/certification/chain-custody-certification) | Bosch / FSC | retrieved 2026-08-02; document-specific | Official constraint | appliance installation clearance และ certified-material traceability | ใช้กับ exact product/certification scope และ current revision |
 | Parent `LineOS/line-flex-*.mjs`, studio/tests @ `eca050a…` | local parent Git root | inspected 2026-08-02 | Verified local fact | standalone demo contracts | repository evidence เท่านั้น |
 | Nested LINE functions/migrations/tests/quiet-hours @ `a1e9006…` | local nested Git root | inspected 2026-08-02 | Verified local fact | active-product ingredients | repository evidence; preserve dirty tree |
 | หัวข้อ 3–17 | synthesis นี้ | 2026-08-02 | Inference | boundary/priorities/lifecycle | ต้อง validate ใน context |

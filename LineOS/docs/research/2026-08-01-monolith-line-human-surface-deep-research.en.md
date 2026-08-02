@@ -22,7 +22,7 @@ Evidence labels are deliberately narrow:
 
 | Label | Meaning in this report |
 |---|---|
-| **Official constraint** | A requirement or limit from a standards body, platform owner, or manufacturer primary source. |
+| **Official constraint** | A mandatory requirement or limit from a standards body, platform owner, regulator, or manufacturer installation/compatibility document; a catalogue or tool capability description alone does not qualify. |
 | **Verified local fact** | A file, test, or commit directly inspected in the named Git root. |
 | **Inference** | A bounded conclusion derived from cited evidence; it is not itself a platform guarantee. |
 | **Proposal** | A board choice, control, target, or workflow awaiting authorization and implementation. |
@@ -32,7 +32,7 @@ Evidence labels are deliberately narrow:
 
 ## 3. Two-root current-state map
 
-The repository-scope correction is authoritative for topology: parent-root `CONTEXT.md` and `docs/reports/2026-07-21-ima-schelling-monolith-repository-scope-correction.en.md`, both inspected at parent commit `eca050ac8e7b76a1cb690e5d2cc4e3687c476bd7`, identify the parent as governance/bootstrap and `determined-williams/` as the separate active-product Git root.
+The topology conclusion relies on two **untracked working-tree evidence** documents inspected 2026-08-02. They are absent from parent commit `eca050ac8e7b76a1cb690e5d2cc4e3687c476bd7` and are **not commit or deployment evidence**: `CONTEXT.md` has SHA-256 `715E4865B1A4498AC08C6E9AC7A0C7881A54645A645C088B130FE0572A92DE99`; `docs/reports/2026-07-21-ima-schelling-monolith-repository-scope-correction.en.md` has SHA-256 `6966AB9BB1C3B97E3856A66A35190E2D404627E5B88BFFE720462E96C296FD42`. At those exact hashes, they identify the parent as governance/bootstrap and `determined-williams/` as the separate active-product Git root. This report preserves that provisional provenance and does not promote either document into commit history.
 
 | Root and evidence | What it supports | What the board may conclude |
 |---|---|---|
@@ -138,7 +138,8 @@ Webhook redelivery may duplicate events, alter delivery order, and remains non-g
 | Forwarded link | an authenticated link reaches another person or context | **[Proposal]** Short life, audience binding, single-use/nonce where appropriate, and server reauthorization. |
 | Unknown group actor | shared group context has an unresolved principal binding | **[Proposal]** Read-only response; `STEP_UP` in 1:1/authenticated web; actor authority requires an explicit principal binding. |
 | Wrong audience | sensitive or tenant-specific content is sent to an unintended recipient/conversation | **[Proposal]** Audience classification, recipient preview, server binding, minimum-data template, and reconciliation/incident route. |
-| Lost or double send | database and API side effects diverge | **[Proposal]** Transactional outbox, idempotent sender, acceptance/delivery/business-state separation, reconciliation. |
+| duplicate-send | webhook redelivery, client retry, or sender retry executes twice | **[Proposal]** Persist a stable retry key; enforce sender idempotency and command uniqueness; measure zero duplicate business execution. |
+| unknown-after-send | timeout or ambiguous response leaves delivery acceptance unresolved | **[Proposal]** Persist request/retry identifiers and acceptance state; reconcile outcome; route ambiguity to operator resolution; never blind resend. **[Official constraint]** LINE documents that an accepted retry can still fail to reach a user: [retry semantics](https://developers.line.biz/en/docs/messaging-api/retrying-api-request/). |
 | Identity substitution | client profile or redirect result trusted | **[Proposal]** Server token validation, nonce, PKCE, exact redirect URI, short-lived command token. |
 | Notification abuse | excessive prompts create pressure | **[Proposal]** quiet hours, digest, per-role relevance, opt-down, escalation caps, complaint/recovery route. |
 | Vendor or channel outage | LINE unavailable or account disabled | **[Proposal]** durable work queue, web fallback, operator runbook, replaceable adapter contract. |
@@ -169,19 +170,19 @@ The US FTC documents interface patterns that mislead or manipulate users, includ
 
 The RIBA Plan of Work structures built-environment work from strategic definition and preparation/brief through concept, spatial coordination, technical design, manufacturing/construction, handover, and use. **[Official constraint]** It is used here as a lifecycle analogue, not a universal studio mandate. Source: [RIBA Plan of Work 2020 template](https://www.architecture.com/-/media/GatherContent/Test-resources-page/Additional-Documents/2020RIBAPlanofWorktemplatepdf.pdf).
 
-**[Proposal]** MONOLITH project states and control points:
+**[Proposal]** MONOLITH project states and control points. LINE is not the system of record: each route below carries the user to an action, while the authoritative object and decision remain revisioned in MONOLITH.
 
-| State | Required revision evidence | High-risk exit gate |
-|---|---|---|
-| Lead / qualify | source, consent basis, tenant, owner, intent | accepted brief owner |
-| Discover / survey | site, datum, units, tolerances, photos, constraints | survey approval and issue log |
-| Brief / concept | requirements, options, assumptions, room/product links | selected concept and budget band |
-| Spatial coordination | dimensions, interfaces, clashes, utilities, accessibility | coordinated revision |
-| Technical design | drawings, specs, schedules, product compatibility, approvals | frozen issue package |
-| Price / contract / change | priced revision, inclusions, exclusions, taxes, dependencies | authorized commercial baseline |
-| Procurement / manufacture | BOM, supplier evidence, lead times, CAM/CNC package, QA plan | release to manufacture |
-| Logistics / install | pack/location IDs, delivery condition, site readiness, installation checks | installed acceptance |
-| Handover / warranty / referral | as-built record, manuals, defects, warranty, consented follow-up | closeout and service ownership |
+| State | Human Surface path | Authoritative MONOLITH record/fields | Required revision evidence | High-risk exit gate |
+|---|---|---|---|---|
+| Lead / qualify | OA 1:1 intake; personal push only after consent | tenant, project/lead, customer, consent, conversation, principal, owner, intent | source, consent version, qualification revision | accepted brief owner |
+| Discover / survey | OA 1:1 assignment; groups for approved field coordination; Flex→LIFF for survey upload | tenant/project, resource/revision, survey/evidence, principal, issue owner | site, datum, units, tolerances, photos, constraints | survey approval and issue log |
+| Brief / concept | OA 1:1 and personal push for tasks; groups for read-only coordination; Flex→LIFF for selection | project/customer, consent, resource/revision, brief, option, decision, audit | requirements, options, assumptions, room/product links | selected concept and budget band |
+| Spatial coordination | groups for approved-team digest; OA 1:1 for assigned issue; Flex→LIFF for resolution | project, resource/revision, drawing/evidence, issue, decision, audit | dimensions, interfaces, clashes, utilities, accessibility | coordinated revision |
+| Technical design | personal push for assigned review; groups for safe digest; Flex→LIFF for high-risk approval | project, resource/revision, drawing, spec, BOM, grant, decision, audit | drawings, specs, schedules, product compatibility, approvals | frozen issue package |
+| Price / contract / change | OA 1:1 summary and personal push; Flex→LIFF for price/change acceptance | tenant/project/customer, price, change, resource/revision, grant, decision, audit | priced revision, inclusions, exclusions, taxes, dependencies | authorized commercial baseline |
+| Procurement / manufacture | personal push for exceptions; groups for approved operations; Flex→LIFF for release | project, BOM, drawing, spec, supplier evidence, revision, grant, decision, audit, outbox | supplier, lead-time, CAM/CNC package, QA plan | release to manufacture |
+| Logistics / install | personal push for assigned event; groups for approved crew; Flex→LIFF for exception/acceptance | project, logistics, delivery, install, QA/evidence, revision, outbox, audit | pack/location IDs, delivery condition, site readiness, installation checks | installed acceptance |
+| Handover / warranty / referral | OA 1:1 service; consented personal push; Flex→LIFF for defect, acceptance, or privacy choice | tenant/project/customer, consent, as-built, warranty, defect, delivery, decision, audit | as-built record, manuals, defects, warranty, consented follow-up | closeout and service ownership |
 
 ISO 19650-1 addresses exchanging, recording, versioning, and organizing information across the asset lifecycle; the published 2018 edition is currently marked for revision. **[Official constraint]** Source: [ISO 19650-1](https://www.iso.org/standard/68078.html). ISO 10007 describes configuration-management principles across a product or service lifecycle. **[Official constraint]** Source: [ISO 10007:2017](https://www.iso.org/standard/70400.html).
 
@@ -196,7 +197,7 @@ ISO 19650-1 addresses exchanging, recording, versioning, and organizing informat
 | Sink, hob, hood, oven, refrigerator, dishwasher, laundry | cutout, ventilation, heat/moisture clearance, utilities, service access | **[Proposal]** Appliance installation document governs; larger safety clearance prevails. |
 | Panel, stone, glass, metal, upholstery, finish | stock size, thickness, grain/direction, edge, bend/radius, seam, batch, care | **[Proposal]** Source and batch/revision travel into BOM and QA. |
 
-IKEA's Thailand METOD buying guide shows multiple base, wall, and high-cabinet dimensions; it is a dated, market-specific example rather than a universal standard. **[Official constraint]** Source: [METOD buying guide](https://www.ikea.com/th/en/files/pdf/ea/22/ea22e971/metod_bg_apr21_th.pdf). Blum publishes product data, technical drawings, CAD data, and configurator collision checks; Häfele publishes application-specific connector families. **[Official constraint]** Sources: [Blum product database](https://www.blum.com/gb/en/services/planning-construction-product-selection/product-database/), [Blum cabinet configurator](https://www.blum.com/gb/en/services/planning-construction-product-selection/cabinet-configurator/index.html), and [Häfele connectors](https://www.hafele.com/us/en/products/furniture-fittings-living-solutions/connectors-shelf-supports/connectors/50/).
+**Primary-source capability fact:** IKEA's Thailand METOD buying guide shows multiple base, wall, and high-cabinet dimensions; it is a dated, market-specific example rather than a universal standard. Source: [METOD buying guide](https://www.ikea.com/th/en/files/pdf/ea/22/ea22e971/metod_bg_apr21_th.pdf). Blum publishes product data, technical drawings, CAD data, and configurator collision checks; Häfele publishes application-specific connector families. Sources: [Blum product database](https://www.blum.com/gb/en/services/planning-construction-product-selection/product-database/), [Blum cabinet configurator](https://www.blum.com/gb/en/services/planning-construction-product-selection/cabinet-configurator/index.html), and [Häfele connectors](https://www.hafele.com/us/en/products/furniture-fittings-living-solutions/connectors-shelf-supports/connectors/50/). These catalogue/configurator descriptions support schema and workflow design; exact installation compatibility still requires the current product and project documents.
 
 **[Inference]** Configurations should be data with provenance and compatibility rules. A generated cabinet or room remains a revisioned instance of sourced parameters, never evidence that one brand's dimensions fit another market or application.
 
@@ -204,7 +205,7 @@ IKEA's Thailand METOD buying guide shows multiple base, wall, and high-cabinet d
 
 RICS measured-survey guidance requires the client and surveyor to agree survey purpose, accuracy, control, datum, content, and deliverables. **[Official constraint]** Source: [RICS measured surveys](https://www.rics.org/profession-standards/rics-standards-and-guidance/sector-standards/land-standards/measured-surveys-of-land-buildings-and-utilities). IFC is an open, vendor-neutral schema for built-environment data, with IFC 4.3 ADD2 published as ISO 16739-1:2024. **[Official constraint]** Source: [buildingSMART IFC](https://www.buildingsmart.org/standards/bsi-standards/industry-foundation-classes/?lang=en).
 
-HOMAG SmartWOP can generate CNC programs, panel-cutting parts lists, fitting lists, and technical drawings and transfer production data to machine/production applications; its woodWOP CAM tooling imports external 3D models and simulates machining/collisions. **[Official constraint]** Sources: [HOMAG SmartWOP](https://digital.homag.com/en/smart-wop/) and [woodWOP CAM plugin](https://www.homag.com/en/software-detail/software/work-preparation/woodwop-cam-plugin). Biesse describes B_SOLID as 3D CAD/CAM with machining simulation and virtual prototyping. **[Official constraint]** Source: [Biesse B_SOLID](https://biesse.com/gb/en/software/b_solid/).
+**Primary-source capability fact:** HOMAG describes SmartWOP as generating CNC programs, panel-cutting parts lists, fitting lists, and technical drawings and transferring production data to machine/production applications; its woodWOP CAM tooling imports external 3D models and simulates machining/collisions. Sources: [HOMAG SmartWOP](https://digital.homag.com/en/smart-wop/) and [woodWOP CAM plugin](https://www.homag.com/en/software-detail/software/work-preparation/woodwop-cam-plugin). Biesse describes B_SOLID as 3D CAD/CAM with machining simulation and virtual prototyping. Source: [Biesse B_SOLID](https://biesse.com/gb/en/software/b_solid/). These vendor capability statements do not qualify a particular MONOLITH job, machine, tooling, material, or post-processor.
 
 **[Proposal]** The evidence chain is `survey source → coordinated model → approved product revision → drawing/specification/BOM → machine-specific post-process → simulation → first-article/QA → pack/location → installation → as-built/warranty`. Native and exchange files are linked by revision and checksum; the machine operator approves the post-processed program for the named machine/tooling/material. CAD/BIM exchange is coordination evidence, while CAM output is machine-context evidence.
 
@@ -214,7 +215,7 @@ Appliance instructions may impose ventilation, clearances, local-condition check
 
 | Role | Accountable outcomes | Human Surface default | Step-up events |
 |---|---|---|---|
-| Board / product owner | risk appetite, investment, tenant boundary, stop rules | portfolio digest | expansion or risk acceptance |
+| Executive / board / product owner | risk appetite, investment, tenant boundary, stop rules | portfolio digest | expansion or risk acceptance |
 | Tenant owner / studio director | policy, memberships, retention, escalation | operational digest | role/grant/retention change |
 | Sales / relationship lead | qualified lead, consented contact, commercial handoff | lead tasks and reminders | offer or discount approval |
 | Project manager | baseline, scope, schedule, dependencies, change control | exception and approval cards | baseline/change release |
@@ -313,7 +314,8 @@ Immediate stop conditions are: signature bypass; tenant ambiguity; cross-tenant 
 | [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html) | IETF/RFC Editor | 2025 | Official constraint | OAuth exact redirect/PKCE/token protections | apply per client and threat model |
 | [WCAG 2.2](https://www.w3.org/TR/WCAG22/) | W3C | Recommendation 2023 | Official constraint | accessible interaction criteria | conformance requires evaluation with actual content/UI |
 | [RIBA Plan of Work](https://www.architecture.com/-/media/GatherContent/Test-resources-page/Additional-Documents/2020RIBAPlanofWorktemplatepdf.pdf), [ISO 19650-1](https://www.iso.org/standard/68078.html), [RICS surveys](https://www.rics.org/profession-standards/rics-standards-and-guidance/sector-standards/land-standards/measured-surveys-of-land-buildings-and-utilities) | RIBA / ISO / RICS | 2020 / 2018 / current page | Official constraint | lifecycle, information revision, survey framing | analogues/guidance; project requirements still govern |
-| [Blum](https://www.blum.com/gb/en/services/planning-construction-product-selection/product-database/), [Häfele](https://www.hafele.com/us/en/products/furniture-fittings-living-solutions/connectors-shelf-supports/connectors/50/), [Bosch](https://media3.bosch-home.com/Documents/9000952998_A.pdf), [HOMAG](https://digital.homag.com/en/smart-wop/), [Biesse](https://biesse.com/gb/en/software/b_solid/), [FSC](https://connect.fsc.org/certification/chain-custody-certification) | official manufacturers / FSC | retrieved 2026-08-02; document-specific versions | Official constraint | sourced parameters and manufacture chain | market/product/machine specific; revalidate exact revision |
+| [IKEA METOD](https://www.ikea.com/th/en/files/pdf/ea/22/ea22e971/metod_bg_apr21_th.pdf), [Blum](https://www.blum.com/gb/en/services/planning-construction-product-selection/product-database/), [Häfele](https://www.hafele.com/us/en/products/furniture-fittings-living-solutions/connectors-shelf-supports/connectors/50/), [HOMAG](https://digital.homag.com/en/smart-wop/), [Biesse](https://biesse.com/gb/en/software/b_solid/) | official manufacturers | retrieved 2026-08-02; document-specific versions | Primary-source capability fact | catalogue dimensions, configuration and CAD/CAM tool capabilities | descriptive and market/product/machine specific; not installation compatibility or qualification |
+| [Bosch installation instructions](https://media3.bosch-home.com/Documents/9000952998_A.pdf), [FSC chain of custody](https://connect.fsc.org/certification/chain-custody-certification) | Bosch / FSC | retrieved 2026-08-02; document-specific versions | Official constraint | appliance installation clearances and certified-material traceability | applies only to the exact product/certification scope and current revision |
 | Parent root `LineOS/line-flex-*.mjs`, studio and tests @ `eca050a…` | local parent Git root | inspected 2026-08-02 | Verified local fact | standalone composition/demo contracts | repository evidence only |
 | Nested LINE functions/migrations/tests/quiet-hours @ `a1e9006…` | local nested Git root | inspected 2026-08-02 | Verified local fact | active-product ingredients | repository evidence only; dirty tree preserved |
 | Sections 3–17 | this synthesis | 2026-08-02 | Inference | boundary, priorities, lifecycle synthesis | requires validation in context |
