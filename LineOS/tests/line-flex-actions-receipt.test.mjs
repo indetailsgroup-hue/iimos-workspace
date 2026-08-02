@@ -36,7 +36,10 @@ test("exports a URI for a high-risk postback request while reporting MON-ACT-001
   const findings = validateDraft(unsafe, message);
 
   assert.equal(action.type, "uri");
-  assert.equal(action.uri, "https://example.com/monolith/demo/design-approval");
+  assert.equal(
+    action.uri,
+    "https://example.com/monolith/demo/design-approval?reviewToken=rvw_A1_7L3n9Q2pV8xK"
+  );
   assert.ok(findings.some((finding) => finding.ruleId === "MON-ACT-001"));
 });
 

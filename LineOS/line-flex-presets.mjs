@@ -15,10 +15,11 @@ const sharedContext = {
 
 const makePreset = ({
   id, audience, asset, canonicalAction, risk, requestedActionType,
-  targetRef, expiresInMinutes, correlationPrefix, description, th, en
+  targetRef, expiresInMinutes, correlationPrefix, description, reviewToken, th, en
 }) => ({
   id,
   base: {
+    ...(reviewToken === undefined ? {} : { reviewToken }),
     context: { ...sharedContext, audience },
     hero: {
       localAsset: "./assets/line-flex-studio/" + asset,
@@ -47,6 +48,7 @@ const entries = [
     expiresInMinutes: 1440,
     correlationPrefix: "LFS-APPROVAL",
     description: "Warm kitchen design preview",
+    reviewToken: "rvw_A1_7L3n9Q2pV8xK",
     th: {
       header: { eyebrow: "DAPH STUDIO", title: "แบบพร้อมอนุมัติ", status: "REV D-07" },
       body: {

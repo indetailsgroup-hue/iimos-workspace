@@ -10,8 +10,12 @@ const actionFor = (draft) => {
     return { type: "message", label: draft.footer.primaryLabel,
       text: draft.footer.primaryLabel };
   }
+  const reviewToken = draft.presetId === "design-approval"
+    ? "?reviewToken=" + encodeURIComponent(draft.reviewToken)
+    : "";
   return { type: "uri", label: draft.footer.primaryLabel,
-    uri: "https://example.com/monolith/demo/" + encodeURIComponent(draft.presetId) };
+    uri: "https://example.com/monolith/demo/" + encodeURIComponent(draft.presetId) +
+      reviewToken };
 };
 
 const factRow = (label, value) => ({

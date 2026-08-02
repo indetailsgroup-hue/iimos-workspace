@@ -158,6 +158,16 @@ test("builds deterministic Header Hero Body Footer JSON", () => {
   );
 });
 
+test("routes Design Approval through the tokenized private review URI", () => {
+  const action = buildFlexMessage(draft()).contents.footer.contents[0].action;
+  assert.deepEqual(action, {
+    type: "uri",
+    label: "เปิดดูแบบและยืนยัน",
+    uri: "https://example.com/monolith/demo/design-approval" +
+      "?reviewToken=rvw_A1_7L3n9Q2pV8xK"
+  });
+});
+
 test("measures the bubble as UTF-8 and accepts the approved preset", () => {
   const message = buildFlexMessage(draft());
   assert.ok(measureUtf8Bytes(message.contents) < 24 * 1024);
