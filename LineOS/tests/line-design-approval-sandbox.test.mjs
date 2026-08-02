@@ -32,7 +32,8 @@ const fixture = () => ({
   requestedCanonicalAction: "design.approve_revision",
   plainLanguageConsequence: "Records a sandbox confirmation attempt only.",
   reviewTtlMs: 15 * 60 * 1000,
-  fixtureIdentity: "customer-internal-001",
+  fixtureIdentity: "fx_A1_7L3n9Q2pV8xK",
+  customerIdentity: "customer-internal-001",
   tenantId: "tenant-internal-001",
   role: "internal-reviewer",
   secret: "fixture-secret-value"
@@ -50,6 +51,18 @@ const createIdFactory = () => {
     const next = (counts.get(kind) ?? 0) + 1;
     counts.set(kind, next);
     return `${prefixes[kind]}${String(next).padStart(3, "0")}`;
+  };
+};
+
+const createSequencedIdFactory = (sequences) => {
+  const fallback = createIdFactory();
+  const indexes = new Map();
+  return (kind) => {
+    const values = sequences[kind];
+    if (!values) return fallback(kind);
+    const index = indexes.get(kind) ?? 0;
+    indexes.set(kind, index + 1);
+    return values[index] ?? values.at(-1);
   };
 };
 
@@ -96,6 +109,48 @@ const confirmInput = (snapshot, changes = {}) => ({
   decision: "confirm",
   ...changes
 });
+
+const malformedRecordsFrom = (trusted) => {
+  const missingField = { ...trusted };
+  delete missingField.title;
+
+  const hiddenExtra = { ...trusted };
+  Object.defineProperty(hiddenExtra, "reviewToken", {
+    value: REVIEW_TOKEN,
+    enumerable: false
+  });
+
+  const symbolExtra = { ...trusted };
+  symbolExtra[Symbol("tenantId")] = "tenant-internal-001";
+
+  const accessorDescriptors = Object.getOwnPropertyDescriptors(trusted);
+  accessorDescriptors.recordDigest = {
+    enumerable: true,
+    configurable: false,
+    get() {
+      throw new Error("accessor fixture-secret-value");
+    }
+  };
+  const accessor = Object.defineProperties({}, accessorDescriptors);
+  Object.freeze(accessor);
+
+  const proxy = new Proxy(trusted, {
+    ownKeys() {
+      throw new Error("proxy fixture-secret-value");
+    }
+  });
+
+  return [
+    ["token extra", Object.freeze({ ...trusted, reviewToken: REVIEW_TOKEN })],
+    ["tenant extra", Object.freeze({ ...trusted, tenantId: "tenant-internal-001" })],
+    ["missing field", Object.freeze(missingField)],
+    ["forged digest", Object.freeze({ ...trusted, recordDigest: SHA_C })],
+    ["hidden extra", Object.freeze(hiddenExtra)],
+    ["symbol extra", Object.freeze(symbolExtra)],
+    ["accessor", accessor],
+    ["proxy", proxy]
+  ];
+};
 
 test("opens one adapter-owned deeply frozen A1 ReviewSnapshot", async () => {
   const harness = createHarness();
@@ -152,6 +207,40 @@ test("collapses invalid, missing, and cross-scope lookups into one neutral resul
   }
 });
 
+test("validates all fixture-visible values before disclosing a snapshot", async () => {
+  const cases = [
+    ["provider", { providerContext: "Tenant tenant-internal-001" }],
+    ["scope", { scopeContext: "Secret customer scope" }],
+    ["work reference", { workItemRef: "customer-internal-001" }],
+    ["request reference", { approvalRequestRef: "tenant-internal-001" }],
+    ["action", { requestedCanonicalAction: "design.approved" }],
+    ["missing identity", { fixtureIdentity: undefined }],
+    ["semantic identity", { fixtureIdentity: "customer-internal-001" }]
+  ];
+
+  for (const [label, changes] of cases) {
+    const openedFixture = { ...fixture(), ...changes };
+    const { port } = createHarness({ openedFixture });
+    const result = await port.openReview(REVIEW_TOKEN);
+    assert.deepEqual(result, { outcome: "not_available" }, label);
+    assert.equal(JSON.stringify(result), '{"outcome":"not_available"}', label);
+  }
+});
+
+test("binds opaque fixture identity privately and rejects identity changes", async () => {
+  const harness = createHarness();
+  const snapshot = await harness.port.openReview(REVIEW_TOKEN);
+  assert.equal(JSON.stringify(snapshot).includes("fx_A1_7L3n9Q2pV8xK"), false);
+  harness.setCurrent({ fixtureIdentity: "fx_A1_Changed9Q2pV8xK" });
+  harness.setNow("2026-08-02T03:01:00.000Z");
+
+  assert.deepEqual(
+    await harness.port.confirmReview(confirmInput(snapshot)),
+    { outcome: "not_available" }
+  );
+  assert.equal(harness.ledger.size, 0);
+});
+
 test("issues session and idempotency identity inside the adapter", async () => {
   const issued = [];
   const harness = createHarness({
@@ -169,6 +258,80 @@ test("issues session and idempotency identity inside the adapter", async () => {
   assert.equal(snapshot.reviewSessionId, "review_session_demo_002");
   assert.equal(snapshot.serverIssuedIdempotencyKey, "idempotency_demo_002");
   assert.equal(JSON.stringify(snapshot).includes(REVIEW_TOKEN), false);
+});
+
+test("rejects malformed adapter-issued IDs with one bounded outcome", async () => {
+  const cases = [
+    ["reviewSessionId", "review_session_demo_1"],
+    ["serverIssuedIdempotencyKey", "idempotency_fixture-secret-value"],
+    ["recordId", "record_demo_1"],
+    ["correlationId", "correlation_fixture-secret-value"]
+  ];
+
+  for (const [kind, invalidValue] of cases) {
+    const harness = createHarness({
+      idFactory: createSequencedIdFactory({ [kind]: [invalidValue] })
+    });
+    const opened = await harness.port.openReview(REVIEW_TOKEN);
+    const result = kind === "reviewSessionId" || kind === "serverIssuedIdempotencyKey"
+      ? opened
+      : await harness.port.confirmReview(confirmInput(opened));
+    assert.deepEqual(result, { outcome: "temporarily_unavailable" }, kind);
+    assert.equal(JSON.stringify(result), '{"outcome":"temporarily_unavailable"}', kind);
+    assert.equal(Object.isFrozen(result), true, kind);
+    assert.equal(harness.ledger.size, 0, kind);
+  }
+});
+
+test("rejects an idempotency-key collision across distinct sessions", async () => {
+  const harness = createHarness({
+    idFactory: createSequencedIdFactory({
+      reviewSessionId: ["review_session_demo_001", "review_session_demo_002"],
+      serverIssuedIdempotencyKey: ["idempotency_demo_001", "idempotency_demo_001"]
+    })
+  });
+
+  const first = await harness.port.openReview(REVIEW_TOKEN);
+  const second = await harness.port.openReview(REVIEW_TOKEN);
+  assert.equal(first.reviewSessionId, "review_session_demo_001");
+  assert.deepEqual(second, { outcome: "temporarily_unavailable" });
+  assert.equal(harness.ledger.size, 0);
+});
+
+test("rejects duplicate record and correlation IDs before a second commit", async () => {
+  const cases = [
+    {
+      recordId: ["record_demo_001", "record_demo_001"],
+      correlationId: ["correlation_demo_001", "correlation_demo_002"]
+    },
+    {
+      recordId: ["record_demo_001", "record_demo_002"],
+      correlationId: ["correlation_demo_001", "correlation_demo_001"]
+    }
+  ];
+
+  for (const sequences of cases) {
+    const harness = createHarness({
+      idFactory: createSequencedIdFactory({
+        reviewSessionId: ["review_session_demo_001", "review_session_demo_002"],
+        serverIssuedIdempotencyKey: ["idempotency_demo_001", "idempotency_demo_002"],
+        ...sequences
+      })
+    });
+    const first = await harness.port.openReview(REVIEW_TOKEN);
+    const second = await harness.port.openReview(REVIEW_TOKEN);
+    harness.setNow("2026-08-02T03:01:00.000Z");
+
+    assert.equal(
+      (await harness.port.confirmReview(confirmInput(first))).outcome,
+      "sandbox_recorded"
+    );
+    assert.deepEqual(
+      await harness.port.confirmReview(confirmInput(second)),
+      { outcome: "temporarily_unavailable" }
+    );
+    assert.equal(harness.ledger.size, 1);
+  }
 });
 
 test("fails closed at the exact expiry boundary and remains expired", async () => {
@@ -205,6 +368,76 @@ test("rechecks revision, artifact manifest, and workflow version before recordin
   }
 });
 
+test("rechecks expiry after an asynchronous record factory resolves", async () => {
+  let releaseFactory;
+  let markFactoryStarted;
+  const factoryStarted = new Promise((resolve) => {
+    markFactoryStarted = resolve;
+  });
+  const factoryGate = new Promise((resolve) => {
+    releaseFactory = resolve;
+  });
+  const harness = createHarness({
+    async recordFactory(input) {
+      markFactoryStarted();
+      await factoryGate;
+      return createSandboxVerificationRecord(input);
+    }
+  });
+  const snapshot = await harness.port.openReview(REVIEW_TOKEN);
+  harness.setNow("2026-08-02T03:01:00.000Z");
+
+  const pending = harness.port.confirmReview(confirmInput(snapshot));
+  await factoryStarted;
+  harness.setNow(snapshot.expiresAt);
+  releaseFactory();
+
+  assert.deepEqual(await pending, { outcome: "expired" });
+  assert.equal(harness.ledger.size, 0);
+});
+
+test("rechecks every bound fixture category after an asynchronous record factory", async () => {
+  const cases = [
+    [{ revisionId: SHA_C }, "stale_revision"],
+    [{ artifactManifestSha256: SHA_C }, "stale_revision"],
+    [{ expectedWorkflowVersion: 8 }, "version_conflict"],
+    [{ providerContext: "Other Studio · A1 sandbox fixture" }, "not_available"],
+    [{ reviewArtifacts: [{
+      kind: "rendered_preview",
+      label: "Changed perspective",
+      uri: "https://example.com/monolith/demo/artifacts/changed.png"
+    }] }, "stale_revision"]
+  ];
+
+  for (const [changes, expected] of cases) {
+    let releaseFactory;
+    let markFactoryStarted;
+    const factoryStarted = new Promise((resolve) => {
+      markFactoryStarted = resolve;
+    });
+    const factoryGate = new Promise((resolve) => {
+      releaseFactory = resolve;
+    });
+    const harness = createHarness({
+      async recordFactory(input) {
+        markFactoryStarted();
+        await factoryGate;
+        return createSandboxVerificationRecord(input);
+      }
+    });
+    const snapshot = await harness.port.openReview(REVIEW_TOKEN);
+    harness.setNow("2026-08-02T03:01:00.000Z");
+
+    const pending = harness.port.confirmReview(confirmInput(snapshot));
+    await factoryStarted;
+    harness.setCurrent(changes);
+    releaseFactory();
+
+    assert.deepEqual(await pending, { outcome: expected });
+    assert.equal(harness.ledger.size, 0);
+  }
+});
+
 test("enforces the exact confirm shape and records only the stored snapshot", async () => {
   const harness = createHarness();
   const snapshot = await harness.port.openReview(REVIEW_TOKEN);
@@ -231,6 +464,114 @@ test("enforces the exact confirm shape and records only the stored snapshot", as
   assert.equal(result.record.revisionId, SHA_A);
   assert.equal(result.record.outcome, "sandbox_recorded");
   assert.equal(harness.ledger.size, 1);
+});
+
+test("rejects malformed or forged record-factory candidates before commit", async () => {
+  const trustedInput = {
+    recordId: "record_demo_001",
+    correlationId: "correlation_demo_001",
+    reviewSessionId: "review_session_demo_001",
+    providerContext: "Daph Studio · A1 sandbox fixture",
+    scopeContext: "Main kitchen review scope",
+    workItemRef: "work_item_demo_001",
+    approvalRequestRef: "approval_request_demo_001",
+    revisionLabel: "D-07",
+    revisionId: SHA_A,
+    artifactManifestSha256: SHA_B,
+    canonicalizationVersion: "line-design-approval-v1",
+    requestedCanonicalAction: "design.approve_revision",
+    outcome: "sandbox_recorded",
+    createdAt: "2026-08-02T03:00:00.000Z",
+    confirmedAt: "2026-08-02T03:01:00.000Z"
+  };
+  const trusted = await createSandboxVerificationRecord(trustedInput);
+
+  for (const [label, candidate] of malformedRecordsFrom(trusted)) {
+    const harness = createHarness({
+      async recordFactory() {
+        return candidate;
+      }
+    });
+    const snapshot = await harness.port.openReview(REVIEW_TOKEN);
+    harness.setNow("2026-08-02T03:01:00.000Z");
+    const result = await harness.port.confirmReview(confirmInput(snapshot));
+
+    assert.deepEqual(result, { outcome: "temporarily_unavailable" }, label);
+    assert.equal(JSON.stringify(result), '{"outcome":"temporarily_unavailable"}', label);
+    assert.equal(Object.isFrozen(result), true, label);
+    assert.equal(harness.ledger.size, 0, label);
+  }
+});
+
+test("validates a recorded ledger entry again before replay", async () => {
+  for (const label of malformedRecordsFrom(Object.freeze({})).map(([name]) => name)) {
+    const harness = createHarness();
+    const snapshot = await harness.port.openReview(REVIEW_TOKEN);
+    harness.setNow("2026-08-02T03:01:00.000Z");
+    const input = confirmInput(snapshot);
+    const first = await harness.port.confirmReview(input);
+    const entry = harness.ledger.get(snapshot.serverIssuedIdempotencyKey);
+    const candidate = malformedRecordsFrom(first.record)
+      .find(([name]) => name === label)[1];
+    harness.ledger.set(snapshot.serverIssuedIdempotencyKey, Object.freeze({
+      ...entry,
+      record: candidate
+    }));
+
+    const replay = await harness.port.confirmReview(input);
+    assert.deepEqual(replay, { outcome: "temporarily_unavailable" }, label);
+    assert.equal(JSON.stringify(replay), '{"outcome":"temporarily_unavailable"}', label);
+    assert.equal(Object.isFrozen(replay), true, label);
+  }
+});
+
+test("requires an injected session ledger to be fresh and empty", () => {
+  const preloaded = new Map([["idempotency_demo_001", Object.freeze({})]]);
+  assert.throws(
+    () => createHarness({ ledger: preloaded }),
+    new Error("invalid_sandbox_design_approval_dependencies")
+  );
+});
+
+test("rejects Map subclasses and proxies without exposing their raw errors", () => {
+  class LeakyLedger extends Map {
+    get() {
+      throw new Error("subclass fixture-secret-value");
+    }
+  }
+  const proxy = new Proxy(new Map(), {
+    get(_target, property) {
+      if (property === "size") throw new Error("proxy fixture-secret-value");
+      return undefined;
+    }
+  });
+
+  for (const ledger of [new LeakyLedger(), proxy]) {
+    assert.throws(
+      () => createHarness({ ledger }),
+      new Error("invalid_sandbox_design_approval_dependencies")
+    );
+  }
+});
+
+test("uses captured base Map operations when ledger instance methods are poisoned", async () => {
+  const harness = createHarness();
+  const snapshot = await harness.port.openReview(REVIEW_TOKEN);
+  harness.setNow("2026-08-02T03:01:00.000Z");
+  for (const method of ["get", "set", "has", "delete"]) {
+    Object.defineProperty(harness.ledger, method, {
+      value() {
+        throw new Error(`${method} fixture-secret-value`);
+      },
+      configurable: true
+    });
+  }
+
+  const result = await harness.port.confirmReview(confirmInput(snapshot));
+  assert.equal(result.outcome, "sandbox_recorded");
+  const ledgerSize = Object.getOwnPropertyDescriptor(Map.prototype, "size")
+    .get.call(harness.ledger);
+  assert.equal(ledgerSize, 1);
 });
 
 test("replays the exact same record for the same key and canonical payload", async () => {

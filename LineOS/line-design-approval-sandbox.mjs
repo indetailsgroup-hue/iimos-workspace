@@ -9,6 +9,9 @@ import { canonicalize, deepFreeze } from "./line-flex-model.mjs";
 
 const DEFAULT_REVIEW_TOKEN = "rvw_A1_7L3n9Q2pV8xK";
 const MAX_REVIEW_TTL_MS = 60 * 60 * 1000;
+const MAP_GET = Map.prototype.get;
+const MAP_SET = Map.prototype.set;
+const MAP_SIZE = Object.getOwnPropertyDescriptor(Map.prototype, "size").get;
 const BOUND_SCALAR_FIELDS = deepFreeze([
   "providerContext",
   "scopeContext",
@@ -16,9 +19,65 @@ const BOUND_SCALAR_FIELDS = deepFreeze([
   "approvalRequestRef",
   "revisionLabel",
   "requestedCanonicalAction",
-  "plainLanguageConsequence"
+  "plainLanguageConsequence",
+  "fixtureIdentity",
+  "reviewTtlMs"
 ]);
 const CANONICAL_UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const OPAQUE_FIXTURE_ID = /^fx_[A-Za-z0-9_-]{13,125}$/;
+const FORBIDDEN_FIXTURE_ID_SEMANTICS =
+  /tenant|customer|role|recipient|project|approval|secret|signature|key/i;
+const ISSUED_ID_PATTERNS = deepFreeze({
+  reviewSessionId: /^review_session_demo_\d{3}$/,
+  serverIssuedIdempotencyKey: /^idempotency_demo_\d{3}$/,
+  recordId: /^record_demo_\d{3}$/,
+  correlationId: /^correlation_demo_\d{3}$/
+});
+const RECORD_INPUT_KEYS = deepFreeze([
+  "recordId",
+  "correlationId",
+  "reviewSessionId",
+  "providerContext",
+  "scopeContext",
+  "workItemRef",
+  "approvalRequestRef",
+  "revisionLabel",
+  "revisionId",
+  "artifactManifestSha256",
+  "canonicalizationVersion",
+  "requestedCanonicalAction",
+  "outcome",
+  "createdAt",
+  "confirmedAt"
+]);
+const RECORD_KEYS = deepFreeze([
+  "title",
+  "recordVersion",
+  "mode",
+  "businessEffect",
+  "recordId",
+  "correlationId",
+  "reviewSessionId",
+  "providerContext",
+  "scopeContext",
+  "workItemRef",
+  "approvalRequestRef",
+  "revisionLabel",
+  "revisionId",
+  "artifactManifestSha256",
+  "requestedCanonicalAction",
+  "outcome",
+  "createdAt",
+  "confirmedAt",
+  "digestAlgorithm",
+  "canonicalizationVersion",
+  "recordDigest"
+]);
+const LEDGER_ENTRY_KEYS = deepFreeze([
+  "canonicalPayload",
+  "recordInput",
+  "record"
+]);
 
 const OUTCOME = Object.fromEntries([
   "expired",
@@ -47,7 +106,8 @@ const DEFAULT_FIXTURE = deepFreeze({
   }],
   requestedCanonicalAction: "design.approve_revision",
   plainLanguageConsequence: "Records a sandbox confirmation attempt only.",
-  reviewTtlMs: 15 * 60 * 1000
+  reviewTtlMs: 15 * 60 * 1000,
+  fixtureIdentity: "fx_A1_7L3n9Q2pV8xK"
 });
 
 const defaultFixtureSource = () => ({
@@ -104,7 +164,8 @@ const boundFixtureFor = (fixture) => deepFreeze({
   reviewArtifacts: cloneArtifacts(fixture.reviewArtifacts),
   requestedCanonicalAction: fixture.requestedCanonicalAction,
   plainLanguageConsequence: fixture.plainLanguageConsequence,
-  reviewTtlMs: fixture.reviewTtlMs
+  reviewTtlMs: fixture.reviewTtlMs,
+  fixtureIdentity: fixture.fixtureIdentity
 });
 
 const snapshotFor = (bound, ids, issuedAt, expiresAt) => assertReviewSnapshot(deepFreeze({
@@ -131,6 +192,34 @@ const snapshotFor = (bound, ids, issuedAt, expiresAt) => assertReviewSnapshot(de
 const hasValidTtl = (value) => Number.isSafeInteger(value) &&
   value > 0 && value <= MAX_REVIEW_TTL_MS;
 
+const hasOpaqueFixtureIdentity = (value) => typeof value === "string" &&
+  OPAQUE_FIXTURE_ID.test(value) && !FORBIDDEN_FIXTURE_ID_SEMANTICS.test(value);
+
+const hasTrustedFixtureSemantics = async (bound, snapshot) => {
+  try {
+    await createSandboxVerificationRecord(deepFreeze({
+      recordId: "record_demo_000",
+      correlationId: "correlation_demo_000",
+      reviewSessionId: snapshot.reviewSessionId,
+      providerContext: bound.providerContext,
+      scopeContext: bound.scopeContext,
+      workItemRef: bound.workItemRef,
+      approvalRequestRef: bound.approvalRequestRef,
+      revisionLabel: bound.revisionLabel,
+      revisionId: bound.revisionId,
+      artifactManifestSha256: bound.artifactManifestSha256,
+      canonicalizationVersion: bound.canonicalizationVersion,
+      requestedCanonicalAction: bound.requestedCanonicalAction,
+      outcome: "sandbox_recorded",
+      createdAt: snapshot.issuedAt,
+      confirmedAt: snapshot.issuedAt
+    }));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const replayResult = (record) => deepFreeze({
   outcome: "sandbox_replayed",
   record
@@ -140,6 +229,100 @@ const recordedResult = (record) => deepFreeze({
   outcome: "sandbox_recorded",
   record
 });
+
+const exactFrozenDataValues = (value, expectedKeys, scalarOnly = false) => {
+  try {
+    if (value === null || typeof value !== "object" || Array.isArray(value) ||
+        Object.getPrototypeOf(value) !== Object.prototype || !Object.isFrozen(value)) {
+      return null;
+    }
+    const keys = Reflect.ownKeys(value);
+    const expected = new Set(expectedKeys);
+    if (keys.length !== expectedKeys.length ||
+        !keys.every((key) => typeof key === "string" && expected.has(key))) {
+      return null;
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const entries = [];
+    for (const key of expectedKeys) {
+      const descriptor = descriptors[key];
+      if (!descriptor || descriptor.enumerable !== true ||
+          descriptor.configurable !== false || descriptor.writable !== false ||
+          !Object.hasOwn(descriptor, "value") || Object.hasOwn(descriptor, "get") ||
+          Object.hasOwn(descriptor, "set")) {
+        return null;
+      }
+      if (scalarOnly && descriptor.value !== null &&
+          !["string", "number", "boolean"].includes(typeof descriptor.value)) {
+        return null;
+      }
+      entries.push([key, descriptor.value]);
+    }
+    return Object.fromEntries(entries);
+  } catch {
+    return null;
+  }
+};
+
+const matchesTrustedRecord = async (recordInput, candidate) => {
+  const oracle = await createSandboxVerificationRecord(recordInput);
+  const candidateValues = exactFrozenDataValues(candidate, RECORD_KEYS, true);
+  const oracleValues = exactFrozenDataValues(oracle, RECORD_KEYS, true);
+  return candidateValues !== null && oracleValues !== null &&
+    canonicalize(candidateValues) === canonicalize(oracleValues);
+};
+
+const validateLedgerEntry = async (entry, commitment) => {
+  const entryValues = exactFrozenDataValues(entry, LEDGER_ENTRY_KEYS);
+  const commitmentValues = exactFrozenDataValues(commitment, LEDGER_ENTRY_KEYS);
+  if (!entryValues || !commitmentValues ||
+      typeof entryValues.canonicalPayload !== "string" ||
+      typeof commitmentValues.canonicalPayload !== "string") {
+    return null;
+  }
+  const recordInputValues = exactFrozenDataValues(
+    entryValues.recordInput,
+    RECORD_INPUT_KEYS,
+    true
+  );
+  const committedInputValues = exactFrozenDataValues(
+    commitmentValues.recordInput,
+    RECORD_INPUT_KEYS,
+    true
+  );
+  if (!recordInputValues || !committedInputValues ||
+      canonicalize(recordInputValues) !== canonicalize(committedInputValues) ||
+      canonicalize(recordInputValues) !== canonicalize(entryValues.recordInput) ||
+      entryValues.canonicalPayload !== commitmentValues.canonicalPayload ||
+      !(await matchesTrustedRecord(entryValues.recordInput, entryValues.record))) {
+    return null;
+  }
+  const recordValues = exactFrozenDataValues(entryValues.record, RECORD_KEYS, true);
+  const committedRecordValues = exactFrozenDataValues(
+    commitmentValues.record,
+    RECORD_KEYS,
+    true
+  );
+  if (!recordValues || !committedRecordValues ||
+      canonicalize(recordValues) !== canonicalize(committedRecordValues)) {
+    return null;
+  }
+  return deepFreeze({
+    canonicalPayload: entryValues.canonicalPayload,
+    record: commitmentValues.record
+  });
+};
+
+const isSafeFreshLedger = (value) => {
+  try {
+    return value !== null && typeof value === "object" &&
+      Object.getPrototypeOf(value) === Map.prototype &&
+      Reflect.ownKeys(value).length === 0 &&
+      MAP_SIZE.call(value) === 0;
+  } catch {
+    return false;
+  }
+};
 
 const currentFixtureOutcome = (bound, current) => {
   if (!current || typeof current !== "object") return OUTCOME.not_available;
@@ -161,6 +344,31 @@ const currentFixtureOutcome = (bound, current) => {
   return null;
 };
 
+const validatedCurrentFixtureOutcome = async (session, current) => {
+  try {
+    const currentBound = boundFixtureFor(current);
+    if (!hasValidTtl(currentBound.reviewTtlMs) ||
+        !hasOpaqueFixtureIdentity(currentBound.fixtureIdentity)) {
+      return OUTCOME.not_available;
+    }
+    const currentSnapshot = snapshotFor(
+      currentBound,
+      {
+        reviewSessionId: session.snapshot.reviewSessionId,
+        serverIssuedIdempotencyKey: session.snapshot.serverIssuedIdempotencyKey
+      },
+      session.snapshot.issuedAt,
+      session.snapshot.expiresAt
+    );
+    if (!(await hasTrustedFixtureSemantics(currentBound, currentSnapshot))) {
+      return OUTCOME.not_available;
+    }
+    return currentFixtureOutcome(session.bound, currentBound);
+  } catch {
+    return OUTCOME.not_available;
+  }
+};
+
 export function createSandboxDesignApprovalPort(dependencies = {}) {
   const clock = dependencies.clock ?? (() => new Date());
   const idFactory = dependencies.idFactory ?? defaultIdFactory();
@@ -168,15 +376,36 @@ export function createSandboxDesignApprovalPort(dependencies = {}) {
   const recordFactory = dependencies.recordFactory ?? createSandboxVerificationRecord;
   const ledger = dependencies.ledger ?? new Map();
 
-  if (typeof clock !== "function" || typeof idFactory !== "function" ||
-      typeof fixtureSource?.open !== "function" ||
-      typeof fixtureSource?.recheck !== "function" ||
-      typeof recordFactory !== "function" || !(ledger instanceof Map)) {
+  let validDependencies = false;
+  try {
+    validDependencies = typeof clock === "function" && typeof idFactory === "function" &&
+      typeof fixtureSource?.open === "function" &&
+      typeof fixtureSource?.recheck === "function" &&
+      typeof recordFactory === "function" && isSafeFreshLedger(ledger);
+  } catch {
+    validDependencies = false;
+  }
+  if (!validDependencies) {
     throw new Error("invalid_sandbox_design_approval_dependencies");
   }
 
   const sessions = new Map();
   const pendingByKey = new Map();
+  const issuedIds = Object.fromEntries(
+    Object.keys(ISSUED_ID_PATTERNS).map((kind) => [kind, new Set()])
+  );
+
+  const issueId = (kind) => {
+    const pattern = ISSUED_ID_PATTERNS[kind];
+    const seen = issuedIds[kind];
+    if (!pattern || !seen) throw new Error("invalid_issued_id");
+    const value = idFactory(kind);
+    if (typeof value !== "string" || !pattern.test(value) || seen.has(value)) {
+      throw new Error("invalid_issued_id");
+    }
+    seen.add(value);
+    return value;
+  };
 
   const openReview = async (reviewToken) => {
     let fixture;
@@ -189,17 +418,24 @@ export function createSandboxDesignApprovalPort(dependencies = {}) {
 
     try {
       const bound = boundFixtureFor(fixture);
-      if (!hasValidTtl(bound.reviewTtlMs)) return OUTCOME.not_available;
+      if (!hasValidTtl(bound.reviewTtlMs) ||
+          !hasOpaqueFixtureIdentity(bound.fixtureIdentity)) {
+        return OUTCOME.not_available;
+      }
       const issued = timestampFor(clock);
       const expiresAt = new Date(issued.milliseconds + bound.reviewTtlMs).toISOString();
       const ids = {
-        reviewSessionId: idFactory("reviewSessionId"),
-        serverIssuedIdempotencyKey: idFactory("serverIssuedIdempotencyKey")
+        reviewSessionId: issueId("reviewSessionId"),
+        serverIssuedIdempotencyKey: issueId("serverIssuedIdempotencyKey")
       };
       const snapshot = snapshotFor(bound, ids, issued.timestamp, expiresAt);
+      if (!(await hasTrustedFixtureSemantics(bound, snapshot))) {
+        return OUTCOME.not_available;
+      }
       if (sessions.has(snapshot.reviewSessionId)) return OUTCOME.temporarily_unavailable;
       sessions.set(snapshot.reviewSessionId, {
         bound,
+        commitment: null,
         expired: false,
         snapshot
       });
@@ -212,11 +448,11 @@ export function createSandboxDesignApprovalPort(dependencies = {}) {
   const recordAttempt = async (session, input, canonicalPayload, confirmedAt) => {
     try {
       const current = await fixtureSource.recheck(session.bound);
-      const recheckFailure = currentFixtureOutcome(session.bound, current);
+      const recheckFailure = await validatedCurrentFixtureOutcome(session, current);
       if (recheckFailure) return recheckFailure;
-      const record = await recordFactory({
-        recordId: idFactory("recordId"),
-        correlationId: idFactory("correlationId"),
+      const recordInput = deepFreeze({
+        recordId: issueId("recordId"),
+        correlationId: issueId("correlationId"),
         reviewSessionId: session.snapshot.reviewSessionId,
         providerContext: session.bound.providerContext,
         scopeContext: session.bound.scopeContext,
@@ -231,10 +467,25 @@ export function createSandboxDesignApprovalPort(dependencies = {}) {
         createdAt: session.snapshot.issuedAt,
         confirmedAt
       });
-      ledger.set(input.serverIssuedIdempotencyKey, deepFreeze({
+      const record = await recordFactory(recordInput);
+      if (!(await matchesTrustedRecord(recordInput, record))) {
+        return OUTCOME.temporarily_unavailable;
+      }
+      const finalCurrent = await fixtureSource.recheck(session.bound);
+      const finalRecheckFailure = await validatedCurrentFixtureOutcome(session, finalCurrent);
+      if (finalRecheckFailure) return finalRecheckFailure;
+      const finalNow = timestampFor(clock);
+      if (finalNow.milliseconds >= Date.parse(session.snapshot.expiresAt)) {
+        session.expired = true;
+        return OUTCOME.expired;
+      }
+      const entry = deepFreeze({
         canonicalPayload,
+        recordInput,
         record
-      }));
+      });
+      MAP_SET.call(ledger, input.serverIssuedIdempotencyKey, entry);
+      session.commitment = entry;
       return recordedResult(record);
     } catch {
       return OUTCOME.temporarily_unavailable;
@@ -266,12 +517,25 @@ export function createSandboxDesignApprovalPort(dependencies = {}) {
     }
 
     const canonicalPayload = canonicalize(input);
-    const existing = ledger.get(input.serverIssuedIdempotencyKey);
+    let existing;
+    try {
+      existing = MAP_GET.call(ledger, input.serverIssuedIdempotencyKey);
+    } catch {
+      return OUTCOME.temporarily_unavailable;
+    }
     if (existing) {
-      return existing.canonicalPayload === canonicalPayload
-        ? replayResult(existing.record)
+      let validated;
+      try {
+        validated = await validateLedgerEntry(existing, session.commitment);
+      } catch {
+        return OUTCOME.temporarily_unavailable;
+      }
+      if (!validated) return OUTCOME.temporarily_unavailable;
+      return validated.canonicalPayload === canonicalPayload
+        ? replayResult(validated.record)
         : OUTCOME.idempotency_conflict;
     }
+    if (session.commitment) return OUTCOME.temporarily_unavailable;
 
     const pending = pendingByKey.get(input.serverIssuedIdempotencyKey);
     if (pending) {
