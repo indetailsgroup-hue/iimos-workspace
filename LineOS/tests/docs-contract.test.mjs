@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { access, copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
@@ -66,9 +67,127 @@ const stripHtml = (value) => value
   .replaceAll("&quot;", '"')
   .replaceAll("&#39;", "'");
 
-const validateVerificationSummary = (summary) => {
+const expectedJourneys = [
+  "design-approval:th", "quote-order:th", "sla-escalation:th", "site-update:th", "issue-evidence:th",
+  "design-approval:en", "quote-order:en", "sla-escalation:en", "site-update:en", "issue-evidence:en"
+];
+const expectedJourneyAssertions = [
+  "local hero, tenant, audience, and exported action inspected",
+  "Header, Hero, Body, and Footer edited",
+  "preview, JSON, and validation updated",
+  "blocking error induced and fixed",
+  "valid JSON copied and downloaded",
+  "Mock LIFF exact-action review completed",
+  "demo intent confirmed and demo receipt inspected",
+  "opposite-language preset restored without field leak"
+];
+const expectedResponsiveLayouts = {
+  1440: "three-column PASS",
+  1024: "two-row PASS",
+  768: "two-row transition PASS",
+  390: "mobile tabs PASS",
+  360: "mobile tabs PASS",
+  320: "mobile tabs PASS"
+};
+const expectedZeroOverflow = { 1440: 0, 1024: 0, 768: 0, 390: 0, 360: 0, 320: 0 };
+
+const slugTestName = (name) => name
+  .normalize("NFKD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, "-")
+  .replace(/^-+|-+$/g, "");
+
+const namedTestAnchors = (source) => new Set(
+  [...source.matchAll(/\btest\(\s*"((?:[^"\\]|\\.)*)"\s*,/g)]
+    .map((match) => slugTestName(JSON.parse(`"${match[1]}"`)))
+);
+
+const validateNetworkRecord = (summary) => {
+  const record = summary.browser?.networkRecord;
+  assert.ok(record && typeof record === "object" && !Array.isArray(record) && Object.keys(record).length > 0,
+    "networkRecord is required");
+  assert.ok(Number.isInteger(record.requestCount) && record.requestCount > 0,
+    "networkRecord request count must be positive");
+  assert.deepEqual(record.allowedHosts, ["localhost"], "networkRecord hosts must be localhost only");
+  assert.equal(record.externalRequestCount, 0, "networkRecord external requests must be zero");
+  assert.equal(record.externalRequestCount, summary.browser.externalRequests,
+    "networkRecord external count must match browser summary");
+  assert.equal(record.lineSupabaseAnalyticsRequestCount, 0,
+    "networkRecord LINE/Supabase/analytics requests must be zero");
+  assert.equal(record.unexpectedConsoleErrorCount, 0,
+    "networkRecord unexpected console errors must be zero");
+  assert.equal(record.pageErrorCount, 0, "networkRecord page errors must be zero");
+  assert.equal(record.expectedInducedLocalHeroAbortErrors, 1,
+    "networkRecord induced hero abort count must be one");
+  assert.deepEqual(record.journeys, expectedJourneys, "networkRecord journeys must be the exact 5x2 matrix");
+  assert.deepEqual(record.journeyAssertions, expectedJourneyAssertions,
+    "networkRecord journey assertions are incomplete");
+  assert.deepEqual(record.responsiveLayouts, expectedResponsiveLayouts,
+    "networkRecord responsive results must be the exact six PASS layouts");
+  assert.deepEqual(record.horizontalOverflowPixels, expectedZeroOverflow,
+    "networkRecord overflow must be zero at all six widths");
+  assert.equal(record.staleRevisionFailClosed, true, "networkRecord stale revision must fail closed");
+  assert.equal(record.keyboardOnlyCompletion, true, "networkRecord keyboard completion must pass");
+  assert.equal(record.visibleFocus, "3px solid rgb(240, 185, 77)",
+    "networkRecord visible focus evidence is invalid");
+  assert.equal(record.dialogFocusReturned, true, "networkRecord dialog focus return must pass");
+  assert.equal(record.reducedMotion, "0.01ms equivalent animation and transition duration",
+    "networkRecord reduced-motion evidence is invalid");
+  assert.equal(record.thaiLongText, "PASS", "networkRecord Thai long-text check must pass");
+  assert.equal(record.englishLongText, "PASS", "networkRecord English long-text check must pass");
+  assert.equal(record.emoji, "PASS", "networkRecord emoji check must pass");
+  assert.equal(record.missingHeroFallback,
+    "PASS after one intentionally aborted localhost image request",
+    "networkRecord missing-hero fallback must pass");
+};
+
+const resolveEvidenceReference = async (summary, evidence) => {
+  const [artifact, anchor = ""] = evidence.split("#", 2);
+  const artifactPath = resolve(root, artifact);
+  await access(artifactPath);
+
+  if (artifact.startsWith("tests/")) {
+    const anchors = namedTestAnchors(await readFile(artifactPath, "utf8"));
+    assert.ok(anchors.has(anchor), `test anchor does not resolve: ${evidence}`);
+    return;
+  }
+
+  if (artifact.endsWith(".png")) {
+    const screenshot = Object.values(summary.browser?.screenshots ?? {})
+      .find((candidate) => candidate?.path === artifact);
+    assert.ok(screenshot, `screenshot record does not resolve: ${evidence}`);
+    assert.match(screenshot.sha256 ?? "", /^[0-9A-F]{64}$/, "screenshot SHA-256 is invalid");
+    const actual = createHash("sha256").update(await readFile(artifactPath)).digest("hex").toUpperCase();
+    assert.equal(actual, screenshot.sha256, `screenshot SHA-256 mismatch: ${evidence}`);
+    assert.equal(screenshot.visualInspection, "PASS", `screenshot visual inspection must PASS: ${evidence}`);
+    return;
+  }
+
+  assert.equal(artifact, verificationSummary, `unsupported evidence artifact: ${evidence}`);
+  assert.equal(anchor, "/browser/networkRecord", `unsupported JSON pointer: ${evidence}`);
+  validateNetworkRecord(summary);
+};
+
+const validateVerificationSummary = async (summary) => {
   assert.equal(summary.schemaVersion, 1);
-  assert.match(summary.generatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/);
+  const timestamp = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?Z$/.exec(summary.generatedAt);
+  assert.ok(timestamp, "invalid generatedAt format");
+  const generatedAtInstant = Date.parse(summary.generatedAt);
+  assert.ok(Number.isFinite(generatedAtInstant), "invalid generatedAt instant");
+  const generatedAtDate = new Date(generatedAtInstant);
+  assert.deepEqual(
+    [
+      generatedAtDate.getUTCFullYear(),
+      generatedAtDate.getUTCMonth() + 1,
+      generatedAtDate.getUTCDate(),
+      generatedAtDate.getUTCHours(),
+      generatedAtDate.getUTCMinutes(),
+      generatedAtDate.getUTCSeconds(),
+    ],
+    timestamp.slice(1, 7).map(Number),
+    "invalid generatedAt calendar date",
+  );
   assert.equal(summary.repository?.root, "parent");
   assert.match(summary.repository?.commit ?? "", /^[0-9a-f]{40}$/, "invalid repository commit");
   assert.match(summary.repository?.branch ?? "", /\S/, "empty repository branch");
@@ -98,6 +217,10 @@ const validateVerificationSummary = (summary) => {
   assert.equal(summary.liveLineMessageSent, false);
   assert.equal(summary.productionSignatureCreated, false);
   assert.equal(summary.broaderCustomerMessagingDecision, "NO-GO_PENDING_TRUST_P0");
+  validateNetworkRecord(summary);
+  for (const gate of summary.acceptanceGates) {
+    await resolveEvidenceReference(summary, gate.evidence);
+  }
 };
 
 test("approved document manifest is bilingual, standalone, and deterministically rendered", async () => {
@@ -152,7 +275,7 @@ test("implementation reports expose the complete decision record", async () => {
 
 test("verification evidence is complete and rejects unsafe substitutions", async () => {
   const summary = JSON.parse(await read(verificationSummary));
-  assert.doesNotThrow(() => validateVerificationSummary(summary));
+  await assert.doesNotReject(() => validateVerificationSummary(summary));
 
   const invalidCases = [
     ["invalid repository commit", (value) => { value.repository.commit = "short"; }],
@@ -160,17 +283,49 @@ test("verification evidence is complete and rejects unsafe substitutions", async
     ["non-positive automated test count", (value) => { value.automated.tests = 0; }],
     ["acceptance gate count must be ten", (value) => { value.acceptanceGates.pop(); }],
     ["status must be PASS", (value) => { value.acceptanceGates[0].status = "FAIL"; }],
-    ["invalid evidence", (value) => { value.acceptanceGates[0].evidence = "notes/no-real-evidence.txt"; }]
+    ["invalid evidence", (value) => { value.acceptanceGates[0].evidence = "notes/no-real-evidence.txt"; }],
+    ["invalid generatedAt instant", (value) => { value.generatedAt = "2026-99-99T99:99:99Z"; }],
+    ["invalid generatedAt calendar date", (value) => { value.generatedAt = "2026-02-30T00:00:00Z"; }],
+    ["test anchor does not resolve", (value) => {
+      value.acceptanceGates[1].evidence = "tests/line-flex-studio-state.test.mjs#invented-test-anchor";
+    }],
+    ["networkRecord is required", (value) => { delete value.browser.networkRecord; }],
+    ["networkRecord is required", (value) => { value.browser.networkRecord = {}; }],
+    ["networkRecord hosts must be localhost only", (value) => {
+      value.browser.networkRecord.allowedHosts = ["localhost", "example.com"];
+    }],
+    ["networkRecord external requests must be zero", (value) => {
+      value.browser.networkRecord.externalRequestCount = 1;
+    }],
+    ["networkRecord LINE/Supabase/analytics requests must be zero", (value) => {
+      value.browser.networkRecord.lineSupabaseAnalyticsRequestCount = 1;
+    }],
+    ["networkRecord unexpected console errors must be zero", (value) => {
+      value.browser.networkRecord.unexpectedConsoleErrorCount = 1;
+    }],
+    ["networkRecord page errors must be zero", (value) => {
+      value.browser.networkRecord.pageErrorCount = 1;
+    }],
+    ["networkRecord journeys must be the exact 5x2 matrix", (value) => {
+      value.browser.networkRecord.journeys.pop();
+    }],
+    ["networkRecord responsive results must be the exact six PASS layouts", (value) => {
+      value.browser.networkRecord.responsiveLayouts["1024"] = "three-column FAIL";
+    }],
+    ["networkRecord overflow must be zero at all six widths", (value) => {
+      value.browser.networkRecord.horizontalOverflowPixels["320"] = 1;
+    }],
+    ["networkRecord keyboard completion must pass", (value) => {
+      value.browser.networkRecord.keyboardOnlyCompletion = false;
+    }],
+    ["screenshot SHA-256 mismatch", (value) => {
+      value.browser.screenshots.desktop1440.sha256 = "0".repeat(64);
+    }]
   ];
   for (const [message, mutate] of invalidCases) {
     const candidate = structuredClone(summary);
     mutate(candidate);
-    assert.throws(() => validateVerificationSummary(candidate), new RegExp(message));
-  }
-
-  for (const gate of summary.acceptanceGates) {
-    const artifact = gate.evidence.split("#", 1)[0];
-    await access(resolve(root, artifact));
+    await assert.rejects(() => validateVerificationSummary(candidate), new RegExp(message));
   }
 });
 

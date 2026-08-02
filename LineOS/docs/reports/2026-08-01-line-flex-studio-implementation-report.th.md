@@ -1,7 +1,7 @@
 # MONOLITH LINE Flex Studio — รายงานหลักฐานการติดตั้งใช้งานต้นแบบ
 
-**วันที่ตัดสินใจ:** 2 สิงหาคม 2026  
-**คอมมิต runtime ที่ทดสอบ:** `b66699aedf0ef5f8e333f603aa22b5e3e4f1e66b`  
+**วันที่ตัดสินใจ:** 2 สิงหาคม 2026<br>
+**คอมมิต runtime ที่ทดสอบ:** `b66699aedf0ef5f8e333f603aa22b5e3e4f1e66b`<br>
 **คำตัดสิน:** `NO-GO_PENDING_TRUST_P0`
 
 รายงานนี้บันทึกผลตรวจต้นแบบแบบ standalone ไม่ใช่หลักฐาน deployment ระดับ production และไม่ใช่การอนุญาตให้ส่งข้อความหาลูกค้า LINE ยังคงเป็น Human Surface ที่เปลี่ยนทดแทนได้ ส่วนสถานะธุรกิจที่เป็นจริงต้องอยู่ภายใต้ data, workflow, permission และ audit ของ MONOLITH
