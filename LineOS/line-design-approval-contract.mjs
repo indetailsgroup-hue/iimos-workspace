@@ -149,7 +149,7 @@ export function assertReviewSnapshot(snapshot) {
     isNonEmptyString(snapshot.approvalRequestRef) &&
     isNonEmptyString(snapshot.revisionLabel) &&
     isSha256Hex(snapshot.revisionId) &&
-    /^[a-f0-9]{64}$/i.test(snapshot.artifactManifestSha256) &&
+    isSha256Hex(snapshot.artifactManifestSha256) &&
     snapshot.digestAlgorithm === "SHA-256" &&
     isNonEmptyString(snapshot.canonicalizationVersion) &&
     Number.isInteger(snapshot.expectedWorkflowVersion) &&

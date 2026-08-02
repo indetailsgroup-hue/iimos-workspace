@@ -119,6 +119,12 @@ test("rejects malformed review snapshot revision content hashes", () => {
   }
 });
 
+test("rejects noncanonical uppercase artifact manifest SHA-256 hex", () => {
+  const snapshot = reviewSnapshot();
+  snapshot.artifactManifestSha256 = "B".repeat(64);
+  assert.throws(() => assertReviewSnapshot(snapshot), new Error("invalid_review_snapshot"));
+});
+
 const forbiddenArtifactCases = [
   ["an unknown review artifact kind", {
     kind: "revision_document"
