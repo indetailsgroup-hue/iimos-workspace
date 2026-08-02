@@ -12,6 +12,7 @@ const MAX_REVIEW_TTL_MS = 60 * 60 * 1000;
 const MAP_GET = Map.prototype.get;
 const MAP_SET = Map.prototype.set;
 const MAP_SIZE = Object.getOwnPropertyDescriptor(Map.prototype, "size").get;
+const STRUCTURED_CLONE = globalThis.structuredClone;
 const BOUND_SCALAR_FIELDS = deepFreeze([
   "providerContext",
   "scopeContext",
@@ -27,6 +28,24 @@ const CANONICAL_UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const OPAQUE_FIXTURE_ID = /^fx_[A-Za-z0-9_-]{13,125}$/;
 const FORBIDDEN_FIXTURE_ID_SEMANTICS =
   /tenant|customer|role|recipient|project|approval|secret|signature|key/i;
+const ALLOWED_PLAIN_LANGUAGE_CONSEQUENCES = deepFreeze([
+  "Records a sandbox confirmation attempt only."
+]);
+const ALLOWED_REVIEW_ARTIFACT_LISTS = deepFreeze([
+  [{
+    kind: "rendered_preview",
+    label: "Main kitchen perspective",
+    uri: "https://example.com/monolith/demo/artifacts/main-kitchen.png"
+  }],
+  [{
+    kind: "rendered_preview",
+    label: "Guest bedroom perspective",
+    uri: "https://example.com/monolith/demo/artifacts/guest-bedroom.png"
+  }]
+]);
+const ALLOWED_REVIEW_ARTIFACT_CANONICAL_VALUES = deepFreeze(
+  ALLOWED_REVIEW_ARTIFACT_LISTS.map((artifacts) => canonicalize(artifacts))
+);
 const ISSUED_ID_PATTERNS = deepFreeze({
   reviewSessionId: /^review_session_demo_\d{3}$/,
   serverIssuedIdempotencyKey: /^idempotency_demo_\d{3}$/,
@@ -77,6 +96,12 @@ const LEDGER_ENTRY_KEYS = deepFreeze([
   "canonicalPayload",
   "recordInput",
   "record"
+]);
+const CONFIRM_REVIEW_INPUT_KEYS = deepFreeze([
+  "reviewSessionId",
+  "serverIssuedIdempotencyKey",
+  "expectedRevisionId",
+  "decision"
 ]);
 
 const OUTCOME = Object.fromEntries([
@@ -194,6 +219,18 @@ const hasValidTtl = (value) => Number.isSafeInteger(value) &&
 
 const hasOpaqueFixtureIdentity = (value) => typeof value === "string" &&
   OPAQUE_FIXTURE_ID.test(value) && !FORBIDDEN_FIXTURE_ID_SEMANTICS.test(value);
+
+const hasAllowedFixtureDisclosure = (bound) => {
+  try {
+    return ALLOWED_PLAIN_LANGUAGE_CONSEQUENCES.includes(
+      bound.plainLanguageConsequence
+    ) && ALLOWED_REVIEW_ARTIFACT_CANONICAL_VALUES.includes(
+      canonicalize(bound.reviewArtifacts)
+    );
+  } catch {
+    return false;
+  }
+};
 
 const hasTrustedFixtureSemantics = async (bound, snapshot) => {
   try {
@@ -313,6 +350,38 @@ const validateLedgerEntry = async (entry, commitment) => {
   });
 };
 
+const captureConfirmReviewInput = (callerInput) => {
+  try {
+    if (callerInput === null || typeof callerInput !== "object" ||
+        Array.isArray(callerInput) ||
+        Object.getPrototypeOf(callerInput) !== Object.prototype) {
+      return null;
+    }
+    const keys = Reflect.ownKeys(callerInput);
+    const expected = new Set(CONFIRM_REVIEW_INPUT_KEYS);
+    if (keys.length !== CONFIRM_REVIEW_INPUT_KEYS.length ||
+        !keys.every((key) => typeof key === "string" && expected.has(key))) {
+      return null;
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(callerInput);
+    const entries = [];
+    for (const key of CONFIRM_REVIEW_INPUT_KEYS) {
+      const descriptor = descriptors[key];
+      if (!descriptor || descriptor.enumerable !== true ||
+          !Object.hasOwn(descriptor, "value") || Object.hasOwn(descriptor, "get") ||
+          Object.hasOwn(descriptor, "set") || typeof descriptor.value !== "string") {
+        return null;
+      }
+      entries.push([key, descriptor.value]);
+    }
+    if (typeof STRUCTURED_CLONE !== "function") return null;
+    STRUCTURED_CLONE(callerInput);
+    return deepFreeze(Object.fromEntries(entries));
+  } catch {
+    return null;
+  }
+};
+
 const isSafeFreshLedger = (value) => {
   try {
     return value !== null && typeof value === "object" &&
@@ -348,7 +417,8 @@ const validatedCurrentFixtureOutcome = async (session, current) => {
   try {
     const currentBound = boundFixtureFor(current);
     if (!hasValidTtl(currentBound.reviewTtlMs) ||
-        !hasOpaqueFixtureIdentity(currentBound.fixtureIdentity)) {
+        !hasOpaqueFixtureIdentity(currentBound.fixtureIdentity) ||
+        !hasAllowedFixtureDisclosure(currentBound)) {
       return OUTCOME.not_available;
     }
     const currentSnapshot = snapshotFor(
@@ -419,7 +489,8 @@ export function createSandboxDesignApprovalPort(dependencies = {}) {
     try {
       const bound = boundFixtureFor(fixture);
       if (!hasValidTtl(bound.reviewTtlMs) ||
-          !hasOpaqueFixtureIdentity(bound.fixtureIdentity)) {
+          !hasOpaqueFixtureIdentity(bound.fixtureIdentity) ||
+          !hasAllowedFixtureDisclosure(bound)) {
         return OUTCOME.not_available;
       }
       const issued = timestampFor(clock);
@@ -445,7 +516,12 @@ export function createSandboxDesignApprovalPort(dependencies = {}) {
     }
   };
 
-  const recordAttempt = async (session, input, canonicalPayload, confirmedAt) => {
+  const recordAttempt = async (
+    session,
+    confirmedInput,
+    canonicalPayload,
+    confirmedAt
+  ) => {
     try {
       const current = await fixtureSource.recheck(session.bound);
       const recheckFailure = await validatedCurrentFixtureOutcome(session, current);
@@ -484,7 +560,11 @@ export function createSandboxDesignApprovalPort(dependencies = {}) {
         recordInput,
         record
       });
-      MAP_SET.call(ledger, input.serverIssuedIdempotencyKey, entry);
+      MAP_SET.call(
+        ledger,
+        confirmedInput.serverIssuedIdempotencyKey,
+        entry
+      );
       session.commitment = entry;
       return recordedResult(record);
     } catch {
@@ -492,16 +572,19 @@ export function createSandboxDesignApprovalPort(dependencies = {}) {
     }
   };
 
-  const confirmReview = async (input) => {
+  const confirmReview = async (callerInput) => {
+    const confirmedInput = captureConfirmReviewInput(callerInput);
+    if (!confirmedInput) return OUTCOME.invalid_request;
     try {
-      assertConfirmReviewInput(input);
+      assertConfirmReviewInput(confirmedInput);
     } catch {
       return OUTCOME.invalid_request;
     }
 
-    const session = sessions.get(input.reviewSessionId);
+    const session = sessions.get(confirmedInput.reviewSessionId);
     if (!session ||
-        input.serverIssuedIdempotencyKey !== session.snapshot.serverIssuedIdempotencyKey) {
+        confirmedInput.serverIssuedIdempotencyKey !==
+          session.snapshot.serverIssuedIdempotencyKey) {
       return OUTCOME.not_available;
     }
 
@@ -516,10 +599,13 @@ export function createSandboxDesignApprovalPort(dependencies = {}) {
       return OUTCOME.expired;
     }
 
-    const canonicalPayload = canonicalize(input);
+    const canonicalPayload = canonicalize(confirmedInput);
     let existing;
     try {
-      existing = MAP_GET.call(ledger, input.serverIssuedIdempotencyKey);
+      existing = MAP_GET.call(
+        ledger,
+        confirmedInput.serverIssuedIdempotencyKey
+      );
     } catch {
       return OUTCOME.temporarily_unavailable;
     }
@@ -537,7 +623,9 @@ export function createSandboxDesignApprovalPort(dependencies = {}) {
     }
     if (session.commitment) return OUTCOME.temporarily_unavailable;
 
-    const pending = pendingByKey.get(input.serverIssuedIdempotencyKey);
+    const pending = pendingByKey.get(
+      confirmedInput.serverIssuedIdempotencyKey
+    );
     if (pending) {
       if (pending.canonicalPayload !== canonicalPayload) {
         return OUTCOME.idempotency_conflict;
@@ -548,20 +636,25 @@ export function createSandboxDesignApprovalPort(dependencies = {}) {
         : completed;
     }
 
-    if (input.expectedRevisionId !== session.snapshot.revisionId) {
+    if (confirmedInput.expectedRevisionId !== session.snapshot.revisionId) {
       return OUTCOME.stale_revision;
     }
 
-    const promise = recordAttempt(session, input, canonicalPayload, now.timestamp);
-    pendingByKey.set(input.serverIssuedIdempotencyKey, {
+    const promise = recordAttempt(
+      session,
+      confirmedInput,
+      canonicalPayload,
+      now.timestamp
+    );
+    pendingByKey.set(confirmedInput.serverIssuedIdempotencyKey, {
       canonicalPayload,
       promise
     });
     try {
       return await promise;
     } finally {
-      if (pendingByKey.get(input.serverIssuedIdempotencyKey)?.promise === promise) {
-        pendingByKey.delete(input.serverIssuedIdempotencyKey);
+      if (pendingByKey.get(confirmedInput.serverIssuedIdempotencyKey)?.promise === promise) {
+        pendingByKey.delete(confirmedInput.serverIssuedIdempotencyKey);
       }
     }
   };

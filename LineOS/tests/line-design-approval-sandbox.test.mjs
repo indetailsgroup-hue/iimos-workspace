@@ -13,6 +13,11 @@ const CROSS_SCOPE_TOKEN = "rvw_A1_crossScope01";
 const SHA_A = "a".repeat(64);
 const SHA_B = "b".repeat(64);
 const SHA_C = "c".repeat(64);
+const SAFE_ALTERNATE_ARTIFACT = Object.freeze({
+  kind: "rendered_preview",
+  label: "Guest bedroom perspective",
+  uri: "https://example.com/monolith/demo/artifacts/guest-bedroom.png"
+});
 
 const fixture = () => ({
   providerContext: "Daph Studio · A1 sandbox fixture",
@@ -227,6 +232,76 @@ test("validates all fixture-visible values before disclosing a snapshot", async 
   }
 });
 
+const fixtureDisclosureCases = [
+  ["English artifact-label leakage", {
+    reviewArtifacts: [{
+      kind: "rendered_preview",
+      label: "Secret customer tenant token alice@example.com",
+      uri: "https://example.com/monolith/demo/artifacts/main-kitchen.png"
+    }]
+  }],
+  ["Thai artifact-label leakage", {
+    reviewArtifacts: [{
+      kind: "rendered_preview",
+      label: "ข้อมูลลับ ลูกค้า ผู้เช่า โทเคน สมชาย 0812345678",
+      uri: "https://example.com/monolith/demo/artifacts/main-kitchen.png"
+    }]
+  }],
+  ["raw artifact-path leakage", {
+    reviewArtifacts: [{
+      kind: "rendered_preview",
+      label: "Main kitchen perspective",
+      uri: "https://example.com/monolith/demo/artifacts/customer-secret-token-alice@example.com.png"
+    }]
+  }],
+  ["encoded English artifact-path leakage", {
+    reviewArtifacts: [{
+      kind: "rendered_preview",
+      label: "Main kitchen perspective",
+      uri: "https://example.com/monolith/demo/artifacts/%74enant-%73ecret-%74oken.png"
+    }]
+  }],
+  ["encoded Thai artifact-path leakage", {
+    reviewArtifacts: [{
+      kind: "rendered_preview",
+      label: "Main kitchen perspective",
+      uri: "https://example.com/monolith/demo/artifacts/" +
+        encodeURIComponent("ข้อมูลลับ-ลูกค้า-โทเคน") + ".png"
+    }]
+  }],
+  ["artifact-query leakage", {
+    reviewArtifacts: [{
+      kind: "rendered_preview",
+      label: "Main kitchen perspective",
+      uri: "https://example.com/monolith/demo/artifacts/main-kitchen.png?token=fixture-secret-value"
+    }]
+  }],
+  ["artifact-hash leakage", {
+    reviewArtifacts: [{
+      kind: "rendered_preview",
+      label: "Main kitchen perspective",
+      uri: "https://example.com/monolith/demo/artifacts/main-kitchen.png#customer-tenant-token"
+    }]
+  }],
+  ["English consequence leakage", {
+    plainLanguageConsequence: "Records customer alice@example.com secret tenant token."
+  }],
+  ["Thai consequence leakage", {
+    plainLanguageConsequence: "บันทึกข้อมูลลับของลูกค้า ผู้เช่า โทเคน และเบอร์ 0812345678"
+  }]
+];
+
+for (const [label, changes] of fixtureDisclosureCases) {
+  test(`rejects ${label} before snapshot disclosure`, async () => {
+    const openedFixture = { ...fixture(), ...changes };
+    const { port } = createHarness({ openedFixture });
+    const result = await port.openReview(REVIEW_TOKEN);
+    assert.deepEqual(result, { outcome: "not_available" });
+    assert.equal(JSON.stringify(result), '{"outcome":"not_available"}');
+    assert.equal(Object.isFrozen(result), true);
+  });
+}
+
 test("binds opaque fixture identity privately and rejects identity changes", async () => {
   const harness = createHarness();
   const snapshot = await harness.port.openReview(REVIEW_TOKEN);
@@ -402,11 +477,7 @@ test("rechecks every bound fixture category after an asynchronous record factory
     [{ artifactManifestSha256: SHA_C }, "stale_revision"],
     [{ expectedWorkflowVersion: 8 }, "version_conflict"],
     [{ providerContext: "Other Studio · A1 sandbox fixture" }, "not_available"],
-    [{ reviewArtifacts: [{
-      kind: "rendered_preview",
-      label: "Changed perspective",
-      uri: "https://example.com/monolith/demo/artifacts/changed.png"
-    }] }, "stale_revision"]
+    [{ reviewArtifacts: [SAFE_ALTERNATE_ARTIFACT] }, "stale_revision"]
   ];
 
   for (const [changes, expected] of cases) {
@@ -464,6 +535,150 @@ test("enforces the exact confirm shape and records only the stored snapshot", as
   assert.equal(result.record.revisionId, SHA_A);
   assert.equal(result.record.outcome, "sandbox_recorded");
   assert.equal(harness.ledger.size, 1);
+});
+
+test("rejects a stateful idempotency getter without executing it", async () => {
+  const harness = createHarness();
+  const snapshot = await harness.port.openReview(REVIEW_TOKEN);
+  const input = confirmInput(snapshot);
+  let getterCalls = 0;
+  Object.defineProperty(input, "serverIssuedIdempotencyKey", {
+    enumerable: true,
+    configurable: true,
+    get() {
+      getterCalls += 1;
+      return getterCalls === 1
+        ? "idempotency_demo_001"
+        : "idempotency_demo_999";
+    }
+  });
+
+  const result = await harness.port.confirmReview(input);
+  assert.deepEqual(result, { outcome: "invalid_request" });
+  assert.equal(JSON.stringify(result), '{"outcome":"invalid_request"}');
+  assert.equal(Object.isFrozen(result), true);
+  assert.equal(getterCalls, 0);
+  assert.equal(harness.ledger.size, 0);
+});
+
+test("uses one frozen input capture across asynchronous confirmation", async () => {
+  let releaseFactory;
+  let markFactoryStarted;
+  const factoryStarted = new Promise((resolve) => {
+    markFactoryStarted = resolve;
+  });
+  const factoryGate = new Promise((resolve) => {
+    releaseFactory = resolve;
+  });
+  const harness = createHarness({
+    async recordFactory(input) {
+      markFactoryStarted();
+      await factoryGate;
+      return createSandboxVerificationRecord(input);
+    }
+  });
+  const snapshot = await harness.port.openReview(REVIEW_TOKEN);
+  harness.setNow("2026-08-02T03:01:00.000Z");
+  const input = confirmInput(snapshot);
+
+  const pending = harness.port.confirmReview(input);
+  await factoryStarted;
+  input.serverIssuedIdempotencyKey = "idempotency_demo_999";
+  releaseFactory();
+
+  const result = await pending;
+  assert.equal(result.outcome, "sandbox_recorded");
+  assert.equal(
+    Map.prototype.has.call(harness.ledger, "idempotency_demo_001"),
+    true
+  );
+  assert.equal(
+    Map.prototype.has.call(harness.ledger, "idempotency_demo_999"),
+    false
+  );
+  assert.equal(harness.ledger.size, 1);
+});
+
+test("rejects unsafe confirm descriptors and prototypes before use", async () => {
+  const builders = [
+    ["unsafe prototype", (valid) => Object.assign(Object.create({}), valid)],
+    ["hidden extra", (valid) => {
+      Object.defineProperty(valid, "tenantId", {
+        value: "tenant-internal-001",
+        enumerable: false
+      });
+      return valid;
+    }],
+    ["symbol extra", (valid) => {
+      valid[Symbol("token")] = REVIEW_TOKEN;
+      return valid;
+    }],
+    ["enumerable extra", (valid) => ({
+      ...valid,
+      customerIdentity: "customer-internal-001"
+    })]
+  ];
+
+  for (const [label, build] of builders) {
+    const harness = createHarness();
+    const snapshot = await harness.port.openReview(REVIEW_TOKEN);
+    const result = await harness.port.confirmReview(build(confirmInput(snapshot)));
+    assert.deepEqual(result, { outcome: "invalid_request" }, label);
+    assert.equal(Object.isFrozen(result), true, label);
+    assert.equal(harness.ledger.size, 0, label);
+  }
+});
+
+test("collapses hostile confirm proxy traps into invalid_request", async () => {
+  const traps = [
+    ["prototype", { getPrototypeOf() {
+      throw new Error("prototype fixture-secret-value");
+    } }],
+    ["own keys", { ownKeys() {
+      throw new Error("keys fixture-secret-value");
+    } }],
+    ["descriptor", { getOwnPropertyDescriptor() {
+      throw new Error("descriptor fixture-secret-value");
+    } }]
+  ];
+
+  for (const [label, handler] of traps) {
+    const harness = createHarness();
+    const snapshot = await harness.port.openReview(REVIEW_TOKEN);
+    let result;
+    try {
+      result = await harness.port.confirmReview(
+        new Proxy(confirmInput(snapshot), handler)
+      );
+    } catch (error) {
+      result = { outcome: `escaped:${error.message}` };
+    }
+    assert.deepEqual(result, { outcome: "invalid_request" }, label);
+    assert.equal(Object.isFrozen(result), true, label);
+    assert.equal(harness.ledger.size, 0, label);
+  }
+});
+
+test("rejects a confirm proxy without invoking its value get trap", async () => {
+  const harness = createHarness();
+  const snapshot = await harness.port.openReview(REVIEW_TOKEN);
+  let getCalls = 0;
+  const input = new Proxy(confirmInput(snapshot), {
+    get() {
+      getCalls += 1;
+      throw new Error("get fixture-secret-value");
+    }
+  });
+  let result;
+  try {
+    result = await harness.port.confirmReview(input);
+  } catch (error) {
+    result = { outcome: `escaped:${error.message}` };
+  }
+
+  assert.deepEqual(result, { outcome: "invalid_request" });
+  assert.equal(getCalls, 0);
+  assert.equal(harness.ledger.size, 0);
 });
 
 test("rejects malformed or forged record-factory candidates before commit", async () => {
