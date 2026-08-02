@@ -119,6 +119,38 @@ test("rejects malformed review snapshot revision content hashes", () => {
   }
 });
 
+const forbiddenArtifactCases = [
+  ["an unknown review artifact kind", {
+    kind: "revision_document"
+  }],
+  ["an alternate HTTPS review artifact origin", {
+    uri: "https://cdn.example.com/monolith/demo/artifacts/main-kitchen.png"
+  }],
+  ["a review artifact path outside the sandbox prefix", {
+    uri: "https://example.com/monolith/demo/private/main-kitchen.png"
+  }],
+  ["credentials in a review artifact URL", {
+    uri: "https://viewer:secret@example.com/monolith/demo/artifacts/main-kitchen.png"
+  }],
+  ["a query in a review artifact URL", {
+    uri: "https://example.com/monolith/demo/artifacts/main-kitchen.png?download=1"
+  }],
+  ["a hash in a review artifact URL", {
+    uri: "https://example.com/monolith/demo/artifacts/main-kitchen.png#detail"
+  }],
+  ["an empty review artifact path", {
+    uri: "https://example.com/monolith/demo/artifacts/"
+  }]
+];
+
+for (const [description, changes] of forbiddenArtifactCases) {
+  test(`rejects ${description}`, () => {
+    const snapshot = reviewSnapshot();
+    Object.assign(snapshot.reviewArtifacts[0], changes);
+    assert.throws(() => assertReviewSnapshot(snapshot), new Error("invalid_review_snapshot"));
+  });
+}
+
 test("rejects top-level and nested authority fields in review snapshots", () => {
   const topLevelCases = [
     ["tenantId", "tenant_demo"],

@@ -42,6 +42,8 @@ const CONFIRM_REVIEW_INPUT_KEYS = deepFreeze([
 ]);
 
 const REVIEW_ARTIFACT_KEYS = deepFreeze(["kind", "label", "uri"]);
+const REVIEW_ARTIFACT_ORIGIN = "https://example.com";
+const REVIEW_ARTIFACT_PATH_PREFIX = "/monolith/demo/artifacts/";
 const FORBIDDEN_AUTHORITY_FIELDS = new Set([
   "tenant",
   "tenantid",
@@ -96,11 +98,27 @@ const isCanonicalizable = (value) => {
   }
 };
 
+const isAllowedReviewArtifactUri = (value) => {
+  if (!isNonEmptyString(value)) return false;
+  try {
+    const uri = new URL(value);
+    const remainingPath = uri.pathname.slice(REVIEW_ARTIFACT_PATH_PREFIX.length);
+    return uri.origin === REVIEW_ARTIFACT_ORIGIN &&
+      uri.pathname.startsWith(REVIEW_ARTIFACT_PATH_PREFIX) &&
+      remainingPath.split("/").some((segment) => segment.length > 0) &&
+      uri.username === "" &&
+      uri.password === "" &&
+      uri.search === "" &&
+      uri.hash === "";
+  } catch {
+    return false;
+  }
+};
+
 const isReviewArtifact = (artifact) => hasExactOwnKeys(artifact, REVIEW_ARTIFACT_KEYS) &&
-  isNonEmptyString(artifact.kind) &&
+  artifact.kind === "rendered_preview" &&
   isNonEmptyString(artifact.label) &&
-  isNonEmptyString(artifact.uri) &&
-  artifact.uri.startsWith("https://");
+  isAllowedReviewArtifactUri(artifact.uri);
 
 export function assertReviewSnapshot(snapshot) {
   const valid = hasExactOwnKeys(snapshot, REVIEW_SNAPSHOT_KEYS) &&
