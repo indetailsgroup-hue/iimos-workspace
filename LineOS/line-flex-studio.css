@@ -27,6 +27,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   box-shadow:var(--shadow)}#phone-preview{min-height:610px;background:#fff;border-radius:25px;overflow:hidden}
 .code-pane pre{max-height:52vh;overflow:auto;background:#16221d;color:#cbe7df;
   border-radius:10px;padding:14px;white-space:pre-wrap;word-break:break-word}
+#payload-count{font-size:.82rem;color:var(--muted);text-align:right}
+#payload-count[data-state=warning]{color:#76540f;font-weight:700}
+#payload-count[data-state=error]{color:var(--danger);font-weight:700}
 .button-row{display:flex;gap:8px;flex-wrap:wrap}
 button{min-height:44px;border:1px solid var(--border);border-radius:10px;padding:8px 12px;background:#fff}
 #run-journey,[data-confirm-demo]{background:var(--action);color:#fff;border-color:var(--action)}
@@ -65,10 +68,14 @@ dialog::backdrop{background:rgba(10,25,21,.62)}
 .finding[data-severity=error]{border-color:var(--danger)}.finding[data-severity=warning]{border-color:var(--attention)}
 .finding[data-severity=guidance]{border-color:var(--action)}.finding-meta{font-size:.76rem;color:var(--muted)}
 .demo-ribbon{background:var(--warm);border:1px solid #decfae;border-radius:9px;padding:8px;font-weight:800}
+.review-pair{display:grid;grid-template-columns:minmax(110px,.7fr) minmax(0,1.3fr);gap:12px;
+  padding:8px 0;border-bottom:1px solid var(--border)}
+.review-pair span{overflow-wrap:anywhere}
 .receipt-digest{font-family:ui-monospace,Consolas,monospace;overflow-wrap:anywhere;background:#eef4f1;padding:10px}
 button:not(:disabled):hover{border-color:var(--action)}button:disabled{opacity:.48;cursor:not-allowed}
 [hidden]{display:none!important}[data-mobile-tabs]{display:none}
 @media(max-width:720px){#preset-list{grid-template-columns:1fr}[data-mobile-tabs]{display:flex;position:sticky;
-  top:0;z-index:10;background:var(--canvas);padding:8px 0}.studio-grid>section[hidden]{display:none!important}}
+  top:0;z-index:10;background:var(--canvas);padding:8px 10px}.studio-grid>section[hidden]{display:none!important}
+  .review-pair{grid-template-columns:1fr}}
 @media print{.app-header,.editor-pane,.preview-pane,.button-row,[data-mobile-tabs]{display:none!important}
   .studio-grid{display:block;padding:0}.code-pane{border:0!important}.code-pane pre{max-height:none;color:#000;background:#fff}}

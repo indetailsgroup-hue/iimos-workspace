@@ -1,10 +1,12 @@
+import { selectActionMode } from "./line-flex-actions.mjs";
+
 const actionFor = (draft) => {
-  const type = draft.intent.requestedActionType;
-  if (type === "postback") {
+  const mode = selectActionMode(draft.intent);
+  if (mode === "postback") {
     return { type: "postback", label: draft.footer.primaryLabel,
       data: "intent=" + encodeURIComponent(draft.presetId) };
   }
-  if (type === "message") {
+  if (mode === "message") {
     return { type: "message", label: draft.footer.primaryLabel,
       text: draft.footer.primaryLabel };
   }

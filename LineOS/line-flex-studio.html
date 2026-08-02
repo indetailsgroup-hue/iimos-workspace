@@ -17,39 +17,39 @@
   </header>
   <main id="studio-main" class="studio-grid">
     <section class="editor-pane" aria-labelledby="editor-title">
-      <h1 id="editor-title">Flex Message Studio</h1>
+      <h1 id="editor-title">สตูดิโอ Flex Message</h1>
       <div id="preset-list" role="list" aria-label="Message presets"></div>
       <div id="block-tabs" role="tablist" aria-label="Flex blocks"></div>
       <form id="field-panel" novalidate></form>
     </section>
     <section class="preview-pane" aria-labelledby="preview-title">
-      <div class="pane-title"><h2 id="preview-title">LINE Preview</h2>
+      <div class="pane-title"><h2 id="preview-title">ตัวอย่าง LINE</h2>
         <div id="viewport-switcher" role="group" aria-label="Preview width"></div></div>
       <div class="phone-frame"><div id="phone-preview"></div></div>
-      <button id="run-journey" type="button">Run Journey</button>
+      <button id="run-journey" type="button">ทดลอง Journey</button>
     </section>
     <section class="code-pane" aria-labelledby="json-title">
-      <div class="pane-title"><h2 id="json-title">JSON Preview</h2>
+      <div class="pane-title"><h2 id="json-title">ตัวอย่าง JSON</h2>
         <output id="payload-count"></output></div>
       <pre><code id="json-output"></code></pre>
       <div class="button-row">
-        <button id="copy-json" type="button">Copy JSON</button>
-        <button id="download-json" type="button">Download JSON</button>
-        <button id="reset-draft" type="button">Reset</button>
+        <button id="copy-json" type="button">คัดลอก JSON</button>
+        <button id="download-json" type="button">ดาวน์โหลด JSON</button>
+        <button id="reset-draft" type="button">คืนค่า</button>
       </div>
-      <h2>Validation</h2>
+      <h2 id="validation-title">การตรวจสอบ</h2>
       <ol id="validation-list"></ol>
     </section>
   </main>
   <dialog id="liff-dialog" aria-labelledby="liff-title">
-    <h2 id="liff-title">Private review · Demo</h2>
+    <h2 id="liff-title">ตรวจแบบส่วนตัว · Demo</h2>
     <div data-liff-review></div>
-    <div class="button-row"><button value="cancel">Cancel</button>
-      <button data-confirm-demo value="confirm">Confirm demo intent</button></div>
+    <div class="button-row"><button id="cancel-journey" type="button" value="cancel">ยกเลิก</button>
+      <button id="confirm-journey" type="button" data-confirm-demo value="confirm">ยืนยันเจตนาใน Demo</button></div>
   </dialog>
   <dialog id="receipt-dialog" aria-labelledby="receipt-title">
     <h2 id="receipt-title">Verification Receipt — Demo</h2>
-    <div data-receipt></div><button data-close-receipt>Close</button>
+    <div data-receipt></div><button id="close-receipt" type="button" data-close-receipt>ปิด</button>
   </dialog>
   <p id="toast-live" class="sr-only" aria-live="polite"></p>
   <script type="module" src="./line-flex-studio.mjs"></script>

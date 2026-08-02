@@ -6,7 +6,9 @@ import { getPreset } from "../line-flex-presets.mjs";
 import {
   selectActionMode, createDemoTransaction, confirmDemoTransaction
 } from "../line-flex-actions.mjs";
+import { buildFlexMessage } from "../line-flex-json.mjs";
 import { createDemoReceipt } from "../line-flex-receipt.mjs";
+import { validateDraft } from "../line-flex-validator.mjs";
 
 const approval = () => createDraft(getPreset("design-approval"), "th");
 const NON_CANONICAL_PARSEABLE_TIMESTAMPS = [
@@ -22,6 +24,19 @@ test("routes every consequential action through LIFF URI", () => {
   for (const requestedActionType of ["message", "postback", "uri", "liff_uri"]) {
     assert.equal(selectActionMode({ risk: "high", requestedActionType }), "liff_uri");
   }
+});
+
+test("exports a URI for a high-risk postback request while reporting MON-ACT-001", () => {
+  const unsafe = updateDraftAtPath(
+    approval(), ["intent", "requestedActionType"], "postback"
+  );
+  const message = buildFlexMessage(unsafe);
+  const action = message.contents.footer.contents[0].action;
+  const findings = validateDraft(unsafe, message);
+
+  assert.equal(action.type, "uri");
+  assert.equal(action.uri, "https://example.com/monolith/demo/design-approval");
+  assert.ok(findings.some((finding) => finding.ruleId === "MON-ACT-001"));
 });
 
 test("allows low-risk acknowledgement postback", () => {
