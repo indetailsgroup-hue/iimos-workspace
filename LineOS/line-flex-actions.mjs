@@ -26,6 +26,7 @@ export function selectActionMode(intent) {
 
 const digestInputFor = (draft) => ({
   tenantId: draft.context.tenantId,
+  providerName: draft.context.tenantName,
   recipientRef: draft.context.recipientRef,
   targetRef: draft.intent.targetRef,
   revision: draft.body.revision,
@@ -79,6 +80,7 @@ export function confirmDemoTransaction(transaction, currentDraft, now = new Date
   const confirmation = deepFreeze({
     transactionId: snapshot.id,
     tenantId: snapshot.tenantId,
+    providerName: snapshot.providerName,
     recipientRef: snapshot.recipientRef,
     targetRef: snapshot.targetRef,
     revision: snapshot.revision,
@@ -113,6 +115,7 @@ export function getDemoReceiptBinding(transaction, confirmation) {
   const expected = canonicalize({
     transactionId: transactionSnapshot.id,
     tenantId: transactionSnapshot.tenantId,
+    providerName: transactionSnapshot.providerName,
     recipientRef: transactionSnapshot.recipientRef,
     targetRef: transactionSnapshot.targetRef,
     revision: transactionSnapshot.revision,
@@ -123,6 +126,7 @@ export function getDemoReceiptBinding(transaction, confirmation) {
   const actual = canonicalize({
     transactionId: confirmed.transactionId,
     tenantId: confirmed.tenantId,
+    providerName: confirmed.providerName,
     recipientRef: confirmed.recipientRef,
     targetRef: confirmed.targetRef,
     revision: confirmed.revision,

@@ -1,8 +1,8 @@
 # Flex Message Performance and Rendering Checklist
 
-Status: release checklist for the v1 standalone authoring scope  
-Edition: English  
-Official LINE limits rechecked 2026-08-02
+- Status: release checklist for the v1 standalone authoring scope
+- Edition: English
+- Official LINE limits rechecked 2026-08-02
 
 ## 1. Release rule
 

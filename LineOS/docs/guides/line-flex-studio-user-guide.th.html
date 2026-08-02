@@ -54,7 +54,11 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 </head>
 <body><main>
 <h1>MONOLITH LINE Flex Studio — คู่มือผู้ใช้งาน</h1>
-<p>สถานะ: คู่มือ prototype แบบ standalone ที่อนุมัติแล้ว ฉบับ: ภาษาไทย ตรวจเทียบกับ Studio ใน repository และเอกสารทางการของ LINE เมื่อ 2026-08-02</p>
+<ul>
+<li>สถานะ: คู่มือ prototype แบบ standalone ที่อนุมัติแล้ว</li>
+<li>ฉบับ: ภาษาไทย</li>
+<li>ตรวจเทียบกับ Studio ใน repository และเอกสารทางการของ LINE เมื่อ 2026-08-02</li>
+</ul>
 <h2>1. วัตถุประสงค์และขอบเขตความปลอดภัย</h2>
 <p>LINE Flex Studio เป็นเครื่องมือ local สำหรับสร้างและตรวจ Flex Message แบบหนึ่ง bubble ผู้ใช้เลือก preset ที่กำกับไว้ แก้ Header, Hero, Body และ Footer ดูตัวอย่างแบบ responsive ตรวจ JSON และซ้อมการตรวจ action แบบเจาะจงผ่าน Mock LIFF ได้</p>
 <p>Studio ไม่ใช่ตัวส่ง Messaging API, LIFF production, ฐานข้อมูลหลัก, กลไกอนุญาต หรือบริการลงลายเซ็น มีเพียงตัวอ้างอิง tenant และผู้รับแบบ demo ห้ามใส่ข้อมูลส่วนบุคคลลูกค้า channel secret, channel access token, bearer token หรือความลับ production ใด ๆ Revision, permission, workflow และ audit ที่มีอำนาจต้องอยู่ใน MONOLITH</p>
@@ -127,7 +131,7 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <h2>9. ซ้อม Mock LIFF แบบ exact-action review</h2>
 <ol>
 <li>แก้ blocking errors ทั้งหมด</li>
-<li>เลือก <code>design-approval</code> เพื่อซ้อม “แบบพร้อมอนุมัติ → เปิด LIFF ตรวจ revision → ยืนยัน → รับ Signed Receipt” โดยไม่เชื่อม LIFF จริง</li>
+<li>เลือก <code>design-approval</code> โดยไม่เชื่อม LIFF จริง; ขั้นตอน standalone นี้จบด้วย <strong>Verification Receipt — Demo</strong></li>
 <li>เลือก <strong>Run Journey</strong></li>
 <li>ใน <strong>PRIVATE REVIEW — DEMO</strong> ให้เทียบ tenant, recipient, project, revision, canonical action, consequence, action mode และ expiry กับการ์ด</li>
 <li>หากค่าใดผิดให้ Cancel หากตรงทั้งหมดให้เลือก <strong>Confirm demo intent</strong> หนึ่งครั้ง</li>

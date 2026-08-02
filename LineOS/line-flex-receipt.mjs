@@ -10,6 +10,7 @@ export async function createDemoReceipt(transaction, confirmation) {
     receiptVersion: 1,
     transactionId: binding.transactionId,
     tenantId: binding.tenantId,
+    providerName: binding.providerName,
     recipientRef: binding.recipientRef,
     targetRef: binding.targetRef,
     revision: binding.revision,

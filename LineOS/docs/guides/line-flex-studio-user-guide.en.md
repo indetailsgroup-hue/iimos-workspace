@@ -1,8 +1,8 @@
 # MONOLITH LINE Flex Studio — Operator Guide
 
-Status: approved standalone prototype guidance  
-Edition: English  
-Verified against the local Studio and official LINE documentation on 2026-08-02
+- Status: approved standalone prototype guidance
+- Edition: English
+- Verified against the local Studio and official LINE documentation on 2026-08-02
 
 ## 1. Purpose and safety boundary
 
@@ -104,7 +104,7 @@ The source link supports the rule; it does not certify the current draft or a pr
 ## 9. Rehearse the Mock LIFF exact-action review
 
 1. Resolve all blocking errors.
-2. Select `design-approval` to rehearse “ready for approval → open LIFF → inspect revision → confirm → receive Signed Receipt” without a live LIFF connection.
+2. Select `design-approval` without a live LIFF connection; the standalone rehearsal ends with **Verification Receipt — Demo**
 3. Choose **Run Journey**.
 4. In **PRIVATE REVIEW — DEMO**, compare tenant, recipient, project, revision, canonical action, consequence, action mode and expiry with the card.
 5. Cancel if any value is unexpected. If values are exact, choose **Confirm demo intent** once.

@@ -54,7 +54,11 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 </head>
 <body><main>
 <h1>MONOLITH LINE Flex Studio — Operator Guide</h1>
-<p>Status: approved standalone prototype guidance Edition: English Verified against the local Studio and official LINE documentation on 2026-08-02</p>
+<ul>
+<li>Status: approved standalone prototype guidance</li>
+<li>Edition: English</li>
+<li>Verified against the local Studio and official LINE documentation on 2026-08-02</li>
+</ul>
 <h2>1. Purpose and safety boundary</h2>
 <p>LINE Flex Studio is a local authoring and review surface for one Flex Message bubble. It helps an operator select a governed preset, edit Header, Hero, Body and Footer content, inspect a responsive preview, validate the generated JSON, and rehearse an exact-action review in Mock LIFF.</p>
 <p>The Studio is not a Messaging API sender, production LIFF app, system of record, authorization engine or signing service. It contains demo tenant and recipient references only. Do not enter customer personal data, a channel secret, channel access token, bearer token or other production secret. The authoritative revision, permission, workflow and audit records remain in MONOLITH.</p>
@@ -127,7 +131,7 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 <h2>9. Rehearse the Mock LIFF exact-action review</h2>
 <ol>
 <li>Resolve all blocking errors.</li>
-<li>Select <code>design-approval</code> to rehearse “ready for approval → open LIFF → inspect revision → confirm → receive Signed Receipt” without a live LIFF connection.</li>
+<li>Select <code>design-approval</code> without a live LIFF connection; the standalone rehearsal ends with <strong>Verification Receipt — Demo</strong></li>
 <li>Choose <strong>Run Journey</strong>.</li>
 <li>In <strong>PRIVATE REVIEW — DEMO</strong>, compare tenant, recipient, project, revision, canonical action, consequence, action mode and expiry with the card.</li>
 <li>Cancel if any value is unexpected. If values are exact, choose <strong>Confirm demo intent</strong> once.</li>

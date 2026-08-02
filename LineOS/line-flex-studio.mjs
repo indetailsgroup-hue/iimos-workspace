@@ -145,8 +145,10 @@ const COPY = {
       action: "Action", consequence: "Consequence", actionMode: "Action mode", expires: "Expires"
     },
     receiptLabels: {
-      transaction: "Transaction", tenant: "Tenant", recipient: "Recipient",
-      revision: "Revision", action: "Action", outcome: "Outcome", confirmed: "Confirmed"
+      transaction: "Transaction / correlation ID", tenant: "Tenant ID", provider: "Provider",
+      recipient: "Recipient", target: "Project / resource", revision: "Revision",
+      action: "Action", outcome: "Outcome", created: "Created", confirmed: "Confirmed",
+      digest: "SHA-256 digest"
     },
     fix: "Fix",
     cancel: "Cancel", confirm: "Confirm demo intent", close: "Close",
@@ -187,8 +189,10 @@ const COPY = {
       actionMode: "โหมดการดำเนินการ", expires: "หมดอายุ"
     },
     receiptLabels: {
-      transaction: "รายการ", tenant: "ผู้ให้บริการ", recipient: "ผู้รับ",
-      revision: "รุ่นแบบ", action: "การดำเนินการ", outcome: "ผลลัพธ์", confirmed: "ยืนยันเมื่อ"
+      transaction: "รายการ / Correlation ID", tenant: "รหัส Tenant", provider: "ผู้ให้บริการ",
+      recipient: "ผู้รับ", target: "โครงการ / ทรัพยากร", revision: "รุ่นแบบ",
+      action: "การดำเนินการ", outcome: "ผลลัพธ์", created: "สร้างเมื่อ",
+      confirmed: "ยืนยันเมื่อ", digest: "SHA-256 digest"
     },
     fix: "แก้ไข",
     cancel: "ยกเลิก", confirm: "ยืนยันเจตนาใน Demo", close: "ปิด",
@@ -197,6 +201,23 @@ const COPY = {
     blockLabel: "ส่วนของ Flex", paneLabel: "พื้นที่ในสตูดิโอ", skip: "ข้ามไปพื้นที่ทำงาน"
   }
 };
+
+export function receiptRowsFor(receipt, language) {
+  const labels = COPY[language === "en" ? "en" : "th"].receiptLabels;
+  return [
+    [labels.transaction, receipt.transactionId],
+    [labels.tenant, receipt.tenantId],
+    [labels.provider, receipt.providerName],
+    [labels.recipient, receipt.recipientRef],
+    [labels.target, receipt.targetRef],
+    [labels.revision, receipt.revision],
+    [labels.action, receipt.canonicalAction],
+    [labels.outcome, receipt.outcome],
+    [labels.created, receipt.createdAt],
+    [labels.confirmed, receipt.confirmedAt],
+    [labels.digest, receipt.digest]
+  ];
+}
 
 const pathParts = (path) => path.split(".");
 const valueAt = (value, path) => pathParts(path).reduce((cursor, part) => cursor[part], value);
@@ -282,6 +303,7 @@ function installJourney(doc, controller) {
   const cancel = liff.querySelector('button[value="cancel"]');
   const closeReceipt = receiptDialog.querySelector("[data-close-receipt]");
   let transaction = null;
+  let reviewLanguage = "th";
   let confirming = false;
 
   const hasJourneyApis = () =>
@@ -321,6 +343,7 @@ function installJourney(doc, controller) {
     }
     const draft = controller.getState().draft;
     try {
+      reviewLanguage = draft.language;
       transaction = createDemoTransaction(draft);
       review.replaceChildren(make(doc, "p", {
         className: "demo-ribbon", text: copy.privateReview
@@ -362,26 +385,15 @@ function installJourney(doc, controller) {
         throw new Error("validation_blocked");
       }
       if (!hasJourneyApis()) throw new Error("browser_api_unavailable");
-      const confirmation = confirmDemoTransaction(
-        transaction, controller.getState().draft
-      );
+      const confirmation = confirmDemoTransaction(transaction, current.draft);
       const receipt = await createDemoReceipt(transaction, confirmation);
-      const copy = copyForState();
+      const copy = COPY[reviewLanguage];
       receiptTarget.replaceChildren(make(doc, "p", {
         className: "demo-ribbon", text: copy.receiptRibbon
       }));
-      for (const [label, value] of [
-        [copy.receiptLabels.transaction, receipt.transactionId],
-        [copy.receiptLabels.tenant, receipt.tenantId],
-        [copy.receiptLabels.recipient, receipt.recipientRef],
-        [copy.receiptLabels.revision, receipt.revision],
-        [copy.receiptLabels.action, receipt.canonicalAction],
-        [copy.receiptLabels.outcome, receipt.outcome],
-        [copy.receiptLabels.confirmed, receipt.confirmedAt]
-      ]) appendPair(doc, receiptTarget, label, value);
-      receiptTarget.append(make(doc, "p", {
-        className: "receipt-digest", text: receipt.digest
-      }));
+      for (const [label, value] of receiptRowsFor(receipt, reviewLanguage)) {
+        appendPair(doc, receiptTarget, label, value);
+      }
       receiptTarget.append(make(doc, "p", { text: copy.productionNotice }));
       transaction = null;
       closeReview("confirmed");

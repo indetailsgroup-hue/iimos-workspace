@@ -1,8 +1,8 @@
 # MONOLITH LINE Flex Studio — คู่มือผู้ใช้งาน
 
-สถานะ: คู่มือ prototype แบบ standalone ที่อนุมัติแล้ว  
-ฉบับ: ภาษาไทย  
-ตรวจเทียบกับ Studio ใน repository และเอกสารทางการของ LINE เมื่อ 2026-08-02
+- สถานะ: คู่มือ prototype แบบ standalone ที่อนุมัติแล้ว
+- ฉบับ: ภาษาไทย
+- ตรวจเทียบกับ Studio ใน repository และเอกสารทางการของ LINE เมื่อ 2026-08-02
 
 ## 1. วัตถุประสงค์และขอบเขตความปลอดภัย
 
@@ -104,7 +104,7 @@ Source classifications:
 ## 9. ซ้อม Mock LIFF แบบ exact-action review
 
 1. แก้ blocking errors ทั้งหมด
-2. เลือก `design-approval` เพื่อซ้อม “แบบพร้อมอนุมัติ → เปิด LIFF ตรวจ revision → ยืนยัน → รับ Signed Receipt” โดยไม่เชื่อม LIFF จริง
+2. เลือก `design-approval` โดยไม่เชื่อม LIFF จริง; ขั้นตอน standalone นี้จบด้วย **Verification Receipt — Demo**
 3. เลือก **Run Journey**
 4. ใน **PRIVATE REVIEW — DEMO** ให้เทียบ tenant, recipient, project, revision, canonical action, consequence, action mode และ expiry กับการ์ด
 5. หากค่าใดผิดให้ Cancel หากตรงทั้งหมดให้เลือก **Confirm demo intent** หนึ่งครั้ง

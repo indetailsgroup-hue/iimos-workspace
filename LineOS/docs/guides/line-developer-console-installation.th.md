@@ -1,8 +1,8 @@
 # การติดตั้ง LINE Developer Console และส่งมอบอย่างมีการควบคุม
 
-สถานะ: operator runbook; production activation ยังติด gate  
-ฉบับ: ภาษาไทย  
-ตรวจ platform facts กับเอกสารทางการของ LINE เมื่อ 2026-08-02
+- สถานะ: operator runbook; production activation ยังติด gate
+- ฉบับ: ภาษาไทย
+- ตรวจ platform facts กับเอกสารทางการของ LINE เมื่อ 2026-08-02
 
 ## อ่านส่วนนี้ก่อน
 

@@ -362,6 +362,16 @@ test("project Markdown has no prose markers or replacement characters", async ()
   }
 });
 
+test("every project Markdown edition is free of trailing spaces and tabs", async () => {
+  for (const stem of documentStems) {
+    for (const language of editions) {
+      const path = `${stem}.${language}.md`;
+      const markdown = await read(path);
+      assert.doesNotMatch(markdown, /[\t ]+$/m, `${path} contains trailing whitespace`);
+    }
+  }
+});
+
 test("both research editions require the exact source-presence readiness boundary", async () => {
   for (const language of editions) {
     requireReadinessBoundary(await read(`${research}.${language}.md`), language);
@@ -475,6 +485,19 @@ test("Studio user guides cover the complete safe operator journey", async () => 
     for (const phrase of required) {
       assert.ok(markdown.includes(phrase), `${language} Studio guide missing: ${phrase}`);
     }
+  }
+});
+
+test("standalone rehearsal ends with Verification Receipt Demo and reserves Signed Receipt", async () => {
+  for (const language of editions) {
+    const markdown = await read(`docs/guides/line-flex-studio-user-guide.${language}.md`);
+    const start = markdown.search(/^## 9\. /m);
+    const end = markdown.search(/^## 10\. /m);
+    assert.ok(start >= 0 && end > start, `${language}: missing standalone rehearsal section`);
+    const rehearsal = markdown.slice(start, end);
+    const step = rehearsal.split("\n").find((line) => line.startsWith("2. ")) ?? "";
+    assert.doesNotMatch(rehearsal, /Signed Receipt/);
+    assert.match(step, /Verification Receipt — Demo\*{0,2}$/);
   }
 });
 

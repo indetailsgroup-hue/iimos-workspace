@@ -60,6 +60,7 @@ test("binds tenant recipient revision action and expiry", () => {
     now: "2026-08-01T10:00:00.000Z"
   });
   assert.equal(tx.tenantId, "tenant_daph_demo");
+  assert.equal(tx.providerName, "Daph Studio");
   assert.equal(tx.recipientRef, "customer_demo_001");
   assert.equal(tx.targetRef, "project_s49_main_kitchen");
   assert.equal(tx.revision, "D-07");
@@ -71,6 +72,7 @@ test("binds tenant recipient revision action and expiry", () => {
   assert.equal(tx.expiresAt, "2026-08-02T10:00:00.000Z");
   assert.equal(tx.boundPayload, canonicalize({
     tenantId: tx.tenantId,
+    providerName: tx.providerName,
     recipientRef: tx.recipientRef,
     targetRef: tx.targetRef,
     revision: tx.revision,
@@ -88,6 +90,7 @@ test("fails closed when any bound value changes", () => {
   });
   const changes = [
     [["context", "tenantId"], "tenant_other_demo"],
+    [["context", "tenantName"], "Other Studio"],
     [["context", "recipientRef"], "customer_demo_002"],
     [["intent", "targetRef"], "project_other"],
     [["body", "revision"], "D-08"],
@@ -113,6 +116,7 @@ test("rejects cloned tampered and rebound transactions", () => {
   });
   const mutations = [
     ["tenantId", "tenant_other_demo"],
+    ["providerName", "Other Studio"],
     ["recipientRef", "customer_demo_002"],
     ["targetRef", "project_other"],
     ["revision", "D-08"],
@@ -137,13 +141,14 @@ test("rejects cloned tampered and rebound transactions", () => {
   }
 
   const reboundDraft = updateDraftAtPath(
-    approval(), ["context", "tenantId"], "tenant_other_demo"
+    approval(), ["context", "tenantName"], "Other Studio"
   );
   const rebound = {
     ...tx,
-    tenantId: reboundDraft.context.tenantId,
+    providerName: reboundDraft.context.tenantName,
     boundPayload: canonicalize({
       tenantId: reboundDraft.context.tenantId,
+      providerName: reboundDraft.context.tenantName,
       recipientRef: reboundDraft.context.recipientRef,
       targetRef: reboundDraft.intent.targetRef,
       revision: reboundDraft.body.revision,
@@ -287,6 +292,7 @@ test("creates a labelled deterministic SHA-256 digest that changes on bound inpu
     receiptVersion: 1,
     transactionId: tx.id,
     tenantId: confirmed.tenantId,
+    providerName: confirmed.providerName,
     recipientRef: confirmed.recipientRef,
     targetRef: confirmed.targetRef,
     revision: confirmed.revision,
@@ -310,10 +316,11 @@ test("creates a labelled deterministic SHA-256 digest that changes on bound inpu
   assert.equal(Object.hasOwn(first, "signature"), false);
   assert.equal(first.amount, "฿486,000");
   assert.equal(first.deadline, "3 ส.ค. 2026 · 18:00");
+  assert.equal(first.providerName, "Daph Studio");
   assert.equal(Object.isFrozen(confirmed), true);
 });
 
-test("changes the digest when confirmed amount or deadline changes", async () => {
+test("changes the digest when provider amount or deadline changes", async () => {
   const baselineDraft = approval();
   const baselineTx = createDemoTransaction(baselineDraft, {
     id: "tx_demo_digest_bound",
@@ -325,6 +332,7 @@ test("changes the digest when confirmed amount or deadline changes", async () =>
   const baselineReceipt = await createDemoReceipt(baselineTx, baselineConfirmation);
 
   for (const [path, value] of [
+    [["context", "tenantName"], "Other Studio"],
     [["body", "amount"], "฿487,000"],
     [["body", "deadline"], "4 ส.ค. 2026 · 18:00"]
   ]) {

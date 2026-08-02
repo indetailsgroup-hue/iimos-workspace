@@ -1,8 +1,8 @@
 # คู่มือตัดสินใจ Flex Action กับ LIFF
 
-สถานะ: approved decision contract สำหรับ MONOLITH LINE Human Surface  
-ฉบับ: ภาษาไทย  
-ตรวจพฤติกรรมแพลตฟอร์มทางการเมื่อ 2026-08-02
+- สถานะ: approved decision contract สำหรับ MONOLITH LINE Human Surface
+- ฉบับ: ภาษาไทย
+- ตรวจพฤติกรรมแพลตฟอร์มทางการเมื่อ 2026-08-02
 
 ## 1. หลักตัดสินใจ
 

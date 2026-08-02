@@ -1,8 +1,8 @@
 # MONOLITH + LINE Human Surface: board deep-research report
 
-**Edition:** English (EN)  
-**Decision date:** 2 August 2026  
-**Decision scope:** governed product direction and one-tenant pilot; this is neither a production-deployment attestation nor legal advice.
+- **Edition:** English (EN)
+- **Decision date:** 2 August 2026
+- **Decision scope:** governed product direction and one-tenant pilot; this is neither a production-deployment attestation nor legal advice.
 
 ## 1. Board decision
 

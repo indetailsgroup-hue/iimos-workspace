@@ -1,8 +1,8 @@
 # Checklist ประสิทธิภาพและ Rendering ของ Flex Message
 
-สถานะ: release checklist สำหรับ v1 standalone authoring scope  
-ฉบับ: ภาษาไทย  
-ตรวจข้อจำกัด LINE ทางการเมื่อ 2026-08-02
+- สถานะ: release checklist สำหรับ v1 standalone authoring scope
+- ฉบับ: ภาษาไทย
+- ตรวจข้อจำกัด LINE ทางการเมื่อ 2026-08-02
 
 ## 1. Release rule
 

@@ -54,7 +54,11 @@ ul,ol{padding-left:1.5em}li{margin:.3em 0}
 </head>
 <body><main>
 <h1>การติดตั้ง LINE Developer Console และส่งมอบอย่างมีการควบคุม</h1>
-<p>สถานะ: operator runbook; production activation ยังติด gate ฉบับ: ภาษาไทย ตรวจ platform facts กับเอกสารทางการของ LINE เมื่อ 2026-08-02</p>
+<ul>
+<li>สถานะ: operator runbook; production activation ยังติด gate</li>
+<li>ฉบับ: ภาษาไทย</li>
+<li>ตรวจ platform facts กับเอกสารทางการของ LINE เมื่อ 2026-08-02</li>
+</ul>
 <h2>อ่านส่วนนี้ก่อน</h2>
 <p><strong>Flex JSON is not installed in Developer Console.</strong> Console ใช้ตั้งค่า channels, webhooks และการลงทะเบียน LIFF app ส่วน Flex JSON คือ message payload: ให้นำไป prototype ใน <strong>Flex Message Simulator</strong> ทางการ ตรวจให้ผ่าน แล้วส่งต่อให้ server-side <strong>Messaging API</strong> integration ภายใต้ MONOLITH</p>
 <p>คู่มือนี้บันทึกลำดับ configuration โดยไม่มี production credentials และไม่ได้อนุมัติ live send หรือลูกค้าจริง เงื่อนไขคือ <strong>no production token</strong> ใน standalone Studio, Flex JSON, LIFF client code, screenshots, source control หรือ URLs</p>

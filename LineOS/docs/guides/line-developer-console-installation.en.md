@@ -1,8 +1,8 @@
 # LINE Developer Console Installation and Controlled Handoff
 
-Status: operator runbook; production activation remains gated  
-Edition: English  
-Platform facts rechecked against official LINE documentation on 2026-08-02
+- Status: operator runbook; production activation remains gated
+- Edition: English
+- Platform facts rechecked against official LINE documentation on 2026-08-02
 
 ## Read this first
 
