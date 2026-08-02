@@ -1,4 +1,4 @@
-import { createDraft, updateDraftAtPath } from "./line-flex-model.mjs";
+import { canonicalize, createDraft, updateDraftAtPath } from "./line-flex-model.mjs";
 import { PRESET_IDS, getPreset } from "./line-flex-presets.mjs";
 import { buildFlexMessage, measureUtf8Bytes } from "./line-flex-json.mjs";
 import { validateDraft } from "./line-flex-validator.mjs";
@@ -78,6 +78,11 @@ export function deriveStudioView(state) {
   };
 }
 
+export function isStudioDraftDirty(state) {
+  const baseline = createDraft(getPreset(state.presetId), state.language);
+  return canonicalize(state.draft) !== canonicalize(baseline);
+}
+
 const BLOCKS = ["header", "hero", "body", "footer"];
 const FIELDS = {
   header: [
@@ -123,7 +128,27 @@ const COPY = {
     downloaded: "JSON downloaded", reset: "Draft reset",
     copyFailed: "Copy failed. Select the JSON and copy manually.",
     downloadFailed: "Download failed. Copy the JSON manually.",
-    blocked: "Resolve blocking validation errors first.", fix: "Fix",
+    blocked: "Resolve blocking validation errors first.",
+    validationBlocked: "The draft has blocking errors and cannot be confirmed.",
+    transactionExpired: "The review expired. Start again.",
+    transactionStale: "Bound review values changed. Start the review again.",
+    apiUnavailable: "This browser does not provide an API required for the demo.",
+    unexpectedReceipt: "The demo receipt could not be created because of an unexpected error.",
+    privateReview: "PRIVATE REVIEW — DEMO",
+    liffTitle: "Private review · Demo",
+    receiptTitle: "Verification Receipt — Demo",
+    receiptRibbon: "DEMO — NOT A PRODUCTION SIGNATURE",
+    receiptReady: "Verification Receipt — Demo is ready.",
+    productionNotice: "Production signing and audit require the MONOLITH Trust Kernel.",
+    reviewLabels: {
+      tenant: "Tenant", recipient: "Recipient", project: "Project", revision: "Revision",
+      action: "Action", consequence: "Consequence", actionMode: "Action mode", expires: "Expires"
+    },
+    receiptLabels: {
+      transaction: "Transaction", tenant: "Tenant", recipient: "Recipient",
+      revision: "Revision", action: "Action", outcome: "Outcome", confirmed: "Confirmed"
+    },
+    fix: "Fix",
     cancel: "Cancel", confirm: "Confirm demo intent", close: "Close",
     resetPrompt: "Reset all edits?", resetUnavailable: "Reset confirmation is unavailable.",
     languageLabel: "Switch interface to Thai", presetLabel: "Message presets",
@@ -144,7 +169,28 @@ const COPY = {
     downloaded: "ดาวน์โหลด JSON แล้ว", reset: "คืนค่าแบบร่างแล้ว",
     copyFailed: "คัดลอกไม่สำเร็จ โปรดเลือก JSON แล้วคัดลอกด้วยตนเอง",
     downloadFailed: "ดาวน์โหลดไม่สำเร็จ โปรดคัดลอก JSON ด้วยตนเอง",
-    blocked: "โปรดแก้ข้อผิดพลาดที่ปิดกั้นก่อน", fix: "แก้ไข",
+    blocked: "โปรดแก้ข้อผิดพลาดที่ปิดกั้นก่อน",
+    validationBlocked: "แบบร่างมีข้อผิดพลาดที่ปิดกั้น จึงยืนยันไม่ได้",
+    transactionExpired: "รายการตรวจหมดอายุ โปรดเริ่มใหม่",
+    transactionStale: "ข้อมูลที่ผูกกับรายการตรวจเปลี่ยนแล้ว โปรดเริ่มตรวจใหม่",
+    apiUnavailable: "เบราว์เซอร์นี้ไม่มี API ที่จำเป็นสำหรับ Demo",
+    unexpectedReceipt: "สร้างหลักฐาน Demo ไม่สำเร็จเนื่องจากข้อผิดพลาดที่ไม่คาดคิด",
+    privateReview: "ตรวจแบบส่วนตัว — Demo",
+    liffTitle: "ตรวจแบบส่วนตัว · Demo",
+    receiptTitle: "หลักฐานการยืนยัน — Demo · Verification Receipt — Demo",
+    receiptRibbon: "DEMO — NOT A PRODUCTION SIGNATURE · เดโม — ไม่ใช่ลายเซ็นสำหรับระบบจริง",
+    receiptReady: "Verification Receipt — Demo พร้อมแล้ว",
+    productionNotice: "การลงนามและบันทึกหลักฐานในระบบจริงต้องผ่าน MONOLITH Trust Kernel",
+    reviewLabels: {
+      tenant: "ผู้ให้บริการ", recipient: "ผู้รับ", project: "โครงการ", revision: "รุ่นแบบ",
+      action: "การดำเนินการ", consequence: "ผลที่จะเกิดขึ้น",
+      actionMode: "โหมดการดำเนินการ", expires: "หมดอายุ"
+    },
+    receiptLabels: {
+      transaction: "รายการ", tenant: "ผู้ให้บริการ", recipient: "ผู้รับ",
+      revision: "รุ่นแบบ", action: "การดำเนินการ", outcome: "ผลลัพธ์", confirmed: "ยืนยันเมื่อ"
+    },
+    fix: "แก้ไข",
     cancel: "ยกเลิก", confirm: "ยืนยันเจตนาใน Demo", close: "ปิด",
     resetPrompt: "คืนค่าการแก้ไขทั้งหมดหรือไม่", resetUnavailable: "ไม่สามารถเปิดคำยืนยันการคืนค่าได้",
     languageLabel: "เปลี่ยนหน้าจอเป็นภาษาอังกฤษ", presetLabel: "รูปแบบข้อความ",
@@ -154,6 +200,13 @@ const COPY = {
 
 const pathParts = (path) => path.split(".");
 const valueAt = (value, path) => pathParts(path).reduce((cursor, part) => cursor[part], value);
+const navigatedIndex = (key, current, length) => {
+  if (key === "ArrowRight") return (current + 1) % length;
+  if (key === "ArrowLeft") return (current - 1 + length) % length;
+  if (key === "Home") return 0;
+  if (key === "End") return length - 1;
+  return null;
+};
 
 const make = (doc, tag, options = {}) => {
   const element = doc.createElement(tag);
@@ -231,32 +284,67 @@ function installJourney(doc, controller) {
   let transaction = null;
   let confirming = false;
 
+  const hasJourneyApis = () =>
+    typeof liff?.showModal === "function" && typeof liff?.close === "function" &&
+    typeof receiptDialog?.showModal === "function" && typeof receiptDialog?.close === "function" &&
+    typeof doc.defaultView.crypto?.randomUUID === "function" &&
+    typeof doc.defaultView.crypto?.subtle?.digest === "function";
+  const staleErrors = new Set([
+    "bound_value_changed", "transaction_tampered", "unknown_transaction",
+    "invalid_transaction_expiry", "transaction_confirmation_mismatch",
+    "unknown_confirmation", "confirmation_tampered"
+  ]);
+  const copyForState = () => COPY[controller.getState().language];
+  const errorCopy = (error) => {
+    const copy = copyForState();
+    if (error?.message === "validation_blocked") return copy.validationBlocked;
+    if (error?.message === "transaction_expired") return copy.transactionExpired;
+    if (staleErrors.has(error?.message)) return copy.transactionStale;
+    if (error?.message === "browser_api_unavailable") return copy.apiUnavailable;
+    return copy.unexpectedReceipt;
+  };
+  const closeReview = (returnValue) => {
+    if (liff.open && typeof liff.close === "function") liff.close(returnValue);
+    else controller.nodes.run.focus();
+  };
+
   controller.nodes.run.addEventListener("click", () => {
-    if (!controller.render().canRunJourney) {
-      controller.announce(COPY[controller.getState().language].blocked);
+    const current = controller.render();
+    const copy = copyForState();
+    if (!current.canRunJourney || !current.canExport) {
+      controller.announce(copy.validationBlocked);
       return;
     }
-    if (typeof liff.showModal !== "function") {
-      controller.announce("Dialog API unavailable. Demo journey cannot start.");
+    if (!hasJourneyApis()) {
+      controller.announce(copy.apiUnavailable);
       return;
     }
     const draft = controller.getState().draft;
-    transaction = createDemoTransaction(draft);
-    review.replaceChildren(make(doc, "p", {
-      className: "demo-ribbon", text: "PRIVATE REVIEW — DEMO"
-    }));
-    for (const [label, value] of [
-      ["Tenant", draft.context.tenantName], ["Recipient", transaction.recipientRef],
-      ["Project", draft.body.project], ["Revision", transaction.revision],
-      ["Action", transaction.canonicalAction], ["Consequence", draft.body.trustNote],
-      ["Action mode", transaction.actionMode], ["Expires", transaction.expiresAt]
-    ]) appendPair(doc, review, label, value);
-    liff.showModal();
+    try {
+      transaction = createDemoTransaction(draft);
+      review.replaceChildren(make(doc, "p", {
+        className: "demo-ribbon", text: copy.privateReview
+      }));
+      for (const [label, value] of [
+        [copy.reviewLabels.tenant, draft.context.tenantName],
+        [copy.reviewLabels.recipient, transaction.recipientRef],
+        [copy.reviewLabels.project, draft.body.project],
+        [copy.reviewLabels.revision, transaction.revision],
+        [copy.reviewLabels.action, transaction.canonicalAction],
+        [copy.reviewLabels.consequence, draft.body.trustNote],
+        [copy.reviewLabels.actionMode, transaction.actionMode],
+        [copy.reviewLabels.expires, transaction.expiresAt]
+      ]) appendPair(doc, review, label, value);
+      liff.showModal();
+    } catch {
+      transaction = null;
+      controller.announce(copy.apiUnavailable);
+    }
   });
 
   cancel.addEventListener("click", () => {
     transaction = null;
-    liff.close("cancel");
+    closeReview("cancel");
   });
   liff.addEventListener("cancel", () => {
     transaction = null;
@@ -269,32 +357,40 @@ function installJourney(doc, controller) {
     confirm.disabled = true;
     confirm.setAttribute("aria-busy", "true");
     try {
+      const current = controller.render();
+      if (!current.canRunJourney || !current.canExport) {
+        throw new Error("validation_blocked");
+      }
+      if (!hasJourneyApis()) throw new Error("browser_api_unavailable");
       const confirmation = confirmDemoTransaction(
         transaction, controller.getState().draft
       );
       const receipt = await createDemoReceipt(transaction, confirmation);
+      const copy = copyForState();
       receiptTarget.replaceChildren(make(doc, "p", {
-        className: "demo-ribbon", text: receipt.label
+        className: "demo-ribbon", text: copy.receiptRibbon
       }));
       for (const [label, value] of [
-        ["Transaction", receipt.transactionId], ["Tenant", receipt.tenantId],
-        ["Recipient", receipt.recipientRef], ["Revision", receipt.revision],
-        ["Action", receipt.canonicalAction], ["Outcome", receipt.outcome],
-        ["Confirmed", receipt.confirmedAt]
+        [copy.receiptLabels.transaction, receipt.transactionId],
+        [copy.receiptLabels.tenant, receipt.tenantId],
+        [copy.receiptLabels.recipient, receipt.recipientRef],
+        [copy.receiptLabels.revision, receipt.revision],
+        [copy.receiptLabels.action, receipt.canonicalAction],
+        [copy.receiptLabels.outcome, receipt.outcome],
+        [copy.receiptLabels.confirmed, receipt.confirmedAt]
       ]) appendPair(doc, receiptTarget, label, value);
       receiptTarget.append(make(doc, "p", {
         className: "receipt-digest", text: receipt.digest
       }));
-      receiptTarget.append(make(doc, "p", { text: receipt.productionNotice }));
+      receiptTarget.append(make(doc, "p", { text: copy.productionNotice }));
       transaction = null;
-      liff.close("confirmed");
+      closeReview("confirmed");
       receiptDialog.showModal();
-      controller.announce("Verification Receipt — Demo");
+      controller.announce(copy.receiptReady);
     } catch (error) {
       transaction = null;
-      controller.announce(error.message === "transaction_expired" ?
-        "Review expired. Start again." : "Bound values changed. Start review again.");
-      liff.close("rejected");
+      controller.announce(errorCopy(error));
+      closeReview("rejected");
     } finally {
       confirming = false;
       confirm.disabled = false;
@@ -302,7 +398,10 @@ function installJourney(doc, controller) {
     }
   });
 
-  closeReceipt.addEventListener("click", () => receiptDialog.close());
+  closeReceipt.addEventListener("click", () => {
+    if (receiptDialog.open && typeof receiptDialog.close === "function") receiptDialog.close();
+    else controller.nodes.run.focus();
+  });
   receiptDialog.addEventListener("close", () => controller.nodes.run.focus());
 }
 
@@ -313,6 +412,7 @@ function installResponsiveTabs(doc) {
     ["code", doc.querySelector(".code-pane"), "JSON & Validation", "JSON และตรวจสอบ"]
   ];
   let active = "editor";
+  const tabButtons = [];
   const tabs = make(doc, "nav", {
     attributes: {
       "data-mobile-tabs": "", role: "tablist", "aria-label": "Studio panes"
@@ -332,10 +432,13 @@ function installResponsiveTabs(doc) {
   for (const [id, pane, en, th] of panes) {
     pane.id ||= "pane-" + id;
     pane.tabIndex = -1;
+    const tabId = "pane-tab-" + id;
+    pane.setAttribute("role", "tabpanel");
+    pane.setAttribute("aria-labelledby", tabId);
     const button = make(doc, "button", {
       text: doc.documentElement.lang === "th" ? th : en,
       attributes: {
-        type: "button", role: "tab", "data-pane": id,
+        type: "button", role: "tab", id: tabId, "data-pane": id,
         "data-label-en": en, "data-label-th": th,
         "aria-controls": pane.id, "aria-selected": id === active
       }
@@ -345,6 +448,16 @@ function installResponsiveTabs(doc) {
       apply();
       pane.focus({ preventScroll: true });
     });
+    button.addEventListener("keydown", (event) => {
+      const index = panes.findIndex(([paneId]) => paneId === id);
+      const next = navigatedIndex(event.key, index, panes.length);
+      if (next === null) return;
+      event.preventDefault();
+      active = panes[next][0];
+      apply();
+      tabButtons[next].focus();
+    });
+    tabButtons.push(button);
     tabs.append(button);
   }
   doc.getElementById("studio-main").before(tabs);
@@ -358,7 +471,6 @@ function installResponsiveTabs(doc) {
 
 export function bindStudio(doc) {
   let state = createInitialStudioState();
-  let dirty = false;
   const byId = (id) => doc.getElementById(id);
   const nodes = {
     language: byId("language-toggle"), tenant: byId("tenant-context"),
@@ -380,9 +492,8 @@ export function bindStudio(doc) {
       nodes.toast.textContent = message;
     }, 0);
   };
-  const dispatch = (event, marksDirty = true) => {
+  const dispatch = (event) => {
     state = reduceStudioState(state, event);
-    if (marksDirty) dirty = true;
     render(event.type !== "field.changed");
   };
 
@@ -397,8 +508,7 @@ export function bindStudio(doc) {
         text: COPY[state.language].audiences[item.context.audience] ?? item.context.audience
       }));
       button.addEventListener("click", () => {
-        dirty = false;
-        dispatch({ type: "preset.changed", presetId: id }, false);
+        dispatch({ type: "preset.changed", presetId: id });
       });
       return button;
     });
@@ -406,6 +516,8 @@ export function bindStudio(doc) {
   }
 
   function renderBlocks() {
+    nodes.fields.setAttribute("role", "tabpanel");
+    nodes.fields.setAttribute("aria-labelledby", "block-tab-" + state.activeBlock);
     nodes.blocks.replaceChildren(...BLOCKS.map((block, index) => {
       const selected = block === state.activeBlock;
       const button = make(doc, "button", {
@@ -416,8 +528,18 @@ export function bindStudio(doc) {
           tabindex: selected ? "0" : "-1"
         }
       });
-      button.addEventListener("click", () => {
-        dispatch({ type: "block.changed", block }, false);
+      const activate = () => {
+        dispatch({ type: "block.changed", block });
+        doc.getElementById("block-tab-" + block)?.focus();
+      };
+      button.addEventListener("click", activate);
+      button.addEventListener("keydown", (event) => {
+        const next = navigatedIndex(event.key, index, BLOCKS.length);
+        if (next === null) return;
+        event.preventDefault();
+        const nextBlock = BLOCKS[next];
+        dispatch({ type: "block.changed", block: nextBlock });
+        doc.getElementById("block-tab-" + nextBlock)?.focus();
       });
       return button;
     }));
@@ -474,7 +596,7 @@ export function bindStudio(doc) {
           text: COPY[state.language].fix, attributes: { type: "button" }
         });
         fix.addEventListener("click", () => {
-          dispatch({ type: "block.changed", block: finding.block }, false);
+          dispatch({ type: "block.changed", block: finding.block });
           focusField(finding.field);
         });
         item.append(fix);
@@ -498,9 +620,8 @@ export function bindStudio(doc) {
     nodes.previewTitle.textContent = copy.previewTitle;
     nodes.jsonTitle.textContent = copy.jsonTitle;
     nodes.validationTitle.textContent = copy.validationTitle;
-    nodes.liffTitle.textContent = state.language === "th" ?
-      "ตรวจแบบส่วนตัว · Demo" : "Private review · Demo";
-    nodes.receiptTitle.textContent = "Verification Receipt — Demo";
+    nodes.liffTitle.textContent = copy.liffTitle;
+    nodes.receiptTitle.textContent = copy.receiptTitle;
     nodes.cancel.textContent = copy.cancel;
     nodes.confirm.textContent = copy.confirm;
     nodes.closeReceipt.textContent = copy.close;
@@ -540,10 +661,9 @@ export function bindStudio(doc) {
   }
 
   nodes.language.addEventListener("click", () => {
-    dirty = false;
     dispatch({
       type: "language.changed", language: state.language === "th" ? "en" : "th"
-    }, false);
+    });
   });
 
   nodes.copy.addEventListener("click", async () => {
@@ -600,7 +720,7 @@ export function bindStudio(doc) {
   });
 
   nodes.reset.addEventListener("click", () => {
-    if (dirty) {
+    if (isStudioDraftDirty(state)) {
       const confirmReset = doc.defaultView.confirm;
       if (typeof confirmReset !== "function") {
         announce(COPY[state.language].resetUnavailable);
@@ -608,8 +728,7 @@ export function bindStudio(doc) {
       }
       if (!confirmReset.call(doc.defaultView, COPY[state.language].resetPrompt)) return;
     }
-    dirty = false;
-    dispatch({ type: "draft.reset" }, false);
+    dispatch({ type: "draft.reset" });
     announce(COPY[state.language].reset);
   });
 

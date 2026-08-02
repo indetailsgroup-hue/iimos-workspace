@@ -16,19 +16,19 @@
     <button id="language-toggle" type="button" aria-pressed="false">TH / EN</button>
   </header>
   <main id="studio-main" class="studio-grid">
-    <section class="editor-pane" aria-labelledby="editor-title">
+    <section id="pane-editor" class="editor-pane" role="tabpanel" aria-labelledby="pane-tab-editor" tabindex="-1">
       <h1 id="editor-title">สตูดิโอ Flex Message</h1>
       <div id="preset-list" role="list" aria-label="Message presets"></div>
       <div id="block-tabs" role="tablist" aria-label="Flex blocks"></div>
-      <form id="field-panel" novalidate></form>
+      <form id="field-panel" role="tabpanel" aria-labelledby="block-tab-header" novalidate></form>
     </section>
-    <section class="preview-pane" aria-labelledby="preview-title">
+    <section id="pane-preview" class="preview-pane" role="tabpanel" aria-labelledby="pane-tab-preview" tabindex="-1">
       <div class="pane-title"><h2 id="preview-title">ตัวอย่าง LINE</h2>
         <div id="viewport-switcher" role="group" aria-label="Preview width"></div></div>
       <div class="phone-frame"><div id="phone-preview"></div></div>
       <button id="run-journey" type="button">ทดลอง Journey</button>
     </section>
-    <section class="code-pane" aria-labelledby="json-title">
+    <section id="pane-code" class="code-pane" role="tabpanel" aria-labelledby="pane-tab-code" tabindex="-1">
       <div class="pane-title"><h2 id="json-title">ตัวอย่าง JSON</h2>
         <output id="payload-count"></output></div>
       <pre><code id="json-output"></code></pre>

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  createInitialStudioState, reduceStudioState, deriveStudioView
+  createInitialStudioState, reduceStudioState, deriveStudioView, isStudioDraftDirty
 } from "../line-flex-studio.mjs";
 
 test("starts with the Thai design approval preset", () => {
@@ -39,4 +39,24 @@ test("blocking errors disable copy download and journey", () => {
   assert.equal(view.hasBlockingErrors, true);
   assert.equal(view.canExport, false);
   assert.equal(view.canRunJourney, false);
+});
+
+test("dirty state follows draft values instead of edit events", () => {
+  let state = createInitialStudioState();
+  assert.equal(isStudioDraftDirty(state), false);
+
+  state = reduceStudioState(state, {
+    type: "field.changed", path: ["body", "revision"], value: "D-08"
+  });
+  assert.equal(isStudioDraftDirty(state), true);
+
+  state = reduceStudioState(state, {
+    type: "field.changed", path: ["body", "revision"], value: "D-07"
+  });
+  assert.equal(isStudioDraftDirty(state), false);
+
+  state = reduceStudioState(state, { type: "language.changed", language: "en" });
+  assert.equal(isStudioDraftDirty(state), false);
+  state = reduceStudioState(state, { type: "preset.changed", presetId: "quote-order" });
+  assert.equal(isStudioDraftDirty(state), false);
 });
