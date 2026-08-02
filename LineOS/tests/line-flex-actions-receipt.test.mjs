@@ -8,6 +8,7 @@ import {
 } from "../line-flex-actions.mjs";
 import { buildFlexMessage } from "../line-flex-json.mjs";
 import { createDemoReceipt } from "../line-flex-receipt.mjs";
+import { receiptRowsFor } from "../line-flex-studio.mjs";
 import { validateDraft } from "../line-flex-validator.mjs";
 
 const approval = () => createDraft(getPreset("design-approval"), "th");
@@ -318,6 +319,50 @@ test("creates a labelled deterministic SHA-256 digest that changes on bound inpu
   assert.equal(first.deadline, "3 ส.ค. 2026 · 18:00");
   assert.equal(first.providerName, "Daph Studio");
   assert.equal(Object.isFrozen(confirmed), true);
+});
+
+test("freezes authentic receipt evidence before rendering", async () => {
+  const tx = createDemoTransaction(approval(), {
+    id: "tx_demo_frozen_receipt",
+    now: "2026-08-01T10:00:00.000Z"
+  });
+  const confirmed = confirmDemoTransaction(tx, approval(), "2026-08-01T11:00:00.000Z");
+  const receipt = await createDemoReceipt(tx, confirmed);
+  const originalProviderName = receipt.providerName;
+  const originalDigest = receipt.digest;
+
+  assert.equal(Object.isFrozen(receipt), true);
+  assert.throws(() => {
+    receipt.providerName = "Other Studio";
+  }, TypeError);
+  assert.throws(() => {
+    delete receipt.providerName;
+  }, TypeError);
+  assert.throws(() => {
+    Object.defineProperty(receipt, "providerName", { value: "Other Studio" });
+  }, TypeError);
+  assert.throws(() => {
+    receipt.digest = "b".repeat(64);
+  }, TypeError);
+  assert.throws(() => {
+    delete receipt.digest;
+  }, TypeError);
+  assert.throws(() => {
+    Object.defineProperty(receipt, "digest", { value: "b".repeat(64) });
+  }, TypeError);
+
+  assert.equal(receipt.providerName, originalProviderName);
+  assert.equal(receipt.digest, originalDigest);
+  assert.deepEqual(
+    receiptRowsFor(receipt, "en").filter(([label]) =>
+      label === "Provider" || label === "SHA-256 digest"),
+    [["Provider", originalProviderName], ["SHA-256 digest", originalDigest]]
+  );
+  assert.deepEqual(
+    receiptRowsFor(receipt, "th").filter(([label]) =>
+      label === "ผู้ให้บริการ" || label === "SHA-256 digest"),
+    [["ผู้ให้บริการ", originalProviderName], ["SHA-256 digest", originalDigest]]
+  );
 });
 
 test("changes the digest when provider amount or deadline changes", async () => {

@@ -1,4 +1,4 @@
-import { canonicalize } from "./line-flex-model.mjs";
+import { canonicalize, deepFreeze } from "./line-flex-model.mjs";
 import { getDemoReceiptBinding } from "./line-flex-actions.mjs";
 
 const toHex = (bytes) =>
@@ -23,12 +23,12 @@ export async function createDemoReceipt(transaction, confirmation) {
   };
   const bytes = new TextEncoder().encode(canonicalize(payload));
   const digest = toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
-  return {
+  return deepFreeze({
     title: "Verification Receipt — Demo",
     label: "DEMO — NOT A PRODUCTION SIGNATURE",
     platform: "MONOLITH",
     ...payload,
     digest,
     productionNotice: "Production signing and audit require the MONOLITH Trust Kernel."
-  };
+  });
 }
