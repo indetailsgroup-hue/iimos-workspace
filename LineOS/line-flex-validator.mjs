@@ -8,10 +8,12 @@ const MONOLITH_REFERENCE =
   "./docs/superpowers/specs/2026-08-01-monolith-line-flex-studio-design.en.html";
 
 const isBlank = (value) => typeof value !== "string" || value.trim() === "";
-const primaryAction = (message) => message.contents.footer.contents[0].action;
+const exceeds = (value, limit) => typeof value === "string" && value.length > limit;
+const isInvalidString = (value, limit) => isBlank(value) || exceeds(value, limit);
+const primaryAction = (message) => message?.contents?.footer?.contents?.[0]?.action;
 const missingTrustField = (draft) => [
-  draft.body.revision, draft.body.deadline, draft.body.requester,
-  draft.context.audience, draft.body.trustNote
+  draft?.body?.revision, draft?.body?.deadline, draft?.body?.requester,
+  draft?.context?.audience, draft?.body?.trustNote
 ].some(isBlank);
 
 const rule = (ruleId, severity, classification, block, field, sourceUrl, when) => ({
@@ -20,42 +22,42 @@ const rule = (ruleId, severity, classification, block, field, sourceUrl, when) =
 
 export const VALIDATION_RULES = deepFreeze([
   rule("LINE-ALT-001", "error", "official_constraint", "header", "altText", LINE_REFERENCE,
-    (draft) => isBlank(draft.altText)),
+    (draft) => isBlank(draft?.altText)),
   rule("LINE-ALT-002", "error", "official_constraint", "header", "altText", LINE_REFERENCE,
-    (draft) => draft.altText.length > 1500),
+    (draft) => exceeds(draft?.altText, 1500)),
   rule("LINE-SIZE-001", "error", "official_constraint", "body", "body.summary", FLEX_REFERENCE,
-    (_draft, message) => measureUtf8Bytes(message.contents) > 30 * 1024),
+    (_draft, message) => measureUtf8Bytes(message?.contents) > 30 * 1024),
   rule("LINE-IMG-001", "error", "official_constraint", "hero", "hero.exportUrl", FLEX_REFERENCE,
-    (draft) => !/^https:\/\//i.test(draft.hero.exportUrl)),
+    (draft) => !/^https:\/\//i.test(draft?.hero?.exportUrl)),
   rule("LINE-IMG-002", "error", "official_constraint", "hero", "hero.exportUrl", FLEX_REFERENCE,
-    (draft) => draft.hero.exportUrl.length > 2000),
+    (draft) => exceeds(draft?.hero?.exportUrl, 2000)),
   rule("LINE-BTN-001", "error", "official_constraint", "footer", "footer.primaryLabel", FLEX_REFERENCE,
-    (draft) => isBlank(draft.footer.primaryLabel) || draft.footer.primaryLabel.length > 40),
+    (draft) => isInvalidString(draft?.footer?.primaryLabel, 40)),
   rule("LINE-POSTBACK-001", "error", "official_constraint", "footer", "action.data", ACTION_REFERENCE,
-    (_draft, message) => primaryAction(message).type === "postback" &&
-      primaryAction(message).data.length > 300),
+    (_draft, message) => primaryAction(message)?.type === "postback" &&
+      isInvalidString(primaryAction(message)?.data, 300)),
   rule("LINE-MESSAGE-001", "error", "official_constraint", "footer", "action.text", ACTION_REFERENCE,
-    (_draft, message) => primaryAction(message).type === "message" &&
-      primaryAction(message).text.length > 300),
+    (_draft, message) => primaryAction(message)?.type === "message" &&
+      isInvalidString(primaryAction(message)?.text, 300)),
   rule("LINE-URI-001", "error", "official_constraint", "footer", "action.uri", ACTION_REFERENCE,
-    (_draft, message) => primaryAction(message).type === "uri" &&
-      primaryAction(message).uri.length > 1000),
+    (_draft, message) => primaryAction(message)?.type === "uri" &&
+      isInvalidString(primaryAction(message)?.uri, 1000)),
   rule("MON-SIZE-001", "warning", "monolith_best_practice", "body", "body.summary",
     MONOLITH_REFERENCE, (_draft, message) => {
-      const bytes = measureUtf8Bytes(message.contents);
+      const bytes = measureUtf8Bytes(message?.contents);
       return bytes > 24 * 1024 && bytes <= 30 * 1024;
     }),
   rule("MON-ACT-001", "error", "monolith_best_practice", "footer", "intent.requestedActionType",
-    MONOLITH_REFERENCE, (draft) => draft.intent.risk === "high" &&
-      ["postback", "message"].includes(draft.intent.requestedActionType)),
+    MONOLITH_REFERENCE, (draft) => draft?.intent?.risk === "high" &&
+      ["postback", "message"].includes(draft?.intent?.requestedActionType)),
   rule("MON-CTA-001", "warning", "monolith_best_practice", "footer", "footer.secondaryLabel",
-    MONOLITH_REFERENCE, (draft) => !isBlank(draft.footer.secondaryLabel)),
+    MONOLITH_REFERENCE, (draft) => !isBlank(draft?.footer?.secondaryLabel)),
   rule("MON-TRUST-001", "warning", "monolith_best_practice", "body", "body.trustNote",
     MONOLITH_REFERENCE, missingTrustField),
   rule("MON-MEDIA-001", "guidance", "monolith_best_practice", "hero", "localAsset",
-    MONOLITH_REFERENCE, (draft) => !isBlank(draft.hero.localAsset)),
+    MONOLITH_REFERENCE, (draft) => !isBlank(draft?.hero?.localAsset)),
   rule("MON-PROD-001", "guidance", "monolith_best_practice", "footer", "canonicalAction",
-    MONOLITH_REFERENCE, (draft) => draft.intent.risk === "high")
+    MONOLITH_REFERENCE, (draft) => draft?.intent?.risk === "high")
 ]);
 
 const TITLES = deepFreeze({
@@ -112,7 +114,7 @@ const REMEDIATION = deepFreeze({
 });
 
 export function validateDraft(draft, message) {
-  const language = draft.language === "en" ? "en" : "th";
+  const language = draft?.language === "en" ? "en" : "th";
   const rank = { error: 0, warning: 1, guidance: 2 };
   return VALIDATION_RULES
     .filter((item) => item.when(draft, message))
