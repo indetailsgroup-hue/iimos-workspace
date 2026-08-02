@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>MONOLITH · LINE Flex Studio</title>
+  <link rel="stylesheet" href="./line-flex-studio.css">
+</head>
+<body>
+  <a class="skip-link" href="#studio-main">ข้ามไปพื้นที่ทำงาน</a>
+  <header class="app-header">
+    <div class="platform-brand"><span class="platform-mark">M</span>
+      <span><b>MONOLITH</b><small>LINE Flex Studio</small></span></div>
+    <div id="tenant-context" class="tenant-context" aria-label="Current tenant"></div>
+    <button id="language-toggle" type="button" aria-pressed="false">TH / EN</button>
+  </header>
+  <main id="studio-main" class="studio-grid">
+    <section class="editor-pane" aria-labelledby="editor-title">
+      <h1 id="editor-title">Flex Message Studio</h1>
+      <div id="preset-list" role="list" aria-label="Message presets"></div>
+      <div id="block-tabs" role="tablist" aria-label="Flex blocks"></div>
+      <form id="field-panel" novalidate></form>
+    </section>
+    <section class="preview-pane" aria-labelledby="preview-title">
+      <div class="pane-title"><h2 id="preview-title">LINE Preview</h2>
+        <div id="viewport-switcher" role="group" aria-label="Preview width"></div></div>
+      <div class="phone-frame"><div id="phone-preview"></div></div>
+      <button id="run-journey" type="button">Run Journey</button>
+    </section>
+    <section class="code-pane" aria-labelledby="json-title">
+      <div class="pane-title"><h2 id="json-title">JSON Preview</h2>
+        <output id="payload-count"></output></div>
+      <pre><code id="json-output"></code></pre>
+      <div class="button-row">
+        <button id="copy-json" type="button">Copy JSON</button>
+        <button id="download-json" type="button">Download JSON</button>
+        <button id="reset-draft" type="button">Reset</button>
+      </div>
+      <h2>Validation</h2>
+      <ol id="validation-list"></ol>
+    </section>
+  </main>
+  <dialog id="liff-dialog" aria-labelledby="liff-title">
+    <h2 id="liff-title">Private review · Demo</h2>
+    <div data-liff-review></div>
+    <div class="button-row"><button value="cancel">Cancel</button>
+      <button data-confirm-demo value="confirm">Confirm demo intent</button></div>
+  </dialog>
+  <dialog id="receipt-dialog" aria-labelledby="receipt-title">
+    <h2 id="receipt-title">Verification Receipt — Demo</h2>
+    <div data-receipt></div><button data-close-receipt>Close</button>
+  </dialog>
+  <p id="toast-live" class="sr-only" aria-live="polite"></p>
+  <script type="module" src="./line-flex-studio.mjs"></script>
+</body>
+</html>
