@@ -1,6 +1,6 @@
 # การออกแบบ MONOLITH Section 4: Safe Recovery & Proof
 
-**สถานะ:** OWNER DECISION — รวม correction ขั้นต่ำที่อนุมัติเมื่อ 3 สิงหาคม 2026 แล้ว; bounded consistency review ผ่านโดยไม่มี blocker
+**สถานะ:** OWNER DECISION — รวม visualization pre-build corrections แปดข้อที่อนุมัติเมื่อ 3 สิงหาคม 2026 แล้ว; bounded consistency re-scrutinize ผ่านโดยไม่มี blocker
 
 **ทิศทางผลิตภัณฑ์:** Decision Chain UX
 
@@ -428,12 +428,30 @@ Policy-critical role fields ต้องมองเห็นเสมอ ส่
 
 ## 14. Contract ของภาพ Section 4
 
-ภาพที่อนุมัติจะมีสองมุมมองที่ sync กัน:
+Visualization ที่เจ้าของอนุมัติเป็น standalone deterministic fixture-driven design-validation artifact ใช้ validate ความเข้าใจ Decision Chain ไม่ใช่ operational MONOLITH surface และไม่สร้าง runtime authority
 
-1. **Recovery Case and Event Chain:** lifecycle แปด state ชุดเดียว พร้อม current projection, append-only events, immutable decision receipts, impact acknowledgements และ last safe revision
-2. **Capability Gate and Egress:** policy, evidence level, authority quorum, permitted-use class และ broker decision ที่บังคับก่อน reopen capability หรือส่ง artifact ออก
+### 14.1 Boundary แบบ Standalone Fixture-only
 
-ผู้ตรวจสามารถเลือก scenarios ตัวแทน:
+Artifact อยู่ใต้ project documentation และห้าม import product stores หรือ runtime modules, เรียก network/API/backend, อ่านหรือเขียน production data, persist participant/project state, สร้างหรือ download artifact, invoke egress หรืออยู่ข้าง operational export/release control โดยทำงานจาก deterministic local fixtures ใน session memory เท่านั้น
+
+มี banner ถาวรว่า **“DESIGN PROTOTYPE — NO AUTHORITY — NOT FOR PRODUCTION”** ในภาษาที่ใช้งาน ไม่มี state, role selector, simulated action, badge, color หรือ fixture ใดออก `EgressGrant`, mutate canonical record หรืออ้าง server authorization ชื่อใน fixture schema ใช้เหมือน Section 4 ได้เฉพาะในฐานะ test data ไม่ใช่ persisted contract ใหม่หรือ source of truth ชุดที่สอง
+
+### 14.2 Information Architecture แบบ Role-first
+
+Participant เห็น **Recovery Decision Card** หลักหนึ่งใบ ซึ่งตอบคำถามกลางห้าข้อใน Section 13 และแสดง next action ที่เหมาะกับบทบาทหนึ่งอย่าง จากนั้นจึงเปิด **Why / Proof inspector** เมื่อร้องขอ โดย inspector มีสอง pane ที่ sync จาก fixture snapshot เดียวกัน:
+
+1. **Recovery Case and Event Chain:** lifecycle position, current projection, append-only events, immutable receipts, impact acknowledgement, assignment status และ last safe revision;
+2. **Capability Gate and Egress:** policy, evidence level, authority quorum, permitted-use class, source freshness และ simulated broker result
+
+เปิด full inspector เป็น default ได้เฉพาะ reviewer หรือ evaluator mode ภาษาสำหรับลูกค้าต้องไม่เปิด policy, quorum, broker หรือ lifecycle jargon เว้นแต่ผู้ใช้ขอรายละเอียด
+
+### 14.3 Role/Scenario Controls และ Coverage Manifest
+
+Design-review shell มี **Role** และ **Scenario** selectors แยกกัน ซึ่งเลือก test perspective เท่านั้นและไม่ grant authority เมื่อ evaluator เริ่ม task แล้ว participant-test mode ต้องซ่อน selectors เหล่านี้
+
+Versioned coverage manifest ผูก fixture IDs กับทุก role ใน `V1-CASEWORK-KITCHEN-RECOVERY-01` โดยบังคับ risk-relevant seeded scenario อย่างน้อยหนึ่งรายการต่อบทบาท แต่ไม่บังคับให้แสดง role-by-domain-scenario combinations ทั้ง 56 คู่ใน interface
+
+Domain scenarios เจ็ดรายการยังคงอยู่:
 
 - missing site evidence;
 - stale revision หลัง review;
@@ -443,7 +461,34 @@ Policy-critical role fields ต้องมองเห็นเสมอ ส่
 - offline หรือ stale revocation policy;
 - supervised qualification coupon ขณะที่ NOT-FOR-PRODUCTION ยังทำงาน
 
-แต่ละ scenario อัปเดต field ชุดเดียวกัน ได้แก่ RecoveryCase state, immutable event ล่าสุด, containment coverage, last safe state, owner, next action, invalidated scope, CapabilityPolicy, required proof, permitted-use class และ EgressBroker result ภาพต้องแยก mutable projection จาก immutable proof อย่างชัดเจนและไม่ทำให้เข้าใจว่า UI badge เป็นผู้ enforce safety
+เพิ่ม truth-pressure fixtures ข้าม scenario สี่รายการเป็นข้อบังคับ:
+
+- `PENDING_ASSIGNMENT` — มี request แต่ยังไม่มี accepted หรือ policy-auto-assigned owner;
+- `SOURCE_UNAVAILABLE_OR_UNKNOWN` — required source ใช้งานไม่ได้หรือ impact coverage เป็น UNKNOWN;
+- `NEWER_HOLD_OVERRIDES_OLD_APPROVAL` — containment truth ที่ใหม่กว่ามี precedence เหนือ Approved/ACTIVE display เก่า;
+- `STALE_ACTION_BROKER_DENIED` — action ที่ render จาก snapshot เก่า fail simulated revalidation
+
+### 14.4 Mapping จาก Fixture ไป Role View
+
+คำถามกลางห้าข้อคือ shared skeleton ไม่ใช่ raw-field list ตายตัว แต่ละ fixture ระบุ `fixtureId`, fixture version, role-registry version, role, scenario, risk, language, viewport, case projection, latest event, relevant receipts, policy result, broker result, source status/freshness, simulated next-action outcome และ expected participant answers
+
+แต่ละ role mapping ระบุ policy-critical fields ที่ต้องมองเห็น และ classify รายละเอียดอื่นว่า summarized, expandable หรือ hidden Card และ inspector ต้องใช้ immutable fixture snapshot เดียวกัน การเปลี่ยน role หรือ scenario ต้องแทน snapshot ทั้งชุดและห้าม merge facts ที่ขัดกัน
+
+### 14.5 Simulate-only Action Semantics
+
+ทุก interactive action ติด label **Simulate** และเปลี่ยนได้เฉพาะ deterministic fixture snapshots ผลแสดง expected case version, simulated policy/broker result และระบุว่า runtime จริงต้อง server revalidation หรือไม่ ห้ามใช้ Approved, Released, Resumed, ACTIVE, Exported หรือ Downloaded ใน message โดยไม่มีคำว่า **SIMULATED** ที่เห็นชัด Artifact ไม่สร้าง file, receipt, grant, notification หรือ persistent audit record
+
+### 14.6 Evaluator Harness
+
+Evaluator mode ที่ซ่อนจาก participant เก็บ immutable fixture ID, role-registry version, scenario, risk, language, viewport, render/announcement start, answer completion, safe-first-action result, backtracking, proof opening, support event, workload response และ unsafe-action flag โดยใช้ session memory และ on-screen summary เท่านั้น ไม่มี analytics, network, persistence หรือ export ส่วน approved research process เป็นผู้บันทึก adjudicated result ภายนอก artifact นี้
+
+Harness ทำตาม clock boundaries ใน Section 15 และเปลี่ยน answer rubric, exclusion rule หรือ success condition หลัง task เริ่มแล้วไม่ได้
+
+### 14.7 Bilingual Visual และ Accessibility Semantics
+
+ภาษาไทยและอังกฤษใช้ fixture IDs, facts, action boundaries และ expected answers ชุดเดียวกัน Status, severity, mutable projection, immutable proof, permitted use และ simulated outcome ใช้ text พร้อม icon/shape โดยสีเพียงอย่างเดียวไม่มี safety meaning Artifact รองรับ keyboard navigation, visible focus, screen-reader announcements, reduced motion, required widths แบบ responsive, zoom/reflow และ client-safe vocabulary
+
+Corporate identity ที่อนุมัติใช้กำหนด typography, spacing, form และ color ได้ แต่ห้ามทำให้ permanent prototype banner อ่อนลงหรือใช้แทน explicit safety/status language
 
 ## 15. Acceptance Criteria
 
@@ -477,7 +522,12 @@ Section 4 รับได้เมื่อ:
 16. broker convergence พร้อม cross-surface contract/bypass tests ผ่านก่อน operational UI อ้าง server-authorized export, release, resume หรือ download;
 17. ทุก required role/scenario cell ผ่านเป้าหมาย orientation 30 วินาทีภายใต้ frozen measurement protocol;
 18. อย่างน้อย 95% ของแต่ละ required non-safety pilot cell ทำ correction, containment acknowledgement หรือ reversal ที่มอบหมายได้โดยไม่ขอ support หรือ reconstruct ข้อมูลนอกระบบ พร้อมรายงาน numerator, denominator และ confidence interval;
-19. NOT-FOR-PRODUCTION ยังคงทำงานจนผ่าน exact machine, postprocessor, operator-procedure, owner-release และ production-egress gates
+19. NOT-FOR-PRODUCTION ยังคงทำงานจนผ่าน exact machine, postprocessor, operator-procedure, owner-release และ production-egress gates;
+20. design visualization เป็น standalone และ fixture-only โดยไม่มี runtime import, network, persistence, artifact generation/download, egress หรืออยู่ข้าง operational control;
+21. role-first card, optional inspector, eight-role coverage manifest, seven domain scenarios และ four truth-pressure fixtures conform กับ Section 14;
+22. fixture mappings ใช้ five-question skeleton พร้อม role-critical fields โดยไม่สร้าง persisted contract ใหม่หรือรวม incompatible snapshots;
+23. ทุก action/outcome เป็น simulated อย่างเห็นชัด และ participant-hidden evaluator harness ทำตาม frozen measurement protocol; และ
+24. Facts/actions ไทย–อังกฤษเทียบเท่ากัน และเข้าถึง safety/status meaning ทุกอย่างได้โดยไม่พึ่งสีเพียงอย่างเดียว
 
 ## 16. Stop Conditions
 
@@ -499,7 +549,11 @@ Section 4 รับได้เมื่อ:
 - safety, authority, evidence, revocation หรือ controlled-egress action ใดหลบ governed chain โดย safety-bypass rate ที่ยอมรับคือศูนย์;
 - non-safety coordination tasks ใน pilot มากกว่า 10% เกิดนอก governed chain ซึ่งเป็น UX redesign trigger และไม่ลด zero-bypass safety rule;
 - role denominator ไม่ถูก freeze, pooled metrics ซ่อน role/scenario cell ที่ล้มเหลว หรือมี exclusion เพิ่มหลัง unblinding;
-- ผู้ใช้ระบุ last safe revision, owner, consequence, permitted use และ next authorized action โดยไม่ขอความช่วยเหลือไม่ได้
+- ผู้ใช้ระบุ last safe revision, owner, consequence, permitted use และ next authorized action โดยไม่ขอความช่วยเหลือไม่ได้;
+- prototype import runtime/product state, เรียก network, persist data, สร้างหรือ download artifact, invoke egress หรืออยู่ข้าง operational export/release control;
+- prototype banner หาย, role/scenario selector สื่อ authority หรือ outcome ที่ดูเหมือน approval/release/resume/export/download ไม่มี SIMULATED qualifier ที่มองเห็นได้;
+- role V1 ใดไม่มี coverage, required truth-pressure fixture หาย หรือ card/inspector รวม facts จาก fixture snapshots คนละชุด;
+- สีหรือ untranslated technical jargon เป็นตัวสื่อ safety, status, permitted use, proof type หรือ action meaning เพียงอย่างเดียว
 
 ## 17. Current Source Trace ที่ใช้ในการออกแบบ
 
@@ -518,8 +572,8 @@ Section 4 รับได้เมื่อ:
 - Handoff validation ปัจจุบันบันทึก process order และ active site แต่ยังไม่สร้าง recipient acceptance: `src/workflow/handoff/canonical.ts:35-57`
 - Notification routing ปัจจุบันส่ง personal responsibility/approval เป็น direct push และส่ง cross-team handoff/FYI เป็น group message โดยยังไม่มี four notification intents หรือ acknowledgement semantics ที่แยกกัน: `src/workflow/notification/routing.ts:4-23`
 - ไม่พบ exact runtime identifiers ของ `RecoveryCase`, `RecoveryEvent`, `DecisionReceipt`, `CapabilityPolicy`, `EgressBroker` หรือ role-view contract ใน `src`, `server` หรือ `supabase` source ที่ตรวจ จึงยังเป็น target design contracts ไม่ใช่ current production facts
-- Evidence/UX appendix: [Deep research เรื่อง Beloved Safe Recovery UX](../../research/2026-08-03-monolith-beloved-safe-recovery-ux-deep-research.th.md) และ [bounded scrutiny correction report](../../research/2026-08-03-monolith-beloved-safe-recovery-ux-scrutiny.th.md)
+- Evidence/UX appendix: [Deep research เรื่อง Beloved Safe Recovery UX](../../research/2026-08-03-monolith-beloved-safe-recovery-ux-deep-research.th.md), [bounded scrutiny correction report](../../research/2026-08-03-monolith-beloved-safe-recovery-ux-scrutiny.th.md) และ [interactive-visualization pre-build scrutiny](../../research/2026-08-03-monolith-section-4-interactive-visualization-prebuild-scrutiny.th.md)
 
 ## 18. ขั้นถัดไปที่อนุมัติหลังตรวจ Written Spec
 
-Bounded consistency re-scrutinize ของ corrected contract นี้ผ่านโดยไม่มี blocker Deliverable การออกแบบถัดไปที่อนุมัติคือภาพ interactive Section 4 สองภาษาในฐานะ non-operational artifact ที่ติดป้ายชัดเจน โดย broker-surface inventory และ convergence ยังเป็น implementation prerequisite แรก ห้ามนำเอกสารนี้ไป implement production release, schema, policy, egress หรือ machine-control changes โดยไม่มี implementation plan ที่อนุมัติแยกต่างหาก
+เจ้าของอนุมัติ visualization pre-build corrections ทั้งแปดข้อเมื่อ 3 สิงหาคม 2026 และ bounded consistency re-scrutinize ผ่านโดยไม่มี blocker Deliverable การออกแบบถัดไปที่อนุมัติคือ bilingual standalone fixture-driven prototype ตาม Section 14 ส่วน broker-surface inventory และ convergence ยังเป็น prerequisite แรกสำหรับ operational implementation ในอนาคต ห้ามนำเอกสารนี้ไป implement production release, schema, policy, egress หรือ machine-control changes โดยไม่มี implementation plan ที่อนุมัติแยกต่างหาก

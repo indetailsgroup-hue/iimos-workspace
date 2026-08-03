@@ -1,6 +1,6 @@
 # MONOLITH Section 4 Design: Safe Recovery & Proof
 
-**Status:** OWNER DECISION — Minimum corrections approved on 3 August 2026 and incorporated; bounded consistency review passed with no blocker
+**Status:** OWNER DECISION — Eight pre-build visualization corrections approved on 3 August 2026 and incorporated; bounded consistency re-scrutinize passed with no blocker
 
 **Product direction:** Decision Chain UX
 
@@ -428,12 +428,30 @@ Shows the exact site and installation revision, open dimensions or interfaces, r
 
 ## 14. Section 4 Visualization Contract
 
-The approved visualization will contain two synchronized views:
+The owner-approved visualization is a standalone, deterministic, fixture-driven design-validation artifact. It validates Decision Chain comprehension; it is not an operational MONOLITH surface and creates no runtime authority.
 
-1. **Recovery Case and Event Chain:** the single eight-state lifecycle, current projection, append-only events, immutable decision receipts, impact acknowledgements, and last safe revision.
-2. **Capability Gate and Egress:** the policy, evidence level, authority quorum, permitted-use class, and broker decision required before a capability can reopen or an artifact can leave.
+### 14.1 Standalone fixture-only boundary
 
-The reviewer can select representative scenarios:
+The artifact lives under project documentation and must not import product stores or runtime modules, call a network/API/backend, read or write production data, persist participant or project state, generate or download an artifact, invoke egress, or appear beside an operational export/release control. It runs from deterministic local fixtures in session memory only.
+
+A persistent banner states **“DESIGN PROTOTYPE — NO AUTHORITY — NOT FOR PRODUCTION”** in the active language. No state, role selector, simulated action, badge, color, or fixture can issue an `EgressGrant`, mutate a canonical record, or claim server authorization. Fixture schema names may mirror Section 4 only as test data; they are not a new persisted contract or a second source of truth.
+
+### 14.2 Role-first information architecture
+
+The participant sees one primary **Recovery Decision Card** that answers the five universal questions in Section 13 and presents one role-appropriate next action. A secondary **Why / Proof inspector** opens only on request and contains two synchronized panes derived from the same fixture snapshot:
+
+1. **Recovery Case and Event Chain:** lifecycle position, current projection, append-only events, immutable receipts, impact acknowledgement, assignment status, and last safe revision;
+2. **Capability Gate and Egress:** policy, evidence level, authority quorum, permitted-use class, source freshness, and simulated broker result.
+
+The full inspector may open by default only in reviewer or evaluator mode. Client-facing language does not expose policy, quorum, broker, or lifecycle jargon unless the user asks for detail.
+
+### 14.3 Role/scenario controls and coverage manifest
+
+The design-review shell has separate **Role** and **Scenario** selectors. They choose test perspective only and never grant authority. Participant-test mode hides those selectors after the evaluator starts a task.
+
+A versioned coverage manifest binds fixture IDs to every role in `V1-CASEWORK-KITCHEN-RECOVERY-01`. It requires at least one risk-relevant seeded scenario per role; it does not require all 56 role-by-domain-scenario combinations to appear in the interface.
+
+The seven domain scenarios remain:
 
 - missing site evidence;
 - stale revision after review;
@@ -443,7 +461,34 @@ The reviewer can select representative scenarios:
 - offline or stale revocation policy;
 - supervised qualification coupon while NOT-FOR-PRODUCTION remains active.
 
-Each scenario updates the same fields: RecoveryCase state, latest immutable event, containment coverage, last safe state, owner, next action, invalidated scope, CapabilityPolicy, required proof, permitted-use class, and EgressBroker result. It must visually distinguish mutable projection from immutable proof and never imply that a UI badge itself enforces safety.
+Four cross-cutting truth-pressure fixtures are also mandatory:
+
+- `PENDING_ASSIGNMENT` — request exists but no accepted or policy-auto-assigned owner;
+- `SOURCE_UNAVAILABLE_OR_UNKNOWN` — a required source is unavailable or impact coverage is UNKNOWN;
+- `NEWER_HOLD_OVERRIDES_OLD_APPROVAL` — newer containment truth dominates an older Approved/ACTIVE display;
+- `STALE_ACTION_BROKER_DENIED` — an action rendered from an older snapshot fails simulated revalidation.
+
+### 14.4 Fixture-to-role-view mapping
+
+The five universal questions are the shared skeleton, not a fixed raw-field list. Each fixture declares `fixtureId`, fixture version, role-registry version, role, scenario, risk, language, viewport, case projection, latest event, relevant receipts, policy result, broker result, source status/freshness, simulated next-action outcome, and expected participant answers.
+
+Each role mapping names policy-critical fields that remain visible and classifies every other detail as summarized, expandable, or hidden. The card and inspector must use the same immutable fixture snapshot; switching role or scenario replaces the entire snapshot and cannot merge incompatible facts.
+
+### 14.5 Simulate-only action semantics
+
+Every interactive action is labelled **Simulate** and can move only between deterministic fixture snapshots. The result shows the expected case version, simulated policy/broker result, and whether a real runtime would require server revalidation. No message may say Approved, Released, Resumed, ACTIVE, Exported, or Downloaded without a conspicuous **SIMULATED** qualifier. The artifact creates no file, receipt, grant, notification, or persistent audit record.
+
+### 14.6 Evaluator harness
+
+A participant-hidden evaluator mode holds immutable fixture ID, role-registry version, scenario, risk, language, viewport, render/announcement start, answer completion, safe-first-action result, backtracking, proof opening, support event, workload response, and unsafe-action flag. It uses session memory and an on-screen summary only; it has no analytics, network, persistence, or export. The approved research process records the adjudicated result outside this artifact.
+
+The harness follows Section 15 clock boundaries and cannot change the answer rubric, exclusion rule, or success condition after a task begins.
+
+### 14.7 Bilingual visual and accessibility semantics
+
+Thai and English share fixture IDs, facts, action boundaries, and expected answers. Status, severity, mutable projection, immutable proof, permitted use, and simulated outcome use text plus icon/shape; color alone carries no safety meaning. The artifact supports keyboard navigation, visible focus, screen-reader announcements, reduced motion, responsive required widths, zoom/reflow, and client-safe vocabulary.
+
+The approved corporate identity may style typography, spacing, form, and color, but cannot weaken the permanent prototype banner or replace explicit safety/status language.
 
 ## 15. Acceptance Criteria
 
@@ -477,7 +522,12 @@ Section 4 is accepted only when:
 16. broker convergence and cross-surface contract/bypass tests pass before any operational UI claims server-authorized export, release, resume, or download;
 17. each required role/scenario cell meets the 30-second orientation target under the frozen measurement protocol;
 18. at least 95% of each required non-safety pilot cell completes its assigned correction, containment acknowledgement, or reversal without support or external reconstruction, with numerator, denominator, and confidence interval reported;
-19. NOT-FOR-PRODUCTION remains active until exact machine, postprocessor, operator-procedure, owner-release, and production-egress gates pass.
+19. NOT-FOR-PRODUCTION remains active until exact machine, postprocessor, operator-procedure, owner-release, and production-egress gates pass;
+20. the design visualization is standalone and fixture-only, with no runtime import, network, persistence, artifact generation/download, egress, or operational control adjacency;
+21. the role-first card, optional inspector, eight-role coverage manifest, seven domain scenarios, and four truth-pressure fixtures conform to Section 14;
+22. fixture mappings use the five-question skeleton plus role-critical fields without creating a new persisted contract or combining incompatible snapshots;
+23. all actions and outcomes remain conspicuously simulated, and the participant-hidden evaluator harness follows the frozen measurement protocol; and
+24. Thai/English facts and actions remain equivalent and every safety/status meaning is accessible without relying on color alone.
 
 ## 16. Stop Conditions
 
@@ -499,7 +549,11 @@ Stop or redesign if:
 - any safety, authority, evidence, revocation, or controlled-egress action bypasses the governed chain—the tolerated safety-bypass rate is zero;
 - more than 10% of non-safety coordination tasks in the pilot occur outside the governed chain; this is a UX redesign trigger and never relaxes the zero-bypass safety rule;
 - the role denominator is not frozen, pooled metrics conceal a failing role/scenario cell, or an exclusion is introduced after unblinding;
-- users cannot identify the last safe revision, owner, consequence, permitted use, and next authorized action without assistance.
+- users cannot identify the last safe revision, owner, consequence, permitted use, and next authorized action without assistance;
+- the prototype imports runtime/product state, calls a network, persists data, creates or downloads an artifact, invokes egress, or appears beside an operational export/release control;
+- the prototype banner disappears, a role/scenario selector implies authority, or an outcome resembling approval/release/resume/export/download lacks a visible SIMULATED qualifier;
+- any V1 role lacks coverage, a required truth-pressure fixture is absent, or the card and inspector combine facts from different fixture snapshots;
+- color or untranslated technical jargon is the only carrier of safety, status, permitted use, proof type, or action meaning.
 
 ## 17. Current Source Trace Informing This Design
 
@@ -518,8 +572,8 @@ Stop or redesign if:
 - Current handoff validation records process order and active site but does not establish recipient acceptance: `src/workflow/handoff/canonical.ts:35-57`.
 - Current notification routing sends personal responsibility/approval to direct push and cross-team handoff/FYI to group messages; it does not implement the four notification intents or distinct acknowledgement semantics: `src/workflow/notification/routing.ts:4-23`.
 - No exact runtime identifiers for `RecoveryCase`, `RecoveryEvent`, `DecisionReceipt`, `CapabilityPolicy`, `EgressBroker`, or a role-view contract were found in the inspected `src`, `server`, or `supabase` source. They remain target design contracts, not current production facts.
-- Evidence/UX appendix: [Beloved Safe Recovery UX deep research](../../research/2026-08-03-monolith-beloved-safe-recovery-ux-deep-research.en.md) and its [bounded scrutiny correction report](../../research/2026-08-03-monolith-beloved-safe-recovery-ux-scrutiny.en.md).
+- Evidence/UX appendix: [Beloved Safe Recovery UX deep research](../../research/2026-08-03-monolith-beloved-safe-recovery-ux-deep-research.en.md), its [bounded scrutiny correction report](../../research/2026-08-03-monolith-beloved-safe-recovery-ux-scrutiny.en.md), and the [interactive-visualization pre-build scrutiny](../../research/2026-08-03-monolith-section-4-interactive-visualization-prebuild-scrutiny.en.md).
 
 ## 18. Approved Next Step After Written-Spec Review
 
-The bounded consistency re-scrutinize of this corrected contract passed with no blocker. The next approved design deliverable is the bilingual interactive Section 4 visualization as a clearly labelled non-operational artifact. Broker-surface inventory and convergence remain the first implementation prerequisite. Do not implement production release, schema, policy, egress, or machine-control changes from this document without a separate approved implementation plan.
+The owner approved all eight pre-build visualization corrections on 3 August 2026, and the bounded consistency re-scrutinize passed with no blocker. The next approved design deliverable is the bilingual standalone fixture-driven prototype defined in Section 14. Broker-surface inventory and convergence remain the first prerequisite for any later operational implementation. Do not implement production release, schema, policy, egress, or machine-control changes from this document without a separate approved implementation plan.
