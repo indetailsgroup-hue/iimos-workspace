@@ -99,6 +99,24 @@ function scanHtmlOpeningTags(html) {
   return tags;
 }
 
+function getTagById(html, id) {
+  return scanHtmlOpeningTags(html).find(({ attributes }) => attributes.get("id") === id);
+}
+
+function assertDialogReferences(html, id) {
+  const dialog = getTagById(html, id);
+  assert.ok(dialog, `${id}: dialog must exist`);
+  assert.equal(dialog.name, "dialog", `${id}: referenced element must be a dialog`);
+
+  for (const attribute of ["aria-labelledby", "aria-describedby"]) {
+    const references = dialog.attributes.get(attribute)?.trim().split(/\s+/).filter(Boolean) ?? [];
+    assert.ok(references.length > 0, `${id}: ${attribute} must reference visible copy`);
+    for (const reference of references) {
+      assert.ok(getTagById(html, reference), `${id}: ${attribute} reference #${reference} must exist`);
+    }
+  }
+}
+
 function assertSafeSvg(source, label) {
   assert.ok(source.startsWith(svgRoot), `${label}: SVG root must use the canonical namespace and exact contract`);
   assert.ok(source.trimEnd().endsWith("</svg>"), `${label}: SVG root must close the document`);
@@ -219,11 +237,80 @@ test("Studio shell exposes semantic controls and dialogs", async () => {
   assert.match(html, /<script type="module" src="\.\/line-flex-studio\.mjs"/);
 });
 
+test("Trust Concierge shell exposes truthful sandbox review and record semantics", async () => {
+  const html = await read("line-flex-studio.html");
+  assertDialogReferences(html, "liff-dialog");
+  assertDialogReferences(html, "receipt-dialog");
+
+  assert.equal(
+    (html.match(/SANDBOX — NO BUSINESS EFFECT/g) ?? []).length,
+    2,
+    "both consequential dialogs must repeat the exact sandbox warning"
+  );
+  assert.match(html, /<h2 id="receipt-title">Sandbox Verification Record — Demo · No Business Effect<\/h2>/);
+  assert.match(html, /Workflow and approval status did not change\./);
+  assert.match(html, /The digest is not a signature\./);
+  assert.match(html, /<dd data-review-mode>\s*sandbox\s*<\/dd>/);
+  assert.match(html, /<dd data-business-effect>\s*none\s*<\/dd>/);
+
+  for (const hook of [
+    "data-review-expiry", "data-artifact-manifest-sha256", "data-liff-review",
+    "data-review-outcome", "data-receipt"
+  ]) assert.match(html, new RegExp(`\\b${hook}(?:[\\s=>])`), `${hook} must remain textContent-ready`);
+
+  const outcome = scanHtmlOpeningTags(html)
+    .find(({ attributes }) => attributes.has("data-review-outcome"));
+  assert.ok(outcome, "bounded review outcome region must exist");
+  assert.equal(outcome.attributes.get("role"), "status");
+  assert.equal(outcome.attributes.get("aria-live"), "polite");
+  assert.equal(outcome.attributes.get("aria-atomic"), "true");
+
+  for (const hook of [
+    "data-review-mode", "data-business-effect", "data-review-expiry",
+    "data-artifact-manifest-sha256", "data-review-outcome"
+  ]) {
+    const element = scanHtmlOpeningTags(html).find(({ attributes }) => attributes.has(hook));
+    assert.ok(!["input", "textarea", "select", "button"].includes(element.name),
+      `${hook} must not be an editable control`);
+  }
+});
+
+test("Trust Concierge styles preserve warning, digest, focus, scroll, mobile, and reduced-motion access", async () => {
+  const css = await read("line-flex-studio.css");
+  assert.match(css, /\.sandbox-warning\{[^}]*position:sticky[^}]*background:var\(--sandbox-warning-bg\)[^}]*color:var\(--sandbox-warning-ink\)/);
+  assert.match(css, /\.sandbox-dialog-body\{[^}]*overflow-y:auto/);
+  assert.match(css, /\.sandbox-digest\{[^}]*overflow-wrap:anywhere/);
+  assert.match(css, /\.sandbox-outcome\{[^}]*border-left:/);
+  assert.match(css, /\.sandbox-dialog-actions button:focus-visible\{/);
+  assert.match(css, /@media\(max-width:480px\)\{[^}]*\.sandbox-dialog-actions\{[^}]*flex-direction:column/);
+  assert.match(css, /@media\(prefers-reduced-motion:reduce\)\{\*,\*::before,\*::after\{/);
+});
+
 test("runtime shell uses only the approved local stylesheet and module", async () => {
   const html = await read("line-flex-studio.html");
   const css = await read("line-flex-studio.css");
   assertAllowedHtmlResources(html, css);
   assert.doesNotMatch(html, /analytics|segment|pixel|gtag/i);
+  assert.doesNotMatch(html, /(?:https?|ftp):\/\//i);
+});
+
+test("runtime allowlist rejects extra loaders, inline styles, remote resources, and CSS URLs", async () => {
+  const html = await read("line-flex-studio.html");
+  const css = await read("line-flex-studio.css");
+  const fixtures = [
+    html.replace("</body>", '<script src="./extra.mjs"></script></body>'),
+    html.replace("</body>", '<img src="./tracking.png" alt=""></body>'),
+    html.replace("<body>", '<body style="display:none">'),
+    html.replace("</head>", '<link rel="preload" href="https://attacker.invalid/font.woff2"></head>')
+  ];
+
+  for (const malicious of fixtures) {
+    assert.throws(() => assertAllowedHtmlResources(malicious, css));
+  }
+  assert.throws(
+    () => assertAllowedHtmlResources(html, `${css}\n.sandbox-warning{background:url(https://attacker.invalid/x)}`),
+    /CSS imports and URL resource loads are forbidden/
+  );
 });
 
 test("runtime shell rejects inline event-handler attributes", async () => {
