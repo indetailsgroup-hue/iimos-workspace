@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>การออกแบบ MONOLITH Section 4: Safe Recovery & Proof</title>
+<style>
+  :root { color-scheme: light dark; font-family: Inter, "Noto Sans Thai", system-ui, sans-serif; }
+  body { margin: 0; background: light-dark(#f5f3ec, #111713); color: light-dark(#20332c, #edf4ef); }
+  main { max-width: 980px; margin: 0 auto; padding: 36px 24px 72px; }
+  article { background: light-dark(#fffef9, #1a241f); border: 1px solid light-dark(#ddd8ca, #38483f); border-radius: 18px; padding: clamp(20px, 4vw, 44px); box-shadow: 0 16px 48px light-dark(rgba(35,56,49,.10), rgba(0,0,0,.28)); }
+  h1, h2, h3 { color: light-dark(#183c31, #f2f7f4); line-height: 1.25; }
+  h1 { margin-top: 0; font-size: clamp(1.8rem, 4vw, 2.6rem); }
+  h2 { margin-top: 2.25rem; border-bottom: 1px solid light-dark(#ddd8ca, #38483f); padding-bottom: .4rem; }
+  h3 { margin-top: 1.6rem; }
+  p, li { line-height: 1.72; }
+  blockquote { margin: 1.25rem 0; padding: .7rem 1rem; border-left: 4px solid light-dark(#2d6651, #8bc4a8); background: light-dark(#eaf3ed, #22342a); }
+  code { background: light-dark(#eeeae0, #2b3831); border-radius: 5px; padding: .12rem .35rem; overflow-wrap: anywhere; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: .94rem; }
+  th, td { padding: .65rem .7rem; border-bottom: 1px solid light-dark(#ddd8ca, #38483f); text-align: left; vertical-align: top; line-height: 1.5; }
+  th { background: light-dark(#eeece4, #25322b); }
+  a { color: light-dark(#2d6651, #9bd2b6); }
+  @media (max-width: 720px) { main { padding: 12px 8px 36px; } article { border-radius: 12px; } table { display: block; overflow-x: auto; } }
+  @media print { body { background: white; color: black; } main { max-width: none; padding: 0; } article { border: 0; box-shadow: none; padding: 0; } }
+</style>
+</head>
+<body>
+<main><article><h1>การออกแบบ MONOLITH Section 4: Safe Recovery &amp; Proof</h1>
+<p><strong>สถานะ:</strong> OWNER DECISION — อนุมัติทิศทางเมื่อ 3 สิงหาคม 2026; รอตรวจทานสเปกฉบับเขียนโดยเจ้าของ</p>
+<p><strong>ทิศทางผลิตภัณฑ์:</strong> Decision Chain UX</p>
+<p><strong>วัตถุประสงค์ของ Section:</strong> กักความล้มเหลว รักษาอำนาจ กู้คืนอย่างปลอดภัย และพิสูจน์ความพร้อมก่อนกลับมาทำงานต่อ</p>
+<p><strong>ขอบเขตแรก:</strong> แพ็กเกจงานครัวและ casework ในโหมด shadow / NOT-FOR-PRODUCTION</p>
+<h2>1. สรุปการตัดสินใจ</h2>
+<p>Section 4 จะไม่แสดง Failure Handling, Governance และ Testing Gates เป็นสามผลิตภัณฑ์แยกกัน แต่จะกำหนด <strong>Safe Recovery Contract</strong> กลางหนึ่งชุด และ <strong>Qualification Evidence Matrix</strong> หลังบ้านหนึ่งชุด</p>
+<p>ลำดับ runtime คือ:</p>
+<p><code>Detect → Contain → Explain → Assign → Recover → Re-verify → Resume / Retire</code></p>
+<p>ผู้ใช้เห็นการกระทำถัดไปที่ปลอดภัยที่สุด ผู้รับผิดชอบ และผลกระทบ ส่วน MONOLITH จัดการ invalidation, dependency propagation, retry, reconciliation, audit assembly, notification และการรวบรวมหลักฐานทั้งหมดหลังบ้าน</p>
+<p>สถานะที่ล้มเหลว เก่า ขัดแย้ง ไม่มีอำนาจ ยังไม่ตรวจ หรือมี coverage ไม่ครบ จะเดินหน้าต่ออย่างเงียบ ๆ ไม่ได้ “ไม่พบ failure” ไม่เท่ากับ “มีหลักฐานที่บังคับครบแล้ว”</p>
+<h2>2. เจตนาและเงื่อนไขความสำเร็จ</h2>
+<p>Section นี้ต้องทำให้คำมั่นต่อไปนี้เป็นจริง:</p>
+<blockquote>
+<p>เมื่อบางอย่างล้มเหลว MONOLITH จะกักผลกระทบ รักษา revision ล่าสุดที่ปลอดภัย ระบุเจ้าของการกู้คืน และพิสูจน์ control ที่บังคับใหม่ก่อนอนุญาตให้ทำงานต่อ</p>
+</blockquote>
+<p>ความสำเร็จไม่ใช่ dashboard ความปลอดภัยที่สวยงาม แต่เป็นเส้นทางที่บังคับใช้ได้จริง ซึ่ง:</p>
+<ol>
+<li>failure ผูกกับ exact revision และ affected scope;</li>
+<li>unsafe effect ถูกหยุดที่ boundary ที่ถูกต้อง;</li>
+<li>ผู้มีอำนาจที่ระบุชื่อเป็นเจ้าของการตัดสินใจถัดไป;</li>
+<li>recovery ทำซ้ำได้อย่างปลอดภัย สังเกตสถานะได้ และย้อนกลับได้เมื่อเหมาะสม;</li>
+<li>หลักฐานบังคับครบ ใหม่ และตรง scope;</li>
+<li>การ reopen หรือ retire สร้าง immutable receipt;</li>
+<li>ไม่มี export, API, worker, cache, USB หรือ offline path อื่นหลบการตัดสินใจชุดเดียวกันได้</li>
+</ol>
+<h2>3. ทางเลือกที่พิจารณา</h2>
+<h3>A. สามโมดูลแยกกัน — ไม่เลือก</h3>
+<p>Failure, Governance และ Testing workspace แยกกันจะทำให้ state ซ้ำ เพิ่ม navigation สำหรับผู้เชี่ยวชาญ และสร้างความหมายคำว่า “ปลอดภัย” หลายแบบ</p>
+<h3>B. Central safety dashboard — ไม่เลือก</h3>
+<p>Dashboard ช่วยให้มองเห็น แต่ยังอาจเป็นเพียงการเฝ้าดู ไม่ได้ยืนยันว่า state transition, export หรือ machine-package path จริงถูกบล็อก</p>
+<h3>C. Shared recovery contract พร้อม evidence matrix — อนุมัติ</h3>
+<p>Contract เดียวควบคุมทุก consequential transition หน้าจอตามบทบาทแสดง projection ของ record ชุดเดียว ขณะที่ deterministic policy และ evidence เป็นผู้ตัดสินว่า transition เดินหน้าต่อได้หรือไม่</p>
+<h2>4. ขอบเขตและสิ่งที่ไม่ทำ</h2>
+<h3>รวมใน Section นี้</h3>
+<ul>
+<li>failure classification และ containment;</li>
+<li>Failure Receipt ที่ผูก exact revision;</li>
+<li>recovery ownership และ next-action routing;</li>
+<li>authority และ separation-of-duty evaluation;</li>
+<li>retry, idempotency, reconciliation และ compensation semantics;</li>
+<li>การตัดสินใจ HOLD, REVOKE, SUPERSEDE, RETIRE และ RESUME;</li>
+<li>การเชื่อม control claim กับ test evidence;</li>
+<li>export-egress inventory และ no-bypass enforcement;</li>
+<li>shadow-machine qualification evidence;</li>
+<li>recovery UX ที่เหมาะกับแต่ละบทบาท</li>
+</ul>
+<h3>ไม่รวมอย่างชัดเจน</h3>
+<ul>
+<li>autonomous approval, waiver, release หรือ incident closure;</li>
+<li>การควบคุม spindle, motion หรือ cycle start ของเครื่องโดยตรง;</li>
+<li>general workflow builder;</li>
+<li>project-level confidence หรือ safety score แบบรวม;</li>
+<li>automatic regulatory หรือ professional sign-off;</li>
+<li>การประกาศ production readiness จากการมี source, unit test ที่ผ่าน หรือ schema validation เพียงอย่างเดียว;</li>
+<li>การเปิด Interior Architecture Domain Pack กว้าง ๆ ก่อนที่แต่ละ pack จะผ่าน qualification ของตนเอง</li>
+</ul>
+<h2>5. ขอบเขต Repository และ Current State</h2>
+<p>Parent repository เป็น governance/bootstrap root ส่วน <code>determined-williams/</code> nested repository เป็น active product source มี release, gate, audit, verification และ factory code จำนวนมาก แต่ implementation ที่มองเห็นในปัจจุบันยังมี abstraction หลายเส้นทาง governance store แบบ local-only เอกสารทดสอบเชิงเป้าหมาย และ route ที่ยังไม่สมบูรณ์</p>
+<p>สเปกนี้จึงแยกประเภทดังนี้:</p>
+<ul>
+<li><strong>TARGET CONTROL:</strong> สิ่งที่สเปกนี้กำหนดให้ต้องมี;</li>
+<li><strong>VERIFIED SOURCE FACT:</strong> สิ่งที่ source ปัจจุบันรองรับโดยตรง;</li>
+<li><strong>TEST EVIDENCE:</strong> หลักฐานจาก executable check ที่ผูกกับ commit;</li>
+<li><strong>OPERATIONAL EVIDENCE:</strong> หลักฐานจาก shadow, coupon, first article หรือการปฏิบัติงานจริงที่สังเกตได้;</li>
+<li><strong>UNKNOWN:</strong> สิ่งที่หลักฐานที่มีอยู่ยังพิสูจน์ไม่ได้</li>
+</ul>
+<p>สเปกนี้ไม่ประกาศว่า production-ready และไม่ปิด NOT-FOR-PRODUCTION controls</p>
+<h2>6. Safe Recovery Contract</h2>
+<p>ทุก consequential failure สร้าง <code>FailureReceipt</code> canonical หนึ่งรายการ</p>
+<h3>6.1 Field บังคับ</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>ข้อกำหนด</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>failureId</code></td>
+<td>identity คงที่และไม่ซ้ำทั้งระบบ</td>
+</tr>
+<tr>
+<td><code>failureClass</code></td>
+<td>Evidence, proposal, concurrency, authority, verification, release, post-release, infrastructure หรือ security</td>
+</tr>
+<tr>
+<td><code>detectedAt</code> / <code>detectedBy</code></td>
+<td>timestamp และ actor/system source ที่เชื่อถือได้</td>
+</tr>
+<tr>
+<td><code>tenantContext</code></td>
+<td>canonical tenant / organization / site scope; ห้ามอนุมานจาก presentation state</td>
+</tr>
+<tr>
+<td><code>projectId</code>, <code>packageId</code>, <code>revisionId</code></td>
+<td>project, work package และ immutable revision ที่ได้รับผลกระทบอย่างเจาะจง</td>
+</tr>
+<tr>
+<td><code>affectedClaims</code></td>
+<td>Claim IDs และ dependency edges ที่ได้รับผลกระทบ</td>
+</tr>
+<tr>
+<td><code>containment</code></td>
+<td>สิ่งที่ถูกหยุด กัก เพิกถอน หรือเปลี่ยนเป็น read-only</td>
+</tr>
+<tr>
+<td><code>lastSafeState</code></td>
+<td>state ล่าสุดที่ permitted use ยังใช้ได้</td>
+</tr>
+<tr>
+<td><code>invalidatedReceipts</code></td>
+<td>purpose-specific receipts ที่ใช้ต่อไม่ได้</td>
+</tr>
+<tr>
+<td><code>owner</code></td>
+<td>recovery owner ที่ระบุชื่อและ authority assignment</td>
+</tr>
+<tr>
+<td><code>nextAction</code></td>
+<td>primary recovery action หนึ่งรายการในภาษาคน</td>
+</tr>
+<tr>
+<td><code>retryPolicy</code></td>
+<td>idempotency key, retry ceiling, backoff, expiry และ escalation</td>
+</tr>
+<tr>
+<td><code>requiredProof</code></td>
+<td>checks และหลักฐานที่ต้องมีเพื่อ reopen อย่างเจาะจง</td>
+</tr>
+<tr>
+<td><code>downstreamImpact</code></td>
+<td>orders, parts, exports, people, deadlines และ cached copies ที่ได้รับผลกระทบ</td>
+</tr>
+<tr>
+<td><code>disposition</code></td>
+<td>OPEN, CONTAINED, RECOVERING, REVERIFYING, RESUMED, RETIRED หรือ SUPERSEDED</td>
+</tr>
+<tr>
+<td><code>auditAnchor</code></td>
+<td>append-only event และ receipt-chain reference</td>
+</tr>
+</tbody></table>
+<h3>6.2 ความหมายของ State</h3>
+<ol>
+<li><strong>DETECTED:</strong> บันทึกเหตุการณ์แล้ว แต่ยังไม่อ้างความปลอดภัยใด ๆ</li>
+<li><strong>CONTAINED:</strong> ปิด capability และ egress ที่ได้รับผลกระทบ โดยยังแสดง revision ล่าสุดที่ปลอดภัย</li>
+<li><strong>ASSIGNED:</strong> บุคคลที่ระบุชื่อหรือ governed service รับผิดชอบการกระทำถัดไป</li>
+<li><strong>RECOVERING:</strong> Recovery effects ทำงานผ่าน idempotent commands และ outbox/effect ledger</li>
+<li><strong>REVERIFYING:</strong> ประเมิน control claims ที่บังคับทั้งหมดบน recovered exact revision</li>
+<li><strong>RESUMED:</strong> หลักฐานครบ และผู้มีอำนาจที่ qualified เปิด capability ใหม่</li>
+<li><strong>RETIRED / SUPERSEDED:</strong> branch หรือ package ที่ล้มเหลวกลับมาใช้ต่อไม่ได้ ตัวแทนใหม่ต้องมี identity และ evidence chain ใหม่</li>
+</ol>
+<p>Transitions เป็น append-only decisions และห้ามลบ failure record เพียงเพราะกู้คืนสำเร็จแล้ว</p>
+<h2>7. Failure Classes และ Default Containment</h2>
+<table>
+<thead>
+<tr>
+<th>Failure class</th>
+<th>ตัวอย่าง</th>
+<th>Default containment</th>
+<th>Recovery authority</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Evidence</td>
+<td>ไม่มี site dimension, supplier specification เก่า</td>
+<td>Block WIP หรือ review candidate ไว้</td>
+<td>Evidence owner พร้อม reviewer</td>
+</tr>
+<tr>
+<td>AI proposal</td>
+<td>inference ไม่มีหลักฐาน, propagation ไม่ถูกต้อง</td>
+<td>ทิ้งหรือกัก proposal; canonical revision ไม่เปลี่ยน</td>
+<td>Designer</td>
+</tr>
+<tr>
+<td>Concurrency</td>
+<td>version conflict, partial write, duplicate command</td>
+<td>Abort transition และ reconcile prepared effects</td>
+<td>Transaction/recovery service</td>
+</tr>
+<tr>
+<td>Authority</td>
+<td>assignment หมดอายุ, self-approval, scope ผิด</td>
+<td>ปฏิเสธ action และรักษา state เดิม</td>
+<td>Governance owner</td>
+</tr>
+<tr>
+<td>Verification</td>
+<td>report หาย เก่า ซ้ำ หรือ FAIL</td>
+<td>กัก release candidate</td>
+<td>Qualified verifier</td>
+</tr>
+<tr>
+<td>Release</td>
+<td>signature, manifest, machine profile หรือ egress ไม่ตรง</td>
+<td>ปิด production egress ทั้งหมด</td>
+<td>Authorized releaser พร้อม factory authority</td>
+</tr>
+<tr>
+<td>Post-release</td>
+<td>พบ defect หรือ input เปลี่ยนหลัง ACTIVE</td>
+<td>HOLD หรือ REVOKE ทันที และระบุ copies/orders ที่ได้รับผลกระทบ</td>
+<td>Incident commander / revocation authority</td>
+</tr>
+<tr>
+<td>Infrastructure</td>
+<td>offline, timeout, signer/store ใช้งานไม่ได้</td>
+<td>read-only หรือ queued capture เท่านั้น; ห้าม release</td>
+<td>Service owner</td>
+</tr>
+<tr>
+<td>Security</td>
+<td>key compromise, cross-tenant access, audit ถูกแก้</td>
+<td>เพิกถอน capability และ keys พร้อม isolate scope</td>
+<td>Security authority</td>
+</tr>
+</tbody></table>
+<h2>8. ความน่าเชื่อถือของ Transaction และ Effect</h2>
+<p>“Atomic Commit” เป็น target control และห้ามอ้างจาก sequential writes</p>
+<p>ทุก consequential transition ใช้:</p>
+<ol>
+<li>canonical transaction ที่บันทึก business state และ effect intent พร้อมกัน;</li>
+<li>stable idempotency key ที่ scope ตาม actor, command และ expected revision;</li>
+<li>optimistic version comparison ก่อน mutation;</li>
+<li>outbox/effect ledger สำหรับ downstream work;</li>
+<li>retry ที่กำหนด ceiling และ expiry;</li>
+<li>reconciliation เมื่อผลลัพธ์จาก provider คลุมเครือ;</li>
+<li>compensation เฉพาะเมื่อ original effect ทำ atomic ไม่ได้;</li>
+<li>recovery receipt สำหรับทุก retry, compensation หรือ terminal failure</li>
+</ol>
+<p>Lifecycle ขั้นต่ำคือ <code>PREPARED → COMMITTED</code> หรือ <code>PREPARED → ABORTED</code> และ reconciler ต้องตรวจพบและจัดการ prepared records ที่ค้างจาก process failure ผู้ใช้ต้องไม่ถูกบังคับให้เดาว่าการกดหนึ่งครั้งสำเร็จหรือไม่</p>
+<h2>9. Governance และ Authority</h2>
+<h3>9.1 Authority เป็นของ Server</h3>
+<p>UI role label, ปุ่มที่ซ่อน, local state, email link และ chat identity ไม่ใช่ permission ฝั่ง server ต้องประเมิน actor, authority assignment, scope, purpose, exact revision, validity window และ separation-of-duty policy ตอน commit</p>
+<h3>9.2 Authority Moments</h3>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Required authority</th>
+<th>Separation rule</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Accept client concept</td>
+<td>Client decision authority</td>
+<td>ห้ามสื่อว่าเป็น technical หรือ fabrication approval</td>
+</tr>
+<tr>
+<td>Confirm design intent</td>
+<td>Assigned designer</td>
+<td>คนเดียว release งานตนเองไป production ไม่ได้</td>
+</tr>
+<tr>
+<td>Record technical disposition</td>
+<td>Qualified independent reviewer</td>
+<td>Critical claims ใช้ independent-first</td>
+</tr>
+<tr>
+<td>Confirm priced BOM basis</td>
+<td>Commercial authority</td>
+<td>อนุมัติ geometry หรือ machining ไม่ได้</td>
+</tr>
+<tr>
+<td>Confirm manufacturing translation</td>
+<td>Factory engineer</td>
+<td>เปิด production egress คนเดียวไม่ได้</td>
+</tr>
+<tr>
+<td>Commit ACTIVE release</td>
+<td>Authorized releaser</td>
+<td>High-risk release ต้องมี independent qualified evidence และ two-person control ตาม policy</td>
+</tr>
+<tr>
+<td>HOLD</td>
+<td>Authorized safety role คนใดก็ได้</td>
+<td>ทำได้ทันทีแบบ fail-safe และต้องระบุเหตุผล</td>
+</tr>
+<tr>
+<td>REVOKE / RESUME</td>
+<td>Revocation authority</td>
+<td>Resume ต้องใช้หลักฐานใหม่ ห้ามนำ receipt เดิมกลับมาใช้</td>
+</tr>
+</tbody></table>
+<p>Self-approval, authority หมดอายุ, scope mismatch, บุคคลเดียวใช้สอง role ที่ขัดกัน และ identity ที่ตรวจไม่ได้ ต้อง fail closed</p>
+<p>ในสเปกนี้ <strong>high risk</strong> หมายถึง action ใดก็ตามที่สร้างหรือเปิด production-usable egress หรือ resume capability หลัง safety, security, integrity หรือ revocation incident ต้องใช้บุคคลที่ยืนยันตัวตนแล้วสองคนและเป็นคนละคนกัน ได้แก่ qualified reviewer หรือ factory-translation authority หนึ่งคน และ Authorized Releaser หนึ่งคน บุคคลเดียวทำหน้าที่ทั้งสองไม่ได้ ส่วน HOLD ยังคงเป็น one-person fail-safe action ที่ authorized safety role คนใดก็ได้ทำทันที</p>
+<h3>9.3 Audit และ Revocation</h3>
+<p>Canonical audit และ revocation registry ต้องเป็น append-only, server-owned, tenant-scoped และ tamper-evident Local storage ใช้ cache signed policy snapshots ได้ แต่สร้าง ล้าง หรือ override canonical authority ไม่ได้</p>
+<p>Offline enforcement ต้องมี:</p>
+<ul>
+<li>signed monotonic policy version;</li>
+<li>issued-at และ expires-at timestamps;</li>
+<li>อายุ policy สูงสุดที่ยอมรับได้;</li>
+<li>machine และ tenant scope ที่ชัดเจน;</li>
+<li>fail-closed เมื่อ policy หาย ไม่ถูกต้อง หรือเก่า;</li>
+<li>reconciliation ก่อน resumed controlled egress</li>
+</ul>
+<h2>10. Qualification Evidence Matrix</h2>
+<p>ทุก capability มี <code>ControlClaim</code> และยังเปิดใช้ไม่ได้จนกว่า mandatory claims ตาม risk class จะผ่านบน exact build, policy, adapter, machine profile และ revision</p>
+<table>
+<thead>
+<tr>
+<th>Control claim</th>
+<th>Minimum executable evidence</th>
+<th>Operational evidence</th>
+<th>Failure consequence</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Commit เป็น all-or-nothing</td>
+<td>Failure injection ทุก write boundary; crash recovery; idempotent replay</td>
+<td>Recovery drill</td>
+<td>ปิด release capability</td>
+</tr>
+<tr>
+<td>Evidence coverage ครบ</td>
+<td>ทดสอบ cardinality, scope, freshness, duplicate, missing และ unknown state</td>
+<td>Seeded-defect trial</td>
+<td>Candidate อยู่ใน quarantine</td>
+</tr>
+<tr>
+<td>Separation of duties ใช้ได้จริง</td>
+<td>Property tests ครอบคลุม actor, role, expiry, scope และ self-approval</td>
+<td>สังเกต shadow approvals</td>
+<td>ปฏิเสธ commit</td>
+</tr>
+<tr>
+<td>Revocation กระจายถึงปลายทาง</td>
+<td>ทดสอบ offline stale policy, key compromise, cache และ clock boundary</td>
+<td>Revocation exercise ที่ factory endpoint</td>
+<td>ปิด egress</td>
+</tr>
+<tr>
+<td>ไม่มี export bypass</td>
+<td>Static egress scan พร้อม route/API/worker contract tests</td>
+<td>สังเกต external channel</td>
+<td>Block release และเปิด incident</td>
+</tr>
+<tr>
+<td>Package ตรงกับเครื่อง</td>
+<td>Manifest, checksum, unit, origin, postprocessor, tool และ machine profile tests</td>
+<td>Simulation, coupon แล้วจึง first article</td>
+<td>ห้ามใช้กับเครื่อง</td>
+</tr>
+<tr>
+<td>Recovery ใช้งานได้</td>
+<td>Role E2E tests ตั้งแต่ detect-to-resume และ detect-to-retire</td>
+<td>Facilitated pilot แยกทุกบทบาท</td>
+<td>ออกแบบ recovery UX ใหม่</td>
+</tr>
+</tbody></table>
+<h3>10.1 ระดับหลักฐาน</h3>
+<ul>
+<li><strong>E0 — Executable source evidence:</strong> unit, property, model-based, contract, integration, security และ failure-injection results ที่ผูก commit และ environment</li>
+<li><strong>E1 — Shadow operational evidence:</strong> โครงการจริงแต่ไม่มี production authority พร้อม defect adjudication โดยผู้เชี่ยวชาญอิสระ</li>
+<li><strong>E2 — Qualified factory evidence:</strong> simulator, coupon, first article, machine profile ที่ระบุชื่อ, postprocessor ที่อนุมัติ และ operator procedure</li>
+<li><strong>E3 — Sustained operational evidence:</strong> monitored field performance, incidents, false-negative/positive review, recovery drills และ expiry/requalification</li>
+</ul>
+<p>E0 ไม่ได้แปลว่า E2 หรือ E3 Domain Pack จะได้เฉพาะ capability ที่ระดับหลักฐานปัจจุบันรองรับ</p>
+<h2>11. Testing Gates</h2>
+<h3>11.1 กลุ่มการทดสอบบังคับ</h3>
+<ol>
+<li>Unit และ property tests สำหรับ invariants และ boundary values</li>
+<li>Model-based state-machine tests สำหรับทุก legal และ illegal transition</li>
+<li>Contract tests ให้ UI, API, worker, server และ external adapter ใช้ความหมายตรงกัน</li>
+<li>Concurrency และ idempotency tests รวม duplicate และ reordered delivery</li>
+<li>Failure-injection tests ทุก persistence, signing, audit, notification และ export boundary</li>
+<li>Seeded-defect tests สำหรับ stale revision, missing evidence, contradictory dimensions, unsupported inference, wrong hardware/material และ post-review change</li>
+<li>Authority tests สำหรับ denial, expiry, scope, self-approval และ two-person control</li>
+<li>Offline และ revocation tests รวม stale cache และ clock skew</li>
+<li>Egress-bypass tests ครอบคลุม browser download, API, server, worker, cache, USB package และ legacy paths</li>
+<li>Role-specific E2E และ accessibility tests ภาษาไทยและอังกฤษบน desktop และ mobile widths ที่บังคับ</li>
+<li>Shadow simulation, coupon และ first-article qualification สำหรับทุก machine profile และ postprocessor</li>
+</ol>
+<h3>11.2 CI Evidence Contract</h3>
+<p>ทุก required check เผยแพร่ machine-readable record ที่มี:</p>
+<ul>
+<li>control claim IDs;</li>
+<li>commit และ dirty-tree status;</li>
+<li>environment และ dependency lock;</li>
+<li>command identity;</li>
+<li>จำนวน total, passed, failed, skipped, cancelled และ quarantined;</li>
+<li>start/end timestamps;</li>
+<li>artifact digests;</li>
+<li>สถานะสุดท้าย PASS หรือ FAIL;</li>
+<li>expiry/requalification date เมื่อเกี่ยวข้อง</li>
+</ul>
+<p>Required checks ต้องทำงานบน pull requests และ protected release branches Script ที่มีอยู่แต่ไม่ได้ wiring เป็น required check ยังไม่ถือเป็น Gate</p>
+<h2>12. Egress Control</h2>
+<p>MONOLITH มี Governed Egress Registry ชุดเดียวสำหรับทุก path ที่ส่งข้อมูลซึ่งอาจใช้ผลิตได้ รวม browser downloads, direct ZIPs, APIs, workers, server exporters, integrations, caches, offline packages, USB packages และ machine-facing adapters</p>
+<p>ทุก egress path ต้อง:</p>
+<ol>
+<li>resolve exact ACTIVE package;</li>
+<li>verify manifest, signature, policy, machine profile และ revocation status;</li>
+<li>ปฏิเสธ evidence ที่หายหรือ stale;</li>
+<li>บันทึก actor, endpoint, artifact hash, purpose และ result;</li>
+<li>ปฏิเสธ package ที่ superseded, held, revoked, quarantined หรือ NOT-FOR-PRODUCTION;</li>
+<li>ไม่เปิด direct หรือ legacy production path อื่น</li>
+</ol>
+<p>Legacy paths ต้องถูกลบ isolate เป็น non-production อย่างชัดเจน หรืออยู่ภายใต้ server enforcement ชุดเดียวกัน Static bypass scanning ต้องครอบคลุม <code>src</code>, <code>server</code>, workers, API routes, scripts และ adapter code และเป็น required CI check</p>
+<h2>13. ประสบการณ์ตามบทบาท</h2>
+<p>หน้าบ้านใช้ภาษาสงบ ตรงข้อเท็จจริง และมี recovery action เดียว</p>
+<h3>ลูกค้า</h3>
+<p>“บันทึกตัวเลือกของคุณแล้ว การปล่อยแบบเทคนิคหยุดอยู่เพราะยังไม่ได้วัดความกว้างหน้างาน” ลูกค้าไม่ต้องแก้รายละเอียดการผลิต</p>
+<h3>นักออกแบบ</h3>
+<p>เห็น affected objects, last safe revision, proposed correction, invalidated receipts และ reversible branch นักออกแบบแก้หรือ resubmit ได้ แต่ override technical containment ไม่ได้</p>
+<h3>ผู้ตรวจ</h3>
+<p>เห็น exact changed claims, evidence ที่หาย/ขัดแย้ง, mandatory coverage denominator, independent assessment และ permitted dispositions</p>
+<h3>ผู้ประสานงาน</h3>
+<p>เห็น blocking recovery task เดียว เจ้าของที่ระบุชื่อ deadline, downstream roles ที่ได้รับผลกระทบ และ escalation path ไม่ใช่ feed ของทุก system event</p>
+<h3>วิศวกรโรงงาน</h3>
+<p>เห็น quarantined exact candidate, failed checks, machine context, การเปรียบเทียบกับ last ACTIVE package และ HOLD/escalation controls ห้ามดาวน์โหลด production file ก่อน commit</p>
+<h3>CNC Operator</h3>
+<p>เห็นเฉพาะ ACTIVE packages ที่ตรงเครื่อง พร้อม HOLD และ report-issue controls MONOLITH ไม่มี spindle, motion หรือ cycle-start action</p>
+<h2>14. Contract ของภาพ Section 4</h2>
+<p>ภาพที่อนุมัติจะมีสองมุมมองที่ sync กัน:</p>
+<ol>
+<li><strong>Safe Recovery Loop:</strong> เส้นทางเจ็ด state จาก Detect ถึง Resume/Retire</li>
+<li><strong>Qualification Evidence Matrix:</strong> หลักฐานที่บังคับก่อน reopen แต่ละ capability</li>
+</ol>
+<p>ผู้ตรวจสามารถเลือก scenarios ตัวแทน:</p>
+<ul>
+<li>missing site evidence;</li>
+<li>stale revision หลัง review;</li>
+<li>unauthorized หรือ self-approval attempt;</li>
+<li>missing verification report;</li>
+<li>post-release defect;</li>
+<li>offline หรือ stale revocation policy</li>
+</ul>
+<p>แต่ละ scenario อัปเดต field ชุดเดียวกัน ได้แก่ containment, last safe state, owner, next action, invalidated scope, required proof และ permitted output ภาพต้องไม่ทำให้เข้าใจว่า UI badge เป็นผู้ enforce safety</p>
+<h2>15. Acceptance Criteria</h2>
+<p>Section 4 รับได้เมื่อ:</p>
+<ol>
+<li>ทุก failure scenario มี containment, authority, recovery และ re-verification;</li>
+<li>missing evidence แสดงเป็น PASS ไม่ได้;</li>
+<li>ทุก consequential action ผูก actor, purpose, scope และ exact revision;</li>
+<li>high-risk release และ resume policy บังคับ separation of duties ได้;</li>
+<li>transaction failure ไม่ทิ้ง unexplained ambiguous state;</li>
+<li>canonical audit และ revocation ล้างจาก user device ไม่ได้;</li>
+<li>ทุก production egress path อยู่ใน inventory และ governance;</li>
+<li>control claims เชื่อม executable evidence ที่มี expiry;</li>
+<li>interface ให้แต่ละ role มี recovery action ที่ชัดเจนหนึ่งรายการ;</li>
+<li>NOT-FOR-PRODUCTION ยังคงทำงานจนผ่าน machine qualification และ owner release gates</li>
+</ol>
+<h2>16. Stop Conditions</h2>
+<p>หยุดหรือออกแบบใหม่เมื่อ:</p>
+<ul>
+<li>critical seeded defect ไปถึง release;</li>
+<li>missing report ผ่านเพราะ report set ว่าง;</li>
+<li>actor คนเดียวทำ incompatible duties ได้;</li>
+<li>crash ทำให้ canonical state และ release evidence แยกจากกัน;</li>
+<li>stale หรือ missing revocation policy อนุญาต offline use;</li>
+<li>alternate path ใด export non-ACTIVE package;</li>
+<li>consequential recovery work มากกว่า 10% เกิดนอก governed chain;</li>
+<li>ผู้ใช้ระบุ last safe revision, owner และ next action โดยไม่ขอความช่วยเหลือไม่ได้</li>
+</ul>
+<h2>17. Current Source Trace ที่ใช้ในการออกแบบ</h2>
+<ul>
+<li>Sequential manifest, HEAD และ geometry effects: <code>src/core/export/commitApprovedState.ts:200-205</code></li>
+<li>Report checks ที่ค้นหา FAIL โดยไม่ตรวจ required cardinality อย่างชัดเจน: <code>src/core/manufacturing/export/enforceExportGate.ts:119-157</code></li>
+<li>Client-side approval requirement ที่ default หนึ่ง approval และ any-role matching: <code>src/core/manufacturing/release/releaseStore.ts:47-97</code></li>
+<li>Key audit และ revocation state แบบ local และล้างได้: <code>src/release/keys/audit.ts:4-8,56-73,121-126</code> และ <code>src/release/keys/revocationPolicy.ts:53-84,197-202</code></li>
+<li>Direct ZIP path ที่ไม่มี full package structure: <code>server/src/export/exportServiceP22a.ts:426-467</code></li>
+<li>Bypass scanner ปัจจุบัน scope เฉพาะ <code>src</code>: <code>scripts/gates/bypass-scan.ts:82-87</code></li>
+<li>Full verification workflow ทำงานแบบ push/manual: <code>.github/workflows/verify-full.yml:5-12</code></li>
+<li>Gate pull-request workflow paths ไม่รวม release/export modules: <code>.github/workflows/gate-tests.yml:13-16</code></li>
+<li>Release route ยังเป็น incomplete surface: <code>src/routes/index.tsx:873-880</code></li>
+</ul>
+<h2>18. ขั้นถัดไปที่อนุมัติหลังตรวจ Written Spec</h2>
+<p>หลังเจ้าของยืนยัน written specification นี้ ให้สร้างภาพ interactive Section 4 สองภาษา ห้ามนำเอกสารนี้ไป implement production release, schema, policy หรือ machine-control changes โดยไม่มี implementation plan ที่อนุมัติแยกต่างหาก</p>
+</article></main>
+</body>
+</html>
