@@ -65,7 +65,7 @@ GREEN บังคับให้มี durable raw artifacts, evidence-time man
 
 ## การตรวจอัตโนมัติ
 
-Durable post-review JUnit artifact ที่สำเร็จคือ `artifacts/line-design-approval-a1/full-suite.junit.xml`: 38,262 canonical-LF bytes, canonical-LF SHA-256 `2F6F197B7815116770A9709E821AFC50645B6428CBDD816D25381386C8872D5C`, มี `<testcase>` 336 elements และ Node footer ระบุ 351 tests, ผ่าน 351, fail/cancelled/skipped/`todo` เท่ากับศูนย์
+Durable post-review JUnit artifact ที่สำเร็จคือ `artifacts/line-design-approval-a1/full-suite.junit.xml`: 38,262 canonical-LF bytes, canonical-LF SHA-256 `1BD65CBD498EF4E798D82EBD53A7B72BFAA729360B2CB4268C85282157EFCBB4`, มี `<testcase>` 336 elements และ Node footer ระบุ 351 tests, ผ่าน 351, fail/cancelled/skipped/`todo` เท่ากับศูนย์
 
 336 XML elements และ 351 Node summary tests เป็นคนละแนวคิดของ reporter และ executable contract parse ทั้งคู่ Stored canonical-LF hash ระบุ timing-dependent observed run ที่เลือกไว้จริงโดยไม่ขึ้นกับ line endings ของ Git checkout และไม่ยอมรับ hexadecimal claim ใด ๆ ที่ไม่ผูกกับไฟล์
 
@@ -94,9 +94,9 @@ Outcomes ที่สังเกตคือ `sandbox_recorded`, `cancelled_loc
 
 ค่าที่ derive จาก raw request events 56 รายการ: external 0; failed 0; HTTP errors 0; console errors 0; page errors 0.
 
-Raw arrays อยู่ใน `artifacts/line-design-approval-a1/browser-observed.json`: 20,493 canonical-LF bytes และ canonical-LF SHA-256 `D5AF5943762A0C8EC3CEB07C6968934666CC8F2C2E2BC3A2D9963EA74E9DEB4B` Summary คำนวณ counts และ localhost-only hosts จาก arrays เหล่านี้ใหม่ Page สี่หน้าเรียก local resources ชุดเดิม 14 รายการ ส่วน inventory ของ LINE, Supabase, analytics, credential และ external message endpoint มี request count 0
+Raw arrays อยู่ใน `artifacts/line-design-approval-a1/browser-observed.json`: 20,439 canonical-LF bytes และ canonical-LF SHA-256 `B0DFF5533024445A613169A18A1BA864F0335789A55A483AF32B4DE937E008CC` Canonical output provenance บันทึก directory แบบ repository-relative เป็น `artifacts/line-design-approval-a1` เพื่อให้หลักฐานยังใช้ได้ใน clean worktree อื่น Summary คำนวณ counts และ localhost-only hosts จาก arrays เหล่านี้ใหม่ Page สี่หน้าเรียก local resources ชุดเดิม 14 รายการ ส่วน inventory ของ LINE, Supabase, analytics, credential และ external message endpoint มี request count 0
 
-Producer มี 31,438 canonical-LF bytes และ canonical-LF SHA-256 `D846CC0081C4A43B8C664D2EA0D5419D83DC40A325168FA7A1028DF2BAB302A1`
+Producer มี 31,785 canonical-LF bytes และ canonical-LF SHA-256 `8BDEA0AD16721A222E02BEA52939FA26E59681C4380FBC09B5B2009FAF9AB160`
 
 ## การสแกน forbidden fields ของ record
 
@@ -108,9 +108,11 @@ Record digest ที่สังเกตคือ `98aa18f7ac400d7739ba66b9c9dc
 
 Served-resource manifest 14 ไฟล์ที่ sort ตาม path อย่างชัดเจนมี canonical-LF source snapshot SHA-256 `B1289E1BF03136CA4BE362B711786590B844249DBE5CAAF5C06D5F6D060D8DC4`
 
+การเก็บหลักฐาน browser รอบล่าสุด, screenshot ทั้งสอง และ served-source snapshot นี้ผูกกับ commit `d0d2db69c66d850871633bb62cde9ad3ee7d3964` โดย commit ดังกล่าวสืบต่อจาก immutable Task 8 evidence-time base และเป็น ancestor ของ HEAD ที่ตรวจแล้ว จึงรักษาลำดับเวลาได้โดยไม่เขียนทับ captured manifest 11 paths เดิม
+
 | หลักฐาน | มิติ | SHA-256 | Inspection |
 |---|---:|---|---|
-| `artifacts/line-design-approval-a1/desktop-1440.png` | 1440 × 1000 | `EAEE934BB66B1FAEA101660D726B7A9628A0318DE73A5639B5B0716B70570249` | PASS |
+| `artifacts/line-design-approval-a1/desktop-1440.png` | 1440 × 1000 | `C1E35E86FDE474203F89393F1B6584FF728E3B519E939E766A0A9C3B780C4CB3` | PASS |
 | `artifacts/line-design-approval-a1/mobile-390.png` | 390 × 844 | `7499CED9BCA4A24DB15961D4491CE23E4CE1D3D973CEC8BC2CCAA42CF61E9BD7` | PASS |
 
 ทุก identity และ byte count ของ Git-text evidence ใช้ `normalization = canonical-lf` โดยแปลง CRLF และ lone CR เป็น LF ก่อนทำ SHA-256 และนับ bytes ส่วน PNG hash, signature และ dimensions ใช้ raw bytes Contract ตรวจ semantics เหล่านี้, source snapshot, raw observation และ evidence-time base commit

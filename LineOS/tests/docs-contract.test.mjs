@@ -670,6 +670,7 @@ const validateDesignApprovalEvidence = async (summary) => {
 
   const parent = summary.provenance?.parent;
   const nested = summary.provenance?.nested;
+  const browserCaptureCommit = summary.sourceSnapshot?.baseCommitAtCapture;
   await access(nested.path);
   const currentParentHead = gitOutput(repo, ["rev-parse", "HEAD"]);
   validateCapturedProvenance(summary.provenance, {
@@ -679,6 +680,22 @@ const validateDesignApprovalEvidence = async (summary) => {
     nestedCommitExists: gitSucceeds(nested.path, ["cat-file", "-e", `${nested.commitAtCapture}^{commit}`]),
     liveNestedStatusEntries: gitStatusEntries(nested.path)
   });
+  assert.match(browserCaptureCommit ?? "", /^[0-9a-f]{40}$/);
+  assert.equal(
+    gitSucceeds(repo, ["cat-file", "-e", `${browserCaptureCommit}^{commit}`]),
+    true,
+    "browser capture commit does not exist"
+  );
+  assert.equal(
+    gitSucceeds(repo, ["merge-base", "--is-ancestor", parent.baseCommitAtCapture, browserCaptureCommit]),
+    true,
+    "Task 8 base commit is not an ancestor of the browser capture commit"
+  );
+  assert.equal(
+    gitSucceeds(repo, ["merge-base", "--is-ancestor", browserCaptureCommit, currentParentHead]),
+    true,
+    "browser capture commit is not an ancestor of current HEAD"
+  );
 
   const full = summary.automated?.fullSuite;
   assert.equal(full?.command, "npm.cmd --prefix LineOS run test");
@@ -829,7 +846,7 @@ const validateDesignApprovalEvidence = async (summary) => {
   assert.deepEqual(raw.producer, observation.producer);
   assert.deepEqual(raw.output, {
     mode: "canonical",
-    directory: resolve(root, "artifacts/line-design-approval-a1")
+    directory: "artifacts/line-design-approval-a1"
   });
   assert.equal(raw.server?.host, "127.0.0.1");
   assert.equal(raw.server?.shutdownCompleted, true);
@@ -864,7 +881,6 @@ const validateDesignApprovalEvidence = async (summary) => {
   const snapshot = summary.sourceSnapshot;
   assert.equal(snapshot?.algorithm, "SHA-256");
   assert.equal(snapshot?.normalization, "canonical-lf");
-  assert.equal(snapshot?.baseCommitAtCapture, parent.baseCommitAtCapture);
   assert.match(snapshot?.canonicalLfSha256 ?? "", /^[0-9A-F]{64}$/);
   assert.deepEqual(snapshot?.files, [...snapshot.files].sort((a, b) => a.path.localeCompare(b.path)), "source snapshot files must be sorted by path");
   assert.deepEqual(raw.sourceSnapshot, {
@@ -894,14 +910,14 @@ const validateDesignApprovalEvidence = async (summary) => {
     const record = browser.screenshots?.[name];
     assert.equal(record?.path, path);
     assert.equal(record?.sourceSnapshotCanonicalLfSha256, snapshot.canonicalLfSha256);
-    assert.equal(record?.baseCommitAtCapture, parent.baseCommitAtCapture);
+    assert.equal(record?.baseCommitAtCapture, snapshot.baseCommitAtCapture);
     assert.deepEqual(raw.screenshots?.[name], {
       path,
       sha256: record.sha256,
       width: record.width,
       height: record.height,
       sourceSnapshotCanonicalLfSha256: snapshot.canonicalLfSha256,
-      baseCommitAtCapture: parent.baseCommitAtCapture
+      baseCommitAtCapture: snapshot.baseCommitAtCapture
     });
     const bytes = await readFile(resolve(root, path));
     assert.equal(record?.sha256, sha256Upper(bytes));

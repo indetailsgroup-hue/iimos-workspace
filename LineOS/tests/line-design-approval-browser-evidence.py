@@ -28,6 +28,7 @@ PRODUCER_PATH = "tests/line-design-approval-browser-evidence.py"
 PORT = 4179
 URL = f"http://localhost:{PORT}/line-flex-studio.html"
 PUBLISHED_FILENAMES = ("desktop-1440.png", "mobile-390.png", "browser-observed.json")
+CANONICAL_RECORDED_DIRECTORY = "artifacts/line-design-approval-a1"
 FORCED_FAILURE_ENV = "MONOLITH_LINEOS_A1_TEST_FAIL_AFTER_DESKTOP"
 FORBIDDEN_FIELDS = [
     "tenant", "tenantid", "tenantassertion", "customer", "customerid", "customeridentity",
@@ -573,7 +574,14 @@ def capture_evidence(
         "schemaVersion": 1,
         "capturedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "producer": {"path": PRODUCER_PATH, **canonical_lf_identity(Path(__file__))},
-        "output": {"mode": output_mode, "directory": str(recorded_directory)},
+        "output": {
+            "mode": output_mode,
+            "directory": (
+                CANONICAL_RECORDED_DIRECTORY
+                if output_mode == "canonical"
+                else str(recorded_directory.resolve(strict=True))
+            ),
+        },
         "server": {"host": "127.0.0.1", "port": PORT, "url": URL, "shutdownCompleted": shutdown_completed},
         "browserVersion": browser_version,
         "headless": True,
@@ -603,13 +611,17 @@ def capture_evidence(
 
 def validate_capture_set(directory, output_mode, recorded_directory):
     resolved = directory.resolve(strict=True)
-    recorded = recorded_directory.resolve(strict=True)
+    recorded = (
+        CANONICAL_RECORDED_DIRECTORY
+        if output_mode == "canonical"
+        else str(recorded_directory.resolve(strict=True))
+    )
     paths = {name: output_path(resolved, name) for name in PUBLISHED_FILENAMES}
     for name, path in paths.items():
         assert_true(path.is_file(), f"capture output is missing: {name}")
 
     raw = json.loads(paths["browser-observed.json"].read_text(encoding="utf-8"))
-    assert_true(raw["output"] == {"mode": output_mode, "directory": str(recorded)}, "capture output provenance mismatch")
+    assert_true(raw["output"] == {"mode": output_mode, "directory": recorded}, "capture output provenance mismatch")
     assert_true(raw["server"]["shutdownCompleted"] is True, "capture server did not shut down")
     assert_true(len(raw["matrix"]) == 4, "capture matrix is incomplete")
     observed_cells = {(cell["language"], cell["width"]) for cell in raw["matrix"]}

@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "capturedAt": "2026-08-03T05:46:12.383228Z",
+  "capturedAt": "2026-08-03T09:01:14.784660Z",
   "producer": {
     "path": "tests/line-design-approval-browser-evidence.py",
     "normalization": "canonical-lf",
-    "canonicalLfBytes": 31438,
-    "canonicalLfSha256": "D846CC0081C4A43B8C664D2EA0D5419D83DC40A325168FA7A1028DF2BAB302A1"
+    "canonicalLfBytes": 31785,
+    "canonicalLfSha256": "8BDEA0AD16721A222E02BEA52939FA26E59681C4380FBC09B5B2009FAF9AB160"
   },
   "output": {
     "mode": "canonical",
-    "directory": "C:\\tmp\\monolith-lineos-design-approval-a1\\LineOS\\artifacts\\line-design-approval-a1"
+    "directory": "artifacts/line-design-approval-a1"
   },
   "server": {
     "host": "127.0.0.1",
@@ -601,11 +601,11 @@
   "screenshots": {
     "desktop1440": {
       "path": "artifacts/line-design-approval-a1/desktop-1440.png",
-      "sha256": "EAEE934BB66B1FAEA101660D726B7A9628A0318DE73A5639B5B0716B70570249",
+      "sha256": "C1E35E86FDE474203F89393F1B6584FF728E3B519E939E766A0A9C3B780C4CB3",
       "width": 1440,
       "height": 1000,
       "sourceSnapshotCanonicalLfSha256": "B1289E1BF03136CA4BE362B711786590B844249DBE5CAAF5C06D5F6D060D8DC4",
-      "baseCommitAtCapture": "a816bf8d3ddc2f98c9c8e9ef42238df0593f2a8e"
+      "baseCommitAtCapture": "d0d2db69c66d850871633bb62cde9ad3ee7d3964"
     },
     "mobile390": {
       "path": "artifacts/line-design-approval-a1/mobile-390.png",
@@ -613,7 +613,7 @@
       "width": 390,
       "height": 844,
       "sourceSnapshotCanonicalLfSha256": "B1289E1BF03136CA4BE362B711786590B844249DBE5CAAF5C06D5F6D060D8DC4",
-      "baseCommitAtCapture": "a816bf8d3ddc2f98c9c8e9ef42238df0593f2a8e"
+      "baseCommitAtCapture": "d0d2db69c66d850871633bb62cde9ad3ee7d3964"
     }
   },
   "recordForbiddenFieldScan": {

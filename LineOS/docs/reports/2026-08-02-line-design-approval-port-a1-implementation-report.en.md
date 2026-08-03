@@ -65,7 +65,7 @@ GREEN requires durable raw artifacts, internally coherent evidence-time manifest
 
 ## Automated verification
 
-The durable successful post-review JUnit artifact is `artifacts/line-design-approval-a1/full-suite.junit.xml`: 38,262 canonical-LF bytes, canonical-LF SHA-256 `2F6F197B7815116770A9709E821AFC50645B6428CBDD816D25381386C8872D5C`, 336 `<testcase>` elements, and Node footer totals of 351 tests, 351 passed, with zero fail, cancelled, skipped, or `todo`.
+The durable successful post-review JUnit artifact is `artifacts/line-design-approval-a1/full-suite.junit.xml`: 38,262 canonical-LF bytes, canonical-LF SHA-256 `1BD65CBD498EF4E798D82EBD53A7B72BFAA729360B2CB4268C85282157EFCBB4`, 336 `<testcase>` elements, and Node footer totals of 351 tests, 351 passed, with zero fail, cancelled, skipped, or `todo`.
 
 The 336 XML elements and 351 Node summary tests are different reporter concepts and are both parsed by the executable contract. The stored canonical-LF hash identifies the chosen timing-dependent observed run independent of Git checkout line endings; it is not replaced by an arbitrary hexadecimal claim.
 
@@ -94,9 +94,9 @@ Observed outcomes were `sandbox_recorded`, `cancelled_locally`, `legacy_demo_rec
 
 Derived from 56 raw request events: external 0; failed 0; HTTP errors 0; console errors 0; page errors 0.
 
-The raw arrays live in `artifacts/line-design-approval-a1/browser-observed.json`: 20,493 canonical-LF bytes, canonical-LF SHA-256 `D5AF5943762A0C8EC3CEB07C6968934666CC8F2C2E2BC3A2D9963EA74E9DEB4B`. The summary recomputes counts and localhost-only hosts from those arrays. Four pages each requested the same 14 local resources; no LINE, Supabase, analytics, credential, or external message endpoint was contacted.
+The raw arrays live in `artifacts/line-design-approval-a1/browser-observed.json`: 20,439 canonical-LF bytes, canonical-LF SHA-256 `B0DFF5533024445A613169A18A1BA864F0335789A55A483AF32B4DE937E008CC`. Canonical output provenance records the repository-relative directory `artifacts/line-design-approval-a1`, so the evidence remains valid across clean worktrees. The summary recomputes counts and localhost-only hosts from those arrays. Four pages each requested the same 14 local resources; no LINE, Supabase, analytics, credential, or external message endpoint was contacted.
 
-The producer identity is 31,438 canonical-LF bytes with canonical-LF SHA-256 `D846CC0081C4A43B8C664D2EA0D5419D83DC40A325168FA7A1028DF2BAB302A1`.
+The producer identity is 31,785 canonical-LF bytes with canonical-LF SHA-256 `8BDEA0AD16721A222E02BEA52939FA26E59681C4380FBC09B5B2009FAF9AB160`.
 
 ## Record forbidden-field scan
 
@@ -108,9 +108,11 @@ Observed record digest: `98aa18f7ac400d7739ba66b9c9dc876f5df3ffbc9a6aae582e0fb10
 
 The explicitly path-sorted 14-file served-resource manifest has canonical-LF source snapshot SHA-256 `B1289E1BF03136CA4BE362B711786590B844249DBE5CAAF5C06D5F6D060D8DC4`.
 
+The browser recapture, both screenshots, and this served-source snapshot are bound to commit `d0d2db69c66d850871633bb62cde9ad3ee7d3964`. That commit descends from the immutable Task 8 evidence-time base and is itself an ancestor of the verified HEAD, so the later recapture remains historically ordered without rewriting the original 11-path capture.
+
 | Evidence | Dimensions | SHA-256 | Inspection |
 |---|---:|---|---|
-| `artifacts/line-design-approval-a1/desktop-1440.png` | 1440 × 1000 | `EAEE934BB66B1FAEA101660D726B7A9628A0318DE73A5639B5B0716B70570249` | PASS |
+| `artifacts/line-design-approval-a1/desktop-1440.png` | 1440 × 1000 | `C1E35E86FDE474203F89393F1B6584FF728E3B519E939E766A0A9C3B780C4CB3` | PASS |
 | `artifacts/line-design-approval-a1/mobile-390.png` | 390 × 844 | `7499CED9BCA4A24DB15961D4491CE23E4CE1D3D973CEC8BC2CCAA42CF61E9BD7` | PASS |
 
 Every Git-text evidence identity and byte count uses `normalization = canonical-lf`, converting CRLF and lone CR to LF before SHA-256 and counting. PNG hashes, signatures, and dimensions use raw bytes. The contract verifies these semantics, the source snapshot, raw observation, and evidence-time base commit.
