@@ -296,7 +296,15 @@ test("exposes only scalar textContent-ready English and Thai rows", async () => 
   for (const rows of [en, th]) {
     assert.equal(rows.length, 18);
     assert.equal(rows.flat().every((value) => typeof value === "string"), true);
-    assert.equal(rows.flat().every((value) => !/[\u0000-\u001f\u007f]/u.test(value)), true);
+    assert.equal(
+      rows.flat().every((value) =>
+        [...value].every((character) => {
+          const codePoint = character.codePointAt(0);
+          return codePoint !== undefined && codePoint > 0x1f && codePoint !== 0x7f;
+        })
+      ),
+      true
+    );
   }
   assert.deepEqual(en.at(-1), ["SHA-256 record digest", record.recordDigest]);
   assert.deepEqual(th.at(-1), ["ค่าแฮช SHA-256 ของบันทึก", record.recordDigest]);

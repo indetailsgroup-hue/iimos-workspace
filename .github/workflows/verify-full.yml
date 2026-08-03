@@ -2,7 +2,7 @@
 # ผูก commit + environment + วันที่ + ผลเทสต์ ลง artifact — ใช้ปิดสถานะ "E0 candidate / REVERIFY"
 #
 # FS-R2-B1-01: this now runs on governance candidates too, and enforces every
-# local gate as a separate job (root, node-native controls, server, field,
+# local gate as a separate job (root, LineOS, node-native controls, server, field,
 # clean worktree, E2E smoke, manifest integrity) so the workflow's coverage
 # matches its name and the reviewed HEAD gets a real external attestation.
 name: MONOLITH Full Verify
@@ -76,6 +76,18 @@ jobs:
             verify-evidence.json
             vitest-report.json
           retention-days: 90
+
+  lineos:
+    name: LineOS — node-native contract suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: LineOS node-native tests (node:test)
+        run: npm --prefix LineOS test
 
   node-controls:
     name: node-native controls (governance tooling + schema)

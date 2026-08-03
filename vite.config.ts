@@ -27,6 +27,9 @@ export default defineConfig({
       // collect them and would report "No test suite found"; run via `npm run
       // test:node`. Keeps `test:run` honestly green (FS-B1-02).
       'scripts/**/*.test.mjs',
+      // LineOS owns a separate node:test suite and CI job. Keep the root Vitest
+      // run from collecting those files under the wrong runner.
+      'LineOS/tests/**/*.test.mjs',
       // Foreign project snapshots / file dumps that live inside this folder but
       // are not part of the MONOLITH workspace — their tests must not run here.
       'cp06-clean-cowork_dev-complete_20260616/**',
