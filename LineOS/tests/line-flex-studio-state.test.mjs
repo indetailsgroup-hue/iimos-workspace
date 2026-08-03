@@ -691,6 +691,79 @@ test("bindStudio preserves all four legacy routes without calling the Design App
   assert.equal(adapterCalls, 0);
 });
 
+test("bindStudio still completes a current legacy confirmation with its demo receipt", async () => {
+  const doc = createStudioTestDocument();
+  let adapterCalls = 0;
+  bindStudio(doc, {
+    designApprovalPort: {
+      openReview: async () => {
+        adapterCalls += 1;
+        return reviewSnapshot();
+      },
+      confirmReview: async () => {
+        adapterCalls += 1;
+        return { outcome: "not_available" };
+      }
+    }
+  });
+
+  await doc.getElementById("preset-list").children[1].click();
+  await doc.getElementById("run-journey").click();
+  await doc.getElementById("confirm-journey").click();
+
+  assert.equal(doc.getElementById("liff-dialog").open, false);
+  assert.equal(doc.getElementById("receipt-dialog").open, true);
+  assert.equal(
+    doc.getElementById("receipt-title").textContent,
+    "หลักฐานการยืนยัน — Demo · Verification Receipt — Demo"
+  );
+  const receiptSurface = doc.querySelector("[data-receipt]");
+  assert.equal(
+    receiptSurface.children[0].textContent,
+    "DEMO — NOT A PRODUCTION SIGNATURE · เดโม — ไม่ใช่ลายเซ็นสำหรับระบบจริง"
+  );
+  const digestRow = receiptSurface.querySelectorAll(".review-pair").find(
+    (row) => row.children[0].textContent === "SHA-256 digest"
+  );
+  assert.match(digestRow.children[1].textContent, /^[0-9a-f]{64}$/u);
+  assert.equal(
+    receiptSurface.children.at(-1).textContent,
+    "การลงนามและบันทึกหลักฐานในระบบจริงต้องผ่าน MONOLITH Trust Kernel"
+  );
+  assert.equal(adapterCalls, 0);
+});
+
+test("bindStudio still renders a bounded current legacy rejection", async () => {
+  const doc = createStudioTestDocument();
+  const subtlePrototype = Object.getPrototypeOf(globalThis.crypto.subtle);
+  const originalDigest = subtlePrototype.digest;
+  subtlePrototype.digest = async () => {
+    throw new Error("current legacy digest failure secret=must-not-leak");
+  };
+
+  try {
+    bindStudio(doc, {
+      designApprovalPort: {
+        openReview: async () => reviewSnapshot(),
+        confirmReview: async () => ({ outcome: "not_available" })
+      }
+    });
+    await doc.getElementById("preset-list").children[1].click();
+    await doc.getElementById("run-journey").click();
+    await doc.getElementById("confirm-journey").click();
+
+    const message = "สร้างหลักฐาน Demo ไม่สำเร็จเนื่องจากข้อผิดพลาดที่ไม่คาดคิด";
+    assert.equal(doc.getElementById("liff-dialog").open, false);
+    assert.equal(doc.getElementById("receipt-dialog").open, false);
+    assert.equal(doc.querySelector("[data-review-outcome] span").textContent, message);
+    assert.equal(doc.getElementById("toast-live").textContent, message);
+    assert.equal(doc.getElementById("confirm-journey").disabled, true);
+    assert.doesNotMatch(doc.getElementById("toast-live").textContent, /secret|digest failure/u);
+  } finally {
+    subtlePrototype.digest = originalDigest;
+  }
+});
+
 test("a canceled legacy digest success cannot overwrite a newer busy Design Approval", async () => {
   const doc = createStudioTestDocument();
   const legacyDigest = deferred();
