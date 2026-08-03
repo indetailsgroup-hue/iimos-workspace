@@ -804,6 +804,7 @@ function installJourney(doc, controller, designApprovalPort) {
 
   confirm.addEventListener("click", async () => {
     if (confirming || !activeJourney) return;
+    const operationJourney = activeJourney;
     const operation = beginUiOperation();
     confirming = true;
     setConfirmationBusy(confirm, true);
@@ -814,8 +815,9 @@ function installJourney(doc, controller, designApprovalPort) {
       }
       if (!hasDialogApis()) throw new Error("browser_api_unavailable");
 
-      if (activeJourney === "design-approval-port") {
+      if (operationJourney === "design-approval-port") {
         const result = await designJourney.confirm();
+        if (!isCurrentUiOperation(operation)) return;
         if (result.status === "cleared") return;
         if (result.outcome !== "sandbox_recorded" &&
             result.outcome !== "sandbox_replayed") {
@@ -838,6 +840,7 @@ function installJourney(doc, controller, designApprovalPort) {
       }
       const confirmation = confirmDemoTransaction(transaction, current.draft);
       const receipt = await createDemoReceipt(transaction, confirmation);
+      if (!isCurrentUiOperation(operation)) return;
       const copy = COPY[reviewLanguage];
       renderRows(
         receiptTarget,
@@ -850,12 +853,13 @@ function installJourney(doc, controller, designApprovalPort) {
       receiptDialog.showModal();
       controller.announce(copy.receiptReady);
     } catch (error) {
+      if (!isCurrentUiOperation(operation)) return;
       transaction = null;
       designJourney?.clear("controller.error");
-      const message = activeJourney === "design-approval-port" ?
+      const message = operationJourney === "design-approval-port" ?
         designApprovalErrorCopyFor("temporarily_unavailable", reviewLanguage) :
         errorCopy(error);
-      if (activeJourney === "design-approval-port") {
+      if (operationJourney === "design-approval-port") {
         showBoundedDesignError(message);
       } else {
         reviewOutcome.textContent = message;

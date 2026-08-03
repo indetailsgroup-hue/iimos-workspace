@@ -690,3 +690,127 @@ test("bindStudio preserves all four legacy routes without calling the Design App
   }
   assert.equal(adapterCalls, 0);
 });
+
+test("a canceled legacy digest success cannot overwrite a newer busy Design Approval", async () => {
+  const doc = createStudioTestDocument();
+  const legacyDigest = deferred();
+  const designConfirmation = deferred();
+  const record = await sandboxRecord();
+  const subtlePrototype = Object.getPrototypeOf(globalThis.crypto.subtle);
+  const originalDigest = subtlePrototype.digest;
+  subtlePrototype.digest = async () => legacyDigest.promise;
+  let oldLegacyConfirmation;
+  let newDesignConfirmation;
+
+  try {
+    bindStudio(doc, {
+      designApprovalPort: {
+        openReview: async () => reviewSnapshot(),
+        confirmReview: async () => designConfirmation.promise
+      }
+    });
+    const run = doc.getElementById("run-journey");
+    const confirm = doc.getElementById("confirm-journey");
+    const liff = doc.getElementById("liff-dialog");
+
+    await doc.getElementById("preset-list").children[1].click();
+    await run.click();
+    oldLegacyConfirmation = confirm.click();
+    assert.equal(confirm.getAttribute("aria-busy"), "true");
+    await doc.getElementById("cancel-journey").click();
+
+    await doc.getElementById("preset-list").children[0].click();
+    await run.click();
+    newDesignConfirmation = confirm.click();
+    assert.equal(liff.open, true);
+    assert.equal(confirm.getAttribute("aria-busy"), "true");
+    assert.equal(doc.querySelector("[data-artifact-manifest-sha256]").textContent, "b".repeat(64));
+
+    legacyDigest.resolve(new Uint8Array(32).buffer);
+    await oldLegacyConfirmation;
+    assert.equal(liff.open, true);
+    assert.equal(confirm.getAttribute("aria-busy"), "true");
+    assert.equal(doc.getElementById("receipt-dialog").open, false);
+    assert.equal(doc.getElementById("liff-title").textContent, "ตรวจแบบส่วนตัว · Sandbox");
+    assert.equal(doc.querySelector("[data-artifact-manifest-sha256]").textContent, "b".repeat(64));
+
+    designConfirmation.resolve({ outcome: "sandbox_recorded", record });
+    await newDesignConfirmation;
+    assert.equal(doc.getElementById("receipt-dialog").open, true);
+    assert.equal(
+      doc.getElementById("receipt-title").textContent,
+      "Sandbox Verification Record — Demo · No Business Effect"
+    );
+  } finally {
+    legacyDigest.resolve(new Uint8Array(32).buffer);
+    designConfirmation.resolve({ outcome: "sandbox_recorded", record });
+    await Promise.allSettled([
+      oldLegacyConfirmation,
+      newDesignConfirmation
+    ].filter(Boolean));
+    subtlePrototype.digest = originalDigest;
+  }
+});
+
+test("a canceled legacy digest rejection cannot clear a newer busy Design Approval", async () => {
+  const doc = createStudioTestDocument();
+  const legacyDigest = deferred();
+  const designConfirmation = deferred();
+  const record = await sandboxRecord();
+  const subtlePrototype = Object.getPrototypeOf(globalThis.crypto.subtle);
+  const originalDigest = subtlePrototype.digest;
+  subtlePrototype.digest = async () => legacyDigest.promise;
+  let oldLegacyConfirmation;
+  let newDesignConfirmation;
+
+  try {
+    bindStudio(doc, {
+      designApprovalPort: {
+        openReview: async () => reviewSnapshot(),
+        confirmReview: async () => designConfirmation.promise
+      }
+    });
+    const run = doc.getElementById("run-journey");
+    const confirm = doc.getElementById("confirm-journey");
+    const liff = doc.getElementById("liff-dialog");
+
+    await doc.getElementById("preset-list").children[1].click();
+    await run.click();
+    oldLegacyConfirmation = confirm.click();
+    await doc.getElementById("cancel-journey").click();
+
+    await doc.getElementById("preset-list").children[0].click();
+    await run.click();
+    newDesignConfirmation = confirm.click();
+    assert.equal(liff.open, true);
+    assert.equal(confirm.getAttribute("aria-busy"), "true");
+    const visibleOutcome = doc.querySelector("[data-review-outcome] span").textContent;
+    const liveMessage = doc.getElementById("toast-live").textContent;
+
+    legacyDigest.reject(new Error("stale legacy digest failure secret=old"));
+    await oldLegacyConfirmation;
+    assert.equal(liff.open, true);
+    assert.equal(confirm.getAttribute("aria-busy"), "true");
+    assert.equal(confirm.disabled, true);
+    assert.equal(doc.getElementById("receipt-dialog").open, false);
+    assert.equal(doc.querySelector("[data-review-outcome] span").textContent, visibleOutcome);
+    assert.equal(doc.getElementById("toast-live").textContent, liveMessage);
+    assert.equal(doc.querySelector("[data-artifact-manifest-sha256]").textContent, "b".repeat(64));
+
+    designConfirmation.resolve({ outcome: "sandbox_recorded", record });
+    await newDesignConfirmation;
+    assert.equal(doc.getElementById("receipt-dialog").open, true);
+    assert.equal(
+      doc.getElementById("receipt-title").textContent,
+      "Sandbox Verification Record — Demo · No Business Effect"
+    );
+  } finally {
+    legacyDigest.reject(new Error("test cleanup"));
+    designConfirmation.resolve({ outcome: "sandbox_recorded", record });
+    await Promise.allSettled([
+      oldLegacyConfirmation,
+      newDesignConfirmation
+    ].filter(Boolean));
+    subtlePrototype.digest = originalDigest;
+  }
+});
