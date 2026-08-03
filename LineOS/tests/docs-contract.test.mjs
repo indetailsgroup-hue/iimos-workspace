@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { access, copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, copyFile, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -13,6 +13,15 @@ const plan = "docs/superpowers/plans/2026-08-01-monolith-line-flex-studio-implem
 const designApprovalSpec = "docs/superpowers/specs/2026-08-02-monolith-line-design-approval-port-a1-design";
 const designApprovalPlan = "docs/superpowers/plans/2026-08-02-monolith-line-design-approval-port-a1-implementation";
 const designApprovalGuide = "docs/guides/line-design-approval-sandbox-a1-guide";
+const designApprovalImplementationReport = "docs/reports/2026-08-02-line-design-approval-port-a1-implementation-report";
+const designApprovalVerificationSummary = "artifacts/line-design-approval-a1/verification-summary.json";
+const designApprovalBrowserObservation = "artifacts/line-design-approval-a1/browser-observed.json";
+const designApprovalFullSuiteJunit = "artifacts/line-design-approval-a1/full-suite.junit.xml";
+const designApprovalBrowserProducer = "tests/line-design-approval-browser-evidence.py";
+const designApprovalScreenshots = {
+  desktop1440: "artifacts/line-design-approval-a1/desktop-1440.png",
+  mobile390: "artifacts/line-design-approval-a1/mobile-390.png"
+};
 const research = "docs/research/2026-08-01-monolith-line-human-surface-deep-research";
 const implementationReport = "docs/reports/2026-08-01-line-flex-studio-implementation-report";
 const verificationSummary = "artifacts/line-flex-studio/verification-summary.json";
@@ -23,7 +32,14 @@ const guideStems = [
   "docs/guides/line-flex-performance-rendering-checklist",
   designApprovalGuide
 ];
-const documentStems = [spec, plan, research, ...guideStems, implementationReport];
+const documentStems = [
+  spec,
+  plan,
+  research,
+  ...guideStems,
+  implementationReport,
+  designApprovalImplementationReport
+];
 const manifestStems = [...documentStems, designApprovalSpec, designApprovalPlan];
 const read = (path) => readFile(resolve(root, path), "utf8").then((contents) => contents.replace(/\r\n?/g, "\n"));
 const editions = ["en", "th"];
@@ -97,6 +113,15 @@ const a2PromotionGateTerms = [
   "rollback, idempotency, audit, and error semantics",
   "local environment and secret-handling authority"
 ];
+const a2PromotionGateModel = a2PromotionGateTerms.map((name, index) => ({
+  order: index + 1,
+  name,
+  status: index === 0 ? "CLOSED" : "OPEN",
+  satisfaction: index === 0 ? "SATISFIED" : "UNSATISFIED"
+}));
+const a2GateVisibleClaims = a2PromotionGateModel.map(({ order, name, status, satisfaction }) => (
+  `Gate ${order} — ${name} — ${status}${order === 1 ? ` / ${satisfaction}` : ""}.`
+));
 const prohibitedDesignApprovalClaims = {
   en: [
     ["runtime integration", /\b(?:A1|the A1 (?:sandbox|journey|result)|the defensible result|this (?:sandbox|journey|result))\s+(?:(?:is|is now|has become|runs as)\s+(?:fully\s+)?(?:runtime[- ]integrated|integrated (?:with|into) (?:the )?MONOLITH runtime)|(?:connects|integrates|has connected|is connected)\s+(?:directly\s+)?(?:to|with|into)\s+(?:the\s+)?MONOLITH runtime)\b/i],
@@ -286,6 +311,10 @@ const stripHtml = (value) => value
   .replaceAll("&quot;", '"')
   .replaceAll("&#39;", "'");
 
+const visibleHtmlText = (html) => stripHtml(html
+  .replace(/<!--[\s\S]*?(?:-->|$)/g, " ")
+  .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " "));
+
 const expectedJourneys = [
   "design-approval:th", "quote-order:th", "sla-escalation:th", "site-update:th", "issue-evidence:th",
   "design-approval:en", "quote-order:en", "sla-escalation:en", "site-update:en", "issue-evidence:en"
@@ -442,6 +471,481 @@ const validateVerificationSummary = async (summary) => {
   }
 };
 
+const designApprovalForbiddenFields = [
+  "tenant", "tenantid", "tenantassertion", "customer", "customerid", "customeridentity",
+  "role", "recipient", "project", "projectid", "projectowner", "approvalstatus", "approved",
+  "signature", "signaturestatus", "keyid", "privatekey", "publickey", "signingkey", "secret",
+  "lineidtoken", "accesstoken"
+];
+const designApprovalUiScenarios = ["success", "cancel", "legacy_preset"];
+const designApprovalPortContractProbes = ["replay", "stale_revision", "expired"];
+const designApprovalTask8Paths = [
+  "LineOS/tests/docs-contract.test.mjs",
+  `LineOS/${designApprovalScreenshots.desktop1440}`,
+  `LineOS/${designApprovalScreenshots.mobile390}`,
+  `LineOS/${designApprovalVerificationSummary}`,
+  `LineOS/${designApprovalBrowserObservation}`,
+  `LineOS/${designApprovalFullSuiteJunit}`,
+  `LineOS/${designApprovalBrowserProducer}`,
+  `LineOS/${designApprovalImplementationReport}.en.md`,
+  `LineOS/${designApprovalImplementationReport}.th.md`,
+  `LineOS/${designApprovalImplementationReport}.en.html`,
+  `LineOS/${designApprovalImplementationReport}.th.html`
+].sort();
+const designApprovalReportHeadings = {
+  en: [
+    "Executive decision", "Scope", "Two-root provenance and dirty scope", "Changed files",
+    "TDD RED → GREEN evidence", "Automated verification", "Browser evidence matrix",
+    "Network and error evidence", "Record forbidden-field scan", "Screenshot and source binding",
+    "Review gates", "Residual risks", "A2 promotion gates"
+  ],
+  th: [
+    "คำตัดสินสำหรับผู้บริหาร", "ขอบเขต", "Provenance สอง Git root และ dirty scope", "ไฟล์ที่เปลี่ยน",
+    "หลักฐาน TDD RED → GREEN", "การตรวจอัตโนมัติ", "เมทริกซ์หลักฐานเบราว์เซอร์",
+    "หลักฐานเครือข่ายและข้อผิดพลาด", "การสแกน forbidden fields ของ record", "การผูก screenshot กับ source",
+    "Review gates", "ความเสี่ยงคงเหลือ", "Promotion gates ไป A2"
+  ]
+};
+
+const sha256Upper = (value) => createHash("sha256").update(value).digest("hex").toUpperCase();
+const canonicalLfBuffer = (value) => Buffer.from(
+  Buffer.from(value).toString("utf8").replace(/\r\n?/g, "\n"),
+  "utf8"
+);
+const canonicalLfIdentity = (value) => {
+  const bytes = canonicalLfBuffer(value);
+  return {
+    normalization: "canonical-lf",
+    canonicalLfBytes: bytes.length,
+    canonicalLfSha256: sha256Upper(bytes)
+  };
+};
+const gitOutput = (cwd, args) => {
+  const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  return result.stdout.replace(/\r\n?/g, "\n").replace(/\n$/, "");
+};
+const gitStatusEntries = (cwd) => {
+  const output = gitOutput(cwd, ["status", "--porcelain=v1", "--untracked-files=all"]);
+  return output ? output.split("\n") : [];
+};
+const statusPath = (entry) => entry.slice(3).split(" -> ").at(-1);
+
+const gitSucceeds = (cwd, args) => spawnSync("git", ["-C", cwd, ...args], {
+  encoding: "utf8"
+}).status === 0;
+
+const capturedTargetedEntries = (entries) => entries.filter(
+  (entry) => /line-design-approval|LineOS/i.test(statusPath(entry))
+);
+
+const validateCapturedProvenance = (provenance, context) => {
+  const parent = provenance?.parent;
+  const nested = provenance?.nested;
+  assert.equal(parent?.rootKind, "governance-bootstrap-isolated-worktree");
+  assert.match(parent?.path ?? "", /monolith-lineos-design-approval-a1$/);
+  assert.match(parent?.capturedBranch ?? "", /^codex\//);
+  assert.match(parent?.baseCommitAtCapture ?? "", /^[0-9a-f]{40}$/);
+  assert.equal(context.parentCommitExists, true, "baseCommitAtCapture does not exist");
+  assert.equal(context.parentIsAncestor, true, "baseCommitAtCapture is not an ancestor of current HEAD");
+  assert.match(context.parentHead ?? "", /^[0-9a-f]{40}$/);
+  assert.equal(parent?.statusCommand, "git status --porcelain=v1 --untracked-files=all");
+  assert.equal(parent?.capturedStatusEntries?.length, 11);
+  assert.equal(
+    parent?.capturedStatusSha256,
+    sha256Upper(parent.capturedStatusEntries.join("\n")),
+    "parent captured status hash mismatch"
+  );
+  assert.deepEqual(
+    [...new Set(parent.capturedStatusEntries.map(statusPath))].sort(),
+    designApprovalTask8Paths,
+    "captured parent scope must contain the exact approved 11 Task 8 paths"
+  );
+
+  assert.equal(nested?.rootKind, "active-product-nested-repository");
+  assert.match(nested?.path ?? "", /determined-williams$/);
+  assert.equal(nested?.capturedBranch, "fix/dxf-truth-chain");
+  assert.match(nested?.commitAtCapture ?? "", /^[0-9a-f]{40}$/);
+  assert.equal(context.nestedCommitExists, true, "nested commitAtCapture does not exist");
+  assert.equal(nested?.statusCommand, "git status --porcelain=v1 --untracked-files=all");
+  assert.equal(nested?.capturedStatusEntryCount, nested?.capturedStatusEntries?.length);
+  assert.equal(
+    nested?.capturedStatusSha256,
+    sha256Upper(nested.capturedStatusEntries.join("\n")),
+    "nested captured status hash mismatch"
+  );
+  const capturedNestedTargeted = capturedTargetedEntries(nested.capturedStatusEntries);
+  assert.deepEqual(nested?.a1TargetedStatusEntries, capturedNestedTargeted);
+  assert.deepEqual(capturedNestedTargeted, [], "captured nested scope contains an A1/LineOS path");
+  assert.deepEqual(
+    capturedTargetedEntries(context.liveNestedStatusEntries),
+    [],
+    "live nested repository contains an A1/LineOS targeted status entry"
+  );
+};
+
+const validateA2PromotionGates = (summary) => {
+  assert.deepEqual(
+    summary.a2PromotionGates,
+    a2PromotionGateModel,
+    "A2 promotion gate statuses or order are fabricated"
+  );
+  assert.deepEqual(
+    summary.a2Blockers,
+    a2PromotionGateTerms.slice(1),
+    "only A2 gates 2–7 may remain blockers"
+  );
+};
+
+const junitFooterCount = (xml, label) => {
+  const match = xml.match(new RegExp(`<!--\\s*${label}\\s+(\\d+)\\s*-->`));
+  assert.ok(match, `JUnit footer missing ${label}`);
+  return Number(match[1]);
+};
+
+const normalizeVisibleText = (value) => value
+  .replace(/[*>#]/g, " ")
+  .replace(/\s+/g, " ")
+  .trim();
+
+const reportClaims = {
+  en: {
+    heading: "Scope",
+    decision: "Evidence-time decision: NO-GO_RUNTIME_INTEGRATION; runtime integration = false.",
+    network: "Derived from 56 raw request events: external 0; failed 0; HTTP errors 0; console errors 0; page errors 0.",
+    boundary: "This is evidence-time sandbox proof only; it is not runtime integration, production readiness, customer delivery, or approval authority.",
+    provenance: "Evidence-time snapshot: base commit a816bf8d3ddc2f98c9c8e9ef42238df0593f2a8e and an immutable captured 11-path Task 8 status manifest.",
+    substitution: "Uncoordinated substitution is detected; coordinated edits are not signature/tamper proof."
+  },
+  th: {
+    heading: "ขอบเขต",
+    decision: "คำตัดสิน ณ เวลาเก็บหลักฐาน: NO-GO_RUNTIME_INTEGRATION; runtime integration = false.",
+    network: "ค่าที่ derive จาก raw request events 56 รายการ: external 0; failed 0; HTTP errors 0; console errors 0; page errors 0.",
+    boundary: "นี่เป็นเพียงหลักฐาน sandbox ณ เวลาเก็บหลักฐาน ไม่ใช่ runtime integration, production readiness, customer delivery หรือ approval authority.",
+    provenance: "Evidence-time snapshot: base commit a816bf8d3ddc2f98c9c8e9ef42238df0593f2a8e และ immutable captured status manifest ของ Task 8 จำนวน 11 paths.",
+    substitution: "ตรวจพบการแทนที่ที่ไม่ประสานกัน แต่ coordinated edits ไม่ใช่ signature/tamper proof."
+  }
+};
+
+const validateDesignApprovalReport = (markdown, html, language, summary) => {
+  const visibleMarkdown = visibleGuideMarkdown(markdown);
+  const visibleMarkdownText = normalizeVisibleText(visibleGuideProse(markdown));
+  const visibleHtml = normalizeVisibleText(visibleHtmlText(html));
+  const headings = (visibleMarkdown.match(/^## .+$/gm) ?? [])
+    .map((line) => line.replace(/^## (?:\d+\. )?/, ""));
+  for (const heading of designApprovalReportHeadings[language]) {
+    assert.ok(headings.includes(heading), `${language} A1 report missing visible heading: ${heading}`);
+  }
+  const requiredClaims = [
+    ...Object.values(reportClaims[language]).filter((claim) => claim !== reportClaims[language].heading),
+    summary.sourceSnapshot.canonicalLfSha256,
+    summary.provenance.nested.commitAtCapture,
+    summary.browser.screenshots.desktop1440.sha256,
+    summary.browser.screenshots.mobile390.sha256,
+    ...a2GateVisibleClaims,
+    ...a2PromotionGateTerms
+  ];
+  for (const claim of requiredClaims) {
+    assert.ok(visibleMarkdownText.includes(claim), `${language} A1 report missing visible claim: ${claim}`);
+    assert.ok(visibleHtml.includes(claim), `${language} A1 report HTML missing visible claim: ${claim}`);
+    const inlineOnly = visibleMarkdown.split("\n").some((line) => {
+      const match = line.trim().match(/^`+(.+?)`+$/);
+      return match && normalizeVisibleText(match[1]) === claim;
+    });
+    assert.equal(inlineOnly, false, `${language} A1 report claim is hidden as whole-claim inline code: ${claim}`);
+  }
+};
+
+const validateDesignApprovalEvidence = async (summary) => {
+  assert.equal(summary.schemaVersion, 2);
+  assert.equal(summary.decision, "NO-GO_RUNTIME_INTEGRATION");
+  assert.deepEqual(summary.scope, {
+    sandboxOnly: true,
+    runtimeIntegration: false,
+    productionCredentialsUsed: false,
+    liveLineMessageSent: false,
+    databaseWritePerformed: false,
+    nestedProductModifiedByA1: false
+  });
+
+  const parent = summary.provenance?.parent;
+  const nested = summary.provenance?.nested;
+  await access(nested.path);
+  const currentParentHead = gitOutput(repo, ["rev-parse", "HEAD"]);
+  validateCapturedProvenance(summary.provenance, {
+    parentHead: currentParentHead,
+    parentCommitExists: gitSucceeds(repo, ["cat-file", "-e", `${parent.baseCommitAtCapture}^{commit}`]),
+    parentIsAncestor: gitSucceeds(repo, ["merge-base", "--is-ancestor", parent.baseCommitAtCapture, currentParentHead]),
+    nestedCommitExists: gitSucceeds(nested.path, ["cat-file", "-e", `${nested.commitAtCapture}^{commit}`]),
+    liveNestedStatusEntries: gitStatusEntries(nested.path)
+  });
+
+  const full = summary.automated?.fullSuite;
+  assert.equal(full?.command, "npm.cmd --prefix LineOS run test");
+  assert.equal(full?.exitCode, 0);
+  for (const field of ["tests", "passed", "failures", "skipped", "cancelled", "todo"]) {
+    assert.ok(Number.isInteger(full?.[field]) && full[field] >= 0, `invalid full-suite ${field} count`);
+  }
+  assert.ok(full.tests > 0, "full-suite test count must be positive");
+  assert.equal(full.tests, full.passed + full.failures + full.skipped + full.cancelled + full.todo);
+  assert.equal(full.failures, 0);
+  assert.equal(full.skipped, 0);
+  assert.equal(full.cancelled, 0);
+  assert.equal(full.todo, 0);
+  const junit = full?.junit;
+  assert.equal(junit?.path, designApprovalFullSuiteJunit);
+  const junitBytes = await readFile(resolve(root, junit.path));
+  const junitIdentity = canonicalLfIdentity(junitBytes);
+  const junitXml = canonicalLfBuffer(junitBytes).toString("utf8");
+  assert.equal(junit?.normalization, "canonical-lf");
+  assert.equal(junit?.canonicalLfBytes, 38262);
+  assert.equal(junit?.canonicalLfBytes, junitIdentity.canonicalLfBytes);
+  assert.equal(junit?.canonicalLfSha256, junitIdentity.canonicalLfSha256);
+  assert.equal(junit?.testcaseElements, 336);
+  assert.equal((junitXml.match(/<testcase\b/g) ?? []).length, junit.testcaseElements);
+  assert.deepEqual(junit?.nodeSummary, {
+    tests: junitFooterCount(junitXml, "tests"),
+    passed: junitFooterCount(junitXml, "pass"),
+    failures: junitFooterCount(junitXml, "fail"),
+    cancelled: junitFooterCount(junitXml, "cancelled"),
+    skipped: junitFooterCount(junitXml, "skipped"),
+    todo: junitFooterCount(junitXml, "todo")
+  });
+  assert.deepEqual(junit.nodeSummary, {
+    tests: 351, passed: 351, failures: 0, cancelled: 0, skipped: 0, todo: 0
+  });
+  assert.deepEqual(summary.automated?.producerSafetyRedContract, {
+    command: "npm.cmd --prefix LineOS run test -- tests/docs-contract.test.mjs",
+    exitCode: 1,
+    tests: 90,
+    passed: 88,
+    failures: 2,
+    cancelled: 0,
+    skipped: 0,
+    todo: 0,
+    reason: "Canonical evidence was stale and --help executed a capture before argparse isolation"
+  });
+  assert.deepEqual(summary.automated?.canonicalLfPortabilityRedContract, {
+    command: "node --test tests/docs-contract.test.mjs",
+    exitCode: 1,
+    tests: 91,
+    passed: 89,
+    failures: 2,
+    cancelled: 0,
+    skipped: 0,
+    todo: 0,
+    reason: "Expected missing canonical-LF evidence schema and stale report bindings before implementation"
+  });
+  assert.deepEqual(summary.automated?.canonicalLfPortabilityGreen, {
+    command: "node --test tests/docs-contract.test.mjs",
+    exitCode: 0,
+    tests: 91,
+    passed: 91,
+    failures: 0,
+    cancelled: 0,
+    skipped: 0,
+    todo: 0
+  });
+  assert.deepEqual(
+    { tests: full.tests, passed: full.passed, failures: full.failures, cancelled: full.cancelled, skipped: full.skipped, todo: full.todo },
+    junit.nodeSummary
+  );
+  assert.deepEqual(summary.automated?.postReviewGreen, {
+    command: "npm.cmd --prefix LineOS run test",
+    exitCode: 0,
+    tests: 351,
+    passed: 351,
+    failures: 0,
+    cancelled: 0,
+    skipped: 0,
+    todo: 0
+  });
+  assert.deepEqual(summary.automated?.latestLogicalRevalidation, {
+    command: "npm.cmd --prefix LineOS run test",
+    exitCode: 0,
+    tests: 351,
+    passed: 351,
+    failures: 0,
+    cancelled: 0,
+    skipped: 0,
+    todo: 0,
+    artifactPolicy: "temporary timing-only JUnit XML is not retained; durable observed JUnit remains authoritative"
+  });
+  assert.equal(summary.automated?.claimLint?.exitCode, 0);
+  assert.equal(summary.automated?.claimLint?.newDebtCount, 0);
+  assert.equal(summary.automated?.diffCheck?.exitCode, 0);
+  assert.equal(summary.automated?.diffCheck?.output, "");
+
+  const browser = summary.browser;
+  assert.equal(browser?.serverUrl, "http://localhost:4179/line-flex-studio.html");
+  assert.match(browser?.engine ?? "", /^Chromium /);
+  assert.equal(browser?.headless, true);
+  assert.deepEqual(browser?.widths, [1440, 390]);
+  assert.deepEqual(browser?.languages, ["en", "th"]);
+  assert.equal(browser?.matrix?.length, 4);
+  assert.deepEqual(
+    browser.matrix.map(({ language, width }) => `${language}:${width}`).sort(),
+    ["en:1440", "en:390", "th:1440", "th:390"]
+  );
+  for (const cell of browser.matrix) {
+    assert.deepEqual(Object.keys(cell.uiJourneys).sort(), [...designApprovalUiScenarios].sort());
+    assert.deepEqual(Object.keys(cell.portContractProbes).sort(), [...designApprovalPortContractProbes].sort());
+    for (const result of Object.values(cell.uiJourneys)) assert.equal(result.status, "PASS");
+    for (const result of Object.values(cell.portContractProbes)) assert.equal(result.status, "PASS");
+    assert.equal(cell.uiJourneys.success.outcome, "sandbox_recorded");
+    assert.equal(cell.uiJourneys.cancel.outcome, "cancelled_locally");
+    assert.equal(cell.uiJourneys.legacy_preset.outcome, "legacy_demo_receipt");
+    assert.equal(cell.portContractProbes.replay.outcome, "sandbox_replayed");
+    assert.equal(cell.portContractProbes.stale_revision.errorCode, "stale_revision");
+    assert.equal(cell.portContractProbes.expired.errorCode, "expired");
+    assert.equal(cell.horizontalOverflowPixels, 0);
+    assert.equal(cell.copyReadability, "PASS");
+  }
+  assert.equal(browser.keyboard?.completion, "PASS");
+  assert.equal(browser.keyboard?.focusReturnedToRunJourney, true);
+  assert.equal(browser.reducedMotion?.status, "PASS");
+  assert.equal(browser.reducedMotion?.animationDurationMs <= 0.01, true);
+  assert.equal(browser.reducedMotion?.transitionDurationMs <= 0.01, true);
+  const observation = browser?.observation;
+  assert.equal(observation?.path, designApprovalBrowserObservation);
+  assert.equal(observation?.normalization, "canonical-lf");
+  const rawBytes = await readFile(resolve(root, observation.path));
+  const raw = JSON.parse(rawBytes.toString("utf8"));
+  assert.deepEqual(
+    {
+      normalization: observation.normalization,
+      canonicalLfBytes: observation.canonicalLfBytes,
+      canonicalLfSha256: observation.canonicalLfSha256
+    },
+    canonicalLfIdentity(rawBytes)
+  );
+  assert.equal(observation?.producer?.path, designApprovalBrowserProducer);
+  const producerBytes = await readFile(resolve(root, observation.producer.path));
+  assert.deepEqual(observation.producer, {
+    path: designApprovalBrowserProducer,
+    ...canonicalLfIdentity(producerBytes)
+  });
+  assert.equal(raw.producer?.path, designApprovalBrowserProducer);
+  assert.deepEqual(raw.producer, observation.producer);
+  assert.deepEqual(raw.output, {
+    mode: "canonical",
+    directory: resolve(root, "artifacts/line-design-approval-a1")
+  });
+  assert.equal(raw.server?.host, "127.0.0.1");
+  assert.equal(raw.server?.shutdownCompleted, true);
+  assert.equal(raw.waitCondition, "networkidle");
+  assert.deepEqual(browser.matrix, raw.matrix);
+  const requestUrls = raw.network.events.requests.map(({ url }) => url);
+  const requestHosts = [...new Set(requestUrls.map((url) => new URL(url).hostname))].sort();
+  const externalRequests = requestUrls.filter((url) => new URL(url).hostname !== "localhost");
+  const localResourcePaths = [...new Set(requestUrls
+    .filter((url) => new URL(url).hostname === "localhost")
+    .map((url) => decodeURIComponent(new URL(url).pathname)))].sort();
+  const derivedNetwork = {
+    requestCount: requestUrls.length,
+    allowedHosts: requestHosts,
+    externalRequestCount: externalRequests.length,
+    failedRequestCount: raw.network.events.failedRequests.length,
+    httpErrorCount: raw.network.events.httpErrors.length,
+    consoleErrorCount: raw.network.events.consoleErrors.length,
+    pageErrorCount: raw.network.events.pageErrors.length,
+    localResourcePaths
+  };
+  assert.deepEqual(browser.network, derivedNetwork, "browser summary must be derived from raw event arrays");
+  assert.equal(browser.network?.requestCount, 56);
+  assert.equal(browser.network?.externalRequestCount, 0);
+  assert.equal(browser.network?.httpErrorCount, 0);
+  assert.equal(browser.network?.consoleErrorCount, 0);
+  assert.equal(browser.network?.pageErrorCount, 0);
+  assert.equal(browser.network?.failedRequestCount, 0);
+  assert.deepEqual(browser.network?.allowedHosts, ["localhost"]);
+  assert.ok(browser.network.localResourcePaths.every((path) => path.startsWith("/")));
+
+  const snapshot = summary.sourceSnapshot;
+  assert.equal(snapshot?.algorithm, "SHA-256");
+  assert.equal(snapshot?.normalization, "canonical-lf");
+  assert.equal(snapshot?.baseCommitAtCapture, parent.baseCommitAtCapture);
+  assert.match(snapshot?.canonicalLfSha256 ?? "", /^[0-9A-F]{64}$/);
+  assert.deepEqual(snapshot?.files, [...snapshot.files].sort((a, b) => a.path.localeCompare(b.path)), "source snapshot files must be sorted by path");
+  assert.deepEqual(raw.sourceSnapshot, {
+    normalization: "canonical-lf",
+    canonicalLfSha256: snapshot.canonicalLfSha256,
+    files: snapshot.files
+  });
+  assert.deepEqual(
+    snapshot.files.map(({ path }) => `/${path}`),
+    browser.network.localResourcePaths,
+    "source snapshot must cover every requested local resource"
+  );
+  for (const file of snapshot.files) {
+    assert.equal(file.normalization, "canonical-lf");
+    assert.match(file.canonicalLfSha256 ?? "", /^[0-9A-F]{64}$/);
+    assert.deepEqual(file, {
+      path: file.path,
+      ...canonicalLfIdentity(await readFile(resolve(root, file.path)))
+    });
+  }
+  const snapshotManifest = snapshot.files.map(({ path, canonicalLfSha256, canonicalLfBytes }) => (
+    `${path}\0${canonicalLfSha256}\0${canonicalLfBytes}`
+  )).join("\n");
+  assert.equal(snapshot.canonicalLfSha256, sha256Upper(snapshotManifest));
+
+  for (const [name, path] of Object.entries(designApprovalScreenshots)) {
+    const record = browser.screenshots?.[name];
+    assert.equal(record?.path, path);
+    assert.equal(record?.sourceSnapshotCanonicalLfSha256, snapshot.canonicalLfSha256);
+    assert.equal(record?.baseCommitAtCapture, parent.baseCommitAtCapture);
+    assert.deepEqual(raw.screenshots?.[name], {
+      path,
+      sha256: record.sha256,
+      width: record.width,
+      height: record.height,
+      sourceSnapshotCanonicalLfSha256: snapshot.canonicalLfSha256,
+      baseCommitAtCapture: parent.baseCommitAtCapture
+    });
+    const bytes = await readFile(resolve(root, path));
+    assert.equal(record?.sha256, sha256Upper(bytes));
+    assert.equal(bytes.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+    assert.equal(record?.width, name === "desktop1440" ? 1440 : 390);
+    assert.equal(record?.height, name === "desktop1440" ? 1000 : 844);
+    assert.equal(bytes.readUInt32BE(16), record.width);
+    assert.equal(bytes.readUInt32BE(20), record.height);
+    assert.equal(record?.visualInspection, "PASS");
+  }
+
+  assert.deepEqual(summary.recordForbiddenFieldScan, {
+    ...raw.recordForbiddenFieldScan,
+    status: "PASS"
+  });
+  assert.deepEqual(summary.recordForbiddenFieldScan?.fields, designApprovalForbiddenFields);
+  assert.equal(summary.recordForbiddenFieldScan?.occurrences, 0);
+  assert.deepEqual(summary.recordForbiddenFieldScan?.matches, []);
+  assert.equal(summary.recordForbiddenFieldScan?.status, "PASS");
+  validateA2PromotionGates(summary);
+};
+
+test("canonical-LF evidence identities survive Windows checkout conversion and reject content mutation", () => {
+  const representatives = {
+    junit: "<?xml version=\"1.0\"?>\n<testsuites>\n\t<testcase name=\"portable\"/>\n</testsuites>\n",
+    json: "{\n  \"schemaVersion\": 1,\n  \"portable\": true\n}\n",
+    producer: "def canonical_lf_bytes(value):\n    return value.replace(b'\\r\\n', b'\\n')\n",
+    source: "export const approval = {\n  mode: \"sandbox\"\n};\n"
+  };
+
+  for (const [label, lf] of Object.entries(representatives)) {
+    const crlf = lf.replaceAll("\n", "\r\n");
+    const loneCr = lf.replaceAll("\n", "\r");
+    const expected = canonicalLfIdentity(lf);
+    assert.deepEqual(canonicalLfIdentity(crlf), expected, `${label}: CRLF identity drifted`);
+    assert.deepEqual(canonicalLfIdentity(loneCr), expected, `${label}: lone-CR identity drifted`);
+    assert.notEqual(
+      canonicalLfIdentity(`${lf}mutation`).canonicalLfSha256,
+      expected.canonicalLfSha256,
+      `${label}: content mutation was not detected`
+    );
+  }
+});
+
 test("approved document manifest is bilingual, standalone, and deterministically rendered", async () => {
   const scratch = await mkdtemp(join(tmpdir(), "lineos-document-manifest-"));
   try {
@@ -465,6 +969,255 @@ test("approved document manifest is bilingual, standalone, and deterministically
         assert.equal(await readFile(tempHtml, "utf8"), html, `${stem}.${language}.html is not deterministic`);
       }
     }
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+});
+
+test("A1 browser evidence and bilingual implementation reports preserve the final decision record", async () => {
+  const summary = JSON.parse(await read(designApprovalVerificationSummary));
+  await validateDesignApprovalEvidence(summary);
+
+  for (const language of editions) {
+    const [markdown, html] = await Promise.all([
+      read(`${designApprovalImplementationReport}.${language}.md`),
+      read(`${designApprovalImplementationReport}.${language}.html`)
+    ]);
+    validateDesignApprovalReport(markdown, html, language, summary);
+    assert.match(visibleGuideProse(markdown), /UI-driven.*success.*cancel.*legacy_preset|UI-driven.*success.*cancel.*legacy_preset/is);
+    assert.match(visibleGuideProse(markdown), /in-page port-contract probes.*replay.*stale_revision.*expired|in-page port-contract probes.*replay.*stale_revision.*expired/is);
+    assert.match(visibleGuideProse(markdown), /1440.*390/is);
+    assert.match(visibleGuideProse(markdown), /English|ภาษาอังกฤษ/);
+    assert.match(visibleGuideProse(markdown), /Thai|ภาษาไทย/);
+    assert.doesNotMatch(html, /&lt;br\s*\/?&gt;/i);
+  }
+});
+
+test("A1 captured provenance survives checkpoint commits but rejects falsified capture data", async () => {
+  const summary = JSON.parse(await read(designApprovalVerificationSummary));
+  const baseContext = {
+    parentHead: summary.provenance.parent.baseCommitAtCapture,
+    parentCommitExists: true,
+    parentIsAncestor: true,
+    nestedCommitExists: true,
+    liveNestedStatusEntries: []
+  };
+  assert.doesNotThrow(() => validateCapturedProvenance(summary.provenance, baseContext));
+  assert.doesNotThrow(() => validateCapturedProvenance(summary.provenance, {
+    ...baseContext,
+    parentHead: "f".repeat(40)
+  }), "a clean descendant/post-checkpoint state must preserve the immutable capture");
+  assert.throws(() => validateCapturedProvenance(summary.provenance, {
+    ...baseContext,
+    parentCommitExists: false
+  }), /does not exist/);
+  assert.throws(() => validateCapturedProvenance(summary.provenance, {
+    ...baseContext,
+    parentIsAncestor: false
+  }), /not an ancestor/);
+  assert.throws(() => validateCapturedProvenance(summary.provenance, {
+    ...baseContext,
+    nestedCommitExists: false
+  }), /nested commitAtCapture does not exist/);
+
+  const forgedNestedCommit = structuredClone(summary.provenance);
+  forgedNestedCommit.nested.commitAtCapture = "0".repeat(40);
+  assert.throws(() => validateCapturedProvenance(forgedNestedCommit, {
+    ...baseContext,
+    nestedCommitExists: false
+  }), /nested commitAtCapture does not exist/);
+  const forgedNestedBranch = structuredClone(summary.provenance);
+  forgedNestedBranch.nested.capturedBranch = "forged/branch";
+  assert.throws(() => validateCapturedProvenance(forgedNestedBranch, baseContext), /fix\/dxf-truth-chain/);
+
+  const tamperedParent = structuredClone(summary.provenance);
+  tamperedParent.parent.capturedStatusEntries[0] = " M LineOS/UNAPPROVED.txt";
+  assert.throws(() => validateCapturedProvenance(tamperedParent, baseContext), /hash mismatch/);
+  tamperedParent.parent.capturedStatusSha256 = sha256Upper(tamperedParent.parent.capturedStatusEntries.join("\n"));
+  assert.throws(() => validateCapturedProvenance(tamperedParent, baseContext), /exact approved 11/);
+
+  const tamperedNested = structuredClone(summary.provenance);
+  tamperedNested.nested.capturedStatusEntries.push("?? LineOS/forbidden-a1.txt");
+  tamperedNested.nested.capturedStatusEntryCount += 1;
+  tamperedNested.nested.capturedStatusSha256 = sha256Upper(tamperedNested.nested.capturedStatusEntries.join("\n"));
+  tamperedNested.nested.a1TargetedStatusEntries = ["?? LineOS/forbidden-a1.txt"];
+  assert.throws(() => validateCapturedProvenance(tamperedNested, baseContext), /captured nested scope/);
+  assert.throws(() => validateCapturedProvenance(summary.provenance, {
+    ...baseContext,
+    liveNestedStatusEntries: ["?? LineOS/live-forbidden-a1.txt"]
+  }), /live nested repository/);
+  for (const targetedPath of ["docs/line-design-approval-report.md", "LineOS.md"]) {
+    const capturedCandidate = structuredClone(summary.provenance);
+    const entry = `?? ${targetedPath}`;
+    capturedCandidate.nested.capturedStatusEntries.push(entry);
+    capturedCandidate.nested.capturedStatusEntryCount += 1;
+    capturedCandidate.nested.capturedStatusSha256 = sha256Upper(
+      capturedCandidate.nested.capturedStatusEntries.join("\n")
+    );
+    capturedCandidate.nested.a1TargetedStatusEntries = [entry];
+    assert.throws(
+      () => validateCapturedProvenance(capturedCandidate, baseContext),
+      /captured nested scope/,
+      `captured policy must reject ${targetedPath}`
+    );
+    assert.throws(
+      () => validateCapturedProvenance(summary.provenance, {
+        ...baseContext,
+        liveNestedStatusEntries: [entry]
+      }),
+      /live nested repository/,
+      `live policy must reject ${targetedPath}`
+    );
+  }
+
+  assert.doesNotThrow(() => validateA2PromotionGates(summary));
+  const fabricatedGateOne = structuredClone(summary);
+  fabricatedGateOne.a2PromotionGates[0].status = "OPEN";
+  fabricatedGateOne.a2PromotionGates[0].satisfaction = "UNSATISFIED";
+  assert.throws(() => validateA2PromotionGates(fabricatedGateOne), /fabricated/);
+  const fabricatedGateTwo = structuredClone(summary);
+  fabricatedGateTwo.a2PromotionGates[1].status = "CLOSED";
+  fabricatedGateTwo.a2PromotionGates[1].satisfaction = "SATISFIED";
+  assert.throws(() => validateA2PromotionGates(fabricatedGateTwo), /fabricated/);
+  const reorderedGates = structuredClone(summary);
+  [reorderedGates.a2PromotionGates[1], reorderedGates.a2PromotionGates[2]] = [
+    reorderedGates.a2PromotionGates[2], reorderedGates.a2PromotionGates[1]
+  ];
+  assert.throws(() => validateA2PromotionGates(reorderedGates), /fabricated/);
+  const fabricatedBlockers = structuredClone(summary);
+  fabricatedBlockers.a2Blockers.unshift(a2PromotionGateTerms[0]);
+  assert.throws(() => validateA2PromotionGates(fabricatedBlockers), /only A2 gates 2–7/);
+});
+
+test("A1 report contract rejects decision evidence hidden from readers", async () => {
+  const summary = JSON.parse(await read(designApprovalVerificationSummary));
+  for (const language of editions) {
+    const markdown = await read(`${designApprovalImplementationReport}.${language}.md`);
+    const html = await read(`${designApprovalImplementationReport}.${language}.html`);
+    const claims = reportClaims[language];
+    const mutations = [
+      ["heading", markdown.replace(`## ${claims.heading}`, `<!-- ## ${claims.heading} -->`)],
+      ["heading in fenced code", markdown.replace(`## ${claims.heading}`, `\`\`\`text\n## ${claims.heading}\n\`\`\``)],
+      ["decision", markdown.replace(claims.decision, `<!-- ${claims.decision} -->`)],
+      ["network/error", markdown.replace(claims.network, `<!-- ${claims.network} -->`)],
+      ["runtime boundary", markdown.replace(claims.boundary, `<!-- ${claims.boundary} -->`)],
+      ["runtime boundary in fenced code", markdown.replace(claims.boundary, `\`\`\`text\n${claims.boundary}\n\`\`\``)],
+      ["nested commit", markdown.replaceAll(summary.provenance.nested.commitAtCapture, `<!-- ${summary.provenance.nested.commitAtCapture} -->`)],
+      ["A2 gate status", markdown.replace(a2GateVisibleClaims[0], `<!-- ${a2GateVisibleClaims[0]} -->`)],
+      ["A2 gate status in fenced code", markdown.replace(a2GateVisibleClaims[0], `\`\`\`text\n${a2GateVisibleClaims[0]}\n\`\`\``)],
+      ["whole-claim inline code", markdown.replace(claims.boundary, `\`${claims.boundary}\``)]
+    ];
+    for (const [label, candidate] of mutations) {
+      assert.notEqual(candidate, markdown, `${language} ${label} mutation fixture did not apply`);
+      assert.throws(
+        () => validateDesignApprovalReport(candidate, html, language, summary),
+        /missing visible|whole-claim inline code/,
+        `${language} ${label} mutation must be rejected`
+      );
+    }
+    const htmlHidden = html.replace(claims.network, `<script>${claims.network}</script>`);
+    assert.notEqual(htmlHidden, html, `${language} hidden HTML mutation fixture did not apply`);
+    assert.throws(
+      () => validateDesignApprovalReport(markdown, htmlHidden, language, summary),
+      /HTML missing visible claim/
+    );
+    for (const [label, wrapper] of [
+      ["HTML comment", (claim) => `<!-- ${claim} -->`],
+      ["HTML style", (claim) => `<style>${claim}</style>`]
+    ]) {
+      const candidate = html.replace(claims.network, wrapper(claims.network));
+      assert.notEqual(candidate, html, `${language} ${label} mutation fixture did not apply`);
+      assert.throws(
+        () => validateDesignApprovalReport(markdown, candidate, language, summary),
+        /HTML missing visible claim/
+      );
+    }
+    for (const [label, wrapper] of [
+      ["gate HTML comment", (claim) => `<!-- ${claim} -->`],
+      ["gate HTML style", (claim) => `<style>${claim}</style>`]
+    ]) {
+      const candidate = html.replace(a2GateVisibleClaims[0], wrapper(a2GateVisibleClaims[0]));
+      assert.notEqual(candidate, html, `${language} ${label} mutation fixture did not apply`);
+      assert.throws(
+        () => validateDesignApprovalReport(markdown, candidate, language, summary),
+        /HTML missing visible claim/
+      );
+    }
+  }
+});
+
+test("A1 browser evidence producer help is inert and temp output cannot overwrite canonical evidence", async () => {
+  const producer = resolve(root, designApprovalBrowserProducer);
+  const canonicalPaths = [
+    designApprovalBrowserObservation,
+    designApprovalScreenshots.desktop1440,
+    designApprovalScreenshots.mobile390,
+    designApprovalVerificationSummary,
+    designApprovalFullSuiteJunit
+  ].map((path) => resolve(root, path));
+  const identities = async () => Promise.all(canonicalPaths.map(async (path) => {
+    const [bytes, metadata] = await Promise.all([readFile(path), stat(path, { bigint: true })]);
+    return { path, sha256: sha256Upper(bytes), mtimeNs: metadata.mtimeNs.toString() };
+  }));
+
+  const beforeHelp = await identities();
+  const help = spawnSync("python", [producer, "--help"], { encoding: "utf8", timeout: 30_000 });
+  assert.equal(help.status, 0, help.stderr || help.stdout);
+  assert.match(help.stdout, /--output-dir/);
+  assert.match(help.stdout, /--publish-canonical/);
+  assert.deepEqual(await identities(), beforeHelp, "--help changed canonical evidence bytes or mtimes");
+
+  const implicitCanonical = spawnSync("python", [
+    producer,
+    "--output-dir",
+    resolve(root, "artifacts/line-design-approval-a1")
+  ], { encoding: "utf8", timeout: 30_000 });
+  assert.notEqual(implicitCanonical.status, 0, "canonical output must require --publish-canonical");
+  assert.match(implicitCanonical.stderr, /canonical evidence requires --publish-canonical/);
+  assert.deepEqual(await identities(), beforeHelp, "rejected implicit canonical output changed evidence");
+
+  const artifactParent = resolve(root, "artifacts");
+  const transactionResidue = async () => (await readdir(artifactParent, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory() && /^line-design-approval-a1\.(?:staging|backup)-/.test(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+  const residueBeforeFailure = await transactionResidue();
+  const forcedFailure = spawnSync("python", [producer, "--publish-canonical"], {
+    encoding: "utf8",
+    timeout: 60_000,
+    env: { ...process.env, MONOLITH_LINEOS_A1_TEST_FAIL_AFTER_DESKTOP: "1" }
+  });
+  assert.notEqual(forcedFailure.status, 0, "forced staged-desktop failure unexpectedly succeeded");
+  assert.match(`${forcedFailure.stdout}\n${forcedFailure.stderr}`, /forced failure after staged desktop capture/i);
+  assert.deepEqual(await identities(), beforeHelp, "failed canonical capture changed evidence bytes or mtimes");
+  assert.deepEqual(await transactionResidue(), residueBeforeFailure, "failed canonical capture left staging or backup residue");
+  const portProbe = spawnSync("python", ["-c", [
+    "import socket",
+    "probe=socket.socket()",
+    "probe.bind(('127.0.0.1',4179))",
+    "probe.close()"
+  ].join(";")], { encoding: "utf8", timeout: 10_000 });
+  assert.equal(portProbe.status, 0, `failed canonical capture left port 4179 unavailable: ${portProbe.stderr}`);
+
+  const scratch = await mkdtemp(join(tmpdir(), "lineos-a1-browser-evidence-"));
+  try {
+    const tempRun = spawnSync("python", [producer, "--output-dir", scratch], {
+      encoding: "utf8",
+      timeout: 60_000
+    });
+    assert.equal(tempRun.status, 0, tempRun.stderr || tempRun.stdout);
+    const tempObservationPath = resolve(scratch, "browser-observed.json");
+    const tempDesktopPath = resolve(scratch, "desktop-1440.png");
+    const tempMobilePath = resolve(scratch, "mobile-390.png");
+    await Promise.all([access(tempObservationPath), access(tempDesktopPath), access(tempMobilePath)]);
+    const tempObservation = JSON.parse(await readFile(tempObservationPath, "utf8"));
+    assert.equal(tempObservation.output?.mode, "isolated");
+    assert.equal(tempObservation.output?.directory, resolve(scratch));
+    assert.deepEqual(
+      Object.values(tempObservation.screenshots).map(({ path }) => path).sort(),
+      ["desktop-1440.png", "mobile-390.png"]
+    );
+    assert.deepEqual(await identities(), beforeHelp, "isolated output run changed canonical evidence");
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
