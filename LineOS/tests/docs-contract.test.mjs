@@ -1127,12 +1127,19 @@ test("A1 browser evidence producer help is inert and temp output cannot overwrit
   assert.deepEqual(await identities(), beforeHelp, "failed canonical capture changed evidence bytes or mtimes");
   assert.deepEqual(await transactionResidue(), residueBeforeFailure, "failed canonical capture left staging or backup residue");
   const portProbe = spawnSync("python", ["-c", [
-    "import socket",
-    "probe=socket.socket()",
-    "probe.bind(('127.0.0.1',4179))",
-    "probe.close()"
-  ].join(";")], { encoding: "utf8", timeout: 10_000 });
-  assert.equal(portProbe.status, 0, `failed canonical capture left port 4179 unavailable: ${portProbe.stderr}`);
+    "from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer",
+    "probe = None",
+    "try:",
+    "    probe = ThreadingHTTPServer(('127.0.0.1', 4179), SimpleHTTPRequestHandler)",
+    "finally:",
+    "    if probe is not None:",
+    "        probe.server_close()"
+  ].join("\n")], { encoding: "utf8", timeout: 10_000 });
+  assert.equal(
+    portProbe.status,
+    0,
+    `failed canonical capture left port 4179 unavailable to the next evidence server: ${portProbe.stderr}`
+  );
 
   const scratch = await mkdtemp(join(tmpdir(), "lineos-a1-browser-evidence-"));
   try {
