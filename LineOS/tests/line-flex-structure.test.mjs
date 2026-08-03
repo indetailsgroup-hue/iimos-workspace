@@ -103,6 +103,48 @@ function getTagById(html, id) {
   return scanHtmlOpeningTags(html).find(({ attributes }) => attributes.get("id") === id);
 }
 
+function getDialogMarkup(html, id) {
+  const start = html.indexOf(`<dialog id="${id}"`);
+  assert.notEqual(start, -1, `${id}: dialog opening must exist`);
+  const end = html.indexOf("</dialog>", start);
+  assert.notEqual(end, -1, `${id}: dialog closing must exist`);
+  return html.slice(start, end + "</dialog>".length);
+}
+
+function getCssRule(css, requiredSelectors) {
+  for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selectors = match[1].split(",").map((selector) => selector.trim());
+    if (requiredSelectors.every((selector) => selectors.includes(selector))) return match[2];
+  }
+  assert.fail(`missing CSS rule for selectors: ${requiredSelectors.join(", ")}`);
+}
+
+function getHexToken(css, name) {
+  const match = css.match(new RegExp(`--${name}\\s*:\\s*(#[0-9a-f]{6})`, "i"));
+  assert.ok(match, `--${name} must be a six-digit hex color token`);
+  return match[1];
+}
+
+function relativeLuminance(hex) {
+  const channels = hex.slice(1).match(/.{2}/g).map((channel) => Number.parseInt(channel, 16) / 255);
+  const linear = channels.map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  );
+  return (0.2126 * linear[0]) + (0.7152 * linear[1]) + (0.0722 * linear[2]);
+}
+
+function contrastRatio(first, second) {
+  const firstLuminance = relativeLuminance(first);
+  const secondLuminance = relativeLuminance(second);
+  return (Math.max(firstLuminance, secondLuminance) + 0.05) /
+    (Math.min(firstLuminance, secondLuminance) + 0.05);
+}
+
+function assertContrastAtLeast(first, second, minimum, label) {
+  const ratio = contrastRatio(first, second);
+  assert.ok(ratio >= minimum, `${label} must be >= ${minimum}:1; got ${ratio.toFixed(2)}:1`);
+}
+
 function assertDialogReferences(html, id) {
   const dialog = getTagById(html, id);
   assert.ok(dialog, `${id}: dialog must exist`);
@@ -275,6 +317,42 @@ test("Trust Concierge shell exposes truthful sandbox review and record semantics
   }
 });
 
+test("each consequential dialog uniquely owns and describes its exact visible sandbox warning", async () => {
+  const html = await read("line-flex-studio.html");
+  const tags = scanHtmlOpeningTags(html);
+  const ids = tags.flatMap(({ attributes }) => attributes.has("id") ? [attributes.get("id")] : []);
+  assert.equal(new Set(ids).size, ids.length, "every shell id must be globally unique");
+
+  for (const [dialogId, warningId] of [
+    ["liff-dialog", "liff-sandbox-warning"],
+    ["receipt-dialog", "receipt-sandbox-warning"]
+  ]) {
+    const dialog = getTagById(html, dialogId);
+    const describedBy = dialog.attributes.get("aria-describedby").trim().split(/\s+/);
+    assert.ok(describedBy.includes(warningId), `${dialogId}: aria-describedby must include ${warningId}`);
+
+    const warningTags = tags.filter(({ attributes }) => attributes.get("id") === warningId);
+    assert.equal(warningTags.length, 1, `${warningId} must identify exactly one element`);
+    assert.equal(warningTags[0].name, "p", `${warningId} must identify visible warning copy`);
+    assert.equal(warningTags[0].attributes.get("class"), "sandbox-warning");
+    assert.equal(warningTags[0].attributes.get("role"), "note");
+    assert.ok(!warningTags[0].attributes.has("hidden"), `${warningId} must not be hidden`);
+    assert.notEqual(warningTags[0].attributes.get("aria-hidden"), "true", `${warningId} must remain exposed`);
+
+    const dialogMarkup = getDialogMarkup(html, dialogId);
+    assert.equal(
+      (dialogMarkup.match(/SANDBOX — NO BUSINESS EFFECT/g) ?? []).length,
+      1,
+      `${dialogId} must contain exactly one exact sandbox warning`
+    );
+    assert.match(
+      dialogMarkup,
+      new RegExp(`<p\\b(?=[^>]*\\bid="${warningId}")[^>]*>\\s*SANDBOX — NO BUSINESS EFFECT\\s*</p>`),
+      `${warningId} must label the visible exact warning text`
+    );
+  }
+});
+
 test("Trust Concierge styles preserve warning, digest, focus, scroll, mobile, and reduced-motion access", async () => {
   const css = await read("line-flex-studio.css");
   assert.match(css, /\.sandbox-warning\{[^}]*position:sticky[^}]*background:var\(--sandbox-warning-bg\)[^}]*color:var\(--sandbox-warning-ink\)/);
@@ -284,6 +362,48 @@ test("Trust Concierge styles preserve warning, digest, focus, scroll, mobile, an
   assert.match(css, /\.sandbox-dialog-actions button:focus-visible\{/);
   assert.match(css, /@media\(max-width:480px\)\{[^}]*\.sandbox-dialog-actions\{[^}]*flex-direction:column/);
   assert.match(css, /@media\(prefers-reduced-motion:reduce\)\{\*,\*::before,\*::after\{/);
+});
+
+test("sandbox height tokens keep ordered vh fallbacks before dvh overrides", async () => {
+  const css = await read("line-flex-studio.css");
+  const root = css.match(/:root\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(
+    root,
+    /--sandbox-dialog-max-height:calc\(100vh - 28px\);\s*--sandbox-dialog-max-height:calc\(100dvh - 28px\);/,
+    "base dialog height must declare vh before the dvh enhancement"
+  );
+
+  const mobileStart = css.indexOf("@media(max-width:480px)");
+  const mobileEnd = css.indexOf("@media print", mobileStart);
+  assert.ok(mobileStart >= 0 && mobileEnd > mobileStart, "mobile sandbox block must remain bounded");
+  const mobile = css.slice(mobileStart, mobileEnd);
+  assert.match(
+    mobile,
+    /--sandbox-dialog-max-height:calc\(100vh - 16px\);\s*--sandbox-dialog-max-height:calc\(100dvh - 16px\);/,
+    "mobile dialog height must declare vh before the dvh enhancement"
+  );
+});
+
+test("global and sandbox focus indicators use measured contrasting dual rings", async () => {
+  const css = await read("line-flex-studio.css");
+  const focusRing = getHexToken(css, "focus-ring");
+  const focusHalo = getHexToken(css, "focus-halo");
+  const surface = getHexToken(css, "surface");
+  const platform = getHexToken(css, "platform");
+  const sandboxWarning = getHexToken(css, "sandbox-warning-bg");
+
+  assertContrastAtLeast(focusRing, surface, 3, "focus ring contrast on white");
+  assertContrastAtLeast(focusHalo, platform, 3, "focus halo contrast on platform");
+  assertContrastAtLeast(focusHalo, sandboxWarning, 3, "focus halo contrast on warning");
+
+  const focusRule = getCssRule(css, [
+    "button:focus-visible", "input:focus-visible", "textarea:focus-visible",
+    "select:focus-visible", "[role=tab]:focus-visible",
+    ".sandbox-dialog-actions button:focus-visible"
+  ]);
+  assert.match(focusRule, /outline:3px solid var\(--focus-ring\)/);
+  assert.match(focusRule, /outline-offset:2px/);
+  assert.match(focusRule, /box-shadow:0 0 0 6px var\(--focus-halo\)/);
 });
 
 test("runtime shell uses only the approved local stylesheet and module", async () => {
