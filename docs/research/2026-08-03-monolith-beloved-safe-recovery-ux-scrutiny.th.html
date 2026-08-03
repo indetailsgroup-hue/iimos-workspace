@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>รายงาน Scrutinize: งานวิจัย UX การกู้คืนที่ปลอดภัยและเป็นที่รักของ MONOLITH</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>รายงาน Scrutinize: งานวิจัย UX การกู้คืนที่ปลอดภัยและเป็นที่รักของ MONOLITH</h1>
+<p><strong>วันที่:</strong> 3 สิงหาคม 2026</p>
+<p><strong>รูปแบบการตรวจ:</strong> ตรวจ end-to-end จากมุมคนนอก</p>
+<p><strong>เอกสารที่ตรวจ:</strong> <a href="2026-08-03-monolith-beloved-safe-recovery-ux-deep-research.th.html">งานวิจัยเชิงลึก MONOLITH: UX การกู้คืนที่ปลอดภัยและเป็นที่รัก</a></p>
+<p><strong>Baseline ที่อนุมัติแล้ว:</strong> <a href="../superpowers/specs/2026-08-03-monolith-section-4-safe-recovery-proof-design.th.html">การออกแบบ MONOLITH Section 4: Safe Recovery &amp; Proof</a></p>
+<p><strong>คำตัดสิน:</strong> <strong>ต้องแก้ก่อนนำเข้า Section 4</strong></p>
+<h2>เจตนาในหนึ่งประโยค</h2>
+<p>ทำให้ทุกบทบาทเข้าใจและกู้คืนจากความผิดพลาดได้อย่างเป็นมนุษย์ โดยไม่ลด exact-revision evidence, อำนาจทางวิชาชีพ, containment หรือ controlled production egress</p>
+<h2>ทางเลือกที่เล็กกว่า — การท้าทาย scope ที่บังคับต้องทำ</h2>
+<p>อย่าเพิ่ม Recovery Presentation Contract ที่มีชื่อแยก หรือสร้าง authoritative view object อีกชิ้น</p>
+<p>ให้ใช้ RecoveryCase ที่อนุมัติแล้วเป็น current projection ชุดเดียว และเพิ่มเพียง:</p>
+<ol>
+<li>mapping จาก RecoveryCase ไปยัง role view แบบ deterministic;</li>
+<li>กติกา freshness และ fail-closed ของ projection;</li>
+<li>semantics แยก assignment request ออกจาก assignment acceptance;</li>
+<li>notification budget;</li>
+<li>usability tests ที่นิยามวิธีวัดชัดเจน</li>
+</ol>
+<p>แนวทางนี้บรรลุเป้าหมายงานวิจัยด้วยคำศัพท์น้อยกว่าและลดความเสี่ยงที่ความจริงสองชุดจะแยกจากกัน Section 4 กำหนด RecoveryCase ปัจจุบัน, primary action หนึ่งอย่าง, last safe revision, owner, consequence, permitted use, มุมมองตามบทบาท, accessibility tests ไทย/อังกฤษ และเป้าหมาย 30 วินาที/95% ไว้แล้ว</p>
+<h2>End-to-end trace</h2>
+<h3>เส้นทางอนาคตที่งานวิจัยอ้าง</h3>
+<p>งานวิจัยเสนอ:</p>
+<p><strong>RecoveryCase และ proof state → Recovery Decision Card ตามบทบาท → server-authorized action หนึ่งอย่าง → server revalidation → governed effect หรือ controlled egress</strong></p>
+<h3>เส้นทางที่การออกแบบอนุมัติแล้วกำหนด</h3>
+<p>Section 4 เสนออยู่แล้ว:</p>
+<p><strong>Failure detection → RecoveryCase projection → primary next action → expected case version และ fencing token → CapabilityPolicy evaluation → DecisionReceipt หรือ EgressGrant</strong></p>
+<p>หลักฐาน:</p>
+<ul>
+<li>Section 4 บรรทัด 19 และ 102–119 กำหนด current projection และ field ที่ผู้ใช้ต้องเห็นอยู่แล้ว</li>
+<li>Section 4 บรรทัด 333–378 กำหนดมุมมองตามบทบาทที่ใช้ภาษาสงบ มี action หลักหนึ่งอย่าง และ visualization ของ recovery/egress ที่ sync กัน</li>
+<li>Section 4 บรรทัด 273–285 กำหนด projection contract, concurrency, failure injection, seeded defect, bypass และ accessibility tests ไทย/อังกฤษอยู่แล้ว</li>
+</ul>
+<h3>เส้นทางปัจจุบันของผลิตภัณฑ์</h3>
+<p>Object ที่ตั้งใจไว้ยังไม่ใช่ runtime contract ปัจจุบัน: การค้น source แบบ exact ไม่พบ RecoveryCase, RecoveryEvent, DecisionReceipt, CapabilityPolicy, EgressBroker, RecoveryCardView หรือ Recovery Decision Card ใน <strong>src</strong>, <strong>server</strong> และ <strong>supabase</strong></p>
+<p>เส้นทาง export ที่ผู้ใช้เห็นในผลิตภัณฑ์ปัจจุบันยังแยกหลายทาง:</p>
+<ol>
+<li><strong>src/App.tsx:878–892</strong> ส่ง direct export handler ให้ AppShell</li>
+<li><strong>src/components/layout/AppShell.tsx:176,221</strong> เปิดปุ่ม “Export to CNC” จาก local gate/spec state ที่แสดงอยู่</li>
+<li><strong>src/App.tsx:717–724</strong> เรียก generateFactoryPacketFromStores</li>
+<li><strong>src/factory/packet/useFactoryPacket.ts:341–365</strong> สร้างและดาวน์โหลด package ใน browser</li>
+<li><strong>src/App.tsx:732–742</strong> upload package ที่ดาวน์โหลดไปแล้วขึ้น server ภายหลัง หาก upload ล้มเหลวมีเพียง warning</li>
+</ol>
+<p>พื้นผิว release/export อื่นใช้ checks คนละชุด ได้แก่ GateToolbar, ExportPanel, ReleaseWizardModal, ReleasePanel และ factory JobDetail export path จาก test inventory ที่ตรวจพบ มี focused tests ของ GateToolbar และ ExportPanel แต่ยังไม่มี Recovery contract test และไม่มี test ของ AppShell main-export path</p>
+<p>ข้อเท็จจริงนี้ยืนยันคำเตือนของ Section 4: primitive เดิมเป็นเพียง reuse candidate ไม่ใช่ canonical authority ที่ตรวจยืนยันแล้ว</p>
+<h2>Findings</h2>
+<h3>[BLOCKER 1] “ชั้นที่ขาด” ที่เสนอซ้ำกับ Section 4 เกือบทั้งหมด</h3>
+<p><strong>Finding:</strong> งานวิจัยระบุว่า Recovery Presentation Contract คือชั้นสำคัญที่ขาด แต่แปด field ที่เสนอ map ตรงกับ RecoveryCase และ role-experience requirements เดิมเกือบหนึ่งต่อหนึ่ง</p>
+<p><strong>Why it matters:</strong> การมีสองชื่อสำหรับ projection เดียวจะทำให้เกิด schema, acceptance criteria และการตีความ UI สองชุด โครงการที่ตั้งใจทำ UX ให้ง่ายจะเพิ่ม conceptual complexity หลังบ้านเสียเอง</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>งานวิจัยบรรทัด 19 และ 185–195 เรียก presentation contract ว่าเป็นสิ่งที่ต้องเพิ่ม</li>
+<li>งานวิจัยบรรทัด 104–111 กำหนด status/safe state, cause, scope/revision, consequence, evidence gap, primary action, owner และ progress</li>
+<li>Section 4 บรรทัด 106–119 กำหนด failure/risk, scope/revision, impact targets, last safe state, owner, primary next action, policy reference, expected version, fencing token และ state อยู่แล้ว</li>
+<li>Section 4 บรรทัด 335–378 กำหนด calm copy, one primary action, role projection และ scenario fields ชุดเดียวกัน</li>
+</ul>
+<p><strong>Suggested change:</strong> เก็บงานวิจัยไว้เป็นภาคผนวกด้านหลักฐานและ microcopy เปลี่ยนจาก “เพิ่ม Recovery Presentation Contract” เป็น “ทำ mapping การแสดงผลของ RecoveryCase เดิมให้ชัดขึ้น” ห้ามเพิ่ม entity ใหม่หรือ source of truth ชุดที่สอง</p>
+<h3>[BLOCKER 2] ข้อเสนอ card-first ไม่กำหนดลำดับ implementation แบบ broker-first</h3>
+<p><strong>Finding:</strong> งานวิจัยบอกว่าทุก action บน card ต้องถูก server ตรวจซ้ำ และเฉพาะ controlled egress จึงสร้าง production-usable package ได้ แต่ไม่ได้กำหนดให้รวม release/export paths เดิมเป็น prerequisite ก่อนทำ card</p>
+<p><strong>Why it matters:</strong> Card ที่สงบและดูมี authority ซึ่งวางทับ release paths ที่ยังอยู่ฝั่ง client และแยกหลายชุด อาจเพิ่มความเชื่อของผู้ใช้ทั้งที่ authority boundary จริงยังไม่สอดคล้องกัน</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>งานวิจัยบรรทัด 113 และ 217–224 กำหนด server authority, exact binding และ controlled egress</li>
+<li>AppShell เปิด main export จาก displayed state ที่ <strong>src/components/layout/AppShell.tsx:176,221</strong></li>
+<li>Handler นั้นดาวน์โหลดก่อน server upload ที่ <strong>src/App.tsx:717–742</strong> และ <strong>src/factory/packet/useFactoryPacket.ts:341–365</strong></li>
+<li>GateToolbar และ ExportPanel มี checks ของตนเอง และ factory route มี execution path อีกชุด</li>
+</ul>
+<p><strong>Suggested change:</strong> กำหนดลำดับ implementation ให้ชัด:</p>
+<ol>
+<li>ทำ inventory และ classify release/export/download surface ทุกจุด;</li>
+<li>รวม controlled paths ทั้งหมดเข้าสู่ server-owned policy และ egress decision;</li>
+<li>เพิ่ม contract tests ให้ UI/API/worker/server ตรงกัน;</li>
+<li>แล้วจึง render RecoveryCase view ตามบทบาท</li>
+</ol>
+<p>ห้าม card ระบุว่า action เป็น server-authorized ตราบใดที่ user-facing controlled path ใดยังพึ่ง local display state</p>
+<h3>[MAJOR 3] ยังไม่กำหนด truth precedence และ freshness ของ projection</h3>
+<p><strong>Finding:</strong> งานวิจัยบอกว่า card คำนวณใหม่ได้และ stale action จะถูกตรวจซ้ำ แต่ไม่กำหนดว่าจะแสดงอะไรเมื่อ RecoveryCase, latest event, receipt validity, policy, evidence หรือ egress state ไม่ตรงกันชั่วคราวหรืออ่านไม่ได้</p>
+<p><strong>Why it matters:</strong> Recovery copy ที่อันตรายที่สุดคือคำว่า “safe”, “saved” หรือ “ready” ที่เก่า Server ปฏิเสธหลังผู้ใช้กดอาจป้องกัน side effect ได้ แต่ยังสร้าง automation surprise และทำลายความไว้วางใจ</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>งานวิจัยบรรทัด 104–113 ต้องการ safe state ชัดและบอกว่า stale card refresh อย่างปลอดภัย</li>
+<li>Section 4 บรรทัด 117–118 มี expectedVersion และ fencingToken อยู่แล้ว แต่ visible contract ในงานวิจัยไม่กำหนด projection version, policy version, evidence snapshot หรือ precedence</li>
+<li>Source ปัจจุบันมี local/server state seams หลายจุด; <strong>src/core/store/useSpecStore.ts:616–713</strong> ทำ asynchronous server release ขณะที่ <strong>src/core/store/useSpecStore.ts:788–822</strong> derive displayed gate status โดยไม่ใช้ server-sync status</li>
+</ul>
+<p><strong>Suggested change:</strong> กำหนด presenter rule แบบ deterministic:</p>
+<ul>
+<li>ผูกทุก rendered action กับ caseVersion, latestEventId, policyVersion, evidenceSnapshotId, actor scope และ renderedAt;</li>
+<li>HOLD มี precedence เหนือ state ลำดับต่ำกว่าทั้งหมด;</li>
+<li>proof ที่ revoked หรือ invalidated มี precedence เหนือ approval เก่า;</li>
+<li>หาก source ที่จำเป็นอ่านไม่ได้ ไม่ตรง หรือ stale ให้แสดง “กำลังอัปเดตสถานะ—งานยังถูกพัก” และเปิดเพียง refresh, report หรือ authorized escalation;</li>
+<li>ห้ามอนุมานว่า scope ที่ไม่กระทบยังปลอดภัยเมื่อ impact discovery เป็น UNKNOWN</li>
+</ul>
+<h3>[MAJOR 4] Handoff acknowledgement ขัดกับ lifecycle แปด state ที่อนุมัติ</h3>
+<p><strong>Finding:</strong> งานวิจัยบอกว่าห้ามแสดง handoff ว่า assigned จนผู้รับ acknowledge แต่ Section 4 เปลี่ยนเป็น ASSIGNED ทันทีเมื่อมี owner, deadline และ escalation path</p>
+<p><strong>Why it matters:</strong> Case เดียวกันอาจเป็น “ASSIGNED” ใน lifecycle แต่เป็น “requested—not accepted” บน card ความกำกวมนี้สร้าง handoff gap แบบที่ feature ตั้งใจแก้</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>งานวิจัยบรรทัด 192 และ 204 เพิ่ม requested/acknowledged handoff และห้ามใช้ “assigned” ก่อนเวลา</li>
+<li>Section 4 บรรทัด 139 กำหนด CONTAINED → ASSIGNED โดยไม่ต้องมี recipient acceptance</li>
+<li>RecoveryCase มี owner และ escalationOwner แต่ไม่มี assignment-request projection ที่ Section 4 บรรทัด 114</li>
+<li><strong>src/workflow/handoff/canonical.ts:35–57</strong> ปัจจุบันตรวจ process order และ active site เท่านั้น ไม่ model recipient acceptance</li>
+</ul>
+<p><strong>Suggested change:</strong> คง lifecycle แปด state:</p>
+<ul>
+<li>เขียน RecoveryEvent แบบ assignment-requested และ assignment-accepted;</li>
+<li>คง case ไว้ที่ CONTAINED จนได้รับ acceptance ที่ policy บังคับ หรือบันทึก incident-policy auto-assignment โดย authority อย่างชัดเจน;</li>
+<li>transition เป็น ASSIGNED เมื่อ acknowledgement condition ตาม policy ผ่านเท่านั้น;</li>
+<li>project requested owner, acceptance state, deadline และ escalation โดยไม่สร้าง lifecycle state ที่เก้า</li>
+</ul>
+<h3>[MAJOR 5] คำว่า “ทุกบทบาท” และ cross-domain ยังไม่มี Role Registry กำหนดขอบเขต</h3>
+<p><strong>Finding:</strong> งานวิจัยเพิ่ม estimator/procurement แต่บอกให้ Section 4 คงเดิม ขณะที่ Section 4 ไม่มีบทบาทนี้ และทั้งสองเอกสารไม่มี installer/field recovery แม้ platform และ post-release scenarios เกี่ยวข้องกับงานหน้างาน</p>
+<p><strong>Why it matters:</strong> “Each role” กลายเป็น acceptance criterion ที่ไม่มี denominator Shared card อาจดูครบถ้วนทั้งที่บทบาทซึ่งรับงาน ติดตั้ง วัดหน้างาน หรือรายงาน defect ไม่มี authority หรือมุมมองที่กำหนดไว้</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>งานวิจัยบรรทัด 125–134 กำหนดหก projection รวม estimator/procurement</li>
+<li>Section 4 บรรทัด 337–359 กำหนด client, designer, reviewer, coordinator, factory engineer และ CNC operator แต่ไม่มี estimator/procurement</li>
+<li>งานวิจัยบรรทัด 272–276 อ้างการใช้กับ Interior Architecture Domain Pack ที่ qualify แล้วทุกหมวด</li>
+<li>CONTEXT ของ parent repository ระบุชัดว่า MONOLITH ให้บริการ installer รวมกับ designer, factory และ customer</li>
+</ul>
+<p><strong>Suggested change:</strong> เพิ่ม V1 Role Registry แบบ versioned ซึ่งระบุ:</p>
+<ul>
+<li>role และ authority purpose;</li>
+<li>case ที่ role มองเห็นได้;</li>
+<li>permitted actions และ prohibited decisions;</li>
+<li>field สำคัญที่ต้องเห็นเสมอ;</li>
+<li>handoff/acknowledgement responsibility;</li>
+<li>seeded test scenarios</li>
+</ul>
+<p>ให้ตัดสินชัดว่าจะรวม estimator/procurement และ installer/field ใน Section 4 V1 หรือระบุว่า defer ห้ามใช้คำว่า “ทุกบทบาท” จน freeze denominator ของ registry</p>
+<h3>[MAJOR 6] Hard cap แปด field อาจซ่อนข้อมูลสำคัญตามบทบาท</h3>
+<p><strong>Finding:</strong> “ไม่เกินแปด field” ถูกเสนอเป็น universal contract ทั้งที่ factory, security, revocation และ qualification ต้องเห็นข้อเท็จจริงสำคัญต่างกัน</p>
+<p><strong>Why it matters:</strong> Progressive disclosure ห้ามซ่อน machine, permitted use, expiry, active package identity, acknowledgement coverage หรือ HOLD การรวมหลายข้อเท็จจริงไว้ใน field ชื่อเดียวรักษาจำนวนได้ แต่ไม่ได้ทำให้ cognitive load ง่ายขึ้น</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>งานวิจัยบรรทัด 100–111 กำหนด hard cap</li>
+<li>Section 4 บรรทัด 353–359 กำหนดให้ factory user เห็น candidate identity, machine context, permitted use, last ACTIVE comparison, acknowledgement, qualification restriction, procedure และ expiry</li>
+<li>งานวิจัยบรรทัด 274 ขยาย contract เดียวไปยังหลาย domain ที่มี risk evidence ต่างกัน</li>
+</ul>
+<p><strong>Suggested change:</strong> แทน field-count cap ด้วย:</p>
+<ul>
+<li>คำถามสากลห้าข้อ: status/safe state, what happened, affected scope, consequence และ next action;</li>
+<li>policy-defined always-visible critical fields ตาม actor และ capability;</li>
+<li>evidence/detail drawer สำหรับข้อมูลลึกที่ไม่ critical;</li>
+<li>usability tests ที่วัด orientation และ error ไม่ใช่จำนวน visual fields</li>
+</ul>
+<h3>[MAJOR 7] Notification tiers และ assignment acceptance ยังไม่ reconcile กับ workflow semantics ปัจจุบัน</h3>
+<p><strong>Finding:</strong> งานวิจัยเสนอ immediate/action-queue/digest/activity-only tiers แต่ routing ปัจจุบันแยกเพียง direct push กับ group message และส่ง FYI เป็น group message</p>
+<p><strong>Why it matters:</strong> Recovery card ใหม่จะลด alert fatigue ไม่ได้ หาก backstage router ยัง broadcast FYI ที่ลงมือไม่ได้ หรือถือว่าการส่งเท่ากับ assignment</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>งานวิจัยบรรทัด 193 และ 204 เสนอ tiering และ acknowledgement</li>
+<li><strong>src/workflow/notification/routing.ts:4–23</strong> map personal responsibility/approval ไป direct push และ cross-team handoff/FYI ไป group message</li>
+<li><strong>src/workflow/handoff/canonical.ts:35–57</strong> ไม่มี acknowledgement</li>
+</ul>
+<p><strong>Suggested change:</strong> กำหนด recovery notification intent จาก severity, actor capability, required response, deadline และ acknowledgement mode ให้ข้อมูลที่ลงมือไม่ได้ไป digest หรือ activity log เป็น default และแยก delivery, read, acceptance กับ containment acknowledgement เป็นคนละ event</p>
+<h3>[MAJOR 8] Usability targets ยัง falsify ไม่ได้ในเชิงปฏิบัติ</h3>
+<p><strong>Finding:</strong> เป้าหมาย 30 วินาที, 95% และ 100% ไม่กำหนด clock start, denominator, sample, task mix, baseline, confidence interval หรือวิธีแยกผลตามบทบาทและ risk class</p>
+<p><strong>Why it matters:</strong> ผลรวมอาจซ่อน workflow ของ CNC หรือ reviewer ที่ล้มเหลวไว้หลัง task ของ client ที่ง่ายกว่า “100% ใน qualification testing” จาก sample เล็กไม่ได้พิสูจน์ safety property</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>งานวิจัยบรรทัด 243–257 กำหนด target โดยไม่มี measurement protocol</li>
+<li>Section 4 บรรทัด 396–397 ใช้ median 30 วินาทีและ 95% โดยยังไม่มี frozen test protocol เช่นกัน</li>
+<li>งานวิจัยบรรทัด 232–241 รวม routine comprehension, professional review, handoff, manufacturing, replay และ accessibility ไว้ในชุดเดียว</li>
+</ul>
+<p><strong>Suggested change:</strong> Freeze measurement protocol:</p>
+<ul>
+<li>กำหนด clock start และ successful end state จาก event;</li>
+<li>รายงานแยกตาม role, language, device, risk class และ scenario;</li>
+<li>กำหนด sample size และ confidence interval ก่อน pilot;</li>
+<li>วัด safe first action, completion, backtracking, evidence opening, support escape และ NASA-TLX เทียบ baseline;</li>
+<li>บังคับ safety invariants ด้วย automated/property/failure-injection tests และถือ human study เป็น usability evidence ไม่ใช่หลักฐานว่าเหตุการณ์อันตรายเป็นไปไม่ได้</li>
+</ul>
+<h2>สิ่งที่ผ่านการ scrutinize และควรเก็บไว้</h2>
+<p>ข้อเสนอจากงานวิจัยต่อไปนี้ควรเก็บ:</p>
+<ul>
+<li>เป้าหมายด้านอารมณ์คือความโล่งใจ ไม่ใช่ความตื่นตา;</li>
+<li>คำอธิบายตามเวลา why / now / next;</li>
+<li>microcopy ที่บอกสถานะโดยไม่กล่าวโทษ;</li>
+<li>ภาษาที่บอก saved work และ safe state ชัด;</li>
+<li>preview/diff ก่อน consequential commitment;</li>
+<li>appropriate reliance แทน trust score;</li>
+<li>notification discipline;</li>
+<li>ข้อกำหนดภาษาไทย/อังกฤษและ assistive technology;</li>
+<li>seeded recovery scenarios ตามบทบาท;</li>
+<li>ภาษาที่บอกขอบเขต revocation ตามจริงและการคง physical machine safeguards แยกจาก software</li>
+</ul>
+<p>ทั้งหมดนี้ช่วยเสริม presentation และ validation clauses ของ Section 4 เดิม โดยไม่ต้องสร้าง authoritative object ใหม่</p>
+<h2>ชุดแก้ขั้นต่ำก่อนให้ owner อนุมัติ</h2>
+<ol>
+<li>จัดประเภทงานวิจัยใหม่ให้เป็น evidence และ UX guidance appendix ของ Section 4</li>
+<li>ลบข้ออ้างว่า Recovery Presentation Contract ที่มีชื่อแยกคือ material missing layer</li>
+<li>เพิ่ม RecoveryCase-to-role-view mapping และ fail-closed freshness/precedence rules ใน Section 4</li>
+<li>ตัดสิน requested versus accepted assignment โดยไม่เพิ่ม lifecycle state</li>
+<li>Freeze V1 Role Registry และตัดสิน scope ของ estimator/procurement กับ installer/field ให้ชัด</li>
+<li>เปลี่ยน hard cap แปด field เป็น universal questions บวก policy-critical role fields</li>
+<li>กำหนด notification intent, acknowledgement semantics และ measurement protocol</li>
+<li>ทำ broker-first convergence ของ export/release path ปัจจุบันทุกจุดให้เป็น prerequisite ก่อน implement UI</li>
+</ol>
+<h2>Repository boundary และการจัดประเภทหลักฐาน</h2>
+<ul>
+<li><strong>VERIFIED FACT — parent root:</strong> Parent repository เป็น governance/bootstrap root และระบุ installer เป็นหนึ่งในกลุ่มที่ platform ให้บริการ</li>
+<li><strong>VERIFIED FACT — nested root:</strong> มี release, workflow, factory และ export source จำนวนมาก มี UI entry paths หลายจุด และยังไม่มี implementation แบบ exact ของ Recovery contract ชื่อใหม่</li>
+<li><strong>OWNER DECISION:</strong> RecoveryCase, RecoveryEvent, DecisionReceipt, CapabilityPolicy, lifecycle และ EgressBroker model ของ Section 4</li>
+<li><strong>PRODUCT-DESIGN INFERENCE:</strong> Card layout, field budget, role projection, microcopy และ notification tiers</li>
+<li><strong>UNKNOWN / ยังไม่ยืนยัน:</strong> พฤติกรรมหลัง deploy, production readiness, ความรักของผู้ใช้, machine qualification หรือผล recovery จาก real job</li>
+</ul>
+<p>การ scrutinize รอบนี้ไม่ได้แก้ production code หรือไฟล์ Section 4 ที่อนุมัติแล้ว</p>
+<h2>Final verdict</h2>
+<p><strong>FIX-THEN-SHIP ในฐานะข้อมูลนำเข้า Section 4</strong></p>
+<p>หลักฐานและ human-factors guidance มีประโยชน์ แต่คำแนะนำปัจจุบันซ้ำกับ projection model ที่อนุมัติแล้ว และยังไม่แก้ authority-path, projection-freshness, assignment-acknowledgement, role-denominator และ measurement seams ที่เกิดขึ้นจริง</p>
+</main></body>
+</html>

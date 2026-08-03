@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>Scrutiny Report: MONOLITH Beloved Safe-Recovery UX Research</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>Scrutiny Report: MONOLITH Beloved Safe-Recovery UX Research</h1>
+<p><strong>Date:</strong> 3 August 2026</p>
+<p><strong>Review mode:</strong> Outsider-perspective end-to-end scrutiny</p>
+<p><strong>Reviewed artifact:</strong> <a href="2026-08-03-monolith-beloved-safe-recovery-ux-deep-research.en.html">MONOLITH Deep Research: Beloved Safe-Recovery UX</a></p>
+<p><strong>Approved baseline:</strong> <a href="../superpowers/specs/2026-08-03-monolith-section-4-safe-recovery-proof-design.en.html">MONOLITH Section 4 Design: Safe Recovery &amp; Proof</a></p>
+<p><strong>Verdict:</strong> <strong>REWORK BEFORE INCORPORATION INTO SECTION 4</strong></p>
+<h2>Intent in one sentence</h2>
+<p>Make failure recovery understandable and humane for each role without weakening exact-revision evidence, professional authority, containment, or controlled production egress.</p>
+<h2>Simpler alternative — mandatory scope challenge</h2>
+<p>Do <strong>not</strong> add a separately named Recovery Presentation Contract or another authoritative view object.</p>
+<p>Use the already-approved RecoveryCase as the single current projection and add only:</p>
+<ol>
+<li>a deterministic RecoveryCase-to-role-view mapping;</li>
+<li>freshness and fail-closed projection rules;</li>
+<li>assignment-request versus assignment-acceptance semantics;</li>
+<li>a notification budget;</li>
+<li>operationally defined usability tests.</li>
+</ol>
+<p>This achieves the research goal with a smaller vocabulary and lower divergence risk. Section 4 already specifies one current RecoveryCase, one primary action, last safe revision, owner, consequence, permitted use, role-specific views, Thai/English accessibility tests, and the 30-second/95% targets.</p>
+<h2>End-to-end trace</h2>
+<h3>Claimed future path</h3>
+<p>The research proposes:</p>
+<p><strong>RecoveryCase and proof state → role-aware Recovery Decision Card → one server-authorized action → server revalidation → governed effect or controlled egress</strong></p>
+<h3>Approved design path</h3>
+<p>Section 4 already proposes:</p>
+<p><strong>Failure detection → RecoveryCase projection → primary next action → expected case version and fencing token → CapabilityPolicy evaluation → DecisionReceipt or EgressGrant</strong></p>
+<p>Evidence:</p>
+<ul>
+<li>Section 4 lines 19 and 102–119 already define the current projection and its user-facing fields.</li>
+<li>Section 4 lines 333–378 already define calm one-action role views and synchronized recovery/egress visualization.</li>
+<li>Section 4 lines 273–285 already require projection contracts, concurrency, failure injection, seeded defects, bypass tests, and Thai/English accessibility tests.</li>
+</ul>
+<h3>Current product path</h3>
+<p>The intended objects are not current runtime contracts: an exact source search found zero references to RecoveryCase, RecoveryEvent, DecisionReceipt, CapabilityPolicy, EgressBroker, RecoveryCardView, or Recovery Decision Card under <strong>src</strong>, <strong>server</strong>, and <strong>supabase</strong>.</p>
+<p>The active user-facing export path is currently fragmented:</p>
+<ol>
+<li><strong>src/App.tsx:878–892</strong> gives AppShell a direct export handler.</li>
+<li><strong>src/components/layout/AppShell.tsx:176,221</strong> enables “Export to CNC” from displayed local gate/spec state.</li>
+<li><strong>src/App.tsx:717–724</strong> calls generateFactoryPacketFromStores.</li>
+<li><strong>src/factory/packet/useFactoryPacket.ts:341–365</strong> builds and downloads the package in the browser.</li>
+<li><strong>src/App.tsx:732–742</strong> uploads the already-downloaded package afterward; upload failure only produces a warning.</li>
+</ol>
+<p>Other release/export surfaces use different checks, including GateToolbar, ExportPanel, ReleaseWizardModal, ReleasePanel, and the factory JobDetail export path. The reviewed test inventory contains focused GateToolbar and ExportPanel export tests, but no Recovery contract test and no AppShell main-export test.</p>
+<p>This confirms Section 4’s caution: existing primitives are reuse candidates, not verified canonical authority.</p>
+<h2>Findings</h2>
+<h3>[BLOCKER 1] The proposed “missing layer” substantially duplicates Section 4</h3>
+<p><strong>Finding:</strong> The research says the material missing layer is a Recovery Presentation Contract, but the proposed eight fields map almost one-for-one to the existing RecoveryCase and role-experience requirements.</p>
+<p><strong>Why it matters:</strong> Two names for the same projection will produce competing schemas, acceptance criteria, and UI interpretations. The simpler UX initiative would increase backstage conceptual complexity.</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>Research lines 19 and 185–195 call the presentation contract an addition.</li>
+<li>Research lines 104–111 define status/safe state, cause, scope/revision, consequence, evidence gap, primary action, owner, and progress.</li>
+<li>Section 4 lines 106–119 already define failure/risk, scope/revision, impact targets, last safe state, owner, primary next action, policy reference, expected version, fencing token, and state.</li>
+<li>Section 4 lines 335–378 already require calm copy, one primary action, role projections, and the same scenario fields.</li>
+</ul>
+<p><strong>Suggested change:</strong> Keep the research as an evidence and microcopy appendix. Replace “add a Recovery Presentation Contract” with “tighten the existing RecoveryCase presentation mapping.” Add no new entity and no second source of truth.</p>
+<h3>[BLOCKER 2] The card-first recommendation omits the required broker-first implementation order</h3>
+<p><strong>Finding:</strong> The research says every card action is server-revalidated and only controlled egress may create a production-usable package, but it does not make convergence of existing release/export paths a prerequisite to implementing the card.</p>
+<p><strong>Why it matters:</strong> A calm, authoritative-looking card placed over fragmented client-side release paths could improve perceived trust while the actual authority boundary remains inconsistent.</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>Research lines 113 and 217–224 require server authority, exact binding, and controlled egress.</li>
+<li>AppShell enables its main export from displayed state at <strong>src/components/layout/AppShell.tsx:176,221</strong>.</li>
+<li>That handler downloads before server upload at <strong>src/App.tsx:717–742</strong> and <strong>src/factory/packet/useFactoryPacket.ts:341–365</strong>.</li>
+<li>GateToolbar and ExportPanel have their own checks; the factory route has another execution path.</li>
+</ul>
+<p><strong>Suggested change:</strong> Make implementation order explicit:</p>
+<ol>
+<li>inventory and classify every release/export/download surface;</li>
+<li>converge all controlled paths on server-owned policy and egress decisions;</li>
+<li>add contract tests for UI/API/worker/server agreement;</li>
+<li>only then render the role-aware RecoveryCase view.</li>
+</ol>
+<p>No card may label an action server-authorized while any user-facing controlled path still relies on local display state.</p>
+<h3>[MAJOR 3] Projection truth precedence and freshness are unspecified</h3>
+<p><strong>Finding:</strong> The card can be “recomputed” and stale actions are revalidated, but the research does not define what the view shows when RecoveryCase, latest event, receipt validity, policy, evidence, or egress state are temporarily inconsistent or unavailable.</p>
+<p><strong>Why it matters:</strong> The most dangerous recovery copy is a stale “safe,” “saved,” or “ready” statement. Server rejection after the user clicks is safe for the effect but still produces automation surprise and erodes trust.</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>Research lines 104–113 require explicit safe state and say a stale card refreshes safely.</li>
+<li>Section 4 lines 117–118 already contain expectedVersion and fencingToken, but the research’s visible contract does not define projection version, policy version, evidence snapshot, or precedence.</li>
+<li>Current code already contains multiple local/server state seams; <strong>src/core/store/useSpecStore.ts:616–713</strong> has asynchronous server release, while <strong>src/core/store/useSpecStore.ts:788–822</strong> derives displayed gate status without server-sync status.</li>
+</ul>
+<p><strong>Suggested change:</strong> Define a deterministic presenter rule:</p>
+<ul>
+<li>bind every rendered action to caseVersion, latestEventId, policyVersion, evidenceSnapshotId, actor scope, and renderedAt;</li>
+<li>HOLD dominates all lower-priority states;</li>
+<li>revoked or invalidated proof dominates older approval;</li>
+<li>if any required source is unavailable, mismatched, or stale, show “status updating—work remains paused” and offer only refresh, report, or authorized escalation;</li>
+<li>never infer unaffected safe scope when impact discovery is UNKNOWN.</li>
+</ul>
+<h3>[MAJOR 4] Handoff acknowledgement contradicts the approved eight-state lifecycle</h3>
+<p><strong>Finding:</strong> The research says a handoff must not appear assigned until the recipient acknowledges it, while Section 4 transitions to ASSIGNED as soon as a named owner, deadline, and escalation path exist.</p>
+<p><strong>Why it matters:</strong> The same case can be “ASSIGNED” in lifecycle logic but “requested—not accepted” in the proposed card. That ambiguity recreates the handoff gap the feature is meant to eliminate.</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>Research lines 192 and 204 add requested/acknowledged handoff and prohibit premature “assigned.”</li>
+<li>Section 4 line 139 defines CONTAINED → ASSIGNED without recipient acceptance.</li>
+<li>RecoveryCase currently has owner and escalationOwner but no assignment-request projection at Section 4 line 114.</li>
+<li>Existing <strong>src/workflow/handoff/canonical.ts:35–57</strong> validates process order and active site only; it does not model recipient acceptance.</li>
+</ul>
+<p><strong>Suggested change:</strong> Keep the eight states. Add policy-defined assignment acceptance:</p>
+<ul>
+<li>emit assignment-requested and assignment-accepted RecoveryEvents;</li>
+<li>keep the case CONTAINED until required acceptance arrives, or record an explicit incident-policy auto-assignment by authority;</li>
+<li>transition to ASSIGNED only when the policy’s acknowledgement condition holds;</li>
+<li>project requested owner, acceptance state, deadline, and escalation without creating a ninth lifecycle state.</li>
+</ul>
+<h3>[MAJOR 5] “All roles” and cross-domain claims are not bounded by a role registry</h3>
+<p><strong>Finding:</strong> The research adds estimator/procurement but says Section 4 should remain unchanged; Section 4 does not include that role, and neither document includes installer/field recovery despite the platform and post-release scenarios involving field work.</p>
+<p><strong>Why it matters:</strong> “Each role” becomes an untestable acceptance criterion. A shared card may appear complete while a role that receives, installs, measures, or reports a defect has no defined authority or view.</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>Research lines 125–134 define six projections including estimator/procurement.</li>
+<li>Section 4 lines 337–359 define client, designer, reviewer, coordinator, factory engineer, and CNC operator, but no estimator/procurement.</li>
+<li>Research lines 272–276 claim applicability across every qualified Interior Architecture Domain Pack.</li>
+<li>The parent repository context explicitly states that MONOLITH serves installers as well as designers, factories, and customers.</li>
+</ul>
+<p><strong>Suggested change:</strong> Add a versioned V1 Role Registry that names:</p>
+<ul>
+<li>role and authority purpose;</li>
+<li>cases the role may see;</li>
+<li>permitted actions and prohibited decisions;</li>
+<li>required always-visible fields;</li>
+<li>handoff/acknowledgement responsibility;</li>
+<li>seeded test scenarios.</li>
+</ul>
+<p>Either include estimator/procurement and installer/field roles in Section 4 V1, or explicitly mark them deferred. Do not say “all roles” until the registry denominator is frozen.</p>
+<h3>[MAJOR 6] The eight-field hard cap can hide role-critical information</h3>
+<p><strong>Finding:</strong> “No more than eight fields” is presented as a universal contract even though factory, security, revocation, and qualification contexts require different always-visible facts.</p>
+<p><strong>Why it matters:</strong> Progressive disclosure must not hide machine, permitted-use, expiry, active package identity, acknowledgement coverage, or HOLD. Combining many facts into one nominal field preserves the count but not cognitive simplicity.</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>Research lines 100–111 set the hard cap.</li>
+<li>Section 4 lines 353–359 require factory users to see candidate identity, machine context, permitted use, last ACTIVE comparison, acknowledgement, qualification restriction, procedure, and expiry.</li>
+<li>Research line 274 extends the same contract to multiple domains with different risk evidence.</li>
+</ul>
+<p><strong>Suggested change:</strong> Replace the field-count cap with:</p>
+<ul>
+<li>five universal questions: status/safe state, what happened, affected scope, consequence, next action;</li>
+<li>a policy-defined set of always-visible critical fields for the actor and capability;</li>
+<li>an evidence/detail drawer for noncritical depth;</li>
+<li>usability testing that measures orientation and error, not the number of visual fields.</li>
+</ul>
+<h3>[MAJOR 7] Notification tiers and assignment acceptance are not reconciled with current workflow semantics</h3>
+<p><strong>Finding:</strong> The research proposes immediate/action-queue/digest/activity-only tiers, but current routing only distinguishes direct push from group message and sends FYI to a group message.</p>
+<p><strong>Why it matters:</strong> A new recovery card cannot reduce alert fatigue if the backstage router continues broadcasting non-actionable FYI messages or treats delivery as assignment.</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>Research lines 193 and 204 propose tiering and acknowledgement.</li>
+<li><strong>src/workflow/notification/routing.ts:4–23</strong> maps personal responsibility/approval to direct push and cross-team handoff/FYI to group message.</li>
+<li><strong>src/workflow/handoff/canonical.ts:35–57</strong> has no acknowledgement.</li>
+</ul>
+<p><strong>Suggested change:</strong> Define recovery notification intent from severity, actor capability, required response, deadline, and acknowledgement mode. Default non-actionable information to digest or activity log. Delivery, read, acceptance, and containment acknowledgement must remain distinct events.</p>
+<h3>[MAJOR 8] The usability targets are not yet operationally falsifiable</h3>
+<p><strong>Finding:</strong> The 30-second, 95%, and 100% targets do not define the clock start, denominator, sample, task mix, baseline, confidence interval, or whether results are evaluated per role and risk class.</p>
+<p><strong>Why it matters:</strong> A pooled result can hide a failing CNC or reviewer workflow behind easy client tasks. “100% in qualification testing” with a small sample does not prove a safety property.</p>
+<p><strong>Evidence:</strong></p>
+<ul>
+<li>Research lines 243–257 define targets without measurement protocol.</li>
+<li>Section 4 lines 396–397 also use median 30 seconds and 95% without a frozen test protocol.</li>
+<li>Research lines 232–241 mix routine comprehension, professional review, handoff, manufacturing, replay, and accessibility scenarios.</li>
+</ul>
+<p><strong>Suggested change:</strong> Freeze a measurement protocol:</p>
+<ul>
+<li>define event-based clock start and successful end state;</li>
+<li>report each role, language, device, risk class, and scenario separately;</li>
+<li>define sample size and confidence interval before the pilot;</li>
+<li>measure safe first action, completion, backtracking, evidence opening, support escape, and NASA-TLX against a baseline;</li>
+<li>enforce safety invariants with automated/property/failure-injection tests; treat human studies as usability evidence, not proof of impossibility.</li>
+</ul>
+<h2>What survives scrutiny</h2>
+<p>The following research contributions should be retained:</p>
+<ul>
+<li>the emotional target of relief rather than amazement;</li>
+<li>why / now / next temporal explanation;</li>
+<li>blame-free, state-based microcopy;</li>
+<li>explicit saved-work and safe-state language;</li>
+<li>preview/diff before consequential commitment;</li>
+<li>appropriate reliance rather than a trust score;</li>
+<li>notification discipline;</li>
+<li>Thai/English and assistive-technology requirements;</li>
+<li>role-specific seeded recovery scenarios;</li>
+<li>bounded revocation language and independent physical machine safeguards.</li>
+</ul>
+<p>These strengthen the existing Section 4 presentation and validation clauses. They do not require a new authoritative object.</p>
+<h2>Minimal correction set before owner approval</h2>
+<ol>
+<li>Reclassify the research as an evidence and UX guidance appendix to Section 4.</li>
+<li>Remove the claim that a separately named Recovery Presentation Contract is the material missing layer.</li>
+<li>Add a RecoveryCase-to-role-view mapping and fail-closed freshness/precedence rules to Section 4.</li>
+<li>Resolve requested versus accepted assignment without adding a lifecycle state.</li>
+<li>Freeze the V1 Role Registry and explicitly decide estimator/procurement and installer/field scope.</li>
+<li>Replace the eight-field hard cap with universal questions plus policy-critical role fields.</li>
+<li>Define notification intent, acknowledgement semantics, and the measurement protocol.</li>
+<li>Make broker-first convergence of every current export/release path a prerequisite to UI implementation.</li>
+</ol>
+<h2>Repository boundary and evidence classification</h2>
+<ul>
+<li><strong>VERIFIED FACT — parent root:</strong> the parent repository is the governance/bootstrap root and identifies installers among the platform constituencies.</li>
+<li><strong>VERIFIED FACT — nested root:</strong> substantial release, workflow, factory, and export source exists, with multiple current UI entry paths and no exact implementation of the newly named Recovery contracts.</li>
+<li><strong>OWNER DECISION:</strong> Section 4’s RecoveryCase, RecoveryEvent, DecisionReceipt, CapabilityPolicy, lifecycle, and EgressBroker model.</li>
+<li><strong>PRODUCT-DESIGN INFERENCE:</strong> the card layout, field budget, role projections, microcopy, and notification tiers.</li>
+<li><strong>UNKNOWN / not established:</strong> deployed behavior, production readiness, user love, machine qualification, or real-job recovery performance.</li>
+</ul>
+<p>No production code or approved Section 4 file was changed during this scrutiny.</p>
+<h2>Final verdict</h2>
+<p><strong>FIX-THEN-SHIP as Section 4 input.</strong></p>
+<p>The evidence and human-factors guidance are useful, but the current recommendation duplicates the approved projection model and does not yet resolve the actual authority-path, projection-freshness, assignment-acknowledgement, role-denominator, and measurement seams.</p>
+</main></body>
+</html>
