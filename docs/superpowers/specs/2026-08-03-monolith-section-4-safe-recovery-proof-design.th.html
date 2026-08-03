@@ -26,15 +26,15 @@
 </head>
 <body>
 <main><article><h1>การออกแบบ MONOLITH Section 4: Safe Recovery &amp; Proof</h1>
-<p><strong>สถานะ:</strong> OWNER DECISION — อนุมัติทิศทางเมื่อ 3 สิงหาคม 2026; รอตรวจทานสเปกฉบับเขียนโดยเจ้าของ</p>
+<p><strong>สถานะ:</strong> OWNER DECISION — ปรับตามผล scrutinize ที่อนุมัติเมื่อ 3 สิงหาคม 2026; รอตรวจทานสเปกฉบับเขียนโดยเจ้าของ</p>
 <p><strong>ทิศทางผลิตภัณฑ์:</strong> Decision Chain UX</p>
 <p><strong>วัตถุประสงค์ของ Section:</strong> กักความล้มเหลว รักษาอำนาจ กู้คืนอย่างปลอดภัย และพิสูจน์ความพร้อมก่อนกลับมาทำงานต่อ</p>
 <p><strong>ขอบเขตแรก:</strong> แพ็กเกจงานครัวและ casework ในโหมด shadow / NOT-FOR-PRODUCTION</p>
 <h2>1. สรุปการตัดสินใจ</h2>
-<p>Section 4 จะไม่แสดง Failure Handling, Governance และ Testing Gates เป็นสามผลิตภัณฑ์แยกกัน แต่จะกำหนด <strong>Safe Recovery Contract</strong> กลางหนึ่งชุด และ <strong>Qualification Evidence Matrix</strong> หลังบ้านหนึ่งชุด</p>
+<p>Section 4 จะไม่แสดง Failure Handling, Governance และ Testing Gates เป็นสามผลิตภัณฑ์แยกกัน แต่จะกำหนด <strong>Safe Recovery Model</strong> กลางหนึ่งชุด <strong>Capability Qualification Policy</strong> หลังบ้านหนึ่งชุด และ <strong>Egress Broker</strong> ที่เป็นของ server หนึ่งชุด</p>
 <p>ลำดับ runtime คือ:</p>
 <p><code>Detect → Contain → Explain → Assign → Recover → Re-verify → Resume / Retire</code></p>
-<p>ผู้ใช้เห็นการกระทำถัดไปที่ปลอดภัยที่สุด ผู้รับผิดชอบ และผลกระทบ ส่วน MONOLITH จัดการ invalidation, dependency propagation, retry, reconciliation, audit assembly, notification และการรวบรวมหลักฐานทั้งหมดหลังบ้าน</p>
+<p>ผู้ใช้เห็น <code>RecoveryCase</code> ปัจจุบันหนึ่งรายการ ได้แก่ การกระทำถัดไปที่ปลอดภัยที่สุด ผู้รับผิดชอบ revision ล่าสุดที่ปลอดภัย ผลกระทบ และ permitted use ส่วน MONOLITH บันทึก <code>RecoveryEvent</code> แบบ append-only และ <code>DecisionReceipt</code> ที่ immutable และเฉพาะวัตถุประสงค์ พร้อมจัดการ invalidation, dependency propagation, retry, reconciliation, notification และการรวบรวมหลักฐานหลังบ้าน</p>
 <p>สถานะที่ล้มเหลว เก่า ขัดแย้ง ไม่มีอำนาจ ยังไม่ตรวจ หรือมี coverage ไม่ครบ จะเดินหน้าต่ออย่างเงียบ ๆ ไม่ได้ “ไม่พบ failure” ไม่เท่ากับ “มีหลักฐานที่บังคับครบแล้ว”</p>
 <h2>2. เจตนาและเงื่อนไขความสำเร็จ</h2>
 <p>Section นี้ต้องทำให้คำมั่นต่อไปนี้เป็นจริง:</p>
@@ -52,23 +52,25 @@
 <li>ไม่มี export, API, worker, cache, USB หรือ offline path อื่นหลบการตัดสินใจชุดเดียวกันได้</li>
 </ol>
 <h2>3. ทางเลือกที่พิจารณา</h2>
-<h3>A. สามโมดูลแยกกัน — ไม่เลือก</h3>
-<p>Failure, Governance และ Testing workspace แยกกันจะทำให้ state ซ้ำ เพิ่ม navigation สำหรับผู้เชี่ยวชาญ และสร้างความหมายคำว่า “ปลอดภัย” หลายแบบ</p>
-<h3>B. Central safety dashboard — ไม่เลือก</h3>
-<p>Dashboard ช่วยให้มองเห็น แต่ยังอาจเป็นเพียงการเฝ้าดู ไม่ได้ยืนยันว่า state transition, export หรือ machine-package path จริงถูกบล็อก</p>
-<h3>C. Shared recovery contract พร้อม evidence matrix — อนุมัติ</h3>
-<p>Contract เดียวควบคุมทุก consequential transition หน้าจอตามบทบาทแสดง projection ของ record ชุดเดียว ขณะที่ deterministic policy และ evidence เป็นผู้ตัดสินว่า transition เดินหน้าต่อได้หรือไม่</p>
+<h3>A. Patch <code>FailureReceipt</code> ที่ทำหลายหน้าที่ — ไม่เลือก</h3>
+<p>การใช้ออบเจ็กต์เดียวเป็นทั้ง recovery state ที่เปลี่ยนได้และ immutable proof ทำให้ lifecycle ขัดกัน และผลักให้ทุก subsystem เพิ่ม field ลงใน record เดียว</p>
+<h3>B. สร้าง universal governance platform ใหม่ — ไม่เลือก</h3>
+<p>Incident, workflow, policy, evidence และ export platform แบบทั่วไปจะสร้างของซ้ำกับ workflow, approval, audit, release และ policy primitives ที่มีอยู่มากแล้ว และเกินขอบเขต V1</p>
+<h3>C. Split recovery model พร้อม capability gate — อนุมัติ</h3>
+<p><code>RecoveryCase</code> เป็น current projection ส่วน <code>RecoveryEvent</code> และ <code>DecisionReceipt</code> เป็น append-only proof ขณะที่ <code>CapabilityPolicy</code> ตัดสิน authority และ evidence และ <code>EgressBroker</code> เป็น controlled path เดียวสำหรับ production-usable หรือ qualification output นำ approval, quorum, idempotency, audit, release และ policy primitives เดิมมาใช้เป็นจุดตั้งต้นทางความหมาย แต่ไม่ถือว่าเป็น production authority ปัจจุบัน</p>
 <h2>4. ขอบเขตและสิ่งที่ไม่ทำ</h2>
 <h3>รวมใน Section นี้</h3>
 <ul>
 <li>failure classification และ containment;</li>
-<li>Failure Receipt ที่ผูก exact revision;</li>
+<li><code>RecoveryCase</code> projection ของ current state;</li>
+<li><code>RecoveryEvent</code> แบบ append-only และ <code>DecisionReceipt</code> ที่ผูก exact revision;</li>
 <li>recovery ownership และ next-action routing;</li>
 <li>authority และ separation-of-duty evaluation;</li>
 <li>retry, idempotency, reconciliation และ compensation semantics;</li>
 <li>การตัดสินใจ HOLD, REVOKE, SUPERSEDE, RETIRE และ RESUME;</li>
-<li>การเชื่อม control claim กับ test evidence;</li>
-<li>export-egress inventory และ no-bypass enforcement;</li>
+<li>การเชื่อม capability กับ control-claim evidence พร้อม cardinality, freshness และ minimum evidence level;</li>
+<li>permitted-use classes สำหรับ preview, shadow simulation, qualification และ production;</li>
+<li>server-owned egress brokering, inventory และ no-bypass enforcement;</li>
 <li>shadow-machine qualification evidence;</li>
 <li>recovery UX ที่เหมาะกับแต่ละบทบาท</li>
 </ul>
@@ -82,6 +84,7 @@
 <li>การประกาศ production readiness จากการมี source, unit test ที่ผ่าน หรือ schema validation เพียงอย่างเดียว;</li>
 <li>การเปิด Interior Architecture Domain Pack กว้าง ๆ ก่อนที่แต่ละ pack จะผ่าน qualification ของตนเอง</li>
 </ul>
+<p>Section นี้ยังไม่ ratify tenant / organization / site schema โดย authority model ดังกล่าวเป็น prerequisite ของ canonical recovery persistence และยังเป็น governance decision แยกต่างหาก</p>
 <h2>5. ขอบเขต Repository และ Current State</h2>
 <p>Parent repository เป็น governance/bootstrap root ส่วน <code>determined-williams/</code> nested repository เป็น active product source มี release, gate, audit, verification และ factory code จำนวนมาก แต่ implementation ที่มองเห็นในปัจจุบันยังมี abstraction หลายเส้นทาง governance store แบบ local-only เอกสารทดสอบเชิงเป้าหมาย และ route ที่ยังไม่สมบูรณ์</p>
 <p>สเปกนี้จึงแยกประเภทดังนี้:</p>
@@ -93,9 +96,10 @@
 <li><strong>UNKNOWN:</strong> สิ่งที่หลักฐานที่มีอยู่ยังพิสูจน์ไม่ได้</li>
 </ul>
 <p>สเปกนี้ไม่ประกาศว่า production-ready และไม่ปิด NOT-FOR-PRODUCTION controls</p>
-<h2>6. Safe Recovery Contract</h2>
-<p>ทุก consequential failure สร้าง <code>FailureReceipt</code> canonical หนึ่งรายการ</p>
-<h3>6.1 Field บังคับ</h3>
+<h2>6. Safe Recovery Model</h2>
+<p>Model แยก current state ออกจาก immutable proof อย่างชัดเจน Receipt จะไม่เปลี่ยน และ case ที่แก้ไขได้จะไม่ถูกนำเสนอว่าเป็น proof</p>
+<h3>6.1 ออบเจ็กต์ที่แยกขอบเขตชัดเจนสี่ประเภท</h3>
+<h4><code>RecoveryCase</code> — current projection ที่เปลี่ยนได้</h4>
 <table>
 <thead>
 <tr>
@@ -104,89 +108,145 @@
 </tr>
 </thead>
 <tbody><tr>
-<td><code>failureId</code></td>
-<td>identity คงที่และไม่ซ้ำทั้งระบบ</td>
+<td><code>caseId</code> / <code>schemaVersion</code></td>
+<td>identity ไม่ซ้ำทั้งระบบและ schema version ที่ชัดเจน</td>
 </tr>
 <tr>
-<td><code>failureClass</code></td>
-<td>Evidence, proposal, concurrency, authority, verification, release, post-release, infrastructure หรือ security</td>
+<td><code>failureClass</code> / <code>riskClass</code></td>
+<td>กลไกความล้มเหลว และความเสี่ยง LOW, MEDIUM, HIGH หรือ CRITICAL โดยเป็นคนละมิติ</td>
 </tr>
 <tr>
 <td><code>detectedAt</code> / <code>detectedBy</code></td>
-<td>timestamp และ actor/system source ที่เชื่อถือได้</td>
+<td>timestamp ที่เชื่อถือได้และ human/system source ที่ resolve แล้ว</td>
 </tr>
 <tr>
-<td><code>tenantContext</code></td>
-<td>canonical tenant / organization / site scope; ห้ามอนุมานจาก presentation state</td>
+<td><code>authorityScopeRef</code></td>
+<td>versioned tenant / organization / site authority reference; ห้ามอนุมานจาก UI state หรือ hard-code เป็น <code>site_code</code></td>
 </tr>
 <tr>
-<td><code>projectId</code>, <code>packageId</code>, <code>revisionId</code></td>
-<td>project, work package และ immutable revision ที่ได้รับผลกระทบอย่างเจาะจง</td>
+<td><code>projectId</code>, <code>packageId</code>, <code>revisionId</code>, <code>capabilityId</code></td>
+<td>project, work package, immutable revision และ controlled capability ที่ได้รับผลกระทบอย่างเจาะจง</td>
 </tr>
 <tr>
-<td><code>affectedClaims</code></td>
-<td>Claim IDs และ dependency edges ที่ได้รับผลกระทบ</td>
-</tr>
-<tr>
-<td><code>containment</code></td>
-<td>สิ่งที่ถูกหยุด กัก เพิกถอน หรือเปลี่ยนเป็น read-only</td>
+<td><code>affectedClaims</code> / <code>impactTargets</code></td>
+<td>claim dependency edges และทุก order, part, export, person, endpoint, machine, cache หรือ offline copy ที่ต้อง containment</td>
 </tr>
 <tr>
 <td><code>lastSafeState</code></td>
-<td>state ล่าสุดที่ permitted use ยังใช้ได้</td>
+<td>exact revision และ scope ที่ permitted use ยังใช้ได้ โดยต้องระบุ unaffected scope อย่างชัดเจน</td>
 </tr>
 <tr>
-<td><code>invalidatedReceipts</code></td>
+<td><code>invalidatedReceiptIds</code></td>
 <td>purpose-specific receipts ที่ใช้ต่อไม่ได้</td>
 </tr>
 <tr>
-<td><code>owner</code></td>
-<td>recovery owner ที่ระบุชื่อและ authority assignment</td>
+<td><code>owner</code> / <code>escalationOwner</code></td>
+<td>recovery owner และ escalation authority ที่ระบุชื่อ Governed service ทำงานได้แต่แทน human authority ที่บังคับไม่ได้</td>
 </tr>
 <tr>
-<td><code>nextAction</code></td>
-<td>primary recovery action หนึ่งรายการในภาษาคน</td>
+<td><code>primaryNextAction</code></td>
+<td>primary action หนึ่งรายการในภาษาคน พร้อม secondary actions แบบ progressive disclosure</td>
 </tr>
 <tr>
-<td><code>retryPolicy</code></td>
-<td>idempotency key, retry ceiling, backoff, expiry และ escalation</td>
+<td><code>capabilityPolicyRef</code></td>
+<td>policy ID และ version ที่กำหนด authority, proof, acknowledgement และ permitted use</td>
 </tr>
 <tr>
-<td><code>requiredProof</code></td>
-<td>checks และหลักฐานที่ต้องมีเพื่อ reopen อย่างเจาะจง</td>
+<td><code>expectedVersion</code> / <code>fencingToken</code></td>
+<td>optimistic concurrency version และ token ที่ป้องกัน worker/device เก่า reopen capability</td>
 </tr>
 <tr>
-<td><code>downstreamImpact</code></td>
-<td>orders, parts, exports, people, deadlines และ cached copies ที่ได้รับผลกระทบ</td>
+<td><code>state</code></td>
+<td>DETECTED, CONTAINED, ASSIGNED, RECOVERING, REVERIFYING, RESUMED, RETIRED หรือ SUPERSEDED</td>
 </tr>
 <tr>
-<td><code>disposition</code></td>
-<td>OPEN, CONTAINED, RECOVERING, REVERIFYING, RESUMED, RETIRED หรือ SUPERSEDED</td>
-</tr>
-<tr>
-<td><code>auditAnchor</code></td>
-<td>append-only event และ receipt-chain reference</td>
+<td><code>relatedCaseIds</code></td>
+<td>ความสัมพันธ์แบบ duplicate, parent, child, recurrence หรือ superseding case</td>
 </tr>
 </tbody></table>
-<h3>6.2 ความหมายของ State</h3>
-<ol>
-<li><strong>DETECTED:</strong> บันทึกเหตุการณ์แล้ว แต่ยังไม่อ้างความปลอดภัยใด ๆ</li>
-<li><strong>CONTAINED:</strong> ปิด capability และ egress ที่ได้รับผลกระทบ โดยยังแสดง revision ล่าสุดที่ปลอดภัย</li>
-<li><strong>ASSIGNED:</strong> บุคคลที่ระบุชื่อหรือ governed service รับผิดชอบการกระทำถัดไป</li>
-<li><strong>RECOVERING:</strong> Recovery effects ทำงานผ่าน idempotent commands และ outbox/effect ledger</li>
-<li><strong>REVERIFYING:</strong> ประเมิน control claims ที่บังคับทั้งหมดบน recovered exact revision</li>
-<li><strong>RESUMED:</strong> หลักฐานครบ และผู้มีอำนาจที่ qualified เปิด capability ใหม่</li>
-<li><strong>RETIRED / SUPERSEDED:</strong> branch หรือ package ที่ล้มเหลวกลับมาใช้ต่อไม่ได้ ตัวแทนใหม่ต้องมี identity และ evidence chain ใหม่</li>
-</ol>
-<p>Transitions เป็น append-only decisions และห้ามลบ failure record เพียงเพราะกู้คืนสำเร็จแล้ว</p>
+<h4><code>RecoveryEvent</code> — lifecycle fact แบบ append-only</h4>
+<p>ทุก transition ที่ยอมรับสร้าง immutable event ซึ่งมี <code>eventId</code>, <code>caseId</code>, event type, trusted time, resolved actor หรือ governed service, expected/resulting case versions, command idempotency key, correlation/causation IDs, policy reference, payload digest และ audit-chain anchor การตรวจ duplicate ใช้การ link events หรือ cases และห้าม overwrite observation แรกอย่างเงียบ ๆ</p>
+<h4><code>DecisionReceipt</code> — immutable proof เฉพาะวัตถุประสงค์</h4>
+<p>ทุก consequential human หรือ governed-service decision สร้าง receipt ใหม่ที่ immutable โดยมี exact revision, capability, purpose, scope, evidence snapshot และ digests, unchecked scope, conditions, consequences, resolved signer identities, authority assignments, separation-of-duty result, policy version, decision, timestamp และ previous-receipt chain anchor การ supersede หรือ invalidate receipt ต้องสร้าง receipt ใหม่และคงต้นฉบับไว้</p>
+<h4><code>CapabilityPolicy</code> และ <code>EgressGrant</code> — อำนาจในการลงมือทำ</h4>
+<p><code>CapabilityPolicy</code> map action, incident class, risk, permitted-use class, authority set, separation rules, mandatory control claims, expected evidence cardinality, minimum evidence level, freshness, containment acknowledgement และ allowed egress ส่วน <code>EgressBroker</code> ออก <code>EgressGrant</code> ที่อายุสั้น ผูก purpose และโอนไม่ได้ เฉพาะเมื่อ policy ผ่าน</p>
+<h3>6.2 State machine ชุดเดียว</h3>
+<table>
+<thead>
+<tr>
+<th>จาก</th>
+<th>ไป</th>
+<th>Minimum precondition</th>
+<th>Immutable output</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>ไม่มี</td>
+<td>DETECTED</td>
+<td>Detection ผ่าน deduplication และผูก exact scope/revision</td>
+<td>detection event</td>
+</tr>
+<tr>
+<td>DETECTED</td>
+<td>CONTAINED</td>
+<td>ปิด capability; ค้นพบ impact targets แล้ว หรือระบุ UNKNOWN และ fail closed</td>
+<td>containment event</td>
+</tr>
+<tr>
+<td>CONTAINED</td>
+<td>ASSIGNED</td>
+<td>มี owner, authority scope, deadline และ escalation path ที่ระบุชื่อ</td>
+<td>assignment event</td>
+</tr>
+<tr>
+<td>ASSIGNED</td>
+<td>RECOVERING</td>
+<td>Recovery command ผ่านอนุมัติ พร้อม idempotency key และ expected case version</td>
+<td>recovery-start event</td>
+</tr>
+<tr>
+<td>RECOVERING</td>
+<td>REVERIFYING</td>
+<td>Reconcile recovery effects แล้วและไม่มี prepared effect ที่คลุมเครือ</td>
+<td>recovery-complete event</td>
+</tr>
+<tr>
+<td>ASSIGNED, RECOVERING หรือ REVERIFYING</td>
+<td>CONTAINED</td>
+<td>Impact ที่พบใหม่ invalidate recovery/proof ที่ stale และ capability ยังปิดอยู่</td>
+<td>containment-expansion event</td>
+</tr>
+<tr>
+<td>REVERIFYING</td>
+<td>RESUMED</td>
+<td>CapabilityPolicy ผ่านบน exact recovered revision และ acknowledgement threshold/authority quorum ครบ</td>
+<td>resume DecisionReceipt</td>
+</tr>
+<tr>
+<td>REVERIFYING</td>
+<td>RETIRED</td>
+<td>Qualified authority ปิด capability หรือ branch ถาวร</td>
+<td>retirement DecisionReceipt</td>
+</tr>
+<tr>
+<td>REVERIFYING</td>
+<td>SUPERSEDED</td>
+<td>มี replacement identity และ evidence chain โดยของเดิมยังใช้ไม่ได้</td>
+<td>supersede DecisionReceipt</td>
+</tr>
+</tbody></table>
+<p><code>EXPLAIN</code> เป็นหน้าที่การนำเสนอที่มีในทุก state ไม่ใช่ persistent state และไม่มี lifecycle value ชื่อ <code>OPEN</code> Failure ใหม่หลัง terminal state ต้องสร้าง <code>RecoveryCase</code> ใหม่ที่เชื่อมกัน ห้าม reopen terminal case หากพบ impact ใหม่ก่อน terminal disposition ให้กลับไป CONTAINED ผ่าน event ใหม่และ invalidate recovery work ที่ stale</p>
+<h3>6.3 ความครบถ้วนของ Containment</h3>
+<p>แต่ละ <code>ImpactTarget</code> มี target type, exact identity, required action, required acknowledgement mode, lease หรือ policy expiry, status, last attempt และ acknowledgement evidence ห้าม Resume จนกว่า threshold ใน CapabilityPolicy จะผ่าน Incident ด้าน safety, security, integrity, revocation และ production egress ต้อง acknowledgement ครบ 100% หรือมี documented physical isolation ที่ incident-specific authority อนุมัติ โดย UNKNOWN ไม่ใช่ความสำเร็จ</p>
 <h2>7. Failure Classes และ Default Containment</h2>
+<p><code>failureClass</code> อธิบายกลไก ส่วน <code>riskClass</code> กำหนดความเร่งด่วนและความเข้มของ control โดยไม่มี failure class ใดบังคับ risk level เดียวตายตัว ตารางนี้กำหนด containment ขั้นต่ำเท่านั้น ส่วน CapabilityPolicy เป็นผู้ resolve authority และ proof สุดท้ายของ capability ที่ได้รับผลกระทบ</p>
 <table>
 <thead>
 <tr>
 <th>Failure class</th>
 <th>ตัวอย่าง</th>
 <th>Default containment</th>
-<th>Recovery authority</th>
+<th>Authority input ที่บังคับ</th>
 </tr>
 </thead>
 <tbody><tr>
@@ -248,16 +308,16 @@
 <p>“Atomic Commit” เป็น target control และห้ามอ้างจาก sequential writes</p>
 <p>ทุก consequential transition ใช้:</p>
 <ol>
-<li>canonical transaction ที่บันทึก business state และ effect intent พร้อมกัน;</li>
-<li>stable idempotency key ที่ scope ตาม actor, command และ expected revision;</li>
-<li>optimistic version comparison ก่อน mutation;</li>
+<li>canonical transaction เดียวที่บันทึก RecoveryEvent, advance RecoveryCase projection และบันทึก effect intent พร้อมกัน;</li>
+<li>stable idempotency key ที่ scope ตาม resolved actor/service, command, case, capability และ expected revision;</li>
+<li>expected case version, expected project revision และ fencing token ก่อน mutation;</li>
 <li>outbox/effect ledger สำหรับ downstream work;</li>
 <li>retry ที่กำหนด ceiling และ expiry;</li>
 <li>reconciliation เมื่อผลลัพธ์จาก provider คลุมเครือ;</li>
 <li>compensation เฉพาะเมื่อ original effect ทำ atomic ไม่ได้;</li>
-<li>recovery receipt สำหรับทุก retry, compensation หรือ terminal failure</li>
+<li>immutable event สำหรับทุก retry, compensation, acknowledgement หรือ terminal failure</li>
 </ol>
-<p>Lifecycle ขั้นต่ำคือ <code>PREPARED → COMMITTED</code> หรือ <code>PREPARED → ABORTED</code> และ reconciler ต้องตรวจพบและจัดการ prepared records ที่ค้างจาก process failure ผู้ใช้ต้องไม่ถูกบังคับให้เดาว่าการกดหนึ่งครั้งสำเร็จหรือไม่</p>
+<p>Effect lifecycle ขั้นต่ำคือ <code>PREPARED → COMMITTED</code> หรือ <code>PREPARED → ABORTED</code> และ reconciler ต้องตรวจพบและจัดการ prepared records ที่ค้างจาก process failure โดย fencing token ต้องปฏิเสธ worker/device ที่ stale ผู้ใช้ต้องไม่ถูกบังคับให้เดาว่าการกดหนึ่งครั้งสำเร็จหรือไม่</p>
 <h2>9. Governance และ Authority</h2>
 <h3>9.1 Authority เป็นของ Server</h3>
 <p>UI role label, ปุ่มที่ซ่อน, local state, email link และ chat identity ไม่ใช่ permission ฝั่ง server ต้องประเมิน actor, authority assignment, scope, purpose, exact revision, validity window และ separation-of-duty policy ตอน commit</p>
@@ -265,8 +325,8 @@
 <table>
 <thead>
 <tr>
-<th>Decision</th>
-<th>Required authority</th>
+<th>Decision context</th>
+<th>Required authority set</th>
 <th>Separation rule</th>
 </tr>
 </thead>
@@ -296,23 +356,38 @@
 <td>เปิด production egress คนเดียวไม่ได้</td>
 </tr>
 <tr>
-<td>Commit ACTIVE release</td>
-<td>Authorized releaser</td>
-<td>High-risk release ต้องมี independent qualified evidence และ two-person control ตาม policy</td>
+<td>Commit ACTIVE manufacturing release</td>
+<td>Qualified reviewer หรือ factory-translation authority <strong>พร้อม</strong> Authorized Releaser</td>
+<td>ต้องเป็น verified humans สองคนที่ต่างกัน</td>
 </tr>
 <tr>
 <td>HOLD</td>
 <td>Authorized safety role คนใดก็ได้</td>
-<td>ทำได้ทันทีแบบ fail-safe และต้องระบุเหตุผล</td>
+<td>One-person fail-safe action ทันที ต้องระบุเหตุผลและ scope</td>
 </tr>
 <tr>
-<td>REVOKE / RESUME</td>
-<td>Revocation authority</td>
-<td>Resume ต้องใช้หลักฐานใหม่ ห้ามนำ receipt เดิมกลับมาใช้</td>
+<td>REVOKE</td>
+<td>Incident-specific revocation authority</td>
+<td>Fail-safe action ทันที ปิด production egress โดยไม่รอ resume quorum</td>
+</tr>
+<tr>
+<td>Resume หลัง manufacturing หรือ professional-safety incident</td>
+<td>Qualified independent reviewer หรือ factory-translation authority <strong>พร้อม</strong> Authorized Releaser</td>
+<td>สองบุคคลต่างกัน พร้อม fresh exact-revision evidence</td>
+</tr>
+<tr>
+<td>Resume หลัง security, key, tenancy, audit-integrity หรือ tampering incident</td>
+<td>Security Authority <strong>พร้อม</strong> Authorized Releaser</td>
+<td>สองบุคคลต่างกัน และ identity/key ที่ได้รับผลกระทบห้ามเข้าร่วม</td>
+</tr>
+<tr>
+<td>Resume หลัง infrastructure incident ที่เปิด production egress ได้</td>
+<td>Service Owner <strong>พร้อม</strong> Authorized Releaser</td>
+<td>สองบุคคลต่างกัน พร้อม effect ledger ที่ reconcile แล้ว</td>
 </tr>
 </tbody></table>
-<p>Self-approval, authority หมดอายุ, scope mismatch, บุคคลเดียวใช้สอง role ที่ขัดกัน และ identity ที่ตรวจไม่ได้ ต้อง fail closed</p>
-<p>ในสเปกนี้ <strong>high risk</strong> หมายถึง action ใดก็ตามที่สร้างหรือเปิด production-usable egress หรือ resume capability หลัง safety, security, integrity หรือ revocation incident ต้องใช้บุคคลที่ยืนยันตัวตนแล้วสองคนและเป็นคนละคนกัน ได้แก่ qualified reviewer หรือ factory-translation authority หนึ่งคน และ Authorized Releaser หนึ่งคน บุคคลเดียวทำหน้าที่ทั้งสองไม่ได้ ส่วน HOLD ยังคงเป็น one-person fail-safe action ที่ authorized safety role คนใดก็ได้ทำทันที</p>
+<p>Self-approval, authority หมดอายุ, scope mismatch, บุคคลเดียวใช้สอง role ที่ขัดกัน, identity ที่ตรวจไม่ได้ หรือ identity ที่ได้รับผลจาก incident ต้อง fail closed</p>
+<p>ในสเปกนี้ <strong>high risk</strong> หมายถึง action ใดก็ตามที่สร้างหรือเปิด production-usable egress หรือ resume capability หลัง safety, security, tenancy, audit-integrity, key, tampering หรือ revocation incident โดย CapabilityPolicy ต้องเลือกคู่ authority ที่ตรง incident จากตาราง ห้ามใช้ generic reviewer/factory แทน Security Authority ส่วน HOLD และ REVOKE เป็น one-person fail-safe action สำหรับ incident-specific role ที่ authorized ขณะที่ RESUME ต้องสร้าง DecisionReceipt ใหม่เสมอและห้าม reuse approval/release receipt เดิม</p>
 <h3>9.3 Audit และ Revocation</h3>
 <p>Canonical audit และ revocation registry ต้องเป็น append-only, server-owned, tenant-scoped และ tamper-evident Local storage ใช้ cache signed policy snapshots ได้ แต่สร้าง ล้าง หรือ override canonical authority ไม่ได้</p>
 <p>Offline enforcement ต้องมี:</p>
@@ -324,11 +399,15 @@
 <li>fail-closed เมื่อ policy หาย ไม่ถูกต้อง หรือเก่า;</li>
 <li>reconciliation ก่อน resumed controlled egress</li>
 </ul>
-<h2>10. Qualification Evidence Matrix</h2>
-<p>ทุก capability มี <code>ControlClaim</code> และยังเปิดใช้ไม่ได้จนกว่า mandatory claims ตาม risk class จะผ่านบน exact build, policy, adapter, machine profile และ revision</p>
+<h3>9.4 Prerequisite ของ Authority Scope</h3>
+<p>Canonical recovery persistence พึ่งพา tenant / organization / site authority model ที่ ratify แล้ว ก่อน decision และ migration ดังกล่าวผ่าน denial-path tests ของตนเอง สเปกนี้ใช้ versioned <code>authorityScopeRef</code> contract และห้าม hard-code <code>site_code</code> เป็น permanent tenant boundary ห้ามอนุมาน multi-tenant safety claim จาก presentation layer หรือการมี source field เพียงอย่างเดียว</p>
+<h2>10. Capability Qualification Policy</h2>
+<p>ทุก controlled action ต้อง resolve versioned CapabilityPolicy หนึ่งรายการก่อนทำงาน Policy จะ executable ได้เมื่อระบุ capability, action, incident class, permitted-use class, authority set, control claims, expected evidence cardinality, minimum evidence level, freshness, acknowledgement threshold และ allowed egress อย่างครบถ้วน คำบรรยายว่า evidence “ครบ” ไม่ถือเป็น Gate</p>
+<h3>10.1 Control-claim Catalog</h3>
 <table>
 <thead>
 <tr>
+<th>Claim ID</th>
 <th>Control claim</th>
 <th>Minimum executable evidence</th>
 <th>Operational evidence</th>
@@ -336,99 +415,184 @@
 </tr>
 </thead>
 <tbody><tr>
+<td><code>CC-ATOMIC</code></td>
 <td>Commit เป็น all-or-nothing</td>
-<td>Failure injection ทุก write boundary; crash recovery; idempotent replay</td>
+<td>Failure injection ทุก write boundary; crash recovery; fenced idempotent replay</td>
 <td>Recovery drill</td>
 <td>ปิด release capability</td>
 </tr>
 <tr>
+<td><code>CC-COVERAGE</code></td>
 <td>Evidence coverage ครบ</td>
-<td>ทดสอบ cardinality, scope, freshness, duplicate, missing และ unknown state</td>
+<td>Expected-versus-observed cardinality, scope, freshness, duplicate, missing และ UNKNOWN tests</td>
 <td>Seeded-defect trial</td>
 <td>Candidate อยู่ใน quarantine</td>
 </tr>
 <tr>
+<td><code>CC-SOD</code></td>
 <td>Separation of duties ใช้ได้จริง</td>
-<td>Property tests ครอบคลุม actor, role, expiry, scope และ self-approval</td>
+<td>Property tests ครอบคลุม actor, role, expiry, scope, affected identity และ self-approval</td>
 <td>สังเกต shadow approvals</td>
 <td>ปฏิเสธ commit</td>
 </tr>
 <tr>
+<td><code>CC-REVOKE</code></td>
 <td>Revocation กระจายถึงปลายทาง</td>
-<td>ทดสอบ offline stale policy, key compromise, cache และ clock boundary</td>
-<td>Revocation exercise ที่ factory endpoint</td>
+<td>ทดสอบ offline stale policy, key compromise, cache, fencing และ clock boundary</td>
+<td>Revocation exercise ทุก registered endpoint</td>
 <td>ปิด egress</td>
 </tr>
 <tr>
+<td><code>CC-EGRESS</code></td>
 <td>ไม่มี export bypass</td>
-<td>Static egress scan พร้อม route/API/worker contract tests</td>
+<td>Broker contract tests, unregistered-egress build/runtime denial และ static scan</td>
 <td>สังเกต external channel</td>
 <td>Block release และเปิด incident</td>
 </tr>
 <tr>
-<td>Package ตรงกับเครื่อง</td>
-<td>Manifest, checksum, unit, origin, postprocessor, tool และ machine profile tests</td>
-<td>Simulation, coupon แล้วจึง first article</td>
+<td><code>CC-MACHINE</code></td>
+<td>Package ตรงเครื่องและ purpose</td>
+<td>Manifest, checksum, unit, origin, postprocessor, tool, geometry envelope, machine profile และ permitted-use tests</td>
+<td>Simulation, supervised coupon แล้วจึง first article</td>
 <td>ห้ามใช้กับเครื่อง</td>
 </tr>
 <tr>
+<td><code>CC-RECOVERY-UX</code></td>
 <td>Recovery ใช้งานได้</td>
 <td>Role E2E tests ตั้งแต่ detect-to-resume และ detect-to-retire</td>
 <td>Facilitated pilot แยกทุกบทบาท</td>
 <td>ออกแบบ recovery UX ใหม่</td>
 </tr>
 </tbody></table>
-<h3>10.1 ระดับหลักฐาน</h3>
+<h3>10.2 ระดับหลักฐาน</h3>
 <ul>
 <li><strong>E0 — Executable source evidence:</strong> unit, property, model-based, contract, integration, security และ failure-injection results ที่ผูก commit และ environment</li>
 <li><strong>E1 — Shadow operational evidence:</strong> โครงการจริงแต่ไม่มี production authority พร้อม defect adjudication โดยผู้เชี่ยวชาญอิสระ</li>
-<li><strong>E2 — Qualified factory evidence:</strong> simulator, coupon, first article, machine profile ที่ระบุชื่อ, postprocessor ที่อนุมัติ และ operator procedure</li>
+<li><strong>E2 — Qualified factory evidence:</strong> simulator, supervised bounded coupon, first article, machine profile ที่ระบุชื่อ, postprocessor ที่อนุมัติ และ operator procedure</li>
 <li><strong>E3 — Sustained operational evidence:</strong> monitored field performance, incidents, false-negative/positive review, recovery drills และ expiry/requalification</li>
 </ul>
 <p>E0 ไม่ได้แปลว่า E2 หรือ E3 Domain Pack จะได้เฉพาะ capability ที่ระดับหลักฐานปัจจุบันรองรับ</p>
+<h3>10.3 Minimum Action Policies</h3>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Permitted-use class</th>
+<th>Minimum policy result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Client/design preview</td>
+<td>PREVIEW</td>
+<td>Exact revision และ visible non-production status โดยไม่มี machine-executable artifact</td>
+</tr>
+<tr>
+<td>Shadow simulation</td>
+<td>SHADOW_SIMULATION</td>
+<td>E0 สำหรับ claims ที่เกี่ยวข้อง; sandboxed non-machine endpoint; output เลื่อนระดับด้วยการ rename ไม่ได้</td>
+</tr>
+<tr>
+<td>Qualification coupon</td>
+<td>QUALIFICATION_COUPON</td>
+<td>Relevant E0 พร้อม supervised E1, bounded coupon geometry, named machine/operator, single-purpose grant และแยกกายภาพจาก production queue</td>
+</tr>
+<tr>
+<td>First article</td>
+<td>QUALIFICATION_FIRST_ARTICLE</td>
+<td>Coupon ผ่าน; ระบุ revision, postprocessor, machine profile, operator procedure, independent disposition และ restricted grant</td>
+</tr>
+<tr>
+<td>ACTIVE production release</td>
+<td>PRODUCTION</td>
+<td>Machine/purpose-specific claims ถึง E2 และ mandatory claim อื่นถึง policy-defined level พร้อม incident-specific authority quorum, required containment acknowledgement 100% หรือ signed not-applicable result และ brokered egress</td>
+</tr>
+<tr>
+<td>Production resume</td>
+<td>PRODUCTION</td>
+<td>Fresh evidence บน recovered exact revision; ไม่ reuse receipt; incident-specific quorum และ fencing token ใหม่</td>
+</tr>
+</tbody></table>
+<p>CapabilityPolicy ที่นำไปใช้จริงต้องแทนคำว่า “relevant” และ “mandatory” ด้วย claim IDs, expected counts, freshness windows, scope match และ expiry ที่ชัดเจนก่อน activate policy</p>
+<h3>10.4 Gate Evaluation</h3>
+<p>Gate resolve exact policy, คำนวณ expected claim set และ join เฉพาะ evidence ที่ตรง build, policy, adapter, machine profile, authority scope, package และ revision จากนั้นปฏิเสธ evidence ที่ missing, duplicate, stale, mismatched, cancelled, quarantined หรือ UNKNOWN แล้วจึงตรวจ minimum evidence levels, authority quorum, separation of duties, containment acknowledgement และ permitted use ก่อนออก EgressGrant หาก expected หรือ observed mandatory set ว่างต้อง fail เว้นแต่ policy ประกาศ claim นั้นว่า not applicable อย่างชัดเจนพร้อม signed rationale</p>
 <h2>11. Testing Gates</h2>
 <h3>11.1 กลุ่มการทดสอบบังคับ</h3>
 <ol>
 <li>Unit และ property tests สำหรับ invariants และ boundary values</li>
-<li>Model-based state-machine tests สำหรับทุก legal และ illegal transition</li>
-<li>Contract tests ให้ UI, API, worker, server และ external adapter ใช้ความหมายตรงกัน</li>
-<li>Concurrency และ idempotency tests รวม duplicate และ reordered delivery</li>
-<li>Failure-injection tests ทุก persistence, signing, audit, notification และ export boundary</li>
-<li>Seeded-defect tests สำหรับ stale revision, missing evidence, contradictory dimensions, unsupported inference, wrong hardware/material และ post-review change</li>
-<li>Authority tests สำหรับ denial, expiry, scope, self-approval และ two-person control</li>
-<li>Offline และ revocation tests รวม stale cache และ clock skew</li>
-<li>Egress-bypass tests ครอบคลุม browser download, API, server, worker, cache, USB package และ legacy paths</li>
+<li>Model-based state-machine tests สำหรับทุก legal/illegal transition, terminal-case immutability, recurrence, duplicate detection และ return-to-CONTAINED behavior</li>
+<li>Contract tests สำหรับ RecoveryCase projections, RecoveryEvent entries, DecisionReceipt records, UI, API, worker, server และ external adapter</li>
+<li>Concurrency, fencing และ idempotency tests รวม duplicate, reordered, delayed และ stale-device delivery</li>
+<li>Failure-injection tests ทุก persistence, signing, audit, notification, acknowledgement, policy, broker และ export boundary</li>
+<li>Seeded-defect tests สำหรับ stale revision, empty/missing/duplicate evidence, contradictory dimensions, unsupported inference, wrong hardware/material และ post-review change</li>
+<li>Authority tests สำหรับ denial, expiry, scope, self-approval, incident-affected identity และทุก two-person pairing</li>
+<li>Offline และ revocation tests รวม stale cache, missing policy, fencing-token mismatch และ clock skew</li>
+<li>Egress-bypass tests ครอบคลุม browser download, API, server, worker, object URL, cache, USB package, scripts, integrations, generated artifacts และ legacy paths</li>
+<li>Permitted-use tests ที่พิสูจน์ว่า preview, shadow, coupon และ first-article artifacts เปลี่ยนเป็น production ด้วยการ copy, rename, replay หรือ policy downgrade ไม่ได้</li>
 <li>Role-specific E2E และ accessibility tests ภาษาไทยและอังกฤษบน desktop และ mobile widths ที่บังคับ</li>
-<li>Shadow simulation, coupon และ first-article qualification สำหรับทุก machine profile และ postprocessor</li>
+<li>Shadow simulation, supervised bounded coupon และ first-article qualification สำหรับทุก machine profile และ postprocessor</li>
 </ol>
 <h3>11.2 CI Evidence Contract</h3>
 <p>ทุก required check เผยแพร่ machine-readable record ที่มี:</p>
 <ul>
 <li>control claim IDs;</li>
-<li>commit และ dirty-tree status;</li>
-<li>environment และ dependency lock;</li>
-<li>command identity;</li>
+<li>repository, commit, ref, protected-branch status และ dirty-tree status;</li>
+<li>environment, runner identity, toolchain และ dependency lock;</li>
+<li>workflow, run, job และ command identity;</li>
 <li>จำนวน total, passed, failed, skipped, cancelled และ quarantined;</li>
+<li>expected evidence count, observed count, not-applicable count พร้อม signed rationale และ UNKNOWN count;</li>
+<li>typecheck, build, migration, security, test และ broker-gate outcomes แยกกัน;</li>
 <li>start/end timestamps;</li>
 <li>artifact digests;</li>
-<li>สถานะสุดท้าย PASS หรือ FAIL;</li>
+<li>signed provenance หรือ tamper-evident attestation ที่เทียบเท่า พร้อม retention location;</li>
+<li>สถานะสุดท้าย PASS หรือ FAIL ที่คำนวณจากทุก mandatory outcome;</li>
 <li>expiry/requalification date เมื่อเกี่ยวข้อง</li>
 </ul>
 <p>Required checks ต้องทำงานบน pull requests และ protected release branches Script ที่มีอยู่แต่ไม่ได้ wiring เป็น required check ยังไม่ถือเป็น Gate</p>
 <h2>12. Egress Control</h2>
-<p>MONOLITH มี Governed Egress Registry ชุดเดียวสำหรับทุก path ที่ส่งข้อมูลซึ่งอาจใช้ผลิตได้ รวม browser downloads, direct ZIPs, APIs, workers, server exporters, integrations, caches, offline packages, USB packages และ machine-facing adapters</p>
-<p>ทุก egress path ต้อง:</p>
-<ol>
-<li>resolve exact ACTIVE package;</li>
-<li>verify manifest, signature, policy, machine profile และ revocation status;</li>
-<li>ปฏิเสธ evidence ที่หายหรือ stale;</li>
-<li>บันทึก actor, endpoint, artifact hash, purpose และ result;</li>
-<li>ปฏิเสธ package ที่ superseded, held, revoked, quarantined หรือ NOT-FOR-PRODUCTION;</li>
-<li>ไม่เปิด direct หรือ legacy production path อื่น</li>
-</ol>
-<p>Legacy paths ต้องถูกลบ isolate เป็น non-production อย่างชัดเจน หรืออยู่ภายใต้ server enforcement ชุดเดียวกัน Static bypass scanning ต้องครอบคลุม <code>src</code>, <code>server</code>, workers, API routes, scripts และ adapter code และเป็น required CI check</p>
+<h3>12.1 Permitted-use Classes</h3>
+<table>
+<thead>
+<tr>
+<th>Class</th>
+<th>Permitted output</th>
+<th>Prohibited use</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>PREVIEW</td>
+<td>Concept หรือ coordination artifact สำหรับคน พร้อม exact revision และ visible status</td>
+<td>Machine execution หรือ fabrication instruction</td>
+</tr>
+<tr>
+<td>SHADOW_SIMULATION</td>
+<td>Sandboxed simulation input/output ที่ address production machine ไม่ได้</td>
+<td>เลื่อนเป็น qualification/production ด้วยการ copy หรือ rename</td>
+</tr>
+<tr>
+<td>QUALIFICATION_COUPON</td>
+<td>Bounded test geometry สำหรับ named machine, operator, procedure และ grant หนึ่งชุด</td>
+<td>Reusable project package หรือ production queue</td>
+</tr>
+<tr>
+<td>QUALIFICATION_FIRST_ARTICLE</td>
+<td>Restricted first-article package หลังมี coupon evidence</td>
+<td>General production หรือเครื่อง/profile อื่น</td>
+</tr>
+<tr>
+<td>PRODUCTION</td>
+<td>Exact ACTIVE package สำหรับ qualified machine/profile ผ่าน controlled egress</td>
+<td>ใช้นอก grant purpose, scope หรือ expiry</td>
+</tr>
+</tbody></table>
+<p>NOT-FOR-PRODUCTION package ใช้ PREVIEW, SHADOW_SIMULATION, QUALIFICATION_COUPON หรือ QUALIFICATION_FIRST_ARTICLE ได้เมื่อ exact CapabilityPolicy ผ่านเท่านั้น และจะไม่ได้รับ PRODUCTION grant เด็ดขาด Qualification artifact ต้องแสดงข้อจำกัดชัดเจน จำกัด scope เลื่อนระดับไม่ได้ และ audit ได้</p>
+<h3>12.2 Server-owned Egress Broker</h3>
+<p>MONOLITH มี Governed Egress Registry ชุดเดียว แต่ Registry ไม่ใช่ enforcement boundary ทุก controlled browser download, direct ZIP, API, worker, server exporter, integration, cache delivery, offline package, USB package และ machine-facing adapter ต้องเรียก server-owned EgressBroker</p>
+<p>Broker resolve exact package/policy, verify manifest, signature, revocation, machine/profile, permitted use, evidence, authority, acknowledgement และ fencing token แล้วจึงออก <code>EgressGrant</code> อายุสั้นที่ผูก grant ID, artifact digest, purpose, permitted-use class, actor, endpoint, machine scope, policy version, expiry และ one-time nonce ผล allow/deny ต้องบันทึกแบบ append-only</p>
+<p>Client badge, filename, MIME type, hidden button หรือ local store ไม่สร้าง permission Package ที่ superseded, held, revoked, quarantined, stale หรือ mismatched ต้อง fail closed ส่วน NOT-FOR-PRODUCTION ถูกปฏิเสธสำหรับ PRODUCTION และมีสิทธิ์เฉพาะ qualification class ที่ govern ไว้ด้านบน</p>
+<h3>12.3 No-bypass Enforcement</h3>
+<p>Egress implementation ที่ไม่ได้ register และ authorize ผ่าน broker ต้อง fail ตอน build หรือ runtime Legacy path ต้องถูกลบ แยกกายภาพเป็น non-controlled preview tooling หรือ migrate หลัง broker Static scan ครอบคลุม <code>src</code>, <code>server</code>, workers, API routes, scripts, integrations, generated-artifact definitions และ adapter code เป็น defense in depth ที่บังคับ แต่ static scan เพียงอย่างเดียวพิสูจน์ no bypass ไม่ได้ จึงต้องผ่าน dynamic contract tests และ observed external-channel trials ด้วย</p>
 <h2>13. ประสบการณ์ตามบทบาท</h2>
-<p>หน้าบ้านใช้ภาษาสงบ ตรงข้อเท็จจริง และมี recovery action เดียว</p>
+<p>หน้าบ้านใช้ภาษาสงบ ตรงข้อเท็จจริง และมี primary recovery action เดียว</p>
 <h3>ลูกค้า</h3>
 <p>“บันทึกตัวเลือกของคุณแล้ว การปล่อยแบบเทคนิคหยุดอยู่เพราะยังไม่ได้วัดความกว้างหน้างาน” ลูกค้าไม่ต้องแก้รายละเอียดการผลิต</p>
 <h3>นักออกแบบ</h3>
@@ -438,14 +602,14 @@
 <h3>ผู้ประสานงาน</h3>
 <p>เห็น blocking recovery task เดียว เจ้าของที่ระบุชื่อ deadline, downstream roles ที่ได้รับผลกระทบ และ escalation path ไม่ใช่ feed ของทุก system event</p>
 <h3>วิศวกรโรงงาน</h3>
-<p>เห็น quarantined exact candidate, failed checks, machine context, การเปรียบเทียบกับ last ACTIVE package และ HOLD/escalation controls ห้ามดาวน์โหลด production file ก่อน commit</p>
+<p>เห็น quarantined exact candidate, failed checks, machine context, permitted-use class, การเปรียบเทียบกับ last ACTIVE package, containment acknowledgement และ HOLD/escalation controls ห้ามดาวน์โหลด production file ก่อน ACTIVE commit ส่วน bounded qualification output ต้องใช้ restricted grant ของตนเอง</p>
 <h3>CNC Operator</h3>
-<p>เห็นเฉพาะ ACTIVE packages ที่ตรงเครื่อง พร้อม HOLD และ report-issue controls MONOLITH ไม่มี spindle, motion หรือ cycle-start action</p>
+<p>ใน production mode เห็นเฉพาะ ACTIVE packages ที่ตรงเครื่อง พร้อม HOLD และ report-issue controls ส่วน qualification mode เห็นเฉพาะ bounded coupon/first-article grant พร้อมข้อจำกัดชัดเจน named procedure และ expiry MONOLITH ไม่มี spindle, motion หรือ cycle-start action</p>
 <h2>14. Contract ของภาพ Section 4</h2>
 <p>ภาพที่อนุมัติจะมีสองมุมมองที่ sync กัน:</p>
 <ol>
-<li><strong>Safe Recovery Loop:</strong> เส้นทางเจ็ด state จาก Detect ถึง Resume/Retire</li>
-<li><strong>Qualification Evidence Matrix:</strong> หลักฐานที่บังคับก่อน reopen แต่ละ capability</li>
+<li><strong>Recovery Case and Event Chain:</strong> lifecycle แปด state ชุดเดียว พร้อม current projection, append-only events, immutable decision receipts, impact acknowledgements และ last safe revision</li>
+<li><strong>Capability Gate and Egress:</strong> policy, evidence level, authority quorum, permitted-use class และ broker decision ที่บังคับก่อน reopen capability หรือส่ง artifact ออก</li>
 </ol>
 <p>ผู้ตรวจสามารถเลือก scenarios ตัวแทน:</p>
 <ul>
@@ -454,33 +618,44 @@
 <li>unauthorized หรือ self-approval attempt;</li>
 <li>missing verification report;</li>
 <li>post-release defect;</li>
-<li>offline หรือ stale revocation policy</li>
+<li>offline หรือ stale revocation policy;</li>
+<li>supervised qualification coupon ขณะที่ NOT-FOR-PRODUCTION ยังทำงาน</li>
 </ul>
-<p>แต่ละ scenario อัปเดต field ชุดเดียวกัน ได้แก่ containment, last safe state, owner, next action, invalidated scope, required proof และ permitted output ภาพต้องไม่ทำให้เข้าใจว่า UI badge เป็นผู้ enforce safety</p>
+<p>แต่ละ scenario อัปเดต field ชุดเดียวกัน ได้แก่ RecoveryCase state, immutable event ล่าสุด, containment coverage, last safe state, owner, next action, invalidated scope, CapabilityPolicy, required proof, permitted-use class และ EgressBroker result ภาพต้องแยก mutable projection จาก immutable proof อย่างชัดเจนและไม่ทำให้เข้าใจว่า UI badge เป็นผู้ enforce safety</p>
 <h2>15. Acceptance Criteria</h2>
 <p>Section 4 รับได้เมื่อ:</p>
 <ol>
-<li>ทุก failure scenario มี containment, authority, recovery และ re-verification;</li>
-<li>missing evidence แสดงเป็น PASS ไม่ได้;</li>
-<li>ทุก consequential action ผูก actor, purpose, scope และ exact revision;</li>
-<li>high-risk release และ resume policy บังคับ separation of duties ได้;</li>
-<li>transaction failure ไม่ทิ้ง unexplained ambiguous state;</li>
-<li>canonical audit และ revocation ล้างจาก user device ไม่ได้;</li>
-<li>ทุก production egress path อยู่ใน inventory และ governance;</li>
-<li>control claims เชื่อม executable evidence ที่มี expiry;</li>
-<li>interface ให้แต่ละ role มี recovery action ที่ชัดเจนหนึ่งรายการ;</li>
-<li>NOT-FOR-PRODUCTION ยังคงทำงานจนผ่าน machine qualification และ owner release gates</li>
+<li>แยกหน้าที่ RecoveryCase, RecoveryEvent และ DecisionReceipt และทดสอบแยกกันได้;</li>
+<li>state enum และ transition table ชุดเดียว govern ทุก legal/illegal transition;</li>
+<li>ทุก failure scenario มี containment, acknowledgement, authority, recovery และ re-verification;</li>
+<li>mandatory evidence ที่ missing, empty, duplicate, stale, mismatched หรือ UNKNOWN แสดงเป็น PASS ไม่ได้;</li>
+<li>ทุก CapabilityPolicy ระบุ exact claims, counts, minimum level, freshness, quorum, acknowledgement และ permitted use;</li>
+<li>ทุก consequential action ผูก resolved actor, purpose, scope, policy, capability และ exact revision;</li>
+<li>incident-specific high-risk release/resume policies บังคับ distinct-human separation of duties;</li>
+<li>transaction failure หรือ stale worker ทิ้ง unexplained/ reopened ambiguous state ไม่ได้;</li>
+<li>canonical audit และ revocation ล้างหรือ override จาก user device ไม่ได้;</li>
+<li>ทุก controlled egress path ถูก register, broker, dynamic test และ audit;</li>
+<li>สร้าง qualification output ได้โดยไม่ grant production use และ artifact เลื่อนระดับด้วย copy, rename, replay หรือ policy downgrade ไม่ได้;</li>
+<li>ratify tenant / organization / site authority model ก่อน implement canonical recovery persistence;</li>
+<li>แต่ละ role ระบุ last safe revision, owner, consequence, permitted use และ primary next action ได้ใน median ไม่เกิน 30 วินาที;</li>
+<li>Pilot participants อย่างน้อย 95% ทำ correction, containment acknowledgement หรือ reversal ได้โดยไม่ขอ support หรือ reconstruct ข้อมูลนอกระบบ;</li>
+<li>NOT-FOR-PRODUCTION ยังคงทำงานจนผ่าน exact machine, postprocessor, operator-procedure, owner-release และ production-egress gates</li>
 </ol>
 <h2>16. Stop Conditions</h2>
 <p>หยุดหรือออกแบบใหม่เมื่อ:</p>
 <ul>
+<li>mutable case ถูกนำเสนอเป็น immutable receipt หรือ immutable receipt เปลี่ยนค่า;</li>
+<li>state name สองชื่ออธิบาย lifecycle position เดียวกัน หรือระบบรับ undefined transition;</li>
 <li>critical seeded defect ไปถึง release;</li>
-<li>missing report ผ่านเพราะ report set ว่าง;</li>
+<li>mandatory report set ที่ missing หรือ empty ผ่าน;</li>
 <li>actor คนเดียวทำ incompatible duties ได้;</li>
 <li>crash ทำให้ canonical state และ release evidence แยกจากกัน;</li>
+<li>stale worker, device หรือ grant reopen/export หลัง fencing token ใหม่ได้;</li>
 <li>stale หรือ missing revocation policy อนุญาต offline use;</li>
-<li>alternate path ใด export non-ACTIVE package;</li>
-<li>consequential recovery work มากกว่า 10% เกิดนอก governed chain;</li>
+<li>path ใดนอก EgressBroker export controlled artifact หรือ path ใดนำเสนอ non-ACTIVE package ว่าเป็น PRODUCTION;</li>
+<li>NOT-FOR-PRODUCTION artifact ได้รับ PRODUCTION use หรือสร้าง qualification evidence ไม่ได้หากไม่ทำเช่นนั้น;</li>
+<li>safety, authority, evidence, revocation หรือ controlled-egress action ใดหลบ governed chain โดย safety-bypass rate ที่ยอมรับคือศูนย์;</li>
+<li>non-safety coordination tasks ใน pilot มากกว่า 10% เกิดนอก governed chain ซึ่งเป็น UX redesign trigger และไม่ลด zero-bypass safety rule;</li>
 <li>ผู้ใช้ระบุ last safe revision, owner และ next action โดยไม่ขอความช่วยเหลือไม่ได้</li>
 </ul>
 <h2>17. Current Source Trace ที่ใช้ในการออกแบบ</h2>
@@ -488,15 +663,17 @@
 <li>Sequential manifest, HEAD และ geometry effects: <code>src/core/export/commitApprovedState.ts:200-205</code></li>
 <li>Report checks ที่ค้นหา FAIL โดยไม่ตรวจ required cardinality อย่างชัดเจน: <code>src/core/manufacturing/export/enforceExportGate.ts:119-157</code></li>
 <li>Client-side approval requirement ที่ default หนึ่ง approval และ any-role matching: <code>src/core/manufacturing/release/releaseStore.ts:47-97</code></li>
+<li>Current visible client release path สร้างและ auto-download หลัง browser-held approval state: <code>src/components/ui/ModelingReleasePanel.tsx:44-86</code></li>
 <li>Key audit และ revocation state แบบ local และล้างได้: <code>src/release/keys/audit.ts:4-8,56-73,121-126</code> และ <code>src/release/keys/revocationPolicy.ts:53-84,197-202</code></li>
-<li>Direct ZIP path ที่ไม่มี full package structure: <code>server/src/export/exportServiceP22a.ts:426-467</code></li>
+<li>มี direct ZIP function ที่ไม่มี full package structure ที่ <code>server/src/export/exportServiceP22a.ts:426-467</code> แต่ไม่พบ caller ใน <code>src</code>, <code>server</code> หรือ <code>tests</code> ที่ตรวจ จึงไม่ถือว่าการมี source เป็น verified reachable production path</li>
 <li>Bypass scanner ปัจจุบัน scope เฉพาะ <code>src</code>: <code>scripts/gates/bypass-scan.ts:82-87</code></li>
 <li>Full verification workflow ทำงานแบบ push/manual: <code>.github/workflows/verify-full.yml:5-12</code></li>
 <li>Gate pull-request workflow paths ไม่รวม release/export modules: <code>.github/workflows/gate-tests.yml:13-16</code></li>
 <li>Release route ยังเป็น incomplete surface: <code>src/routes/index.tsx:873-880</code></li>
+<li>Workflow authz, quorum, idempotency และ audit primitives ที่มีอยู่เป็น semantic reuse candidates แต่ยังไม่ใช่ verified canonical server authority: <code>src/workflow/approval/authz.ts</code>, <code>quorum.ts</code>, <code>idempotency.ts</code> และ <code>src/workflow/audit/writer.ts</code></li>
 </ul>
 <h2>18. ขั้นถัดไปที่อนุมัติหลังตรวจ Written Spec</h2>
-<p>หลังเจ้าของยืนยัน written specification นี้ ให้สร้างภาพ interactive Section 4 สองภาษา ห้ามนำเอกสารนี้ไป implement production release, schema, policy หรือ machine-control changes โดยไม่มี implementation plan ที่อนุมัติแยกต่างหาก</p>
+<p>หลังเจ้าของยืนยัน revised written specification นี้ ให้ทำ bounded re-scrutinize กับ contract ที่ปรับแล้วหนึ่งรอบ หากไม่มี blocker จึงสร้างภาพ interactive Section 4 สองภาษา ห้ามนำเอกสารนี้ไป implement production release, schema, policy, egress หรือ machine-control changes โดยไม่มี implementation plan ที่อนุมัติแยกต่างหาก</p>
 </article></main>
 </body>
 </html>
