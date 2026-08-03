@@ -618,6 +618,7 @@ function installJourney(doc, controller, designApprovalPort) {
   let activeJourney = null;
   let confirming = false;
   let openingDesignReview = false;
+  let uiOperationEpoch = 0;
 
   const hasDialogApis = () =>
     typeof liff?.showModal === "function" && typeof liff?.close === "function" &&
@@ -658,12 +659,37 @@ function installJourney(doc, controller, designApprovalPort) {
     }));
     for (const [label, value] of rows) appendPair(doc, target, label, value);
   };
+  const beginUiOperation = () => {
+    uiOperationEpoch += 1;
+    return uiOperationEpoch;
+  };
+  const isCurrentUiOperation = (operation) => operation === uiOperationEpoch;
+  const invalidateUiOperations = () => {
+    uiOperationEpoch += 1;
+    openingDesignReview = false;
+    confirming = false;
+    controller.nodes.run.removeAttribute("aria-busy");
+    controller.nodes.run.disabled = false;
+    setConfirmationBusy(confirm, false);
+    confirm.disabled = true;
+  };
   const clearForStudioChange = (reason) => {
     transaction = null;
     activeJourney = null;
     designJourney?.clear(reason);
+    invalidateUiOperations();
     resetReviewSurface();
     if (liff.open && typeof liff.close === "function") liff.close("cleared");
+  };
+  const showBoundedDesignError = (message) => {
+    transaction = null;
+    activeJourney = null;
+    designJourney?.clear("visible.error");
+    resetReviewSurface();
+    reviewOutcome.textContent = message;
+    confirm.disabled = true;
+    if (!liff.open) liff.showModal();
+    controller.announce(message);
   };
 
   controller.nodes.run.addEventListener("click", async () => {
@@ -686,12 +712,12 @@ function installJourney(doc, controller, designApprovalPort) {
       if (openingDesignReview) return;
       if (!designJourney) {
         const message = designApprovalErrorCopyFor("not_available", reviewLanguage);
-        reviewOutcome.textContent = message;
-        controller.announce(message);
-        activeJourney = null;
+        showBoundedDesignError(message);
         return;
       }
+      const operation = beginUiOperation();
       openingDesignReview = true;
+      confirm.disabled = true;
       controller.nodes.run.disabled = true;
       controller.nodes.run.setAttribute("aria-busy", "true");
       try {
@@ -701,9 +727,7 @@ function installJourney(doc, controller, designApprovalPort) {
         });
         if (result.status === "cleared") return;
         if (result.outcome !== "review_opened") {
-          reviewOutcome.textContent = result.message;
-          controller.announce(result.message);
-          activeJourney = null;
+          showBoundedDesignError(result.message);
           return;
         }
         const designCopy = designApprovalReviewCopyFor(reviewLanguage);
@@ -713,12 +737,15 @@ function installJourney(doc, controller, designApprovalPort) {
         reviewExpiry.textContent = result.snapshot.expiresAt;
         artifactManifest.textContent = result.snapshot.artifactManifestSha256;
         reviewOutcome.textContent = designCopy.emptyOutcome;
+        confirm.disabled = false;
         liff.showModal();
         controller.announce(designCopy.ready);
       } finally {
-        openingDesignReview = false;
-        controller.nodes.run.removeAttribute("aria-busy");
-        controller.nodes.run.disabled = controller.render().hasBlockingErrors;
+        if (isCurrentUiOperation(operation)) {
+          openingDesignReview = false;
+          controller.nodes.run.removeAttribute("aria-busy");
+          controller.nodes.run.disabled = controller.render().hasBlockingErrors;
+        }
       }
       return;
     }
@@ -745,6 +772,7 @@ function installJourney(doc, controller, designApprovalPort) {
       reviewExpiry.textContent = transaction.expiresAt;
       artifactManifest.textContent = "—";
       reviewOutcome.textContent = "—";
+      confirm.disabled = false;
       liff.showModal();
     } catch {
       transaction = null;
@@ -757,22 +785,26 @@ function installJourney(doc, controller, designApprovalPort) {
     transaction = null;
     designJourney?.clear("cancel");
     activeJourney = null;
+    invalidateUiOperations();
     closeReview("cancel");
   });
   liff.addEventListener("cancel", () => {
     transaction = null;
     designJourney?.clear("dialog.cancel");
     activeJourney = null;
+    invalidateUiOperations();
   });
   liff.addEventListener("close", () => {
     transaction = null;
     designJourney?.clear("dialog.close");
     activeJourney = null;
+    invalidateUiOperations();
     controller.nodes.run.focus();
   });
 
   confirm.addEventListener("click", async () => {
     if (confirming || !activeJourney) return;
+    const operation = beginUiOperation();
     confirming = true;
     setConfirmationBusy(confirm, true);
     try {
@@ -787,9 +819,7 @@ function installJourney(doc, controller, designApprovalPort) {
         if (result.status === "cleared") return;
         if (result.outcome !== "sandbox_recorded" &&
             result.outcome !== "sandbox_replayed") {
-          reviewOutcome.textContent = result.message;
-          controller.announce(result.message);
-          closeReview("rejected");
+          showBoundedDesignError(result.message);
           return;
         }
         controller.nodes.receiptTitle.textContent = result.title;
@@ -825,12 +855,19 @@ function installJourney(doc, controller, designApprovalPort) {
       const message = activeJourney === "design-approval-port" ?
         designApprovalErrorCopyFor("temporarily_unavailable", reviewLanguage) :
         errorCopy(error);
-      reviewOutcome.textContent = message;
-      controller.announce(message);
-      closeReview("rejected");
+      if (activeJourney === "design-approval-port") {
+        showBoundedDesignError(message);
+      } else {
+        reviewOutcome.textContent = message;
+        controller.announce(message);
+        closeReview("rejected");
+      }
     } finally {
-      confirming = false;
-      setConfirmationBusy(confirm, false);
+      if (isCurrentUiOperation(operation)) {
+        confirming = false;
+        setConfirmationBusy(confirm, false);
+        if (!activeJourney) confirm.disabled = true;
+      }
     }
   });
 
@@ -840,6 +877,7 @@ function installJourney(doc, controller, designApprovalPort) {
   });
   receiptDialog.addEventListener("close", () => controller.nodes.run.focus());
   resetReviewSurface();
+  confirm.disabled = true;
   return { clearForStudioChange };
 }
 

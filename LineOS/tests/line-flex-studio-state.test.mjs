@@ -5,11 +5,14 @@ import { fileURLToPath } from "node:url";
 import { PRESET_IDS } from "../line-flex-presets.mjs";
 import { createSandboxVerificationRecord } from "../line-design-approval-record.mjs";
 import {
+  createStudioTestDocument, deferred
+} from "./helpers/studio-fake-dom.mjs";
+import {
   createInitialStudioState, reduceStudioState, deriveStudioView, isStudioDraftDirty,
   receiptRowsFor, selectStudioJourney, createDesignApprovalJourneyController,
   designApprovalReviewRowsFor, designApprovalErrorCopyFor,
   designApprovalReceiptCopyFor, shouldClearDesignApprovalReview,
-  setConfirmationBusy
+  setConfirmationBusy, bindStudio
 } from "../line-flex-studio.mjs";
 
 const studioSource = readFileSync(
@@ -386,4 +389,304 @@ test("bindStudio accepts an injected port and constructs the sandbox default onl
     studioSource,
     /const\s+\w*[Pp]ort\s*=\s*createSandboxDesignApprovalPort\(\)/u
   );
+});
+
+test("bindStudio drives the adapter-owned review and record surfaces end to end", async () => {
+  const doc = createStudioTestDocument();
+  const snapshot = reviewSnapshot();
+  const record = await sandboxRecord();
+  const openTokens = [];
+  const confirmInputs = [];
+  bindStudio(doc, {
+    designApprovalPort: {
+      openReview: async (token) => {
+        openTokens.push(token);
+        return snapshot;
+      },
+      confirmReview: async (input) => {
+        confirmInputs.push(input);
+        return { outcome: "sandbox_recorded", record };
+      }
+    }
+  });
+
+  assert.equal(doc.getElementById("liff-title").textContent, "ตรวจแบบส่วนตัว · Sandbox");
+  assert.equal(doc.getElementById("confirm-journey").textContent, "ยืนยันการทดลองใน Sandbox");
+  await doc.getElementById("run-journey").click();
+
+  assert.deepEqual(openTokens, ["rvw_A1_7L3n9Q2pV8xK"]);
+  assert.equal(doc.getElementById("liff-dialog").open, true);
+  assert.equal(doc.querySelector("[data-review-mode]").textContent, "sandbox");
+  assert.equal(doc.querySelector("[data-business-effect]").textContent, "none");
+  assert.equal(doc.querySelector("[data-review-expiry]").textContent, snapshot.expiresAt);
+  assert.equal(
+    doc.querySelector("[data-artifact-manifest-sha256]").textContent,
+    snapshot.artifactManifestSha256
+  );
+  assert.match(doc.querySelector("[data-liff-review]").textContent, /Daph Studio · A1 sandbox fixture/u);
+  assert.equal(doc.querySelector("[data-liff-review]").textContent.includes("บ้านสุขุมวิท"), false);
+
+  await doc.getElementById("confirm-journey").click();
+  assert.deepEqual(confirmInputs, [{
+    reviewSessionId: snapshot.reviewSessionId,
+    serverIssuedIdempotencyKey: snapshot.serverIssuedIdempotencyKey,
+    expectedRevisionId: snapshot.revisionId,
+    decision: "confirm"
+  }]);
+  assert.equal(doc.getElementById("liff-dialog").open, false);
+  assert.equal(doc.getElementById("receipt-dialog").open, true);
+  assert.equal(
+    doc.getElementById("receipt-title").textContent,
+    "Sandbox Verification Record — Demo · No Business Effect"
+  );
+  assert.match(doc.getElementById("receipt-description").textContent, /workflow.*approval state.*ไม่เปลี่ยน/u);
+  assert.match(doc.getElementById("receipt-digest-disclosure").textContent, /ไม่ใช่ลายเซ็น/u);
+  assert.match(doc.querySelector("[data-receipt]").textContent, new RegExp(record.recordDigest, "u"));
+});
+
+for (const lifecycle of ["preset", "language", "field", "reset"]) {
+  test(`bindStudio releases a pending open immediately on ${lifecycle} change`, async () => {
+    const doc = createStudioTestDocument();
+    const firstOpen = deferred();
+    let openCalls = 0;
+    bindStudio(doc, {
+      designApprovalPort: {
+        openReview: async () => {
+          openCalls += 1;
+          return openCalls === 1 ? firstOpen.promise : reviewSnapshot();
+        },
+        confirmReview: async () => ({ outcome: "not_available" })
+      }
+    });
+    const run = doc.getElementById("run-journey");
+
+    if (lifecycle === "reset") {
+      const field = doc.getElementById("field-header-title");
+      field.value = "แบบพร้อมอนุมัติ — แก้ไข";
+      await field.dispatchEvent({ type: "input" });
+    }
+    const pendingRun = run.click();
+    assert.equal(run.getAttribute("aria-busy"), "true");
+    assert.equal(run.disabled, true);
+
+    try {
+      if (lifecycle === "preset") {
+        await doc.getElementById("preset-list").children[1].click();
+      } else if (lifecycle === "language") {
+        await doc.getElementById("language-toggle").click();
+      } else if (lifecycle === "field") {
+        const field = doc.getElementById("field-header-title");
+        field.value = "แบบพร้อมอนุมัติ — ใหม่";
+        await field.dispatchEvent({ type: "input" });
+      } else {
+        await doc.getElementById("reset-draft").click();
+      }
+
+      assert.equal(run.getAttribute("aria-busy"), null);
+      assert.equal(run.disabled, false);
+      await run.click();
+      if (lifecycle === "preset") {
+        assert.equal(openCalls, 1);
+        assert.equal(doc.getElementById("liff-title").textContent, "ตรวจแบบส่วนตัว · Demo");
+      } else {
+        assert.equal(openCalls, 2);
+        assert.equal(doc.getElementById("liff-dialog").open, true);
+      }
+    } finally {
+      firstOpen.resolve(reviewSnapshot());
+      await pendingRun;
+    }
+  });
+}
+
+for (const lifecycle of ["cancel", "dialog.cancel", "dialog.close"]) {
+  test(`bindStudio releases a pending confirm immediately on ${lifecycle}`, async () => {
+    const doc = createStudioTestDocument();
+    const firstConfirm = deferred();
+    const record = await sandboxRecord();
+    let confirmCalls = 0;
+    bindStudio(doc, {
+      designApprovalPort: {
+        openReview: async () => reviewSnapshot(),
+        confirmReview: async () => {
+          confirmCalls += 1;
+          return confirmCalls === 1 ? firstConfirm.promise : {
+            outcome: "sandbox_recorded",
+            record
+          };
+        }
+      }
+    });
+    const liff = doc.getElementById("liff-dialog");
+    const confirm = doc.getElementById("confirm-journey");
+    await doc.getElementById("run-journey").click();
+    const pendingConfirmation = confirm.click();
+    assert.equal(confirm.getAttribute("aria-busy"), "true");
+    assert.equal(confirm.disabled, true);
+
+    try {
+      if (lifecycle === "cancel") {
+        await doc.getElementById("cancel-journey").click();
+      } else if (lifecycle === "dialog.cancel") {
+        await liff.dispatchEvent({ type: "cancel" });
+        liff.close("cancel");
+      } else {
+        liff.close("dismissed");
+      }
+
+      assert.equal(confirm.getAttribute("aria-busy"), null);
+      assert.equal(confirm.disabled, true);
+      assert.equal(doc.getElementById("receipt-dialog").open, false);
+
+      await doc.getElementById("run-journey").click();
+      assert.equal(liff.open, true);
+      assert.equal(confirm.disabled, false);
+      await confirm.click();
+      assert.equal(confirmCalls, 2);
+      assert.equal(doc.getElementById("receipt-dialog").open, true);
+    } finally {
+      firstConfirm.resolve({ outcome: "sandbox_recorded", record });
+      await pendingConfirmation;
+    }
+    assert.equal(doc.getElementById("receipt-dialog").open, true);
+  });
+}
+
+test("a stale open finally cannot release a newer pending open", async () => {
+  const doc = createStudioTestDocument();
+  const firstOpen = deferred();
+  const secondOpen = deferred();
+  let openCalls = 0;
+  bindStudio(doc, {
+    designApprovalPort: {
+      openReview: async () => {
+        openCalls += 1;
+        return openCalls === 1 ? firstOpen.promise : secondOpen.promise;
+      },
+      confirmReview: async () => ({ outcome: "not_available" })
+    }
+  });
+  const run = doc.getElementById("run-journey");
+  const firstRun = run.click();
+  await doc.getElementById("language-toggle").click();
+  const secondRun = run.click();
+  assert.equal(run.getAttribute("aria-busy"), "true");
+
+  firstOpen.resolve(reviewSnapshot());
+  await firstRun;
+  assert.equal(run.getAttribute("aria-busy"), "true");
+  assert.equal(run.disabled, true);
+  assert.equal(doc.getElementById("liff-dialog").open, false);
+
+  secondOpen.resolve(reviewSnapshot());
+  await secondRun;
+  assert.equal(run.getAttribute("aria-busy"), null);
+  assert.equal(doc.getElementById("liff-dialog").open, true);
+});
+
+test("a stale confirm finally cannot release a newer pending confirm", async () => {
+  const doc = createStudioTestDocument();
+  const firstConfirm = deferred();
+  const secondConfirm = deferred();
+  const record = await sandboxRecord();
+  let confirmCalls = 0;
+  bindStudio(doc, {
+    designApprovalPort: {
+      openReview: async () => reviewSnapshot(),
+      confirmReview: async () => {
+        confirmCalls += 1;
+        return confirmCalls === 1 ? firstConfirm.promise : secondConfirm.promise;
+      }
+    }
+  });
+  const run = doc.getElementById("run-journey");
+  const confirm = doc.getElementById("confirm-journey");
+  await run.click();
+  const firstConfirmation = confirm.click();
+  await doc.getElementById("cancel-journey").click();
+  await run.click();
+  const secondConfirmation = confirm.click();
+  assert.equal(confirm.getAttribute("aria-busy"), "true");
+
+  firstConfirm.resolve({ outcome: "sandbox_recorded", record });
+  await firstConfirmation;
+  assert.equal(confirm.getAttribute("aria-busy"), "true");
+  assert.equal(confirm.disabled, true);
+  assert.equal(doc.getElementById("receipt-dialog").open, false);
+
+  secondConfirm.resolve({ outcome: "sandbox_recorded", record });
+  await secondConfirmation;
+  assert.equal(confirm.getAttribute("aria-busy"), null);
+  assert.equal(doc.getElementById("receipt-dialog").open, true);
+});
+
+test("bindStudio shows a bounded open error in a visible non-confirmable dialog", async () => {
+  const doc = createStudioTestDocument();
+  bindStudio(doc, {
+    designApprovalPort: {
+      openReview: async () => ({ outcome: "not_available" }),
+      confirmReview: async () => ({ outcome: "not_available" })
+    }
+  });
+
+  await doc.getElementById("run-journey").click();
+  const message = "คำขอนี้ไม่พร้อมใช้งาน โปรดตรวจข้อความ LINE ล่าสุดหรือติดต่อทีมบริการ";
+  assert.equal(doc.getElementById("liff-dialog").open, true);
+  assert.equal(doc.getElementById("confirm-journey").disabled, true);
+  assert.equal(doc.querySelector("[data-review-outcome] span").textContent, message);
+  assert.equal(doc.getElementById("toast-live").textContent, message);
+  assert.match(doc.getElementById("liff-description").textContent, /workflow.*approval state.*ไม่เปลี่ยน/u);
+});
+
+test("bindStudio keeps a bounded confirm error visible until acknowledgment", async () => {
+  const doc = createStudioTestDocument();
+  bindStudio(doc, {
+    designApprovalPort: {
+      openReview: async () => reviewSnapshot(),
+      confirmReview: async () => ({ outcome: "stale_revision" })
+    }
+  });
+
+  await doc.getElementById("run-journey").click();
+  await doc.getElementById("confirm-journey").click();
+  const message = "รุ่นแบบที่ตรวจไม่ใช่รุ่นปัจจุบันแล้ว โปรดเปิดข้อความ LINE ล่าสุดและลองใหม่";
+  assert.equal(doc.getElementById("liff-dialog").open, true);
+  assert.equal(doc.getElementById("confirm-journey").disabled, true);
+  assert.equal(doc.querySelector("[data-review-outcome] span").textContent, message);
+  assert.equal(doc.getElementById("toast-live").textContent, message);
+  assert.equal(doc.getElementById("receipt-dialog").open, false);
+});
+
+test("bindStudio preserves all four legacy routes without calling the Design Approval port", async () => {
+  const doc = createStudioTestDocument();
+  let adapterCalls = 0;
+  bindStudio(doc, {
+    designApprovalPort: {
+      openReview: async () => {
+        adapterCalls += 1;
+        return reviewSnapshot();
+      },
+      confirmReview: async () => {
+        adapterCalls += 1;
+        return { outcome: "not_available" };
+      }
+    }
+  });
+  const expectedThaiTitles = [
+    "ใบเสนอราคาพร้อมตรวจ", "งานใกล้เกิน SLA",
+    "อัปเดตหน้างานที่คัดแล้ว", "รับหลักฐานปัญหาแล้ว"
+  ];
+
+  for (let index = 1; index < PRESET_IDS.length; index += 1) {
+    await doc.getElementById("preset-list").children[index].click();
+    assert.equal(doc.getElementById("liff-title").textContent, "ตรวจแบบส่วนตัว · Demo");
+    assert.equal(doc.getElementById("confirm-journey").textContent, "ยืนยันเจตนาใน Demo");
+    assert.equal(doc.getElementById("preset-list").children[index].textContent.includes(
+      expectedThaiTitles[index - 1]
+    ), true);
+    await doc.getElementById("run-journey").click();
+    assert.equal(doc.getElementById("liff-dialog").open, true);
+    doc.getElementById("liff-dialog").close("test-next-route");
+  }
+  assert.equal(adapterCalls, 0);
 });
