@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>MONOLITH Deep Research: Beloved Safe-Recovery UX</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>MONOLITH Deep Research: Beloved Safe-Recovery UX</h1>
+<p><strong>Date:</strong> 3 August 2026</p>
+<p><strong>Status:</strong> Research recommendation for scrutiny; not an implementation or production-readiness claim</p>
+<p><strong>Research method:</strong> Two scoped Perplexity Agent API deep-research passes, followed by a Perplexity evidence-grounded reasoning pass against the approved Section 4 design</p>
+<p><strong>Scope:</strong> Failure handling, recovery, governance, and testing gates across AI-assisted Interior Architecture from client intent to controlled factory/CNC use</p>
+<h2>Executive answer</h2>
+<p>MONOLITH will be loved when a failure feels like a <strong>calm, competent handoff</strong>, not an accusation and not a technical incident console.</p>
+<p>The user-facing promise should be:</p>
+<blockquote><p>When something goes wrong, MONOLITH preserves my valid work, tells me what happened, shows what remains safe, gives me the one next action I can actually take, and handles the investigation, dependency impact, version control, evidence, authority, audit, retry, and containment backstage.</p></blockquote>
+<p>The approved Section 4 safety model is already structurally strong. The research does <strong>not</strong> justify another workflow, another authoritative recovery object, a trust score, or an AI recovery chatbot. The material missing layer is a thin, derived <strong>Recovery Presentation Contract</strong>: one role-aware Recovery Decision Card projected from the existing RecoveryCase, RecoveryEvent, DecisionReceipt, evidence, capability policy, authority, and egress state.</p>
+<p>The emotional target is <strong>relief with calibrated trust</strong>. Users should feel helped, but never be encouraged to rely on an AI result beyond its evidence or permitted use. Microsoft’s <a href="https://www.microsoft.com/en-us/research/wp-content/uploads/2019/01/Guidelines-for-Human-AI-Interaction-camera-ready.pdf" target="_blank" rel="noopener">Guidelines for Human-AI Interaction</a> emphasize capability boundaries, correction, dismissal, explanation, and user control. <a href="https://nvlpubs.nist.gov/nistpubs/ai/nist.ai.100-1.pdf" target="_blank" rel="noopener">NIST AI RMF</a> connects transparency, accountability, monitoring, recourse, and human oversight. Research on <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC3240751/" target="_blank" rel="noopener">automation bias</a> shows why polished recommendations and simple commands can produce both commission and omission errors.</p>
+<h2>What the evidence supports</h2>
+<h3>1. A recovery view must answer three temporal questions</h3>
+<p>People need to understand why the automation acted, what it is doing now, and what it will do next. For MONOLITH, this becomes:</p>
+<ol>
+<li>What triggered the recovery case?</li>
+<li>What is saved, paused, isolated, blocked, or still safe now?</li>
+<li>What will happen automatically, what requires a person, and what remains prohibited?</li>
+</ol>
+<p>This is more useful than exposing an internal error class or a lifecycle state alone. The lifecycle still governs the system; the card translates it into an actionable human state.</p>
+<h3>2. Appropriate reliance is safer than maximum trust</h3>
+<p>The target is not “users trust the AI.” The target is that users accept correct assistance, reject incorrect assistance, and know when direct evidence or professional review is required. NIST’s <a href="https://airc.nist.gov/docs/AI_RMF_Playbook.pdf" target="_blank" rel="noopener">AI RMF Playbook</a> recommends explicit human roles, overrides, recourse, version history, monitoring, and post-alert action. Trust therefore must be measured against actual correctness, not only satisfaction.</p>
+<p>MONOLITH should:</p>
+<ul>
+<li>state whether a claim was provided, observed, inferred, calculated, verified, contradicted, stale, or missing;</li>
+<li>show evidence and unchecked scope for consequential decisions;</li>
+<li>use plain evidence states instead of one project-level AI confidence percentage;</li>
+<li>preserve manual and last-verified paths when AI is unavailable;</li>
+<li>prevent AI from approving, waiving, releasing, closing incidents, or starting machines.</li>
+</ul>
+<h3>3. Blame-free language improves reporting and recovery</h3>
+<p>Google’s <a href="https://sre.google/sre-book/postmortem-culture/" target="_blank" rel="noopener">blameless postmortem guidance</a> treats people as having acted reasonably with the information available and looks for system conditions that made the action understandable. Applied to product copy:</p>
+<ul>
+<li>describe the state, not the person’s fault;</li>
+<li>say what MONOLITH preserved or stopped;</li>
+<li>name the affected object and exact revision;</li>
+<li>give a concrete recovery action;</li>
+<li>make “ask for review” feel like normal professional work, not failure.</li>
+</ul>
+<p>Use “The ceiling-height evidence is not available yet.” Avoid “You failed to provide the ceiling height.”</p>
+<h3>4. Progressive disclosure must hide machinery, not truth</h3>
+<p><a href="https://design-system.service.gov.uk/patterns/validation/" target="_blank" rel="noopener">GOV.UK validation guidance</a> recommends concise corrective messages, preserved input, a clear summary, and direct paths to the affected information. The first layer should therefore show only the information needed to orient and act. Evidence, diffs, receipts, policy, audit history, raw identifiers, and technical diagnostics remain available in a detail drawer.</p>
+<p>Always visible:</p>
+<ul>
+<li>current safe state;</li>
+<li>affected scope and revision;</li>
+<li>consequence;</li>
+<li>missing or conflicting evidence;</li>
+<li>one primary action;</li>
+<li>owner and acknowledgement state;</li>
+<li>production or commitment eligibility.</li>
+</ul>
+<p>Hidden until requested or needed:</p>
+<ul>
+<li>internal event taxonomy;</li>
+<li>model prompts and inference bookkeeping;</li>
+<li>dependency-graph traversal;</li>
+<li>policy evaluation trace;</li>
+<li>retry/outbox mechanics;</li>
+<li>raw telemetry and stack traces.</li>
+</ul>
+<h3>5. Accessible status is part of safety</h3>
+<p><a href="https://www.w3.org/TR/WCAG22/" target="_blank" rel="noopener">WCAG 2.2</a> requires errors to be identified in text, correction suggestions where known, status messages available to assistive technology, and consequential submissions to be reviewable, correctable, confirmable, or reversible. Status cannot depend on color alone. Thai and English content need correct language metadata, and Thai layouts must support real word segmentation and combining marks as described by the <a href="https://www.w3.org/TR/thai-lreq/" target="_blank" rel="noopener">W3C Thai Layout Requirements</a>.</p>
+<h2>Three product approaches</h2>
+<div class="tablewrap"><table><thead><tr><th>Approach</th><th>Strength</th><th>Risk</th><th>Decision</th></tr></thead><tbody>
+<tr><td><strong>A. One Recovery Decision Card with expandable detail</strong></td><td>Fast orientation, one visible truth, role-specific action, compatible with the 30-second target</td><td>Requires disciplined action ranking and careful projection</td><td><strong>Recommended front door</strong></td></tr>
+<tr><td><strong>B. Guided recovery wizard</strong></td><td>Useful when correction genuinely needs ordered evidence collection or cross-role handoff</td><td>More navigation; users may mistake completing steps for authority to commit</td><td>Invoke only from the card for complex recovery</td></tr>
+<tr><td><strong>C. Role dashboards and notification inboxes</strong></td><td>Scales to queues, teams, and many concurrent cases</td><td>Fragments context and can create stale or competing apparent states</td><td>Secondary navigation only</td></tr>
+</tbody></table></div>
+<p>The Recovery Decision Card should be the authoritative <strong>presentation</strong>, not a new authority. A wizard may execute a multi-step correction. Dashboards, LINE, email, or other notifications may deep-link to the same case, but they must not become separate decision surfaces.</p>
+<h2>Recommended experience: the Recovery Decision Card</h2>
+<h3>Minimum lovable recovery contract</h3>
+<p>The first view contains no more than eight fields:</p>
+<div class="tablewrap"><table><thead><tr><th>Visible field</th><th>Required content</th></tr></thead><tbody>
+<tr><td><strong>1. Status and safe state</strong></td><td>Plain-language state plus whether valid work is saved, isolated, paused, blocked, or reversible</td></tr>
+<tr><td><strong>2. What happened and why</strong></td><td>One bounded explanation; distinguish known cause, probable cause, and unknown</td></tr>
+<tr><td><strong>3. Affected scope and revision</strong></td><td>Project, room/object/job, exact revision or package identity, and destination where relevant</td></tr>
+<tr><td><strong>4. Consequence</strong></td><td>What stopped, what remains available, and what waiting or proceeding would affect</td></tr>
+<tr><td><strong>5. Evidence gap</strong></td><td>Missing, conflicting, stale, or insufficient evidence; required level/cardinality; unknown is never shown as pass</td></tr>
+<tr><td><strong>6. Primary next action</strong></td><td>One safest server-authorized action for this role, labelled by outcome</td></tr>
+<tr><td><strong>7. Alternatives and accountability</strong></td><td>At most two safe alternatives, current owner, requested role, and acknowledgement state</td></tr>
+<tr><td><strong>8. Progress and detail</strong></td><td>Current step, last update, retry/reversal state, plus links to diff, evidence, receipts, and activity history</td></tr>
+</tbody></table></div>
+<p>The card may be recomputed from authoritative state. It must not independently authorize, approve, waive, revoke, release, or change the recovery lifecycle. Every action is revalidated by the server at execution time. A stale card causes a safe refresh, not a commitment.</p>
+<h3>Three recovery intensities</h3>
+<div class="tablewrap"><table><thead><tr><th>Mode</th><th>User experience</th><th>Backstage behavior</th></tr></thead><tbody>
+<tr><td><strong>Routine recovery</strong></td><td>MONOLITH preserves input, explains the issue, suggests one correction, and allows retry or undo</td><td>Validation, deduplication, idempotent retry, dependency refresh, event logging</td></tr>
+<tr><td><strong>Expert recovery</strong></td><td>A role-qualified person receives the exact revision, diff, evidence gap, assumptions, and bounded decision</td><td>Impact analysis, evidence assembly, authority check, receipt binding, handoff acknowledgement</td></tr>
+<tr><td><strong>Incident containment</strong></td><td>A prominent safe-state card shows HOLD, affected jobs, required acknowledgement, and replacement status</td><td>Stop new egress, fence affected capabilities, invalidate controlled authorization, trace destinations, record acknowledgements, preserve append-only timeline</td></tr>
+</tbody></table></div>
+<p>Routine failures should not look like incidents. Incidents should never look like ordinary warnings.</p>
+<h2>Role-specific projections over one truth</h2>
+<div class="tablewrap"><table><thead><tr><th>Role</th><th>First question to answer</th><th>Recovery moment the user should love</th><th>Work MONOLITH handles backstage</th></tr></thead><tbody>
+<tr><td><strong>Client / homeowner</strong></td><td>Is my design saved, and what decision is affected?</td><td>“Your option is saved. We still need a measured ceiling height before technical approval.”</td><td>Source classification, ambiguity detection, downstream impact, routing to designer</td></tr>
+<tr><td><strong>Interior designer</strong></td><td>Which objects changed and can I correct them without restarting?</td><td>Compare the stale base against the current revision, keep the draft, update only affected objects, undo safely</td><td>Stable object mapping, diff, invalidation, regeneration, provenance</td></tr>
+<tr><td><strong>Architect / technical reviewer</strong></td><td>What exact scope, evidence, assumptions, and unchecked areas require judgment?</td><td>See risk-ranked exceptions and coverage for the exact revision; record a purpose-specific decision</td><td>Requirement applicability, evidence cardinality, independent-review ordering, receipt creation</td></tr>
+<tr><td><strong>Coordinator</strong></td><td>Who owns the blocker, has the handoff been accepted, and what does it block?</td><td>See one blocking decision rather than every open issue; escalate only when acknowledgement or deadline fails</td><td>Dependency graph, SLA, notification deduplication, acknowledgement tracking</td></tr>
+<tr><td><strong>Estimator / procurement</strong></td><td>Which quantity, price, supplier, or commitment changed?</td><td>Preserve the priced snapshot and show the exact cost/lead-time delta before changing any order</td><td>BOM reconciliation, quote age, substitution impact, reopening affected technical gates</td></tr>
+<tr><td><strong>Factory / CNC operator</strong></td><td>Can this exact job run on this machine now?</td><td>Scan and see one unambiguous ACTIVE or HOLD state, the verified fallback, and a safe-stop action</td><td>Point-of-use identity check, destination policy, replay prevention, egress fencing, run audit</td></tr>
+</tbody></table></div>
+<h2>Frontstage and backstage boundary</h2>
+<div class="tablewrap"><table><thead><tr><th>User sees</th><th>MONOLITH does backstage</th></tr></thead><tbody>
+<tr><td>One calm recovery card</td><td>Failure classification and case correlation</td></tr>
+<tr><td>Exact affected revision and scope</td><td>Dependency reachability and derivative inventory</td></tr>
+<tr><td>What is saved, safe, paused, or blocked</td><td>Snapshot preservation, quarantine, fencing, and last-verified selection</td></tr>
+<tr><td>Missing evidence and unchecked scope</td><td>Evidence collection, applicability, cardinality, freshness, and provenance checks</td></tr>
+<tr><td>One next action and at most two alternatives</td><td>Capability policy, role/tenant authority, separation-of-duties, and server revalidation</td></tr>
+<tr><td>Owner, acknowledgement, and progress</td><td>Routing, notification deduplication, SLA, retry/outbox, and audit assembly</td></tr>
+<tr><td>Preview or diff before commitment</td><td>Impact computation across geometry, BOM, cost, procurement, shop drawing, and CNC</td></tr>
+<tr><td>Purpose-specific confirmation</td><td>Immutable receipt, manifest binding, controlled egress, and point-of-use verification</td></tr>
+</tbody></table></div>
+<h2>Microcopy contract</h2>
+<p>Every recovery message should follow this order:</p>
+<ol>
+<li>neutral status;</li>
+<li>affected object and revision;</li>
+<li>preserved or safe state;</li>
+<li>consequence;</li>
+<li>next action.</li>
+</ol>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Good</th><th>Avoid</th></tr></thead><tbody>
+<tr><td>Missing site evidence</td><td>“Technical review needed. We could not verify the ceiling height from A-14. Your design is saved; production remains paused. Add a measured drawing or assign a reviewer.”</td><td>“Inference failed: insufficient geometric context.”</td></tr>
+<tr><td>Stale designer base</td><td>“This layout was created before the column changed in A-15. Compare the two affected items, then update or keep your draft.”</td><td>“Your design is out of date.”</td></tr>
+<tr><td>Review evidence gap</td><td>“The fire-rating source for partition P-12 is missing. No technical approval has been recorded.”</td><td>“AI confidence low. Approve anyway?”</td></tr>
+<tr><td>Unacknowledged handoff</td><td>“Review requested from Arun at 14:20. It has not been accepted; procurement remains paused.”</td><td>“Waiting for team.”</td></tr>
+<tr><td>BOM change</td><td>“A-15 changes panel PX-04 from 18 to 22. The purchase order is unchanged until you review the cost difference.”</td><td>“Estimate recalculated successfully.”</td></tr>
+<tr><td>CNC revision mismatch</td><td>“Do not run K07-R18. It was generated from superseded A-14. Load verified K07-R17 or request a new release.”</td><td>“Possible mismatch. Continue?”</td></tr>
+</tbody></table></div>
+<p>Thai translation must be authored as Thai, not assembled from translated fragments. Prefer “ยังไม่มีข้อมูลความสูงฝ้าเพดาน” over “คุณใส่ข้อมูลไม่ครบ”.</p>
+<h2>Fit against the approved Section 4</h2>
+<h3>Keep unchanged</h3>
+<ul>
+<li>RecoveryCase as mutable current projection.</li>
+<li>RecoveryEvent as append-only lifecycle fact.</li>
+<li>DecisionReceipt as immutable purpose-specific proof.</li>
+<li>CapabilityPolicy and server-owned EgressBroker.</li>
+<li>Eight-state lifecycle and containment acknowledgements.</li>
+<li>Permitted-use classes: PREVIEW, SHADOW_SIMULATION, QUALIFICATION_COUPON, QUALIFICATION_FIRST_ARTICLE, and PRODUCTION.</li>
+<li>Incident-specific authority matrix, separation of duties, and tenant-authority prerequisite.</li>
+<li>Evidence levels and cardinality proof.</li>
+<li>Exact-revision binding, controlled egress, truthful offline-revocation limits, audit trail, and no-bypass enforcement.</li>
+<li>Existing user targets: correct orientation within 30 seconds and at least 95% correction or reversal without support.</li>
+</ul>
+<h3>Add as a presentation and communication contract</h3>
+<ul>
+<li>the eight-field Recovery Decision Card;</li>
+<li>explicit safe-state and saved-work wording;</li>
+<li>role-specific projections over the same RecoveryCase;</li>
+<li>one primary authorized action plus at most two safe alternatives;</li>
+<li>preview/diff before consequential commitment;</li>
+<li>owner plus requested/acknowledged handoff state;</li>
+<li>notification tiers: immediate interruption, action queue, digest, activity log only;</li>
+<li>Thai/English and assistive-technology behavior;</li>
+<li>recovery-specific instrumentation and seeded user tests.</li>
+</ul>
+<h3>Avoid or simplify</h3>
+<ul>
+<li>do not expose all lifecycle states, policies, evidence, or authority matrices in the first view;</li>
+<li>do not use raw error codes, stack traces, or model telemetry as primary copy;</li>
+<li>do not show a global confidence score or “AI approved” badge;</li>
+<li>do not create several competing banners, retry buttons, or notification streams;</li>
+<li>do not offer a visually normal “Proceed anyway” action beside the safe action;</li>
+<li>do not mark a handoff “assigned” until the recipient acknowledges it;</li>
+<li>do not describe a remote or offline copy as erased when only future controlled access is blocked.</li>
+</ul>
+<h3>Defer</h3>
+<ul>
+<li>a new recovery-orchestration entity or universal workflow engine;</li>
+<li>conversational recovery as the primary interface;</li>
+<li>automatic approval, waiver, release, incident closure, or machine start;</li>
+<li>customizable card builders, gamification, omnichannel decision-making, and predictive incident prevention;</li>
+<li>fully automatic rollback initiated from the presentation layer.</li>
+</ul>
+<h2>Non-negotiable safety invariants</h2>
+<ol>
+<li>A recovery card is a projection; the server remains the authority.</li>
+<li>Every consequential action binds to exact scope, revision/package identity, purpose, actor, authority, evidence, and time.</li>
+<li>Any material change creates a new revision and invalidates affected approvals; no silent approval inheritance.</li>
+<li>Unknown, timed out, stale, missing, or parser-error evidence is never converted to pass.</li>
+<li>“All passed” requires a cardinality proof over the frozen applicable requirement population.</li>
+<li>Only the controlled egress path can create a production-usable package.</li>
+<li>A production HOLD dominates any lower-priority Approved or ACTIVE display.</li>
+<li>Retry and replay cannot create duplicate approvals, orders, exports, jobs, or machine-start authority.</li>
+<li>Revocation claims are bounded to systems under MONOLITH control; retrieved copies require recipient inventory and acknowledgement.</li>
+<li>Platform checks, AI, simulation, and safe-stop workflow never replace physical guarding, interlocks, emergency controls, or qualified operator judgment. <a href="https://www.osha.gov/machine-guarding" target="_blank" rel="noopener">OSHA machine-guarding guidance</a> makes this boundary essential.</li>
+</ol>
+<h2>Testing designed to disprove the recommendation</h2>
+<h3>Seeded role scenarios</h3>
+<div class="tablewrap"><table><thead><tr><th>Role</th><th>Seeded failure</th><th>Evidence of success</th></tr></thead><tbody>
+<tr><td>Client</td><td>AI cannot verify ceiling height from an image</td><td>Understands that design is saved, technical approval is blocked, and a measured source is needed</td></tr>
+<tr><td>Designer</td><td>Column location changed after the draft base revision</td><td>Finds affected objects, compares revisions, corrects or preserves the draft without restart</td></tr>
+<tr><td>Reviewer</td><td>Fire-rating evidence is stale and belongs to an earlier revision</td><td>Rejects silent inheritance, identifies missing current evidence, records a bounded decision</td></tr>
+<tr><td>Coordinator</td><td>Review request was delivered but not acknowledged</td><td>Distinguishes requested from accepted, identifies the sole blocker, escalates correctly</td></tr>
+<tr><td>Estimator/procurement</td><td>Hardware substitution changes cost and technical compatibility</td><td>Keeps the old priced snapshot, reviews delta, and reopens affected gates before commitment</td></tr>
+<tr><td>Factory/CNC</td><td>Cached package is superseded while the job is queued</td><td>Stops use, selects the verified fallback or requests a new release, never bypasses HOLD</td></tr>
+<tr><td>All roles</td><td>Double-click, refresh, timeout, and action replay</td><td>No duplicate side effect; final status is truthful and auditable</td></tr>
+<tr><td>Accessibility/localization</td><td>Async state change in Thai and English, keyboard and screen reader</td><td>Status is announced, usable without color, wraps correctly, and preserves technical identifiers</td></tr>
+</tbody></table></div>
+<h3>Measures</h3>
+<div class="tablewrap"><table><thead><tr><th>Outcome</th><th>Target or interpretation</th></tr></thead><tbody>
+<tr><td>Correct next-action orientation</td><td>Existing Section 4 target: within 30 seconds</td></tr>
+<tr><td>Correction or reversal without support</td><td>Existing Section 4 target: at least 95%</td></tr>
+<tr><td>Safe first action in critical production scenario</td><td>100% in qualification testing; any unsafe action is a stop condition</td></tr>
+<tr><td>Stale revision or approval accepted as current</td><td>0</td></tr>
+<tr><td>Unauthorized or non-ACTIVE egress</td><td>0</td></tr>
+<tr><td>Duplicate consequential side effect after retry/replay</td><td>0</td></tr>
+<tr><td>Evidence cardinality or unknown misrepresented as complete/pass</td><td>0</td></tr>
+<tr><td>Appropriate reliance</td><td>Report accept-correct and reject-incorrect rates separately; do not replace them with a trust score</td></tr>
+<tr><td>Workload</td><td>Improve role-specific <a href="https://www.nasa.gov/human-systems-integration-division/nasa-task-load-index-tlx/" target="_blank" rel="noopener">NASA-TLX</a> dimensions against the existing workflow without worse defect escape</td></tr>
+<tr><td>Notification quality</td><td>Measure actionable interruptions, duplicates, acknowledgement time, and ignored urgent notices</td></tr>
+<tr><td>Psychological safety</td><td>Users can report uncertainty and request review without feeling blamed</td></tr>
+</tbody></table></div>
+<h3>Stop conditions</h3>
+<p>Stop and redesign if any of these occurs:</p>
+<ul>
+<li>the UI claims safe, approved, complete, active, or revoked without server-verifiable evidence;</li>
+<li>a user or manipulated client can bypass authority, evidence, lifecycle, tenant, or egress policy;</li>
+<li>stale revision, stale approval, unknown evidence, or revoked acknowledgement is treated as valid;</li>
+<li>replay creates a duplicate commitment or production action;</li>
+<li>the visible scope or revision differs from the committed receipt;</li>
+<li>any critical role cannot identify the safe state and next authorized action within the agreed threshold;</li>
+<li>less than 95% can correct or reverse without support;</li>
+<li>critical meaning depends on color, is not exposed to assistive technology, or is materially mistranslated.</li>
+</ul>
+<h2>Cross-domain applicability</h2>
+<p>The Recovery Presentation Contract is domain-neutral and should apply to every qualified Interior Architecture Domain Pack: casework and millwork; doors and partitions; ceilings and lighting coordination; wall and floor finishes; sanitary and wet areas; loose furniture and FF&amp;E; soft furnishings; signage; specialist equipment; and MEP interfaces.</p>
+<p>The card contract can be shared, but each domain must supply its own affected-object language, evidence requirements, risk taxonomy, qualified reviewer role, deterministic checks, safe output adapter, and release authority. A shared UX must never imply shared qualification.</p>
+<h2>Research method and limitations</h2>
+<p>This note used Perplexity in three stages:</p>
+<ol>
+<li>A broad single deep-research request was attempted but exceeded the five-minute API timeout and produced no usable result.</li>
+<li>Two narrower Perplexity deep-research passes completed: human factors/recovery UX and safety governance/design-to-manufacturing.</li>
+<li>A Perplexity reasoning pass compared those findings against the approved Section 4 model and was restricted to primary or official domains.</li>
+</ol>
+<p>The synthesis preserves a strict distinction:</p>
+<ul>
+<li><strong>Evidence-backed principle:</strong> supported by a cited official, standards-body, or peer-reviewed source.</li>
+<li><strong>Product-design inference:</strong> the proposed Recovery Decision Card, eight-field contract, role projections, and frontstage/backstage allocation.</li>
+<li><strong>Existing owner decision:</strong> the approved Section 4 objects, lifecycle, authority, evidence, qualification, and egress model.</li>
+</ul>
+<p>The parent repository was inspected as the governance/bootstrap root. The nested <strong>determined-williams/</strong> repository was inspected as the active product source. This note makes no claim that the proposed Recovery Presentation Contract is implemented, deployed, machine-qualified, or production-ready.</p>
+<h2>Principal sources</h2>
+<div class="tablewrap"><table><thead><tr><th>Source</th><th>Organization / date</th><th>Evidence type</th><th>Supports</th></tr></thead><tbody>
+<tr><td><a href="https://www.microsoft.com/en-us/research/wp-content/uploads/2019/01/Guidelines-for-Human-AI-Interaction-camera-ready.pdf" target="_blank" rel="noopener">Guidelines for Human-AI Interaction</a></td><td>Microsoft Research, 2019</td><td>Research-derived guidance</td><td>Capability boundaries, uncertainty, correction, dismissal, explanation, controls</td></tr>
+<tr><td><a href="https://www.microsoft.com/en-us/haxtoolkit/ai-guidelines/" target="_blank" rel="noopener">HAX Toolkit AI Guidelines</a></td><td>Microsoft</td><td>Official design toolkit</td><td>Human-AI interaction patterns</td></tr>
+<tr><td><a href="https://nvlpubs.nist.gov/nistpubs/ai/nist.ai.100-1.pdf" target="_blank" rel="noopener">AI Risk Management Framework 1.0</a></td><td>NIST, 2023</td><td>Government framework</td><td>Governance, accountability, validity, monitoring, human oversight</td></tr>
+<tr><td><a href="https://airc.nist.gov/docs/AI_RMF_Playbook.pdf" target="_blank" rel="noopener">AI RMF Playbook</a></td><td>NIST</td><td>Government playbook</td><td>Recourse, override, version history, incident response, measurement</td></tr>
+<tr><td><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC3240751/" target="_blank" rel="noopener">Automation Bias: A Systematic Review</a></td><td>JAMIA, 2012</td><td>Peer-reviewed systematic review</td><td>Commission/omission errors and mitigations</td></tr>
+<tr><td><a href="https://pubmed.ncbi.nlm.nih.gov/15151155/" target="_blank" rel="noopener">Trust in Automation: Designing for Appropriate Reliance</a></td><td>Human Factors, 2004</td><td>Peer-reviewed review</td><td>Calibrated trust and appropriate reliance</td></tr>
+<tr><td><a href="https://sre.google/sre-book/postmortem-culture/" target="_blank" rel="noopener">Blameless Postmortem Culture</a></td><td>Google SRE</td><td>Official operational guidance</td><td>System-focused, psychologically safe failure learning</td></tr>
+<tr><td><a href="https://sre.google/sre-book/managing-incidents/" target="_blank" rel="noopener">Managing Incidents</a></td><td>Google SRE</td><td>Official operational guidance</td><td>Explicit roles, handoff, communication, timeline</td></tr>
+<tr><td><a href="https://sre.google/sre-book/monitoring-distributed-systems/" target="_blank" rel="noopener">Monitoring Distributed Systems</a></td><td>Google SRE</td><td>Official operational guidance</td><td>Actionable symptom-first alerts and noise control</td></tr>
+<tr><td><a href="https://design-system.service.gov.uk/patterns/validation/" target="_blank" rel="noopener">Validation Pattern</a></td><td>GOV.UK Design System</td><td>Government service pattern</td><td>Preserved input, error summary, corrective recovery</td></tr>
+<tr><td><a href="https://design-system.service.gov.uk/components/error-message/" target="_blank" rel="noopener">Error Message Component</a></td><td>GOV.UK Design System</td><td>Government service pattern</td><td>Concise, specific, non-blaming error copy</td></tr>
+<tr><td><a href="https://design-system.service.gov.uk/patterns/check-answers/" target="_blank" rel="noopener">Check Answers Pattern</a></td><td>GOV.UK Design System</td><td>Government service pattern</td><td>Review and correction before commitment</td></tr>
+<tr><td><a href="https://www.w3.org/TR/WCAG22/" target="_blank" rel="noopener">WCAG 2.2</a></td><td>W3C, 2023</td><td>Web standard</td><td>Error identification, correction, prevention, language, color, focus</td></tr>
+<tr><td><a href="https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html" target="_blank" rel="noopener">Understanding Status Messages</a></td><td>W3C WAI</td><td>Normative-supporting guidance</td><td>Accessible asynchronous status and progress</td></tr>
+<tr><td><a href="https://www.w3.org/TR/thai-lreq/" target="_blank" rel="noopener">Thai Layout Requirements</a></td><td>W3C Internationalization</td><td>Language layout guidance</td><td>Thai segmentation, combining marks, typography</td></tr>
+<tr><td><a href="https://ukbimframework.org/wp-content/uploads/2020/02/Guidance-Part-C_Facilitating-the-common-data-environment-workflow-and-technical-solutions_Edition-1.pdf" target="_blank" rel="noopener">Common Data Environment Guidance</a></td><td>UK BIM Framework, 2020</td><td>Industry guidance</td><td>Information state, revision, suitability, archive</td></tr>
+<tr><td><a href="https://www.buildingsmart.org/standards/bsi-standards/bim-collaboration-format/" target="_blank" rel="noopener">BIM Collaboration Format</a></td><td>buildingSMART</td><td>Open standard</td><td>Structured, object-linked issue exchange</td></tr>
+<tr><td><a href="https://technical.buildingsmart.org/projects/information-delivery-specification-ids/" target="_blank" rel="noopener">Information Delivery Specification</a></td><td>buildingSMART</td><td>Open standard</td><td>Machine-readable information requirements and checking</td></tr>
+<tr><td><a href="https://csrc.nist.gov/pubs/sp/800/207/final" target="_blank" rel="noopener">Zero Trust Architecture SP 800-207</a></td><td>NIST, 2020</td><td>Government security standard</td><td>Per-session authorization and least privilege</td></tr>
+<tr><td><a href="https://nvlpubs.nist.gov/nistpubs/specialpublications/NIST.SP.800-53r5.pdf" target="_blank" rel="noopener">Security and Privacy Controls SP 800-53 Rev. 5</a></td><td>NIST, 2020</td><td>Government security controls</td><td>Separation of duties, audit protection, information flow</td></tr>
+<tr><td><a href="https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-82r3.pdf" target="_blank" rel="noopener">Guide to Operational Technology Security SP 800-82 Rev. 3</a></td><td>NIST, 2023</td><td>Government OT guidance</td><td>OT segmentation, allowlisting, controlled conduits</td></tr>
+<tr><td><a href="https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments" target="_blank" rel="noopener">Deployment Environments</a></td><td>GitHub</td><td>Official product documentation</td><td>Protected deployment approvals and anti-self-approval precedent</td></tr>
+<tr><td><a href="https://learn.microsoft.com/en-us/purview/track-and-revoke-admin" target="_blank" rel="noopener">Track and Revoke Documents</a></td><td>Microsoft Purview</td><td>Official product documentation</td><td>Limits of revocation for downloaded and offline copies</td></tr>
+<tr><td><a href="https://www.osha.gov/machine-guarding" target="_blank" rel="noopener">Machine Guarding</a></td><td>OSHA</td><td>Government safety guidance</td><td>Software does not replace physical safeguards</td></tr>
+<tr><td><a href="https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html" target="_blank" rel="noopener">EC2 API Idempotency</a></td><td>AWS</td><td>Official product documentation</td><td>Retry without duplicate side effects</td></tr>
+<tr><td><a href="https://www.nasa.gov/human-systems-integration-division/nasa-task-load-index-tlx/" target="_blank" rel="noopener">NASA Task Load Index</a></td><td>NASA</td><td>Validated workload method</td><td>Multidimensional workload measurement</td></tr>
+</tbody></table></div>
+<h2>Final research recommendation</h2>
+<p>Keep the Section 4 truth, authority, evidence, qualification, and egress model intact. Add only the thin <strong>Recovery Presentation Contract</strong>:</p>
+<p><strong>One case → one role-aware Recovery Decision Card → one safest action → expandable proof → server-validated commitment.</strong></p>
+<p>That is the smallest change most likely to make recovery feel easy and humane without weakening professional responsibility or manufacturing safety.</p>
+</main></body>
+</html>
