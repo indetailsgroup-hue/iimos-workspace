@@ -1127,7 +1127,13 @@ test("A1 browser evidence producer help is inert and temp output cannot overwrit
   assert.deepEqual(await identities(), beforeHelp, "failed canonical capture changed evidence bytes or mtimes");
   assert.deepEqual(await transactionResidue(), residueBeforeFailure, "failed canonical capture left staging or backup residue");
   const portProbe = spawnSync("python", ["-c", [
+    "import socket",
     "from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer",
+    "try:",
+    "    with socket.create_connection(('127.0.0.1', 4179), timeout=0.25):",
+    "        raise RuntimeError('evidence server is still accepting connections')",
+    "except OSError:",
+    "    pass",
     "probe = None",
     "try:",
     "    probe = ThreadingHTTPServer(('127.0.0.1', 4179), SimpleHTTPRequestHandler)",
