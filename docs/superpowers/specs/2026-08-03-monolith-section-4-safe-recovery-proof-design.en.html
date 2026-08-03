@@ -2,31 +2,59 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MONOLITH Section 4 Design: Safe Recovery & Proof</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>MONOLITH Section 4 Design: Safe Recovery &amp; Proof</title>
 <style>
-  :root { color-scheme: light dark; font-family: Inter, "Noto Sans Thai", system-ui, sans-serif; }
-  body { margin: 0; background: light-dark(#f5f3ec, #111713); color: light-dark(#20332c, #edf4ef); }
-  main { max-width: 980px; margin: 0 auto; padding: 36px 24px 72px; }
-  article { background: light-dark(#fffef9, #1a241f); border: 1px solid light-dark(#ddd8ca, #38483f); border-radius: 18px; padding: clamp(20px, 4vw, 44px); box-shadow: 0 16px 48px light-dark(rgba(35,56,49,.10), rgba(0,0,0,.28)); }
-  h1, h2, h3 { color: light-dark(#183c31, #f2f7f4); line-height: 1.25; }
-  h1 { margin-top: 0; font-size: clamp(1.8rem, 4vw, 2.6rem); }
-  h2 { margin-top: 2.25rem; border-bottom: 1px solid light-dark(#ddd8ca, #38483f); padding-bottom: .4rem; }
-  h3 { margin-top: 1.6rem; }
-  p, li { line-height: 1.72; }
-  blockquote { margin: 1.25rem 0; padding: .7rem 1rem; border-left: 4px solid light-dark(#2d6651, #8bc4a8); background: light-dark(#eaf3ed, #22342a); }
-  code { background: light-dark(#eeeae0, #2b3831); border-radius: 5px; padding: .12rem .35rem; overflow-wrap: anywhere; }
-  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: .94rem; }
-  th, td { padding: .65rem .7rem; border-bottom: 1px solid light-dark(#ddd8ca, #38483f); text-align: left; vertical-align: top; line-height: 1.5; }
-  th { background: light-dark(#eeece4, #25322b); }
-  a { color: light-dark(#2d6651, #9bd2b6); }
-  @media (max-width: 720px) { main { padding: 12px 8px 36px; } article { border-radius: 12px; } table { display: block; overflow-x: auto; } }
-  @media print { body { background: white; color: black; } main { max-width: none; padding: 0; } article { border: 0; box-shadow: none; padding: 0; } }
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
 </style>
 </head>
-<body>
-<main><article><h1>MONOLITH Section 4 Design: Safe Recovery &amp; Proof</h1>
-<p><strong>Status:</strong> OWNER DECISION — Revised after approved scrutiny on 3 August 2026; written specification pending owner review</p>
+<body><main>
+<h1>MONOLITH Section 4 Design: Safe Recovery &amp; Proof</h1>
+<p><strong>Status:</strong> OWNER DECISION — Minimum corrections approved on 3 August 2026 and incorporated; bounded consistency review passed with no blocker</p>
 <p><strong>Product direction:</strong> Decision Chain UX</p>
 <p><strong>Section purpose:</strong> Contain failure, preserve authority, recover safely, and prove readiness before work resumes</p>
 <p><strong>Applies first to:</strong> Casework and kitchen packages in shadow / NOT-FOR-PRODUCTION operation</p>
@@ -38,9 +66,7 @@
 <p>No failed, stale, contradictory, unauthorized, unverified, or incompletely covered state may silently advance. “No recorded failure” is not equivalent to “all required evidence is present.”</p>
 <h2>2. Intent and Success Condition</h2>
 <p>The section must make this promise true:</p>
-<blockquote>
-<p>When something fails, MONOLITH contains the effect, preserves the last safe revision, identifies who owns recovery, and proves the required controls again before permitting work to continue.</p>
-</blockquote>
+<blockquote><p>When something fails, MONOLITH contains the effect, preserves the last safe revision, identifies who owns recovery, and proves the required controls again before permitting work to continue.</p></blockquote>
 <p>Success is not an attractive safety dashboard. Success is an enforceable path in which:</p>
 <ol>
 <li>the failure is bound to an exact revision and affected scope;</li>
@@ -58,6 +84,7 @@
 <p>A general incident, workflow, policy, evidence, and export platform would duplicate substantial workflow, approval, audit, release, and policy primitives already present in the product and would exceed the bounded V1.</p>
 <h3>C. Split recovery model plus capability gate — approved</h3>
 <p><code>RecoveryCase</code> is the current projection. <code>RecoveryEvent</code> and <code>DecisionReceipt</code> records are append-only proof. <code>CapabilityPolicy</code> decides authority and evidence. <code>EgressBroker</code> is the only controlled path for production-usable or qualification output. Existing approval, quorum, idempotency, audit, release, and policy primitives are reused as semantic starting points, not assumed to be current production authority.</p>
+<p>The beloved-safe-recovery deep research is evidence and a UX appendix to this section, not another normative architecture layer. A role view is a derived projection of the existing <code>RecoveryCase</code>, events, receipts, policy, and broker result. This design does <strong>not</strong> create a separately persisted “Recovery Presentation Contract,” a second recovery source of truth, or a new lifecycle state.</p>
 <h2>4. Scope and Non-Goals</h2>
 <h3>Included</h3>
 <ul>
@@ -100,70 +127,23 @@
 <p>The model separates current state from immutable proof. A receipt never mutates, and an editable case is never presented as proof.</p>
 <h3>6.1 Four bounded objects</h3>
 <h4><code>RecoveryCase</code> — mutable current projection</h4>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Requirement</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>caseId</code> / <code>schemaVersion</code></td>
-<td>Stable global identity and explicit schema version</td>
-</tr>
-<tr>
-<td><code>failureClass</code> / <code>riskClass</code></td>
-<td>Failure mechanism and LOW, MEDIUM, HIGH, or CRITICAL risk; these are independent</td>
-</tr>
-<tr>
-<td><code>detectedAt</code> / <code>detectedBy</code></td>
-<td>Trusted timestamp and resolved human or system source</td>
-</tr>
-<tr>
-<td><code>authorityScopeRef</code></td>
-<td>Versioned tenant / organization / site authority reference; never inferred from UI state or hard-coded to <code>site_code</code></td>
-</tr>
-<tr>
-<td><code>projectId</code>, <code>packageId</code>, <code>revisionId</code>, <code>capabilityId</code></td>
-<td>Exact affected project, work package, immutable revision, and controlled capability</td>
-</tr>
-<tr>
-<td><code>affectedClaims</code> / <code>impactTargets</code></td>
-<td>Claim dependency edges and every order, part, export, person, endpoint, machine, cache, or offline copy requiring containment</td>
-</tr>
-<tr>
-<td><code>lastSafeState</code></td>
-<td>Exact revision and scope whose permitted use remains valid; unaffected scope must be explicit</td>
-</tr>
-<tr>
-<td><code>invalidatedReceiptIds</code></td>
-<td>Purpose-specific receipts no longer usable</td>
-</tr>
-<tr>
-<td><code>owner</code> / <code>escalationOwner</code></td>
-<td>Named recovery owner and escalation authority; a governed service may execute but cannot replace required human authority</td>
-</tr>
-<tr>
-<td><code>primaryNextAction</code></td>
-<td>One plain-language primary action, with secondary actions disclosed on demand</td>
-</tr>
-<tr>
-<td><code>capabilityPolicyRef</code></td>
-<td>Exact policy ID and version that defines authority, proof, acknowledgement, and permitted use</td>
-</tr>
-<tr>
-<td><code>expectedVersion</code> / <code>fencingToken</code></td>
-<td>Optimistic concurrency version and token that prevents a stale worker or device from reopening capability</td>
-</tr>
-<tr>
-<td><code>state</code></td>
-<td>DETECTED, CONTAINED, ASSIGNED, RECOVERING, REVERIFYING, RESUMED, RETIRED, or SUPERSEDED</td>
-</tr>
-<tr>
-<td><code>relatedCaseIds</code></td>
-<td>Duplicate, parent, child, recurrence, or superseding case relationships</td>
-</tr>
-</tbody></table>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>Requirement</th></tr></thead><tbody>
+<tr><td><code>caseId</code> / <code>schemaVersion</code></td><td>Stable global identity and explicit schema version</td></tr>
+<tr><td><code>failureClass</code> / <code>riskClass</code></td><td>Failure mechanism and LOW, MEDIUM, HIGH, or CRITICAL risk; these are independent</td></tr>
+<tr><td><code>detectedAt</code> / <code>detectedBy</code></td><td>Trusted timestamp and resolved human or system source</td></tr>
+<tr><td><code>authorityScopeRef</code></td><td>Versioned tenant / organization / site authority reference; never inferred from UI state or hard-coded to <code>site_code</code></td></tr>
+<tr><td><code>projectId</code>, <code>packageId</code>, <code>revisionId</code>, <code>capabilityId</code></td><td>Exact affected project, work package, immutable revision, and controlled capability</td></tr>
+<tr><td><code>affectedClaims</code> / <code>impactTargets</code></td><td>Claim dependency edges and every order, part, export, person, endpoint, machine, cache, or offline copy requiring containment</td></tr>
+<tr><td><code>lastSafeState</code></td><td>Exact revision and scope whose permitted use remains valid; unaffected scope must be explicit</td></tr>
+<tr><td><code>invalidatedReceiptIds</code></td><td>Purpose-specific receipts no longer usable</td></tr>
+<tr><td><code>assignmentRequest</code> / <code>assignmentAcceptance</code></td><td>Requested assignee, requested time, delivery/acknowledgement evidence, acceptance mode and time, deadline, and applicable auto-assignment policy; request is not acceptance</td></tr>
+<tr><td><code>owner</code> / <code>escalationOwner</code></td><td>Accepted recovery owner, or owner established by an explicit authoritative auto-assignment policy, plus escalation authority; a governed service may execute but cannot replace required human authority</td></tr>
+<tr><td><code>primaryNextAction</code></td><td>One plain-language primary action, with secondary actions disclosed on demand</td></tr>
+<tr><td><code>capabilityPolicyRef</code></td><td>Exact policy ID and version that defines authority, proof, acknowledgement, and permitted use</td></tr>
+<tr><td><code>expectedVersion</code> / <code>fencingToken</code></td><td>Optimistic concurrency version and token that prevents a stale worker or device from reopening capability</td></tr>
+<tr><td><code>state</code></td><td>DETECTED, CONTAINED, ASSIGNED, RECOVERING, REVERIFYING, RESUMED, RETIRED, or SUPERSEDED</td></tr>
+<tr><td><code>relatedCaseIds</code></td><td>Duplicate, parent, child, recurrence, or superseding case relationships</td></tr>
+</tbody></table></div>
 <h4><code>RecoveryEvent</code> — append-only lifecycle fact</h4>
 <p>Every accepted transition writes an immutable event containing <code>eventId</code>, <code>caseId</code>, event type, trusted time, resolved actor or governed service, expected and resulting case versions, command idempotency key, correlation and causation IDs, policy reference, payload digest, and audit-chain anchor. Duplicate detection links events or cases; it never silently overwrites the first observation.</p>
 <h4><code>DecisionReceipt</code> — immutable purpose-specific proof</h4>
@@ -171,139 +151,34 @@
 <h4><code>CapabilityPolicy</code> and <code>EgressGrant</code> — authority to act</h4>
 <p><code>CapabilityPolicy</code> maps action, incident class, risk, permitted-use class, authority set, separation rules, mandatory control claims, expected evidence cardinality, minimum evidence level, freshness, containment acknowledgement, and allowed egress. <code>EgressBroker</code> issues a short-lived, purpose-bound, non-transferable <code>EgressGrant</code> only after that policy passes.</p>
 <h3>6.2 Single state machine</h3>
-<table>
-<thead>
-<tr>
-<th>From</th>
-<th>To</th>
-<th>Minimum precondition</th>
-<th>Immutable output</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>none</td>
-<td>DETECTED</td>
-<td>Deduplicated detection bound to exact scope and revision</td>
-<td>detection event</td>
-</tr>
-<tr>
-<td>DETECTED</td>
-<td>CONTAINED</td>
-<td>Capability closed; impact targets discovered or explicitly UNKNOWN and fail-closed</td>
-<td>containment event</td>
-</tr>
-<tr>
-<td>CONTAINED</td>
-<td>ASSIGNED</td>
-<td>Named owner, authority scope, deadline, and escalation path</td>
-<td>assignment event</td>
-</tr>
-<tr>
-<td>ASSIGNED</td>
-<td>RECOVERING</td>
-<td>Approved recovery command with idempotency key and expected case version</td>
-<td>recovery-start event</td>
-</tr>
-<tr>
-<td>RECOVERING</td>
-<td>REVERIFYING</td>
-<td>Recovery effects reconciled; no ambiguous prepared effect remains</td>
-<td>recovery-complete event</td>
-</tr>
-<tr>
-<td>ASSIGNED, RECOVERING, or REVERIFYING</td>
-<td>CONTAINED</td>
-<td>Newly discovered impact invalidates stale recovery or proof; affected capability remains closed</td>
-<td>containment-expansion event</td>
-</tr>
-<tr>
-<td>REVERIFYING</td>
-<td>RESUMED</td>
-<td>CapabilityPolicy passes on exact recovered revision; acknowledgement threshold and authority quorum hold</td>
-<td>resume DecisionReceipt</td>
-</tr>
-<tr>
-<td>REVERIFYING</td>
-<td>RETIRED</td>
-<td>Qualified authority closes the capability or branch permanently</td>
-<td>retirement DecisionReceipt</td>
-</tr>
-<tr>
-<td>REVERIFYING</td>
-<td>SUPERSEDED</td>
-<td>Replacement identity and evidence chain exist; old capability remains unusable</td>
-<td>supersede DecisionReceipt</td>
-</tr>
-</tbody></table>
+<div class="tablewrap"><table><thead><tr><th>From</th><th>To</th><th>Minimum precondition</th><th>Immutable output</th></tr></thead><tbody>
+<tr><td>none</td><td>DETECTED</td><td>Deduplicated detection bound to exact scope and revision</td><td>detection event</td></tr>
+<tr><td>DETECTED</td><td>CONTAINED</td><td>Capability closed; impact targets discovered or explicitly UNKNOWN and fail-closed</td><td>containment event</td></tr>
+<tr><td>CONTAINED</td><td>ASSIGNED</td><td>Named recipient has accepted the assignment, or an incident policy has recorded authoritative auto-assignment; authority scope, deadline, and escalation path exist</td><td>assignment-accepted or auto-assigned event</td></tr>
+<tr><td>ASSIGNED</td><td>RECOVERING</td><td>Approved recovery command with idempotency key and expected case version</td><td>recovery-start event</td></tr>
+<tr><td>RECOVERING</td><td>REVERIFYING</td><td>Recovery effects reconciled; no ambiguous prepared effect remains</td><td>recovery-complete event</td></tr>
+<tr><td>ASSIGNED, RECOVERING, or REVERIFYING</td><td>CONTAINED</td><td>Newly discovered impact invalidates stale recovery or proof; affected capability remains closed</td><td>containment-expansion event</td></tr>
+<tr><td>REVERIFYING</td><td>RESUMED</td><td>CapabilityPolicy passes on exact recovered revision; acknowledgement threshold and authority quorum hold</td><td>resume DecisionReceipt</td></tr>
+<tr><td>REVERIFYING</td><td>RETIRED</td><td>Qualified authority closes the capability or branch permanently</td><td>retirement DecisionReceipt</td></tr>
+<tr><td>REVERIFYING</td><td>SUPERSEDED</td><td>Replacement identity and evidence chain exist; old capability remains unusable</td><td>supersede DecisionReceipt</td></tr>
+</tbody></table></div>
 <p><code>EXPLAIN</code> is a presentation responsibility available in every state, not a persistent state. <code>OPEN</code> is not a lifecycle value. A new failure after a terminal state creates a related new <code>RecoveryCase</code>; a terminal case is not reopened. Any newly discovered impact before terminal disposition returns the case to CONTAINED through a new event and invalidates stale recovery work.</p>
+<p>An assignment request leaves the case in CONTAINED. Requested, delivered, read, accepted, rejected, expired, and policy-auto-assigned outcomes are distinct <code>RecoveryEvent</code> facts; they do not add a ninth state. Assignment acceptance is also distinct from containment acknowledgement: the former establishes who owns recovery, while the latter proves that a specific impact target has been stopped or isolated.</p>
 <h3>6.3 Containment completion</h3>
 <p>Each <code>ImpactTarget</code> has target type, exact identity, required action, required acknowledgement mode, lease or policy expiry, status, last attempt, and acknowledgement evidence. Resume is forbidden until the CapabilityPolicy threshold holds. Safety, security, integrity, revocation, and production-egress incidents require 100% acknowledgement or documented physical isolation approved by the incident-specific authority; UNKNOWN is not success.</p>
 <h2>7. Failure Classes and Default Containment</h2>
 <p><code>failureClass</code> explains the mechanism; <code>riskClass</code> determines urgency and control strength. No failure class automatically implies one fixed risk level. The table gives minimum containment only; CapabilityPolicy resolves the final authority and proof for the affected capability.</p>
-<table>
-<thead>
-<tr>
-<th>Failure class</th>
-<th>Example</th>
-<th>Default containment</th>
-<th>Required authority input</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Evidence</td>
-<td>Missing site dimension, stale supplier specification</td>
-<td>Keep WIP or review candidate blocked</td>
-<td>Evidence owner plus reviewer</td>
-</tr>
-<tr>
-<td>AI proposal</td>
-<td>Unsupported inference, invalid propagation</td>
-<td>Discard or quarantine proposal; canonical revision unchanged</td>
-<td>Designer</td>
-</tr>
-<tr>
-<td>Concurrency</td>
-<td>Version conflict, partial write, duplicate command</td>
-<td>Abort transition; reconcile prepared effects</td>
-<td>Transaction/recovery service</td>
-</tr>
-<tr>
-<td>Authority</td>
-<td>Expired assignment, self-approval, wrong scope</td>
-<td>Deny action; preserve state</td>
-<td>Governance owner</td>
-</tr>
-<tr>
-<td>Verification</td>
-<td>Missing, stale, duplicate, or failed report</td>
-<td>Quarantine release candidate</td>
-<td>Qualified verifier</td>
-</tr>
-<tr>
-<td>Release</td>
-<td>Signature, manifest, machine-profile, or egress mismatch</td>
-<td>Close all production egress</td>
-<td>Authorized releaser plus factory authority</td>
-</tr>
-<tr>
-<td>Post-release</td>
-<td>Defect or changed input discovered after ACTIVE</td>
-<td>Immediate HOLD or REVOKE; identify affected copies/orders</td>
-<td>Incident commander / revocation authority</td>
-</tr>
-<tr>
-<td>Infrastructure</td>
-<td>Offline, timeout, unavailable signer/store</td>
-<td>Read-only or queued capture only; no release</td>
-<td>Service owner</td>
-</tr>
-<tr>
-<td>Security</td>
-<td>Key compromise, cross-tenant access, tampered audit</td>
-<td>Revoke capability and keys; isolate scope</td>
-<td>Security authority</td>
-</tr>
-</tbody></table>
+<div class="tablewrap"><table><thead><tr><th>Failure class</th><th>Example</th><th>Default containment</th><th>Required authority input</th></tr></thead><tbody>
+<tr><td>Evidence</td><td>Missing site dimension, stale supplier specification</td><td>Keep WIP or review candidate blocked</td><td>Evidence owner plus reviewer</td></tr>
+<tr><td>AI proposal</td><td>Unsupported inference, invalid propagation</td><td>Discard or quarantine proposal; canonical revision unchanged</td><td>Designer</td></tr>
+<tr><td>Concurrency</td><td>Version conflict, partial write, duplicate command</td><td>Abort transition; reconcile prepared effects</td><td>Transaction/recovery service</td></tr>
+<tr><td>Authority</td><td>Expired assignment, self-approval, wrong scope</td><td>Deny action; preserve state</td><td>Governance owner</td></tr>
+<tr><td>Verification</td><td>Missing, stale, duplicate, or failed report</td><td>Quarantine release candidate</td><td>Qualified verifier</td></tr>
+<tr><td>Release</td><td>Signature, manifest, machine-profile, or egress mismatch</td><td>Close all production egress</td><td>Authorized releaser plus factory authority</td></tr>
+<tr><td>Post-release</td><td>Defect or changed input discovered after ACTIVE</td><td>Immediate HOLD or REVOKE; identify affected copies/orders</td><td>Incident commander / revocation authority</td></tr>
+<tr><td>Infrastructure</td><td>Offline, timeout, unavailable signer/store</td><td>Read-only or queued capture only; no release</td><td>Service owner</td></tr>
+<tr><td>Security</td><td>Key compromise, cross-tenant access, tampered audit</td><td>Revoke capability and keys; isolate scope</td><td>Security authority</td></tr>
+</tbody></table></div>
 <h2>8. Transaction and Effect Reliability</h2>
 <p>“Atomic Commit” is a target control and must not be claimed from sequential writes.</p>
 <p>Every consequential transition uses:</p>
@@ -318,74 +193,32 @@
 <li>an immutable event for each retry, compensation, acknowledgement, or terminal failure.</li>
 </ol>
 <p>The minimum effect lifecycle is <code>PREPARED → COMMITTED</code> or <code>PREPARED → ABORTED</code>. A reconciler must detect and resolve prepared records left by process failure. Stale workers and devices are rejected by the fencing token. The user must never be asked to guess whether a click succeeded.</p>
+<h3>8.1 Notification intent and acknowledgement semantics</h3>
+<p>Notifications are derived effects, not authority or lifecycle state. Routing resolves risk, actor capability, required response, deadline, and acknowledgement mode into four intents:</p>
+<div class="tablewrap"><table><thead><tr><th>Intent</th><th>Use</th><th>Default delivery</th></tr></thead><tbody>
+<tr><td>Immediate interruption</td><td>Imminent unsafe production/release, required critical containment acknowledgement, or time-critical authority action</td><td>Named role and current escalation path only</td></tr>
+<tr><td>Action queue</td><td>Required correction, review, assignment acceptance, or evidence task that is actionable but not immediately dangerous</td><td>Responsible role queue with due time</td></tr>
+<tr><td>Digest</td><td>Non-urgent dependency or coordination update</td><td>Scheduled role digest</td></tr>
+<tr><td>Activity log only</td><td>Routine retry, autosave, diagnostic, or resolved transient event with no human response required</td><td>Searchable audit/activity record; no interruption</td></tr>
+</tbody></table></div>
+<p>Related failures are deduplicated into one current case and one current owner. “FYI” does not justify a group interruption. Delivery, read, assignment acceptance, and containment acknowledgement are separate immutable events and must never be inferred from one another. The current notification and workflow-handoff helpers are semantic starting points only; they do not conform until these intent and acknowledgement rules are implemented and tested.</p>
 <h2>9. Governance and Authority</h2>
 <h3>9.1 Authority is server-owned</h3>
 <p>UI role labels, hidden buttons, local state, email links, and chat identity are not permission. The server evaluates the actor, authority assignment, scope, purpose, exact revision, validity window, and separation-of-duty policy at commit time.</p>
 <h3>9.2 Authority moments</h3>
-<table>
-<thead>
-<tr>
-<th>Decision context</th>
-<th>Required authority set</th>
-<th>Separation rule</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Accept client concept</td>
-<td>Client decision authority</td>
-<td>Cannot imply technical or fabrication approval</td>
-</tr>
-<tr>
-<td>Confirm design intent</td>
-<td>Assigned designer</td>
-<td>Cannot release own work to production alone</td>
-</tr>
-<tr>
-<td>Record technical disposition</td>
-<td>Qualified independent reviewer</td>
-<td>Independent-first for critical claims</td>
-</tr>
-<tr>
-<td>Confirm priced BOM basis</td>
-<td>Commercial authority</td>
-<td>Cannot approve geometry or machining</td>
-</tr>
-<tr>
-<td>Confirm manufacturing translation</td>
-<td>Factory engineer</td>
-<td>Cannot alone open production egress</td>
-</tr>
-<tr>
-<td>Commit ACTIVE manufacturing release</td>
-<td>Qualified reviewer or factory-translation authority <strong>and</strong> Authorized Releaser</td>
-<td>Two distinct verified humans</td>
-</tr>
-<tr>
-<td>HOLD</td>
-<td>Any authorized safety role</td>
-<td>Immediate one-person fail-safe action; reason and scope required</td>
-</tr>
-<tr>
-<td>REVOKE</td>
-<td>Incident-specific revocation authority</td>
-<td>Immediate fail-safe action; production egress closes without waiting for resume quorum</td>
-</tr>
-<tr>
-<td>Resume after manufacturing or professional-safety incident</td>
-<td>Qualified independent reviewer or factory-translation authority <strong>and</strong> Authorized Releaser</td>
-<td>Two distinct verified humans; fresh exact-revision evidence</td>
-</tr>
-<tr>
-<td>Resume after security, key, tenancy, audit-integrity, or tampering incident</td>
-<td>Security Authority <strong>and</strong> Authorized Releaser</td>
-<td>Two distinct verified humans; compromised identity or key cannot participate</td>
-</tr>
-<tr>
-<td>Resume after infrastructure incident that can reopen production egress</td>
-<td>Service Owner <strong>and</strong> Authorized Releaser</td>
-<td>Two distinct verified humans plus reconciled effect ledger</td>
-</tr>
-</tbody></table>
+<div class="tablewrap"><table><thead><tr><th>Decision context</th><th>Required authority set</th><th>Separation rule</th></tr></thead><tbody>
+<tr><td>Accept client concept</td><td>Client decision authority</td><td>Cannot imply technical or fabrication approval</td></tr>
+<tr><td>Confirm design intent</td><td>Assigned designer</td><td>Cannot release own work to production alone</td></tr>
+<tr><td>Record technical disposition</td><td>Qualified independent reviewer</td><td>Independent-first for critical claims</td></tr>
+<tr><td>Confirm priced BOM basis</td><td>Commercial authority</td><td>Cannot approve geometry or machining</td></tr>
+<tr><td>Confirm manufacturing translation</td><td>Factory engineer</td><td>Cannot alone open production egress</td></tr>
+<tr><td>Commit ACTIVE manufacturing release</td><td>Qualified reviewer or factory-translation authority <strong>and</strong> Authorized Releaser</td><td>Two distinct verified humans</td></tr>
+<tr><td>HOLD</td><td>Any authorized safety role</td><td>Immediate one-person fail-safe action; reason and scope required</td></tr>
+<tr><td>REVOKE</td><td>Incident-specific revocation authority</td><td>Immediate fail-safe action; production egress closes without waiting for resume quorum</td></tr>
+<tr><td>Resume after manufacturing or professional-safety incident</td><td>Qualified independent reviewer or factory-translation authority <strong>and</strong> Authorized Releaser</td><td>Two distinct verified humans; fresh exact-revision evidence</td></tr>
+<tr><td>Resume after security, key, tenancy, audit-integrity, or tampering incident</td><td>Security Authority <strong>and</strong> Authorized Releaser</td><td>Two distinct verified humans; compromised identity or key cannot participate</td></tr>
+<tr><td>Resume after infrastructure incident that can reopen production egress</td><td>Service Owner <strong>and</strong> Authorized Releaser</td><td>Two distinct verified humans plus reconciled effect ledger</td></tr>
+</tbody></table></div>
 <p>Self-approval, expired authority, scope mismatch, duplicate person under two roles, unverifiable identity, or an identity affected by the incident fail closed.</p>
 <p>For this specification, <strong>high risk</strong> means any action that creates or opens production-usable egress, or resumes a capability after a safety, security, tenancy, audit-integrity, key, tampering, or revocation incident. CapabilityPolicy selects the incident-specific pair from the table; there is no generic reviewer/factory substitute for security authority. HOLD and REVOKE remain one-person fail-safe actions for an authorized incident-specific role. RESUME always creates a new DecisionReceipt; prior approval or release receipts are never reused.</p>
 <h3>9.3 Audit and revocation</h3>
@@ -404,66 +237,15 @@
 <h2>10. Capability Qualification Policy</h2>
 <p>Every controlled action resolves one versioned CapabilityPolicy before it can run. A policy is executable only when it names the capability, action, incident class, permitted-use class, authority set, control claims, expected evidence cardinality, minimum evidence level, freshness, acknowledgement threshold, and allowed egress. A narrative statement that evidence is “complete” is not a gate.</p>
 <h3>10.1 Control-claim catalog</h3>
-<table>
-<thead>
-<tr>
-<th>Claim ID</th>
-<th>Control claim</th>
-<th>Minimum executable evidence</th>
-<th>Operational evidence</th>
-<th>Failure consequence</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>CC-ATOMIC</code></td>
-<td>Commit is all-or-nothing</td>
-<td>Failure injection at every write boundary; crash recovery; fenced idempotent replay</td>
-<td>Recovery drill</td>
-<td>Release capability closed</td>
-</tr>
-<tr>
-<td><code>CC-COVERAGE</code></td>
-<td>Evidence coverage is complete</td>
-<td>Expected-versus-observed cardinality, scope, freshness, duplicate, missing, and UNKNOWN tests</td>
-<td>Seeded-defect trial</td>
-<td>Candidate remains quarantined</td>
-</tr>
-<tr>
-<td><code>CC-SOD</code></td>
-<td>Separation of duties holds</td>
-<td>Property tests across actors, roles, expiry, scope, affected identities, and self-approval</td>
-<td>Observed shadow approvals</td>
-<td>Commit denied</td>
-</tr>
-<tr>
-<td><code>CC-REVOKE</code></td>
-<td>Revocation propagates</td>
-<td>Offline stale-policy, key compromise, cache, fencing, and clock-boundary tests</td>
-<td>Revocation exercise at every registered endpoint</td>
-<td>Egress closed</td>
-</tr>
-<tr>
-<td><code>CC-EGRESS</code></td>
-<td>No export bypass exists</td>
-<td>Broker contract tests, unregistered-egress build/runtime denial, plus static scan</td>
-<td>External-channel observation</td>
-<td>Release blocked; incident opened</td>
-</tr>
-<tr>
-<td><code>CC-MACHINE</code></td>
-<td>Package matches machine and purpose</td>
-<td>Manifest, checksum, unit, origin, postprocessor, tool, geometry envelope, machine profile, and permitted-use tests</td>
-<td>Simulation, supervised coupon, then first article</td>
-<td>Machine use prohibited</td>
-</tr>
-<tr>
-<td><code>CC-RECOVERY-UX</code></td>
-<td>Recovery is usable</td>
-<td>Role E2E tests for detect-to-resume and detect-to-retire</td>
-<td>Facilitated pilot with each role</td>
-<td>Redesign recovery UX</td>
-</tr>
-</tbody></table>
+<div class="tablewrap"><table><thead><tr><th>Claim ID</th><th>Control claim</th><th>Minimum executable evidence</th><th>Operational evidence</th><th>Failure consequence</th></tr></thead><tbody>
+<tr><td><code>CC-ATOMIC</code></td><td>Commit is all-or-nothing</td><td>Failure injection at every write boundary; crash recovery; fenced idempotent replay</td><td>Recovery drill</td><td>Release capability closed</td></tr>
+<tr><td><code>CC-COVERAGE</code></td><td>Evidence coverage is complete</td><td>Expected-versus-observed cardinality, scope, freshness, duplicate, missing, and UNKNOWN tests</td><td>Seeded-defect trial</td><td>Candidate remains quarantined</td></tr>
+<tr><td><code>CC-SOD</code></td><td>Separation of duties holds</td><td>Property tests across actors, roles, expiry, scope, affected identities, and self-approval</td><td>Observed shadow approvals</td><td>Commit denied</td></tr>
+<tr><td><code>CC-REVOKE</code></td><td>Revocation propagates</td><td>Offline stale-policy, key compromise, cache, fencing, and clock-boundary tests</td><td>Revocation exercise at every registered endpoint</td><td>Egress closed</td></tr>
+<tr><td><code>CC-EGRESS</code></td><td>No export bypass exists</td><td>Broker contract tests, unregistered-egress build/runtime denial, plus static scan</td><td>External-channel observation</td><td>Release blocked; incident opened</td></tr>
+<tr><td><code>CC-MACHINE</code></td><td>Package matches machine and purpose</td><td>Manifest, checksum, unit, origin, postprocessor, tool, geometry envelope, machine profile, and permitted-use tests</td><td>Simulation, supervised coupon, then first article</td><td>Machine use prohibited</td></tr>
+<tr><td><code>CC-RECOVERY-UX</code></td><td>Recovery is usable</td><td>Role E2E tests for detect-to-resume and detect-to-retire</td><td>Facilitated pilot with each role</td><td>Redesign recovery UX</td></tr>
+</tbody></table></div>
 <h3>10.2 Evidence levels</h3>
 <ul>
 <li><strong>E0 — Executable source evidence:</strong> unit, property, model-based, contract, integration, security, and failure-injection results bound to commit and environment.</li>
@@ -473,45 +255,14 @@
 </ul>
 <p>E0 never implies E2 or E3. A Domain Pack earns only the capability supported by its current evidence level.</p>
 <h3>10.3 Minimum action policies</h3>
-<table>
-<thead>
-<tr>
-<th>Action</th>
-<th>Permitted-use class</th>
-<th>Minimum policy result</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Client/design preview</td>
-<td>PREVIEW</td>
-<td>Exact revision and visible non-production status; no machine-executable artifact</td>
-</tr>
-<tr>
-<td>Shadow simulation</td>
-<td>SHADOW_SIMULATION</td>
-<td>E0 for relevant claims; sandboxed non-machine endpoint; output cannot be promoted by renaming</td>
-</tr>
-<tr>
-<td>Qualification coupon</td>
-<td>QUALIFICATION_COUPON</td>
-<td>Relevant E0 plus supervised E1, bounded coupon geometry, named machine/operator, single-purpose grant, and physical isolation from production queue</td>
-</tr>
-<tr>
-<td>First article</td>
-<td>QUALIFICATION_FIRST_ARTICLE</td>
-<td>Coupon passed; named revision, postprocessor, machine profile, operator procedure, independent disposition, and restricted grant</td>
-</tr>
-<tr>
-<td>ACTIVE production release</td>
-<td>PRODUCTION</td>
-<td>Machine- and purpose-specific claims reach E2; every other mandatory claim meets its policy-defined level; incident-specific authority quorum, 100% required containment acknowledgement or signed not-applicable result, and brokered egress</td>
-</tr>
-<tr>
-<td>Production resume</td>
-<td>PRODUCTION</td>
-<td>Fresh evidence on recovered exact revision; no prior receipt reuse; incident-specific quorum and fencing token advance</td>
-</tr>
-</tbody></table>
+<div class="tablewrap"><table><thead><tr><th>Action</th><th>Permitted-use class</th><th>Minimum policy result</th></tr></thead><tbody>
+<tr><td>Client/design preview</td><td>PREVIEW</td><td>Exact revision and visible non-production status; no machine-executable artifact</td></tr>
+<tr><td>Shadow simulation</td><td>SHADOW_SIMULATION</td><td>E0 for relevant claims; sandboxed non-machine endpoint; output cannot be promoted by renaming</td></tr>
+<tr><td>Qualification coupon</td><td>QUALIFICATION_COUPON</td><td>Relevant E0 plus supervised E1, bounded coupon geometry, named machine/operator, single-purpose grant, and physical isolation from production queue</td></tr>
+<tr><td>First article</td><td>QUALIFICATION_FIRST_ARTICLE</td><td>Coupon passed; named revision, postprocessor, machine profile, operator procedure, independent disposition, and restricted grant</td></tr>
+<tr><td>ACTIVE production release</td><td>PRODUCTION</td><td>Machine- and purpose-specific claims reach E2; every other mandatory claim meets its policy-defined level; incident-specific authority quorum, 100% required containment acknowledgement or signed not-applicable result, and brokered egress</td></tr>
+<tr><td>Production resume</td><td>PRODUCTION</td><td>Fresh evidence on recovered exact revision; no prior receipt reuse; incident-specific quorum and fencing token advance</td></tr>
+</tbody></table></div>
 <p>Each concrete CapabilityPolicy must replace “relevant” and “mandatory” with explicit claim IDs, expected counts, freshness windows, scope match, and expiry before that policy can be activated.</p>
 <h3>10.4 Gate evaluation</h3>
 <p>The gate resolves the exact policy, computes the expected claim set, joins only evidence matching build, policy, adapter, machine profile, authority scope, package, and revision, then rejects missing, duplicate, stale, mismatched, cancelled, quarantined, or UNKNOWN evidence. It verifies minimum evidence levels, authority quorum, separation of duties, containment acknowledgement, and permitted use before an EgressGrant is issued. An empty expected or observed mandatory set fails unless the policy explicitly declares that claim not applicable with a signed rationale.</p>
@@ -550,40 +301,13 @@
 <p>Required checks run on pull requests and protected release branches. A script that exists but is not wired as a required check is not a gate.</p>
 <h2>12. Egress Control</h2>
 <h3>12.1 Permitted-use classes</h3>
-<table>
-<thead>
-<tr>
-<th>Class</th>
-<th>Permitted output</th>
-<th>Prohibited use</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>PREVIEW</td>
-<td>Human-viewable concept or coordination artifact with exact revision and visible status</td>
-<td>Machine execution or fabrication instruction</td>
-</tr>
-<tr>
-<td>SHADOW_SIMULATION</td>
-<td>Sandboxed simulation input/output that cannot address a production machine</td>
-<td>Promotion to qualification or production by copying or renaming</td>
-</tr>
-<tr>
-<td>QUALIFICATION_COUPON</td>
-<td>Bounded test geometry for one named machine, operator, procedure, and grant</td>
-<td>Reusable project package or production queue</td>
-</tr>
-<tr>
-<td>QUALIFICATION_FIRST_ARTICLE</td>
-<td>Restricted first-article package after coupon evidence</td>
-<td>General production or another machine/profile</td>
-</tr>
-<tr>
-<td>PRODUCTION</td>
-<td>Exact ACTIVE package for a qualified machine/profile through controlled egress</td>
-<td>Any use outside grant purpose, scope, or expiry</td>
-</tr>
-</tbody></table>
+<div class="tablewrap"><table><thead><tr><th>Class</th><th>Permitted output</th><th>Prohibited use</th></tr></thead><tbody>
+<tr><td>PREVIEW</td><td>Human-viewable concept or coordination artifact with exact revision and visible status</td><td>Machine execution or fabrication instruction</td></tr>
+<tr><td>SHADOW_SIMULATION</td><td>Sandboxed simulation input/output that cannot address a production machine</td><td>Promotion to qualification or production by copying or renaming</td></tr>
+<tr><td>QUALIFICATION_COUPON</td><td>Bounded test geometry for one named machine, operator, procedure, and grant</td><td>Reusable project package or production queue</td></tr>
+<tr><td>QUALIFICATION_FIRST_ARTICLE</td><td>Restricted first-article package after coupon evidence</td><td>General production or another machine/profile</td></tr>
+<tr><td>PRODUCTION</td><td>Exact ACTIVE package for a qualified machine/profile through controlled egress</td><td>Any use outside grant purpose, scope, or expiry</td></tr>
+</tbody></table></div>
 <p>NOT-FOR-PRODUCTION packages may use PREVIEW, SHADOW_SIMULATION, QUALIFICATION_COUPON, or QUALIFICATION_FIRST_ARTICLE only when their exact CapabilityPolicy passes. They can never receive a PRODUCTION grant. Qualification artifacts remain conspicuously marked, scope-limited, non-promotable, and auditable.</p>
 <h3>12.2 Server-owned Egress Broker</h3>
 <p>MONOLITH maintains one governed Egress Registry, but the registry is not the enforcement boundary. Every controlled browser download, direct ZIP, API, worker, server exporter, integration, cache delivery, offline package, USB package, and machine-facing adapter must call the server-owned EgressBroker.</p>
@@ -591,20 +315,56 @@
 <p>No client badge, filename, MIME type, hidden button, or local store creates permission. Superseded, held, revoked, quarantined, stale, or mismatched packages fail closed. NOT-FOR-PRODUCTION packages are rejected for PRODUCTION while remaining eligible only for the explicitly governed qualification classes above.</p>
 <h3>12.3 No-bypass enforcement</h3>
 <p>An egress implementation that is not registered with and authorized by the broker fails build or runtime. Legacy paths are removed, physically isolated as non-controlled preview tooling, or migrated behind the broker. Static scanning across <code>src</code>, <code>server</code>, workers, API routes, scripts, integrations, generated-artifact definitions, and adapter code is required defense in depth, but scanning alone never proves no bypass. Dynamic contract tests and observed external-channel trials must also pass.</p>
+<h3>12.4 Broker-first implementation prerequisite</h3>
+<p>Before an operational recovery UI may label an export, release, resume, or download action as server-authorized, the implementation must:</p>
+<ol>
+<li>inventory and classify every browser, API, server, worker, cache, offline/USB, integration, generated-artifact, and legacy egress surface;</li>
+<li>remove, physically isolate as non-controlled preview, or converge every controlled surface on the server-owned broker;</li>
+<li>pass UI/API/worker/server contract tests plus dynamic external-channel and bypass tests; and only then</li>
+<li>enable the role-view action and begin the usability pilot.</li>
+</ol>
+<p>A clearly labelled non-operational visualization may be built earlier for design validation. It cannot issue an <code>EgressGrant</code>, claim server authorization, or substitute for broker convergence.</p>
 <h2>13. Role Experience</h2>
 <p>The front stage uses calm, factual language and one primary recovery action.</p>
-<h3>Client</h3>
+<h3>13.1 Derived role view and truth precedence</h3>
+<p>Every role view answers five universal questions; this is not an eight-field or other fixed-count cap:</p>
+<div class="tablewrap"><table><thead><tr><th>Universal question</th><th>Canonical source</th></tr></thead><tbody>
+<tr><td>What is safe now?</td><td><code>RecoveryCase.state</code>, <code>lastSafeState</code>, and current <code>impactTargets</code></td></tr>
+<tr><td>What happened and why?</td><td><code>failureClass</code>, <code>riskClass</code>, and latest relevant <code>RecoveryEvent</code></td></tr>
+<tr><td>What exact scope and revision are affected?</td><td><code>authorityScopeRef</code>, project/package/revision/capability IDs, <code>affectedClaims</code>, and <code>impactTargets</code></td></tr>
+<tr><td>What is the consequence and permitted use?</td><td>invalidated receipts, impact status, <code>CapabilityPolicy</code>, and current broker result</td></tr>
+<tr><td>What is my next authorized action?</td><td><code>primaryNextAction</code>, accepted owner, actor authority, policy version, and required proof</td></tr>
+</tbody></table></div>
+<p>Policy-critical role fields remain visible; non-critical detail may use progressive disclosure. The presenter stores no competing authority. Each actionable view binds <code>caseVersion</code>, latest event ID, policy version, evidence-snapshot ID, actor scope, and rendered time, and the server revalidates all of them at commit. A newer HOLD, containment expansion, revocation, invalidated receipt, or broker denial dominates any older Approved/ACTIVE display. If any required source is missing, mismatched, stale, unavailable, or has UNKNOWN impact coverage, the view says <strong>“Status updating—work remains paused”</strong> and offers only refresh, report issue, or authorized escalation. It must not claim that unconfirmed scope is unaffected.</p>
+<h3>13.2 Frozen V1 Role Registry</h3>
+<p>“Each role” in Section 4 means every role in <code>V1-CASEWORK-KITCHEN-RECOVERY-01</code>; changing the denominator requires a versioned registry decision.</p>
+<div class="tablewrap"><table><thead><tr><th>Role</th><th>Recovery purpose</th><th>Policy-critical information and action boundary</th></tr></thead><tbody>
+<tr><td>Client / homeowner</td><td>Understand the decision consequence</td><td>Saved selection, paused status, consequence, permitted use, and simple client decision; no technical or fabrication resolution</td></tr>
+<tr><td>Interior designer</td><td>Correct design intent</td><td>Affected objects, last safe revision, proposed correction, invalidated receipts, reversible branch; cannot override containment or self-release</td></tr>
+<tr><td>Architect / technical reviewer</td><td>Make qualified disposition</td><td>Changed claims, evidence denominator, missing/contradictory proof, independent assessment, and permitted dispositions</td></tr>
+<tr><td>Coordinator / information manager</td><td>Restore accountable flow</td><td>Accepted owner, assignment status, deadline, affected downstream roles, and escalation; no event-firehose or inferred acceptance</td></tr>
+<tr><td>Estimator / procurement</td><td>Protect commercial basis</td><td>Priced-BOM revision, affected quantities/specifications/suppliers, commercial consequence, and reprice task; cannot approve geometry or machining</td></tr>
+<tr><td>Factory engineer</td><td>Validate manufacturing translation</td><td>Quarantined candidate, checks, machine/profile, permitted-use class, last ACTIVE comparison, acknowledgement and HOLD/escalation controls</td></tr>
+<tr><td>CNC operator</td><td>Use only granted machine package</td><td>Exact ACTIVE package or bounded qualification grant, named machine/procedure, restriction, expiry, HOLD and report-issue; no spindle/motion/cycle-start control</td></tr>
+<tr><td>Installer / field verifier</td><td>Prove field condition and installation disposition</td><td>Exact site/installation revision, unresolved dimensions/interfaces, evidence capture requirement, safe stop, and escalation; cannot sign technical or production release unless separately authorized</td></tr>
+</tbody></table></div>
+<h3>13.3 Role-specific presentation examples</h3>
+<h4>Client</h4>
 <p>“Your selection is saved. Technical release is paused because the site width is not yet measured.” The client is never asked to resolve manufacturing detail.</p>
-<h3>Designer</h3>
+<h4>Designer</h4>
 <p>Shows the affected objects, last safe revision, proposed correction, invalidated receipts, and a reversible branch. The designer can edit or resubmit but cannot override technical containment.</p>
-<h3>Reviewer</h3>
+<h4>Reviewer</h4>
 <p>Shows exact changed claims, missing/contradictory evidence, mandatory coverage denominator, independent assessment, and permitted dispositions.</p>
-<h3>Coordinator</h3>
+<h4>Coordinator</h4>
 <p>Shows the single blocking recovery task, named owner, deadline, downstream roles affected, and escalation path—not a feed of every system event.</p>
-<h3>Factory engineer</h3>
+<h4>Estimator / procurement</h4>
+<p>Shows the priced-BOM basis, items and supplier specifications affected by the exact revision, commercial consequence, and one reprice or substitution-evidence task. It never presents commercial confirmation as geometry or machining approval.</p>
+<h4>Factory engineer</h4>
 <p>Shows a quarantined exact candidate, failed checks, machine context, permitted-use class, comparison with the last ACTIVE package, containment acknowledgement, and HOLD/escalation controls. No production file is downloadable before ACTIVE commit; bounded qualification output requires its own restricted grant.</p>
-<h3>CNC operator</h3>
+<h4>CNC operator</h4>
 <p>In production mode, shows only ACTIVE packages matched to the machine plus HOLD and report-issue controls. In qualification mode, shows only the bounded coupon or first-article grant, its conspicuous restriction, named procedure, and expiry. MONOLITH never presents a spindle, motion, or cycle-start action.</p>
+<h4>Installer / field verifier</h4>
+<p>Shows the exact site and installation revision, open dimensions or interfaces, required field evidence, safe-stop consequence, and one capture or escalation action. Field observation cannot silently alter design truth or confer technical/production approval.</p>
 <h2>14. Section 4 Visualization Contract</h2>
 <p>The approved visualization will contain two synchronized views:</p>
 <ol>
@@ -623,6 +383,11 @@
 </ul>
 <p>Each scenario updates the same fields: RecoveryCase state, latest immutable event, containment coverage, last safe state, owner, next action, invalidated scope, CapabilityPolicy, required proof, permitted-use class, and EgressBroker result. It must visually distinguish mutable projection from immutable proof and never imply that a UI badge itself enforces safety.</p>
 <h2>15. Acceptance Criteria</h2>
+<h3>15.1 Operational measurement protocol</h3>
+<p>The orientation clock starts only when the role view is fully rendered and announced after open or material state change. It stops when the participant correctly identifies the last safe revision, consequence, permitted use, and next authorized action. Results are reported separately by registry version, role, seeded scenario, risk class, language, and required device width; pooled results cannot hide a failing cell.</p>
+<p>The correction/acknowledgement/reversal denominator is every started seeded task. Exclusions are limited to predeclared test-harness failures frozen before unblinding. Report numerator, denominator, and 95% confidence interval for each cell. The sample-size/power plan, success rubric, support definition, and unsafe-action adjudication are frozen before the pilot. Median orientation time is at most 30 seconds per required role/scenario cell, and at least 95% complete the assigned non-safety task without support. Any unsafe critical action, bypass, or incorrect permission inference is an immediate stop regardless of aggregate percentage.</p>
+<p>Also record safe first action, backtracking, evidence opening, support escape, and workload against the approved baseline. Automated property, state-machine, contract, and failure-injection tests prove control invariants; the human pilot supplies usability evidence only and cannot establish runtime authority or production readiness.</p>
+<h3>15.2 Contract acceptance criteria</h3>
 <p>Section 4 is accepted only when:</p>
 <ol>
 <li>RecoveryCase, RecoveryEvent, and DecisionReceipt responsibilities are separate and testable;</li>
@@ -637,8 +402,12 @@
 <li>every controlled egress path is registered, brokered, dynamically tested, and audited;</li>
 <li>qualification output is possible without granting production use, and no qualification artifact can be promoted by copying, renaming, replay, or policy downgrade;</li>
 <li>the tenant / organization / site authority model is ratified before canonical recovery persistence is implemented;</li>
-<li>each role identifies the last safe revision, owner, consequence, permitted use, and primary next action in a median of 30 seconds or less;</li>
-<li>at least 95% of pilot participants complete a correction, containment acknowledgement, or reversal without support or external reconstruction;</li>
+<li>assignment request and acceptance remain distinct, and ASSIGNED requires accepted or policy-auto-assigned ownership without adding a lifecycle state;</li>
+<li>every view in the frozen V1 Role Registry derives from canonical case/event/receipt/policy/broker facts and fails closed on stale, missing, mismatched, unavailable, or UNKNOWN inputs;</li>
+<li>notification delivery, read, assignment acceptance, and containment acknowledgement remain distinct and follow the four-intent routing model;</li>
+<li>broker convergence and cross-surface contract/bypass tests pass before any operational UI claims server-authorized export, release, resume, or download;</li>
+<li>each required role/scenario cell meets the 30-second orientation target under the frozen measurement protocol;</li>
+<li>at least 95% of each required non-safety pilot cell completes its assigned correction, containment acknowledgement, or reversal without support or external reconstruction, with numerator, denominator, and confidence interval reported;</li>
 <li>NOT-FOR-PRODUCTION remains active until exact machine, postprocessor, operator-procedure, owner-release, and production-egress gates pass.</li>
 </ol>
 <h2>16. Stop Conditions</h2>
@@ -646,6 +415,7 @@
 <ul>
 <li>a mutable case is presented as an immutable receipt, or an immutable receipt changes;</li>
 <li>two state names describe the same lifecycle position or an undefined transition is accepted;</li>
+<li>a case enters ASSIGNED before the recipient accepts, unless an explicit authoritative auto-assignment policy records the assignment;</li>
 <li>a critical seeded defect reaches release;</li>
 <li>a missing or empty mandatory report set passes;</li>
 <li>the same actor can satisfy incompatible duties;</li>
@@ -653,10 +423,13 @@
 <li>a stale worker, device, or grant can reopen or export after a newer fencing token;</li>
 <li>a stale or missing revocation policy permits offline use;</li>
 <li>any path outside the EgressBroker exports a controlled artifact, or any path represents a non-ACTIVE package as PRODUCTION;</li>
+<li>an operational UI claims server authorization before every controlled egress surface converges on the broker and passes contract/bypass tests;</li>
+<li>a stale, missing, mismatched, unavailable, or UNKNOWN role-view input is presented as safe, ready, unaffected, or actionable;</li>
 <li>a NOT-FOR-PRODUCTION artifact receives PRODUCTION use, or qualification evidence cannot be generated without doing so;</li>
 <li>any safety, authority, evidence, revocation, or controlled-egress action bypasses the governed chain—the tolerated safety-bypass rate is zero;</li>
 <li>more than 10% of non-safety coordination tasks in the pilot occur outside the governed chain; this is a UX redesign trigger and never relaxes the zero-bypass safety rule;</li>
-<li>users cannot identify the last safe revision, owner, and next action without assistance.</li>
+<li>the role denominator is not frozen, pooled metrics conceal a failing role/scenario cell, or an exclusion is introduced after unblinding;</li>
+<li>users cannot identify the last safe revision, owner, consequence, permitted use, and next authorized action without assistance.</li>
 </ul>
 <h2>17. Current Source Trace Informing This Design</h2>
 <ul>
@@ -664,6 +437,7 @@
 <li>Report checks that search for FAIL without explicit required cardinality: <code>src/core/manufacturing/export/enforceExportGate.ts:119-157</code>.</li>
 <li>Client-side approval requirement with default one approval and any-role matching: <code>src/core/manufacturing/release/releaseStore.ts:47-97</code>.</li>
 <li>Current visible client release path builds and auto-downloads after browser-held approval state: <code>src/components/ui/ModelingReleasePanel.tsx:44-86</code>.</li>
+<li>Additional current release/export surfaces include direct App/AppShell export wiring, browser packet generation/download, and upload only after download: <code>src/App.tsx:717-742,878-892</code>, <code>src/components/layout/AppShell.tsx:176,221</code>, and <code>src/factory/packet/useFactoryPacket.ts:341-365</code>. These paths make broker-first convergence a prerequisite rather than a UI follow-up.</li>
 <li>Local, clearable key audit and revocation state: <code>src/release/keys/audit.ts:4-8,56-73,121-126</code> and <code>src/release/keys/revocationPolicy.ts:53-84,197-202</code>.</li>
 <li>A direct ZIP function without full package structure exists at <code>server/src/export/exportServiceP22a.ts:426-467</code>; no caller was found in the inspected <code>src</code>, <code>server</code>, or <code>tests</code> tree, so source presence is not treated as a verified reachable production path.</li>
 <li>Bypass scanner currently scoped to <code>src</code>: <code>scripts/gates/bypass-scan.ts:82-87</code>.</li>
@@ -671,9 +445,12 @@
 <li>Gate pull-request workflow paths do not include release/export modules: <code>.github/workflows/gate-tests.yml:13-16</code>.</li>
 <li>Release route remains an incomplete surface: <code>src/routes/index.tsx:873-880</code>.</li>
 <li>Existing workflow authz, quorum, idempotency, and audit primitives are semantic reuse candidates, not verified canonical server authority: <code>src/workflow/approval/authz.ts</code>, <code>quorum.ts</code>, <code>idempotency.ts</code>, and <code>src/workflow/audit/writer.ts</code>.</li>
+<li>Current handoff validation records process order and active site but does not establish recipient acceptance: <code>src/workflow/handoff/canonical.ts:35-57</code>.</li>
+<li>Current notification routing sends personal responsibility/approval to direct push and cross-team handoff/FYI to group messages; it does not implement the four notification intents or distinct acknowledgement semantics: <code>src/workflow/notification/routing.ts:4-23</code>.</li>
+<li>No exact runtime identifiers for <code>RecoveryCase</code>, <code>RecoveryEvent</code>, <code>DecisionReceipt</code>, <code>CapabilityPolicy</code>, <code>EgressBroker</code>, or a role-view contract were found in the inspected <code>src</code>, <code>server</code>, or <code>supabase</code> source. They remain target design contracts, not current production facts.</li>
+<li>Evidence/UX appendix: <a href="../../research/2026-08-03-monolith-beloved-safe-recovery-ux-deep-research.en.html">Beloved Safe Recovery UX deep research</a> and its <a href="../../research/2026-08-03-monolith-beloved-safe-recovery-ux-scrutiny.en.html">bounded scrutiny correction report</a>.</li>
 </ul>
 <h2>18. Approved Next Step After Written-Spec Review</h2>
-<p>After the owner confirms this revised written specification, run one bounded re-scrutinize against the updated contract. If no blocker remains, create the bilingual interactive Section 4 visualization. Do not implement production release, schema, policy, egress, or machine-control changes from this document without a separate approved implementation plan.</p>
-</article></main>
-</body>
+<p>The bounded consistency re-scrutinize of this corrected contract passed with no blocker. The next approved design deliverable is the bilingual interactive Section 4 visualization as a clearly labelled non-operational artifact. Broker-surface inventory and convergence remain the first implementation prerequisite. Do not implement production release, schema, policy, egress, or machine-control changes from this document without a separate approved implementation plan.</p>
+</main></body>
 </html>

@@ -1,6 +1,6 @@
 # การออกแบบ MONOLITH Section 4: Safe Recovery & Proof
 
-**สถานะ:** OWNER DECISION — ปรับตามผล scrutinize ที่อนุมัติเมื่อ 3 สิงหาคม 2026; รอตรวจทานสเปกฉบับเขียนโดยเจ้าของ
+**สถานะ:** OWNER DECISION — รวม correction ขั้นต่ำที่อนุมัติเมื่อ 3 สิงหาคม 2026 แล้ว; bounded consistency review ผ่านโดยไม่มี blocker
 
 **ทิศทางผลิตภัณฑ์:** Decision Chain UX
 
@@ -49,6 +49,8 @@ Incident, workflow, policy, evidence และ export platform แบบทั�
 ### C. Split recovery model พร้อม capability gate — อนุมัติ
 
 `RecoveryCase` เป็น current projection ส่วน `RecoveryEvent` และ `DecisionReceipt` เป็น append-only proof ขณะที่ `CapabilityPolicy` ตัดสิน authority และ evidence และ `EgressBroker` เป็น controlled path เดียวสำหรับ production-usable หรือ qualification output นำ approval, quorum, idempotency, audit, release และ policy primitives เดิมมาใช้เป็นจุดตั้งต้นทางความหมาย แต่ไม่ถือว่าเป็น production authority ปัจจุบัน
+
+Deep research เรื่อง beloved-safe-recovery เป็นหลักฐานและ UX appendix ของ Section นี้ ไม่ใช่ normative architecture layer ใหม่ มุมมองตามบทบาทเป็น derived projection จาก `RecoveryCase`, events, receipts, policy และ broker result ที่มีอยู่ สเปกนี้ **ไม่** สร้าง “Recovery Presentation Contract” ที่ persist แยกต่างหาก ไม่สร้าง recovery source of truth ชุดที่สอง และไม่เพิ่ม lifecycle state
 
 ## 4. ขอบเขตและสิ่งที่ไม่ทำ
 
@@ -111,7 +113,8 @@ Model แยก current state ออกจาก immutable proof อย่าง
 | `affectedClaims` / `impactTargets` | claim dependency edges และทุก order, part, export, person, endpoint, machine, cache หรือ offline copy ที่ต้อง containment |
 | `lastSafeState` | exact revision และ scope ที่ permitted use ยังใช้ได้ โดยต้องระบุ unaffected scope อย่างชัดเจน |
 | `invalidatedReceiptIds` | purpose-specific receipts ที่ใช้ต่อไม่ได้ |
-| `owner` / `escalationOwner` | recovery owner และ escalation authority ที่ระบุชื่อ Governed service ทำงานได้แต่แทน human authority ที่บังคับไม่ได้ |
+| `assignmentRequest` / `assignmentAcceptance` | ผู้รับที่ร้องขอ เวลาที่ร้องขอ หลักฐาน delivery/acknowledgement รูปแบบและเวลาการยอมรับ deadline และ auto-assignment policy ที่เกี่ยวข้อง โดย request ไม่เท่ากับ acceptance |
+| `owner` / `escalationOwner` | recovery owner ที่ยอมรับงานแล้ว หรือ owner ที่เกิดจาก authoritative auto-assignment policy อย่างชัดเจน พร้อม escalation authority โดย governed service ทำงานได้แต่แทน human authority ที่บังคับไม่ได้ |
 | `primaryNextAction` | primary action หนึ่งรายการในภาษาคน พร้อม secondary actions แบบ progressive disclosure |
 | `capabilityPolicyRef` | policy ID และ version ที่กำหนด authority, proof, acknowledgement และ permitted use |
 | `expectedVersion` / `fencingToken` | optimistic concurrency version และ token ที่ป้องกัน worker/device เก่า reopen capability |
@@ -136,7 +139,7 @@ Model แยก current state ออกจาก immutable proof อย่าง
 | --- | --- | --- | --- |
 | ไม่มี | DETECTED | Detection ผ่าน deduplication และผูก exact scope/revision | detection event |
 | DETECTED | CONTAINED | ปิด capability; ค้นพบ impact targets แล้ว หรือระบุ UNKNOWN และ fail closed | containment event |
-| CONTAINED | ASSIGNED | มี owner, authority scope, deadline และ escalation path ที่ระบุชื่อ | assignment event |
+| CONTAINED | ASSIGNED | ผู้รับที่ระบุชื่อยอมรับ assignment แล้ว หรือ incident policy บันทึก authoritative auto-assignment; มี authority scope, deadline และ escalation path | assignment-accepted หรือ auto-assigned event |
 | ASSIGNED | RECOVERING | Recovery command ผ่านอนุมัติ พร้อม idempotency key และ expected case version | recovery-start event |
 | RECOVERING | REVERIFYING | Reconcile recovery effects แล้วและไม่มี prepared effect ที่คลุมเครือ | recovery-complete event |
 | ASSIGNED, RECOVERING หรือ REVERIFYING | CONTAINED | Impact ที่พบใหม่ invalidate recovery/proof ที่ stale และ capability ยังปิดอยู่ | containment-expansion event |
@@ -145,6 +148,8 @@ Model แยก current state ออกจาก immutable proof อย่าง
 | REVERIFYING | SUPERSEDED | มี replacement identity และ evidence chain โดยของเดิมยังใช้ไม่ได้ | supersede DecisionReceipt |
 
 `EXPLAIN` เป็นหน้าที่การนำเสนอที่มีในทุก state ไม่ใช่ persistent state และไม่มี lifecycle value ชื่อ `OPEN` Failure ใหม่หลัง terminal state ต้องสร้าง `RecoveryCase` ใหม่ที่เชื่อมกัน ห้าม reopen terminal case หากพบ impact ใหม่ก่อน terminal disposition ให้กลับไป CONTAINED ผ่าน event ใหม่และ invalidate recovery work ที่ stale
+
+Assignment request ทำให้ case คงอยู่ที่ CONTAINED ส่วน requested, delivered, read, accepted, rejected, expired และ policy-auto-assigned เป็น `RecoveryEvent` facts ที่แยกกัน โดยไม่เพิ่ม state ที่เก้า Assignment acceptance ยังต่างจาก containment acknowledgement: อย่างแรกกำหนดว่าใครเป็นเจ้าของ recovery ส่วนอย่างหลังพิสูจน์ว่า impact target หนึ่งถูกหยุดหรือ isolate แล้ว
 
 ### 6.3 ความครบถ้วนของ Containment
 
@@ -182,6 +187,19 @@ Model แยก current state ออกจาก immutable proof อย่าง
 8. immutable event สำหรับทุก retry, compensation, acknowledgement หรือ terminal failure
 
 Effect lifecycle ขั้นต่ำคือ `PREPARED → COMMITTED` หรือ `PREPARED → ABORTED` และ reconciler ต้องตรวจพบและจัดการ prepared records ที่ค้างจาก process failure โดย fencing token ต้องปฏิเสธ worker/device ที่ stale ผู้ใช้ต้องไม่ถูกบังคับให้เดาว่าการกดหนึ่งครั้งสำเร็จหรือไม่
+
+### 8.1 เจตนาของ Notification และความหมายของ Acknowledgement
+
+Notification เป็น derived effect ไม่ใช่ authority หรือ lifecycle state การ routing ต้อง resolve risk, actor capability, required response, deadline และ acknowledgement mode ให้เป็นสี่ intent:
+
+| Intent | ใช้เมื่อ | Default delivery |
+| --- | --- | --- |
+| Immediate interruption | การผลิต/ปล่อยงานที่ไม่ปลอดภัยใกล้เกิดขึ้น, critical containment acknowledgement ที่บังคับ หรือ authority action เร่งด่วน | ส่งเฉพาะบทบาทที่ระบุชื่อและ escalation path ปัจจุบัน |
+| Action queue | Correction, review, assignment acceptance หรือ evidence task ที่ต้องทำแต่ไม่เป็นอันตรายทันที | Queue ของบทบาทที่รับผิดชอบพร้อม due time |
+| Digest | Dependency หรือ coordination update ที่ไม่เร่งด่วน | Digest ตามเวลาของบทบาท |
+| Activity log only | Routine retry, autosave, diagnostic หรือ transient event ที่แก้แล้วและไม่ต้องการ human response | Audit/activity record ที่ค้นได้ โดยไม่รบกวน |
+
+Failure ที่เกี่ยวข้องกันต้อง deduplicate เป็น current case เดียวและ current owner เดียว คำว่า “FYI” ไม่เพียงพอให้รบกวนทั้งกลุ่ม Delivery, read, assignment acceptance และ containment acknowledgement เป็น immutable events คนละรายการและห้ามอนุมานแทนกัน Notification และ workflow-handoff helpers ปัจจุบันเป็น semantic starting points เท่านั้น และยังไม่ conform จนกว่าจะ implement และทดสอบ intent/acknowledgement rules เหล่านี้
 
 ## 9. Governance และ Authority
 
@@ -330,33 +348,83 @@ Client badge, filename, MIME type, hidden button หรือ local store ไม
 
 Egress implementation ที่ไม่ได้ register และ authorize ผ่าน broker ต้อง fail ตอน build หรือ runtime Legacy path ต้องถูกลบ แยกกายภาพเป็น non-controlled preview tooling หรือ migrate หลัง broker Static scan ครอบคลุม `src`, `server`, workers, API routes, scripts, integrations, generated-artifact definitions และ adapter code เป็น defense in depth ที่บังคับ แต่ static scan เพียงอย่างเดียวพิสูจน์ no bypass ไม่ได้ จึงต้องผ่าน dynamic contract tests และ observed external-channel trials ด้วย
 
+### 12.4 Prerequisite แบบ Broker-first ก่อน Implement
+
+ก่อน operational recovery UI จะระบุว่า export, release, resume หรือ download action ได้รับ server authorization implementation ต้อง:
+
+1. ทำ inventory และ classify ทุก browser, API, server, worker, cache, offline/USB, integration, generated-artifact และ legacy egress surface;
+2. ลบ แยกกายภาพเป็น non-controlled preview หรือ converge ทุก controlled surface เข้าสู่ server-owned broker;
+3. ผ่าน UI/API/worker/server contract tests พร้อม dynamic external-channel และ bypass tests; แล้วจึง
+4. เปิด role-view action และเริ่ม usability pilot
+
+สร้าง visualization แบบ non-operational ที่ติดป้ายชัดเจนก่อนได้เพื่อ validate design แต่ห้ามออก `EgressGrant`, อ้าง server authorization หรือใช้แทน broker convergence
+
 ## 13. ประสบการณ์ตามบทบาท
 
 หน้าบ้านใช้ภาษาสงบ ตรงข้อเท็จจริง และมี primary recovery action เดียว
 
-### ลูกค้า
+### 13.1 Derived Role View และ Truth Precedence
+
+ทุก role view ตอบคำถามกลางห้าข้อต่อไปนี้ โดยไม่ใช่ hard cap แปด field หรือจำนวนตายตัวอื่น:
+
+| คำถามกลาง | Canonical source |
+| --- | --- |
+| ตอนนี้อะไรปลอดภัย? | `RecoveryCase.state`, `lastSafeState` และ `impactTargets` ปัจจุบัน |
+| เกิดอะไรขึ้นและเพราะอะไร? | `failureClass`, `riskClass` และ `RecoveryEvent` ล่าสุดที่เกี่ยวข้อง |
+| Scope และ revision ใดได้รับผลกระทบอย่างเจาะจง? | `authorityScopeRef`, project/package/revision/capability IDs, `affectedClaims` และ `impactTargets` |
+| ผลกระทบและ permitted use คืออะไร? | invalidated receipts, impact status, `CapabilityPolicy` และ broker result ปัจจุบัน |
+| การกระทำถัดไปที่ฉันมีอำนาจทำคืออะไร? | `primaryNextAction`, accepted owner, actor authority, policy version และ proof ที่บังคับ |
+
+Policy-critical role fields ต้องมองเห็นเสมอ ส่วนรายละเอียดที่ไม่ critical ใช้ progressive disclosure ได้ Presenter ไม่เก็บ authority ชุดที่แข่งขันกัน มุมมองที่ทำ action ได้ต้องผูก `caseVersion`, latest event ID, policy version, evidence-snapshot ID, actor scope และ rendered time และ server ต้อง revalidate ทั้งหมดตอน commit HOLD, containment expansion, revocation, invalidated receipt หรือ broker denial ที่ใหม่กว่า มี precedence เหนือ Approved/ACTIVE display ที่เก่ากว่า หาก source ที่บังคับหาย ไม่ตรง เก่า ใช้งานไม่ได้ หรือ impact coverage เป็น UNKNOWN ให้แสดง **“กำลังอัปเดตสถานะ—งานยังคงหยุดอยู่”** และมีเพียง refresh, report issue หรือ authorized escalation ห้ามอ้างว่า scope ที่ยังไม่ยืนยันไม่ได้รับผลกระทบ
+
+### 13.2 V1 Role Registry ที่ Freeze แล้ว
+
+คำว่า “แต่ละ role” ใน Section 4 หมายถึงทุกบทบาทใน `V1-CASEWORK-KITCHEN-RECOVERY-01` การเปลี่ยน denominator ต้องผ่าน versioned registry decision
+
+| บทบาท | เป้าหมายของ Recovery | ข้อมูล policy-critical และขอบเขต action |
+| --- | --- | --- |
+| ลูกค้า / เจ้าของบ้าน | เข้าใจผลของการตัดสินใจ | ตัวเลือกที่บันทึก สถานะหยุด ผลกระทบ permitted use และ client decision แบบง่าย; ไม่แก้ technical หรือ fabrication detail |
+| Interior designer | แก้ design intent | Affected objects, last safe revision, proposed correction, invalidated receipts, reversible branch; override containment หรือ self-release ไม่ได้ |
+| สถาปนิก / ผู้ตรวจเทคนิค | ทำ qualified disposition | Changed claims, evidence denominator, proof ที่หาย/ขัดแย้ง, independent assessment และ permitted dispositions |
+| ผู้ประสานงาน / Information manager | คืน accountable flow | Accepted owner, assignment status, deadline, downstream roles ที่กระทบ และ escalation; ไม่มี event firehose หรือ inferred acceptance |
+| Estimator / Procurement | ปกป้อง commercial basis | Priced-BOM revision, quantities/specifications/suppliers ที่กระทบ ผลเชิงพาณิชย์ และ reprice task; อนุมัติ geometry หรือ machining ไม่ได้ |
+| วิศวกรโรงงาน | ตรวจ manufacturing translation | Quarantined candidate, checks, machine/profile, permitted-use class, last ACTIVE comparison, acknowledgement และ HOLD/escalation controls |
+| CNC Operator | ใช้เฉพาะ machine package ที่ grant แล้ว | Exact ACTIVE package หรือ bounded qualification grant, named machine/procedure, restriction, expiry, HOLD และ report issue; ไม่มี spindle/motion/cycle-start control |
+| Installer / Field verifier | พิสูจน์หน้างานและ installation disposition | Exact site/installation revision, dimensions/interfaces ที่ยังไม่จบ, evidence capture requirement, safe stop และ escalation; sign technical/production release ไม่ได้เว้นแต่ได้รับ authority แยก |
+
+### 13.3 ตัวอย่างการนำเสนอตามบทบาท
+
+#### ลูกค้า
 
 “บันทึกตัวเลือกของคุณแล้ว การปล่อยแบบเทคนิคหยุดอยู่เพราะยังไม่ได้วัดความกว้างหน้างาน” ลูกค้าไม่ต้องแก้รายละเอียดการผลิต
 
-### นักออกแบบ
+#### นักออกแบบ
 
 เห็น affected objects, last safe revision, proposed correction, invalidated receipts และ reversible branch นักออกแบบแก้หรือ resubmit ได้ แต่ override technical containment ไม่ได้
 
-### ผู้ตรวจ
+#### ผู้ตรวจ
 
 เห็น exact changed claims, evidence ที่หาย/ขัดแย้ง, mandatory coverage denominator, independent assessment และ permitted dispositions
 
-### ผู้ประสานงาน
+#### ผู้ประสานงาน
 
 เห็น blocking recovery task เดียว เจ้าของที่ระบุชื่อ deadline, downstream roles ที่ได้รับผลกระทบ และ escalation path ไม่ใช่ feed ของทุก system event
 
-### วิศวกรโรงงาน
+#### Estimator / Procurement
+
+เห็น priced-BOM basis, รายการและ supplier specifications ที่ exact revision กระทบ ผลเชิงพาณิชย์ และ reprice หรือ substitution-evidence task หนึ่งรายการ โดยไม่แสดง commercial confirmation เป็น geometry หรือ machining approval
+
+#### วิศวกรโรงงาน
 
 เห็น quarantined exact candidate, failed checks, machine context, permitted-use class, การเปรียบเทียบกับ last ACTIVE package, containment acknowledgement และ HOLD/escalation controls ห้ามดาวน์โหลด production file ก่อน ACTIVE commit ส่วน bounded qualification output ต้องใช้ restricted grant ของตนเอง
 
-### CNC Operator
+#### CNC Operator
 
 ใน production mode เห็นเฉพาะ ACTIVE packages ที่ตรงเครื่อง พร้อม HOLD และ report-issue controls ส่วน qualification mode เห็นเฉพาะ bounded coupon/first-article grant พร้อมข้อจำกัดชัดเจน named procedure และ expiry MONOLITH ไม่มี spindle, motion หรือ cycle-start action
+
+#### Installer / Field Verifier
+
+เห็น exact site/installation revision, dimensions หรือ interfaces ที่ยังเปิดอยู่, field evidence ที่บังคับ, ผลของ safe stop และ capture หรือ escalation action หนึ่งรายการ Observation หน้างานห้ามเปลี่ยน design truth อย่างเงียบ ๆ หรือสร้าง technical/production approval
 
 ## 14. Contract ของภาพ Section 4
 
@@ -379,6 +447,16 @@ Egress implementation ที่ไม่ได้ register และ authorize �
 
 ## 15. Acceptance Criteria
 
+### 15.1 Operational Measurement Protocol
+
+นาฬิกา orientation เริ่มเมื่อ role view render และประกาศครบหลังเปิดหรือ material state change และหยุดเมื่อ participant ระบุ last safe revision, consequence, permitted use และ next authorized action ถูกต้อง รายงานผลแยกตาม registry version, role, seeded scenario, risk class, ภาษา และ required device width โดยผลรวมแบบ pooled ห้ามซ่อน cell ที่ล้มเหลว
+
+Denominator ของ correction/acknowledgement/reversal คือ seeded task ทุกงานที่เริ่มแล้ว Exclusion จำกัดเฉพาะ test-harness failure ที่ประกาศและ freeze ก่อน unblinding รายงาน numerator, denominator และ 95% confidence interval ของทุก cell ต้อง freeze sample-size/power plan, success rubric, นิยาม support และ unsafe-action adjudication ก่อน pilot Median orientation time ต้องไม่เกิน 30 วินาทีต่อ required role/scenario cell และอย่างน้อย 95% ต้องทำ assigned non-safety task สำเร็จโดยไม่ขอ support Unsafe critical action, bypass หรือการอนุมาน permission ผิดเพียงครั้งเดียวเป็น immediate stop โดยไม่สน aggregate percentage
+
+ให้บันทึก safe first action, backtracking, evidence opening, support escape และ workload เทียบ approved baseline ด้วย Automated property, state-machine, contract และ failure-injection tests เป็นผู้พิสูจน์ control invariants ส่วน human pilot ให้ usability evidence เท่านั้นและใช้พิสูจน์ runtime authority หรือ production readiness ไม่ได้
+
+### 15.2 Contract Acceptance Criteria
+
 Section 4 รับได้เมื่อ:
 
 1. แยกหน้าที่ RecoveryCase, RecoveryEvent และ DecisionReceipt และทดสอบแยกกันได้;
@@ -393,9 +471,13 @@ Section 4 รับได้เมื่อ:
 10. ทุก controlled egress path ถูก register, broker, dynamic test และ audit;
 11. สร้าง qualification output ได้โดยไม่ grant production use และ artifact เลื่อนระดับด้วย copy, rename, replay หรือ policy downgrade ไม่ได้;
 12. ratify tenant / organization / site authority model ก่อน implement canonical recovery persistence;
-13. แต่ละ role ระบุ last safe revision, owner, consequence, permitted use และ primary next action ได้ใน median ไม่เกิน 30 วินาที;
-14. Pilot participants อย่างน้อย 95% ทำ correction, containment acknowledgement หรือ reversal ได้โดยไม่ขอ support หรือ reconstruct ข้อมูลนอกระบบ;
-15. NOT-FOR-PRODUCTION ยังคงทำงานจนผ่าน exact machine, postprocessor, operator-procedure, owner-release และ production-egress gates
+13. assignment request และ acceptance แยกกัน และ ASSIGNED ต้องมี accepted หรือ policy-auto-assigned ownership โดยไม่เพิ่ม lifecycle state;
+14. ทุก view ใน frozen V1 Role Registry derive จาก canonical case/event/receipt/policy/broker facts และ fail closed เมื่อ input เก่า หาย ไม่ตรง ใช้งานไม่ได้ หรือเป็น UNKNOWN;
+15. notification delivery, read, assignment acceptance และ containment acknowledgement แยกกันและทำตาม four-intent routing model;
+16. broker convergence พร้อม cross-surface contract/bypass tests ผ่านก่อน operational UI อ้าง server-authorized export, release, resume หรือ download;
+17. ทุก required role/scenario cell ผ่านเป้าหมาย orientation 30 วินาทีภายใต้ frozen measurement protocol;
+18. อย่างน้อย 95% ของแต่ละ required non-safety pilot cell ทำ correction, containment acknowledgement หรือ reversal ที่มอบหมายได้โดยไม่ขอ support หรือ reconstruct ข้อมูลนอกระบบ พร้อมรายงาน numerator, denominator และ confidence interval;
+19. NOT-FOR-PRODUCTION ยังคงทำงานจนผ่าน exact machine, postprocessor, operator-procedure, owner-release และ production-egress gates
 
 ## 16. Stop Conditions
 
@@ -403,6 +485,7 @@ Section 4 รับได้เมื่อ:
 
 - mutable case ถูกนำเสนอเป็น immutable receipt หรือ immutable receipt เปลี่ยนค่า;
 - state name สองชื่ออธิบาย lifecycle position เดียวกัน หรือระบบรับ undefined transition;
+- case เข้า ASSIGNED ก่อนผู้รับยอมรับ เว้นแต่ authoritative auto-assignment policy ที่ชัดเจนบันทึก assignment;
 - critical seeded defect ไปถึง release;
 - mandatory report set ที่ missing หรือ empty ผ่าน;
 - actor คนเดียวทำ incompatible duties ได้;
@@ -410,10 +493,13 @@ Section 4 รับได้เมื่อ:
 - stale worker, device หรือ grant reopen/export หลัง fencing token ใหม่ได้;
 - stale หรือ missing revocation policy อนุญาต offline use;
 - path ใดนอก EgressBroker export controlled artifact หรือ path ใดนำเสนอ non-ACTIVE package ว่าเป็น PRODUCTION;
+- operational UI อ้าง server authorization ก่อนทุก controlled egress surface converge เข้า broker และผ่าน contract/bypass tests;
+- role-view input ที่เก่า หาย ไม่ตรง ใช้งานไม่ได้ หรือ UNKNOWN ถูกนำเสนอว่าปลอดภัย พร้อม ไม่ได้รับผลกระทบ หรือทำ action ได้;
 - NOT-FOR-PRODUCTION artifact ได้รับ PRODUCTION use หรือสร้าง qualification evidence ไม่ได้หากไม่ทำเช่นนั้น;
 - safety, authority, evidence, revocation หรือ controlled-egress action ใดหลบ governed chain โดย safety-bypass rate ที่ยอมรับคือศูนย์;
 - non-safety coordination tasks ใน pilot มากกว่า 10% เกิดนอก governed chain ซึ่งเป็น UX redesign trigger และไม่ลด zero-bypass safety rule;
-- ผู้ใช้ระบุ last safe revision, owner และ next action โดยไม่ขอความช่วยเหลือไม่ได้
+- role denominator ไม่ถูก freeze, pooled metrics ซ่อน role/scenario cell ที่ล้มเหลว หรือมี exclusion เพิ่มหลัง unblinding;
+- ผู้ใช้ระบุ last safe revision, owner, consequence, permitted use และ next authorized action โดยไม่ขอความช่วยเหลือไม่ได้
 
 ## 17. Current Source Trace ที่ใช้ในการออกแบบ
 
@@ -421,6 +507,7 @@ Section 4 รับได้เมื่อ:
 - Report checks ที่ค้นหา FAIL โดยไม่ตรวจ required cardinality อย่างชัดเจน: `src/core/manufacturing/export/enforceExportGate.ts:119-157`
 - Client-side approval requirement ที่ default หนึ่ง approval และ any-role matching: `src/core/manufacturing/release/releaseStore.ts:47-97`
 - Current visible client release path สร้างและ auto-download หลัง browser-held approval state: `src/components/ui/ModelingReleasePanel.tsx:44-86`
+- Release/export surfaces ปัจจุบันเพิ่มเติมมี direct App/AppShell export wiring, browser packet generation/download และ upload หลัง download เท่านั้น: `src/App.tsx:717-742,878-892`, `src/components/layout/AppShell.tsx:176,221` และ `src/factory/packet/useFactoryPacket.ts:341-365` เส้นทางเหล่านี้ทำให้ broker-first convergence เป็น prerequisite ไม่ใช่งานตามหลัง UI
 - Key audit และ revocation state แบบ local และล้างได้: `src/release/keys/audit.ts:4-8,56-73,121-126` และ `src/release/keys/revocationPolicy.ts:53-84,197-202`
 - มี direct ZIP function ที่ไม่มี full package structure ที่ `server/src/export/exportServiceP22a.ts:426-467` แต่ไม่พบ caller ใน `src`, `server` หรือ `tests` ที่ตรวจ จึงไม่ถือว่าการมี source เป็น verified reachable production path
 - Bypass scanner ปัจจุบัน scope เฉพาะ `src`: `scripts/gates/bypass-scan.ts:82-87`
@@ -428,7 +515,11 @@ Section 4 รับได้เมื่อ:
 - Gate pull-request workflow paths ไม่รวม release/export modules: `.github/workflows/gate-tests.yml:13-16`
 - Release route ยังเป็น incomplete surface: `src/routes/index.tsx:873-880`
 - Workflow authz, quorum, idempotency และ audit primitives ที่มีอยู่เป็น semantic reuse candidates แต่ยังไม่ใช่ verified canonical server authority: `src/workflow/approval/authz.ts`, `quorum.ts`, `idempotency.ts` และ `src/workflow/audit/writer.ts`
+- Handoff validation ปัจจุบันบันทึก process order และ active site แต่ยังไม่สร้าง recipient acceptance: `src/workflow/handoff/canonical.ts:35-57`
+- Notification routing ปัจจุบันส่ง personal responsibility/approval เป็น direct push และส่ง cross-team handoff/FYI เป็น group message โดยยังไม่มี four notification intents หรือ acknowledgement semantics ที่แยกกัน: `src/workflow/notification/routing.ts:4-23`
+- ไม่พบ exact runtime identifiers ของ `RecoveryCase`, `RecoveryEvent`, `DecisionReceipt`, `CapabilityPolicy`, `EgressBroker` หรือ role-view contract ใน `src`, `server` หรือ `supabase` source ที่ตรวจ จึงยังเป็น target design contracts ไม่ใช่ current production facts
+- Evidence/UX appendix: [Deep research เรื่อง Beloved Safe Recovery UX](../../research/2026-08-03-monolith-beloved-safe-recovery-ux-deep-research.th.md) และ [bounded scrutiny correction report](../../research/2026-08-03-monolith-beloved-safe-recovery-ux-scrutiny.th.md)
 
 ## 18. ขั้นถัดไปที่อนุมัติหลังตรวจ Written Spec
 
-หลังเจ้าของยืนยัน revised written specification นี้ ให้ทำ bounded re-scrutinize กับ contract ที่ปรับแล้วหนึ่งรอบ หากไม่มี blocker จึงสร้างภาพ interactive Section 4 สองภาษา ห้ามนำเอกสารนี้ไป implement production release, schema, policy, egress หรือ machine-control changes โดยไม่มี implementation plan ที่อนุมัติแยกต่างหาก
+Bounded consistency re-scrutinize ของ corrected contract นี้ผ่านโดยไม่มี blocker Deliverable การออกแบบถัดไปที่อนุมัติคือภาพ interactive Section 4 สองภาษาในฐานะ non-operational artifact ที่ติดป้ายชัดเจน โดย broker-surface inventory และ convergence ยังเป็น implementation prerequisite แรก ห้ามนำเอกสารนี้ไป implement production release, schema, policy, egress หรือ machine-control changes โดยไม่มี implementation plan ที่อนุมัติแยกต่างหาก

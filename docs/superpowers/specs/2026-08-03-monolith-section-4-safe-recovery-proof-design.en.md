@@ -1,6 +1,6 @@
 # MONOLITH Section 4 Design: Safe Recovery & Proof
 
-**Status:** OWNER DECISION — Revised after approved scrutiny on 3 August 2026; written specification pending owner review
+**Status:** OWNER DECISION — Minimum corrections approved on 3 August 2026 and incorporated; bounded consistency review passed with no blocker
 
 **Product direction:** Decision Chain UX
 
@@ -49,6 +49,8 @@ A general incident, workflow, policy, evidence, and export platform would duplic
 ### C. Split recovery model plus capability gate — approved
 
 `RecoveryCase` is the current projection. `RecoveryEvent` and `DecisionReceipt` records are append-only proof. `CapabilityPolicy` decides authority and evidence. `EgressBroker` is the only controlled path for production-usable or qualification output. Existing approval, quorum, idempotency, audit, release, and policy primitives are reused as semantic starting points, not assumed to be current production authority.
+
+The beloved-safe-recovery deep research is evidence and a UX appendix to this section, not another normative architecture layer. A role view is a derived projection of the existing `RecoveryCase`, events, receipts, policy, and broker result. This design does **not** create a separately persisted “Recovery Presentation Contract,” a second recovery source of truth, or a new lifecycle state.
 
 ## 4. Scope and Non-Goals
 
@@ -111,7 +113,8 @@ The model separates current state from immutable proof. A receipt never mutates,
 | `affectedClaims` / `impactTargets` | Claim dependency edges and every order, part, export, person, endpoint, machine, cache, or offline copy requiring containment |
 | `lastSafeState` | Exact revision and scope whose permitted use remains valid; unaffected scope must be explicit |
 | `invalidatedReceiptIds` | Purpose-specific receipts no longer usable |
-| `owner` / `escalationOwner` | Named recovery owner and escalation authority; a governed service may execute but cannot replace required human authority |
+| `assignmentRequest` / `assignmentAcceptance` | Requested assignee, requested time, delivery/acknowledgement evidence, acceptance mode and time, deadline, and applicable auto-assignment policy; request is not acceptance |
+| `owner` / `escalationOwner` | Accepted recovery owner, or owner established by an explicit authoritative auto-assignment policy, plus escalation authority; a governed service may execute but cannot replace required human authority |
 | `primaryNextAction` | One plain-language primary action, with secondary actions disclosed on demand |
 | `capabilityPolicyRef` | Exact policy ID and version that defines authority, proof, acknowledgement, and permitted use |
 | `expectedVersion` / `fencingToken` | Optimistic concurrency version and token that prevents a stale worker or device from reopening capability |
@@ -136,7 +139,7 @@ Every consequential human or governed-service decision produces a new immutable 
 | --- | --- | --- | --- |
 | none | DETECTED | Deduplicated detection bound to exact scope and revision | detection event |
 | DETECTED | CONTAINED | Capability closed; impact targets discovered or explicitly UNKNOWN and fail-closed | containment event |
-| CONTAINED | ASSIGNED | Named owner, authority scope, deadline, and escalation path | assignment event |
+| CONTAINED | ASSIGNED | Named recipient has accepted the assignment, or an incident policy has recorded authoritative auto-assignment; authority scope, deadline, and escalation path exist | assignment-accepted or auto-assigned event |
 | ASSIGNED | RECOVERING | Approved recovery command with idempotency key and expected case version | recovery-start event |
 | RECOVERING | REVERIFYING | Recovery effects reconciled; no ambiguous prepared effect remains | recovery-complete event |
 | ASSIGNED, RECOVERING, or REVERIFYING | CONTAINED | Newly discovered impact invalidates stale recovery or proof; affected capability remains closed | containment-expansion event |
@@ -145,6 +148,8 @@ Every consequential human or governed-service decision produces a new immutable 
 | REVERIFYING | SUPERSEDED | Replacement identity and evidence chain exist; old capability remains unusable | supersede DecisionReceipt |
 
 `EXPLAIN` is a presentation responsibility available in every state, not a persistent state. `OPEN` is not a lifecycle value. A new failure after a terminal state creates a related new `RecoveryCase`; a terminal case is not reopened. Any newly discovered impact before terminal disposition returns the case to CONTAINED through a new event and invalidates stale recovery work.
+
+An assignment request leaves the case in CONTAINED. Requested, delivered, read, accepted, rejected, expired, and policy-auto-assigned outcomes are distinct `RecoveryEvent` facts; they do not add a ninth state. Assignment acceptance is also distinct from containment acknowledgement: the former establishes who owns recovery, while the latter proves that a specific impact target has been stopped or isolated.
 
 ### 6.3 Containment completion
 
@@ -182,6 +187,19 @@ Every consequential transition uses:
 8. an immutable event for each retry, compensation, acknowledgement, or terminal failure.
 
 The minimum effect lifecycle is `PREPARED → COMMITTED` or `PREPARED → ABORTED`. A reconciler must detect and resolve prepared records left by process failure. Stale workers and devices are rejected by the fencing token. The user must never be asked to guess whether a click succeeded.
+
+### 8.1 Notification intent and acknowledgement semantics
+
+Notifications are derived effects, not authority or lifecycle state. Routing resolves risk, actor capability, required response, deadline, and acknowledgement mode into four intents:
+
+| Intent | Use | Default delivery |
+| --- | --- | --- |
+| Immediate interruption | Imminent unsafe production/release, required critical containment acknowledgement, or time-critical authority action | Named role and current escalation path only |
+| Action queue | Required correction, review, assignment acceptance, or evidence task that is actionable but not immediately dangerous | Responsible role queue with due time |
+| Digest | Non-urgent dependency or coordination update | Scheduled role digest |
+| Activity log only | Routine retry, autosave, diagnostic, or resolved transient event with no human response required | Searchable audit/activity record; no interruption |
+
+Related failures are deduplicated into one current case and one current owner. “FYI” does not justify a group interruption. Delivery, read, assignment acceptance, and containment acknowledgement are separate immutable events and must never be inferred from one another. The current notification and workflow-handoff helpers are semantic starting points only; they do not conform until these intent and acknowledgement rules are implemented and tested.
 
 ## 9. Governance and Authority
 
@@ -330,33 +348,83 @@ No client badge, filename, MIME type, hidden button, or local store creates perm
 
 An egress implementation that is not registered with and authorized by the broker fails build or runtime. Legacy paths are removed, physically isolated as non-controlled preview tooling, or migrated behind the broker. Static scanning across `src`, `server`, workers, API routes, scripts, integrations, generated-artifact definitions, and adapter code is required defense in depth, but scanning alone never proves no bypass. Dynamic contract tests and observed external-channel trials must also pass.
 
+### 12.4 Broker-first implementation prerequisite
+
+Before an operational recovery UI may label an export, release, resume, or download action as server-authorized, the implementation must:
+
+1. inventory and classify every browser, API, server, worker, cache, offline/USB, integration, generated-artifact, and legacy egress surface;
+2. remove, physically isolate as non-controlled preview, or converge every controlled surface on the server-owned broker;
+3. pass UI/API/worker/server contract tests plus dynamic external-channel and bypass tests; and only then
+4. enable the role-view action and begin the usability pilot.
+
+A clearly labelled non-operational visualization may be built earlier for design validation. It cannot issue an `EgressGrant`, claim server authorization, or substitute for broker convergence.
+
 ## 13. Role Experience
 
 The front stage uses calm, factual language and one primary recovery action.
 
-### Client
+### 13.1 Derived role view and truth precedence
+
+Every role view answers five universal questions; this is not an eight-field or other fixed-count cap:
+
+| Universal question | Canonical source |
+| --- | --- |
+| What is safe now? | `RecoveryCase.state`, `lastSafeState`, and current `impactTargets` |
+| What happened and why? | `failureClass`, `riskClass`, and latest relevant `RecoveryEvent` |
+| What exact scope and revision are affected? | `authorityScopeRef`, project/package/revision/capability IDs, `affectedClaims`, and `impactTargets` |
+| What is the consequence and permitted use? | invalidated receipts, impact status, `CapabilityPolicy`, and current broker result |
+| What is my next authorized action? | `primaryNextAction`, accepted owner, actor authority, policy version, and required proof |
+
+Policy-critical role fields remain visible; non-critical detail may use progressive disclosure. The presenter stores no competing authority. Each actionable view binds `caseVersion`, latest event ID, policy version, evidence-snapshot ID, actor scope, and rendered time, and the server revalidates all of them at commit. A newer HOLD, containment expansion, revocation, invalidated receipt, or broker denial dominates any older Approved/ACTIVE display. If any required source is missing, mismatched, stale, unavailable, or has UNKNOWN impact coverage, the view says **“Status updating—work remains paused”** and offers only refresh, report issue, or authorized escalation. It must not claim that unconfirmed scope is unaffected.
+
+### 13.2 Frozen V1 Role Registry
+
+“Each role” in Section 4 means every role in `V1-CASEWORK-KITCHEN-RECOVERY-01`; changing the denominator requires a versioned registry decision.
+
+| Role | Recovery purpose | Policy-critical information and action boundary |
+| --- | --- | --- |
+| Client / homeowner | Understand the decision consequence | Saved selection, paused status, consequence, permitted use, and simple client decision; no technical or fabrication resolution |
+| Interior designer | Correct design intent | Affected objects, last safe revision, proposed correction, invalidated receipts, reversible branch; cannot override containment or self-release |
+| Architect / technical reviewer | Make qualified disposition | Changed claims, evidence denominator, missing/contradictory proof, independent assessment, and permitted dispositions |
+| Coordinator / information manager | Restore accountable flow | Accepted owner, assignment status, deadline, affected downstream roles, and escalation; no event-firehose or inferred acceptance |
+| Estimator / procurement | Protect commercial basis | Priced-BOM revision, affected quantities/specifications/suppliers, commercial consequence, and reprice task; cannot approve geometry or machining |
+| Factory engineer | Validate manufacturing translation | Quarantined candidate, checks, machine/profile, permitted-use class, last ACTIVE comparison, acknowledgement and HOLD/escalation controls |
+| CNC operator | Use only granted machine package | Exact ACTIVE package or bounded qualification grant, named machine/procedure, restriction, expiry, HOLD and report-issue; no spindle/motion/cycle-start control |
+| Installer / field verifier | Prove field condition and installation disposition | Exact site/installation revision, unresolved dimensions/interfaces, evidence capture requirement, safe stop, and escalation; cannot sign technical or production release unless separately authorized |
+
+### 13.3 Role-specific presentation examples
+
+#### Client
 
 “Your selection is saved. Technical release is paused because the site width is not yet measured.” The client is never asked to resolve manufacturing detail.
 
-### Designer
+#### Designer
 
 Shows the affected objects, last safe revision, proposed correction, invalidated receipts, and a reversible branch. The designer can edit or resubmit but cannot override technical containment.
 
-### Reviewer
+#### Reviewer
 
 Shows exact changed claims, missing/contradictory evidence, mandatory coverage denominator, independent assessment, and permitted dispositions.
 
-### Coordinator
+#### Coordinator
 
 Shows the single blocking recovery task, named owner, deadline, downstream roles affected, and escalation path—not a feed of every system event.
 
-### Factory engineer
+#### Estimator / procurement
+
+Shows the priced-BOM basis, items and supplier specifications affected by the exact revision, commercial consequence, and one reprice or substitution-evidence task. It never presents commercial confirmation as geometry or machining approval.
+
+#### Factory engineer
 
 Shows a quarantined exact candidate, failed checks, machine context, permitted-use class, comparison with the last ACTIVE package, containment acknowledgement, and HOLD/escalation controls. No production file is downloadable before ACTIVE commit; bounded qualification output requires its own restricted grant.
 
-### CNC operator
+#### CNC operator
 
 In production mode, shows only ACTIVE packages matched to the machine plus HOLD and report-issue controls. In qualification mode, shows only the bounded coupon or first-article grant, its conspicuous restriction, named procedure, and expiry. MONOLITH never presents a spindle, motion, or cycle-start action.
+
+#### Installer / field verifier
+
+Shows the exact site and installation revision, open dimensions or interfaces, required field evidence, safe-stop consequence, and one capture or escalation action. Field observation cannot silently alter design truth or confer technical/production approval.
 
 ## 14. Section 4 Visualization Contract
 
@@ -379,6 +447,16 @@ Each scenario updates the same fields: RecoveryCase state, latest immutable even
 
 ## 15. Acceptance Criteria
 
+### 15.1 Operational measurement protocol
+
+The orientation clock starts only when the role view is fully rendered and announced after open or material state change. It stops when the participant correctly identifies the last safe revision, consequence, permitted use, and next authorized action. Results are reported separately by registry version, role, seeded scenario, risk class, language, and required device width; pooled results cannot hide a failing cell.
+
+The correction/acknowledgement/reversal denominator is every started seeded task. Exclusions are limited to predeclared test-harness failures frozen before unblinding. Report numerator, denominator, and 95% confidence interval for each cell. The sample-size/power plan, success rubric, support definition, and unsafe-action adjudication are frozen before the pilot. Median orientation time is at most 30 seconds per required role/scenario cell, and at least 95% complete the assigned non-safety task without support. Any unsafe critical action, bypass, or incorrect permission inference is an immediate stop regardless of aggregate percentage.
+
+Also record safe first action, backtracking, evidence opening, support escape, and workload against the approved baseline. Automated property, state-machine, contract, and failure-injection tests prove control invariants; the human pilot supplies usability evidence only and cannot establish runtime authority or production readiness.
+
+### 15.2 Contract acceptance criteria
+
 Section 4 is accepted only when:
 
 1. RecoveryCase, RecoveryEvent, and DecisionReceipt responsibilities are separate and testable;
@@ -393,9 +471,13 @@ Section 4 is accepted only when:
 10. every controlled egress path is registered, brokered, dynamically tested, and audited;
 11. qualification output is possible without granting production use, and no qualification artifact can be promoted by copying, renaming, replay, or policy downgrade;
 12. the tenant / organization / site authority model is ratified before canonical recovery persistence is implemented;
-13. each role identifies the last safe revision, owner, consequence, permitted use, and primary next action in a median of 30 seconds or less;
-14. at least 95% of pilot participants complete a correction, containment acknowledgement, or reversal without support or external reconstruction;
-15. NOT-FOR-PRODUCTION remains active until exact machine, postprocessor, operator-procedure, owner-release, and production-egress gates pass.
+13. assignment request and acceptance remain distinct, and ASSIGNED requires accepted or policy-auto-assigned ownership without adding a lifecycle state;
+14. every view in the frozen V1 Role Registry derives from canonical case/event/receipt/policy/broker facts and fails closed on stale, missing, mismatched, unavailable, or UNKNOWN inputs;
+15. notification delivery, read, assignment acceptance, and containment acknowledgement remain distinct and follow the four-intent routing model;
+16. broker convergence and cross-surface contract/bypass tests pass before any operational UI claims server-authorized export, release, resume, or download;
+17. each required role/scenario cell meets the 30-second orientation target under the frozen measurement protocol;
+18. at least 95% of each required non-safety pilot cell completes its assigned correction, containment acknowledgement, or reversal without support or external reconstruction, with numerator, denominator, and confidence interval reported;
+19. NOT-FOR-PRODUCTION remains active until exact machine, postprocessor, operator-procedure, owner-release, and production-egress gates pass.
 
 ## 16. Stop Conditions
 
@@ -403,6 +485,7 @@ Stop or redesign if:
 
 - a mutable case is presented as an immutable receipt, or an immutable receipt changes;
 - two state names describe the same lifecycle position or an undefined transition is accepted;
+- a case enters ASSIGNED before the recipient accepts, unless an explicit authoritative auto-assignment policy records the assignment;
 - a critical seeded defect reaches release;
 - a missing or empty mandatory report set passes;
 - the same actor can satisfy incompatible duties;
@@ -410,10 +493,13 @@ Stop or redesign if:
 - a stale worker, device, or grant can reopen or export after a newer fencing token;
 - a stale or missing revocation policy permits offline use;
 - any path outside the EgressBroker exports a controlled artifact, or any path represents a non-ACTIVE package as PRODUCTION;
+- an operational UI claims server authorization before every controlled egress surface converges on the broker and passes contract/bypass tests;
+- a stale, missing, mismatched, unavailable, or UNKNOWN role-view input is presented as safe, ready, unaffected, or actionable;
 - a NOT-FOR-PRODUCTION artifact receives PRODUCTION use, or qualification evidence cannot be generated without doing so;
 - any safety, authority, evidence, revocation, or controlled-egress action bypasses the governed chain—the tolerated safety-bypass rate is zero;
 - more than 10% of non-safety coordination tasks in the pilot occur outside the governed chain; this is a UX redesign trigger and never relaxes the zero-bypass safety rule;
-- users cannot identify the last safe revision, owner, and next action without assistance.
+- the role denominator is not frozen, pooled metrics conceal a failing role/scenario cell, or an exclusion is introduced after unblinding;
+- users cannot identify the last safe revision, owner, consequence, permitted use, and next authorized action without assistance.
 
 ## 17. Current Source Trace Informing This Design
 
@@ -421,6 +507,7 @@ Stop or redesign if:
 - Report checks that search for FAIL without explicit required cardinality: `src/core/manufacturing/export/enforceExportGate.ts:119-157`.
 - Client-side approval requirement with default one approval and any-role matching: `src/core/manufacturing/release/releaseStore.ts:47-97`.
 - Current visible client release path builds and auto-downloads after browser-held approval state: `src/components/ui/ModelingReleasePanel.tsx:44-86`.
+- Additional current release/export surfaces include direct App/AppShell export wiring, browser packet generation/download, and upload only after download: `src/App.tsx:717-742,878-892`, `src/components/layout/AppShell.tsx:176,221`, and `src/factory/packet/useFactoryPacket.ts:341-365`. These paths make broker-first convergence a prerequisite rather than a UI follow-up.
 - Local, clearable key audit and revocation state: `src/release/keys/audit.ts:4-8,56-73,121-126` and `src/release/keys/revocationPolicy.ts:53-84,197-202`.
 - A direct ZIP function without full package structure exists at `server/src/export/exportServiceP22a.ts:426-467`; no caller was found in the inspected `src`, `server`, or `tests` tree, so source presence is not treated as a verified reachable production path.
 - Bypass scanner currently scoped to `src`: `scripts/gates/bypass-scan.ts:82-87`.
@@ -428,7 +515,11 @@ Stop or redesign if:
 - Gate pull-request workflow paths do not include release/export modules: `.github/workflows/gate-tests.yml:13-16`.
 - Release route remains an incomplete surface: `src/routes/index.tsx:873-880`.
 - Existing workflow authz, quorum, idempotency, and audit primitives are semantic reuse candidates, not verified canonical server authority: `src/workflow/approval/authz.ts`, `quorum.ts`, `idempotency.ts`, and `src/workflow/audit/writer.ts`.
+- Current handoff validation records process order and active site but does not establish recipient acceptance: `src/workflow/handoff/canonical.ts:35-57`.
+- Current notification routing sends personal responsibility/approval to direct push and cross-team handoff/FYI to group messages; it does not implement the four notification intents or distinct acknowledgement semantics: `src/workflow/notification/routing.ts:4-23`.
+- No exact runtime identifiers for `RecoveryCase`, `RecoveryEvent`, `DecisionReceipt`, `CapabilityPolicy`, `EgressBroker`, or a role-view contract were found in the inspected `src`, `server`, or `supabase` source. They remain target design contracts, not current production facts.
+- Evidence/UX appendix: [Beloved Safe Recovery UX deep research](../../research/2026-08-03-monolith-beloved-safe-recovery-ux-deep-research.en.md) and its [bounded scrutiny correction report](../../research/2026-08-03-monolith-beloved-safe-recovery-ux-scrutiny.en.md).
 
 ## 18. Approved Next Step After Written-Spec Review
 
-After the owner confirms this revised written specification, run one bounded re-scrutinize against the updated contract. If no blocker remains, create the bilingual interactive Section 4 visualization. Do not implement production release, schema, policy, egress, or machine-control changes from this document without a separate approved implementation plan.
+The bounded consistency re-scrutinize of this corrected contract passed with no blocker. The next approved design deliverable is the bilingual interactive Section 4 visualization as a clearly labelled non-operational artifact. Broker-surface inventory and convergence remain the first implementation prerequisite. Do not implement production release, schema, policy, egress, or machine-control changes from this document without a separate approved implementation plan.
