@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>แผน Implementation: MONOLITH Section 4 Standalone Prototype</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>แผน Implementation: MONOLITH Section 4 Standalone Prototype</h1>
+<blockquote><p><strong>สำหรับ agentic workers:</strong> REQUIRED SUB-SKILL: ใช้ superpowers:executing-plans เพื่อทำตามแผนทีละ task ใช้ superpowers:subagent-driven-development เฉพาะเมื่อเจ้าของอนุญาตให้แบ่งงานอย่างชัดเจน โดยใช้ checkbox (<code>- [ ]</code>) ติดตามความคืบหน้า</p></blockquote>
+<p><strong>เป้าหมาย:</strong> สร้าง Section 4 recovery prototype สองภาษาที่เป็น standalone และ fixture-driven ตามที่อนุมัติ โดยไม่มี runtime authority, network, persistence, download หรือ product integration</p>
+<p><strong>สถาปัตยกรรม:</strong> HTML entry สองไฟล์แยกภาษา ใช้ stylesheet, deterministic fixture catalog, pure projection/simulation layer และ DOM controller ร่วมกัน ใช้ classic scripts เพื่อเปิดโดยตรงผ่าน <code>file://</code> และเก็บ state ใน memory เท่านั้น ใช้ Vitest/JSDOM ตรวจ fixture contract, role projection, simulation semantics, artifact boundary, bilingual structure และ participant/evaluator flows</p>
+<p><strong>Tech Stack:</strong> Standalone HTML5, CSS3, classic JavaScript, Vitest 3, JSDOM 27, Node <code>vm</code> และ <code>render_docs.py</code> ของโปรเจกต์สำหรับ implementation report เท่านั้น</p>
+<h2>Global Constraints</h2>
+<ul>
+<li>ทำงานเฉพาะใน active nested product repository <code>determined-williams/</code> และรักษา dirty worktree เดิมทั้งหมด</li>
+<li>ทำตาม <a href="../specs/2026-08-03-monolith-section-4-safe-recovery-proof-design.th.html">Section 4 Safe Recovery &amp; Proof Design</a> โดยเฉพาะ Sections 13–16</li>
+<li>Prototype เป็น test data และ design validation เท่านั้น ไม่สร้าง persisted contract, permission, receipt, grant, notification หรือ audit record ใหม่</li>
+<li>ใช้ permanent banner ตรงตามนี้: <code>DESIGN PROTOTYPE — NO AUTHORITY — NOT FOR PRODUCTION</code></li>
+<li>ห้ามใช้ <code>fetch</code>, <code>XMLHttpRequest</code>, <code>WebSocket</code>, <code>EventSource</code>, <code>sendBeacon</code>, service workers, product/runtime imports, <code>localStorage</code>, <code>sessionStorage</code>, IndexedDB, cookies, downloads, object URLs, clipboard writes หรือ form actions</li>
+<li>ห้ามสร้าง <code>.openai/hosting.json</code>, initialize hosted Sites project หรือ publish artifact โดย deliverable ที่อนุมัติเป็น local-only</li>
+<li>สองภาษาต้องใช้ fixture IDs, facts, action boundaries, coverage และ expected answers ชุดเดียวกัน</li>
+<li>Status ใช้ text พร้อม icon/shape โดยสีเพียงอย่างเดียวห้ามสื่อ safety meaning</li>
+<li>คง NOT-FOR-PRODUCTION และห้ามแก้ production, release, broker, schema, policy หรือ machine-control code</li>
+</ul>
+<hr>
+<h2>File Map</h2>
+<div class="tablewrap"><table><thead><tr><th>File</th><th>หน้าที่</th></tr></thead><tbody>
+<tr><td><code>docs/prototypes/section-4-safe-recovery/prototype.en.html</code></td><td>English participant/evaluator shell</td></tr>
+<tr><td><code>docs/prototypes/section-4-safe-recovery/prototype.th.html</code></td><td>Thai participant/evaluator shell</td></tr>
+<tr><td><code>docs/prototypes/section-4-safe-recovery/styles.css</code></td><td>Corporate identity, responsive, focus, status-shape, print และ reduced-motion rules ที่ใช้ร่วมกัน</td></tr>
+<tr><td><code>docs/prototypes/section-4-safe-recovery/fixtures.js</code></td><td>Frozen role registry, 7 domain scenarios, 4 truth-pressure scenarios, fixture snapshots, coverage manifest และ bilingual copy</td></tr>
+<tr><td><code>docs/prototypes/section-4-safe-recovery/projection.js</code></td><td>Pure role projection, fail-closed precedence, snapshot replacement และ simulate-only outcome logic</td></tr>
+<tr><td><code>docs/prototypes/section-4-safe-recovery/prototype.js</code></td><td>DOM rendering, review/participant modes, inspector, simulation และ in-memory evaluator harness</td></tr>
+<tr><td><code>tests/section4-prototype/loadPrototype.ts</code></td><td>Test-only loader สำหรับ classic scripts และ JSDOM shells</td></tr>
+<tr><td><code>tests/section4-prototype/fixtures.contract.test.ts</code></td><td>Registry, scenario, coverage, bilingual fact และ immutability tests</td></tr>
+<tr><td><code>tests/section4-prototype/projection.behavior.test.ts</code></td><td>Five-question mapping, precedence, role boundary, snapshot และ simulation tests</td></tr>
+<tr><td><code>tests/section4-prototype/artifact.boundary.test.ts</code></td><td>Offline/no-authority static boundary และ bilingual accessibility structure tests</td></tr>
+<tr><td><code>tests/section4-prototype/dom.integration.test.ts</code></td><td>Participant/evaluator interaction และ accessible announcement tests</td></tr>
+<tr><td><code>docs/reports/2026-08-03-monolith-section-4-standalone-prototype-implementation.en.md</code></td><td>English implementation evidence report</td></tr>
+<tr><td><code>docs/reports/2026-08-03-monolith-section-4-standalone-prototype-implementation.th.md</code></td><td>Thai implementation evidence report</td></tr>
+<tr><td>Matching <code>.en.html</code> / <code>.th.html</code> report files</td><td>Standalone rendered report editions</td></tr>
+</tbody></table></div>
+<h2>Frozen Fixture Matrix</h2>
+<div class="tablewrap"><table><thead><tr><th>Fixture ID</th><th>บทบาทที่ครอบคลุม</th><th>Starting truth</th><th>Simulated primary outcome</th></tr></thead><tbody>
+<tr><td><code>SITE_EVIDENCE_MISSING</code></td><td>client, designer, installer</td><td>CONTAINED; last safe <code>R-014</code>; site width missing</td><td>ส่ง field evidence → REVERIFYING fixture</td></tr>
+<tr><td><code>STALE_REVISION_AFTER_REVIEW</code></td><td>designer, reviewer, coordinator, estimator</td><td>CONTAINED; last safe <code>R-018</code>; priced basis invalidated</td><td>สร้าง corrected branch / reprice → RECOVERING fixture</td></tr>
+<tr><td><code>UNAUTHORIZED_SELF_APPROVAL</code></td><td>designer, reviewer</td><td>CONTAINED; independent authority missing</td><td>ขอ independent review โดยไม่สร้าง approval</td></tr>
+<tr><td><code>MISSING_VERIFICATION_REPORT</code></td><td>reviewer, factory engineer</td><td>CONTAINED; report denominator incomplete</td><td>ขอ required report และยังคง paused</td></tr>
+<tr><td><code>POST_RELEASE_DEFECT</code></td><td>coordinator, factory engineer, CNC operator, installer</td><td>HOLD/CONTAINED; last safe <code>R-021</code></td><td>acknowledge hold / isolate affected target</td></tr>
+<tr><td><code>OFFLINE_STALE_REVOCATION</code></td><td>factory engineer, CNC operator</td><td>CONTAINED; policy stale</td><td>จำลอง refresh ถูกปฏิเสธเมื่อ offline</td></tr>
+<tr><td><code>NFP_QUALIFICATION_COUPON</code></td><td>factory engineer, CNC operator</td><td>REVERIFYING; use จำกัดที่ QUALIFICATION_COUPON</td><td>จำลอง restricted eligibility โดยไม่เป็น production</td></tr>
+<tr><td><code>PENDING_ASSIGNMENT</code></td><td>designer, coordinator</td><td>CONTAINED; assignment requested, not accepted</td><td>จำลอง acceptance → ASSIGNED fixture</td></tr>
+<tr><td><code>SOURCE_UNAVAILABLE_OR_UNKNOWN</code></td><td>client, coordinator, installer</td><td>CONTAINED; source unavailable / impact UNKNOWN</td><td>refresh แล้วยัง paused; escalate ได้</td></tr>
+<tr><td><code>NEWER_HOLD_OVERRIDES_OLD_APPROVAL</code></td><td>reviewer, factory engineer, CNC operator</td><td>CONTAINED; newer HOLD dominates old Approved</td><td>แสดง current HOLD โดยไม่มี stale action</td></tr>
+<tr><td><code>STALE_ACTION_BROKER_DENIED</code></td><td>factory engineer, CNC operator</td><td>CONTAINED; rendered version เก่ากว่า current version</td><td>จำลอง action → broker-denied fixture</td></tr>
+</tbody></table></div>
+<p>Registry IDs ต้องเป็น <code>client</code>, <code>designer</code>, <code>reviewer</code>, <code>coordinator</code>, <code>estimator</code>, <code>factory_engineer</code>, <code>cnc_operator</code> และ <code>installer</code> ภายใต้ <code>V1-CASEWORK-KITCHEN-RECOVERY-01</code></p>
+<hr>
+<h3>Task 1: Deterministic Fixture Catalog และ Coverage Contract</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>docs/prototypes/section-4-safe-recovery/fixtures.js</code></li>
+<li>Create: <code>tests/section4-prototype/loadPrototype.ts</code></li>
+<li>Create: <code>tests/section4-prototype/fixtures.contract.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Produces: <code>globalThis.MONOLITH_SECTION4_FIXTURES</code></li>
+<li>Fields: <code>schemaVersion</code>, <code>registryVersion</code>, <code>roles</code>, <code>scenarios</code>, <code>fixtures</code>, <code>coverageManifest</code>, <code>labels</code></li>
+<li>ใช้ต่อโดย: <code>projection.js</code>, participant shell, evaluator และ prototype tests ที่เหลือ</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน failing classic-script loader และ fixture contract tests</strong></li>
+</ul>
+<pre><code class="language-ts">// tests/section4-prototype/loadPrototype.ts
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+
+export const prototypeRoot = path.resolve('docs/prototypes/section-4-safe-recovery');
+
+export function loadClassicScripts(files: string[]) {
+  const sandbox: Record&lt;string, unknown&gt; = {};
+  sandbox.globalThis = sandbox;
+  const context = vm.createContext(sandbox);
+  for (const file of files) {
+    const source = fs.readFileSync(path.join(prototypeRoot, file), 'utf8');
+    vm.runInContext(source, context, { filename: file });
+  }
+  return context as Record&lt;string, any&gt;;
+}</code></pre>
+<pre><code class="language-ts">// tests/section4-prototype/fixtures.contract.test.ts
+import { describe, expect, it } from 'vitest';
+import { loadClassicScripts } from './loadPrototype';
+
+const pressureIds = [
+  'PENDING_ASSIGNMENT',
+  'SOURCE_UNAVAILABLE_OR_UNKNOWN',
+  'NEWER_HOLD_OVERRIDES_OLD_APPROVAL',
+  'STALE_ACTION_BROKER_DENIED',
+];
+
+describe('Section 4 prototype fixture contract', () =&gt; {
+  const data = loadClassicScripts(['fixtures.js']).MONOLITH_SECTION4_FIXTURES;
+
+  it('freezes the exact V1 registry of eight roles', () =&gt; {
+    expect(data.registryVersion).toBe('V1-CASEWORK-KITCHEN-RECOVERY-01');
+    expect(data.roles.map((role: any) =&gt; role.id)).toEqual([
+      'client', 'designer', 'reviewer', 'coordinator',
+      'estimator', 'factory_engineer', 'cnc_operator', 'installer',
+    ]);
+  });
+
+  it('contains seven domain and four truth-pressure scenarios', () =&gt; {
+    expect(data.scenarios.filter((item: any) =&gt; item.kind === 'domain')).toHaveLength(7);
+    expect(data.scenarios.filter((item: any) =&gt; item.kind === 'truth-pressure').map((item: any) =&gt; item.id)).toEqual(pressureIds);
+  });
+
+  it('covers every V1 role with at least one fixture', () =&gt; {
+    for (const role of data.roles) expect(data.coverageManifest[role.id]?.length).toBeGreaterThan(0);
+  });
+
+  it('keeps canonical facts language-neutral and copy bilingual', () =&gt; {
+    for (const fixture of data.fixtures) {
+      expect(fixture.copy.en).toBeTruthy();
+      expect(fixture.copy.th).toBeTruthy();
+      expect(fixture.expectedAnswers).toHaveLength(5);
+      expect(fixture.caseProjection.revisionId).toMatch(/^R-/);
+    }
+  });
+
+  it('declares immutable version and simulated action outcomes', () =&gt; {
+    for (const fixture of data.fixtures) {
+      expect(Number.isInteger(fixture.caseProjection.caseVersion)).toBe(true);
+      expect(fixture.actionSimulation.label.en).toContain('Simulate');
+      expect(fixture.actionSimulation.label.th).toContain('จำลอง');
+    }
+  });
+
+  it('deep-freezes the published fixture catalog', () =&gt; {
+    expect(Object.isFrozen(data)).toBe(true);
+    expect(Object.isFrozen(data.roles)).toBe(true);
+    expect(Object.isFrozen(data.fixtures)).toBe(true);
+  });
+});</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: รัน targeted test เพื่อยืนยัน RED</strong></li>
+</ul>
+<p>Run: <code>npm.cmd run test:run -- tests/section4-prototype/fixtures.contract.test.ts</code></p>
+<p>Expected: FAIL เพราะยังไม่มี <code>fixtures.js</code></p>
+<ul>
+<li>[ ] <strong>Step 3: Implement frozen fixture catalog ขั้นต่ำ</strong></li>
+</ul>
+<p>ใช้ publication shape นี้พร้อม exact registry/scenario matrix ด้านบน:</p>
+<pre><code class="language-js">(function publishSection4Fixtures(global) {
+  'use strict';
+
+  function deepFreeze(value) {
+    if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+    Object.freeze(value);
+    Object.values(value).forEach(deepFreeze);
+    return value;
+  }
+
+  const roles = [
+    ['client', 'Client / homeowner', 'ลูกค้า / เจ้าของบ้าน'],
+    ['designer', 'Interior designer', 'นักออกแบบภายใน'],
+    ['reviewer', 'Architect / technical reviewer', 'สถาปนิก / ผู้ตรวจเทคนิค'],
+    ['coordinator', 'Coordinator / information manager', 'ผู้ประสานงาน / ผู้จัดการข้อมูล'],
+    ['estimator', 'Estimator / procurement', 'ประมาณราคา / จัดซื้อ'],
+    ['factory_engineer', 'Factory engineer', 'วิศวกรโรงงาน'],
+    ['cnc_operator', 'CNC operator', 'ผู้ควบคุม CNC'],
+    ['installer', 'Installer / field verifier', 'ผู้ติดตั้ง / ผู้ตรวจหน้างาน'],
+  ].map(([id, en, th]) =&gt; ({ id, label: { en, th } }));
+
+  const scenarios = [
+    ['SITE_EVIDENCE_MISSING', 'domain'],
+    ['STALE_REVISION_AFTER_REVIEW', 'domain'],
+    ['UNAUTHORIZED_SELF_APPROVAL', 'domain'],
+    ['MISSING_VERIFICATION_REPORT', 'domain'],
+    ['POST_RELEASE_DEFECT', 'domain'],
+    ['OFFLINE_STALE_REVOCATION', 'domain'],
+    ['NFP_QUALIFICATION_COUPON', 'domain'],
+    ['PENDING_ASSIGNMENT', 'truth-pressure'],
+    ['SOURCE_UNAVAILABLE_OR_UNKNOWN', 'truth-pressure'],
+    ['NEWER_HOLD_OVERRIDES_OLD_APPROVAL', 'truth-pressure'],
+    ['STALE_ACTION_BROKER_DENIED', 'truth-pressure'],
+  ].map(([id, kind]) =&gt; ({ id, kind }));
+
+  const data = {
+    schemaVersion: 'section4-prototype-fixture/v1',
+    registryVersion: 'V1-CASEWORK-KITCHEN-RECOVERY-01',
+    roles,
+    scenarios,
+    fixtures: buildFixtures(),
+    coverageManifest: buildCoverageManifest(),
+    labels: buildBilingualLabels(),
+  };
+
+  global.MONOLITH_SECTION4_FIXTURES = deepFreeze(data);
+})(globalThis);</code></pre>
+<p><code>buildFixtures()</code> ต้องสร้างครบ 11 rows พร้อม canonical facts และ <code>copy.en</code> / <code>copy.th</code> ที่สมบูรณ์ <code>buildCoverageManifest()</code> ต้องอ้างเฉพาะ fixture IDs ที่มีจริงและครอบคลุม registry ทั้งแปด <code>buildBilingualLabels()</code> ต้องมี five universal questions, prototype banner, inspector/status/evaluator labels ครบสองภาษา</p>
+<p>Helper contract ต้องเป็นดังนี้:</p>
+<ul>
+<li><code>buildFixtures(): Fixture[]</code>; fixture ทุกตัวมี <code>id</code>, <code>scenarioKind</code>, <code>coveredRoles</code>, <code>caseProjection</code>, <code>expectedAnswers</code>, <code>copy</code> และ <code>actionSimulation</code> โดย <code>caseProjection</code> มี <code>caseVersion</code>, <code>revisionId</code>, <code>statusKey</code>, <code>lastSafeRevisionId</code>, <code>impact</code>, <code>permittedUse</code>, <code>evidenceRefs</code>, <code>policyRefs</code>, <code>brokerDecision</code> และ <code>freshness</code> ส่วน <code>copy</code> และ action label ที่มองเห็นได้ต้องมีทั้ง <code>en</code> และ <code>th</code></li>
+<li><code>buildCoverageManifest()</code> คืน membership ตรงตามนี้: <code>client</code> → <code>SITE_EVIDENCE_MISSING</code>, <code>SOURCE_UNAVAILABLE_OR_UNKNOWN</code>; <code>designer</code> → <code>SITE_EVIDENCE_MISSING</code>, <code>STALE_REVISION_AFTER_REVIEW</code>, <code>UNAUTHORIZED_SELF_APPROVAL</code>, <code>PENDING_ASSIGNMENT</code>; <code>reviewer</code> → <code>STALE_REVISION_AFTER_REVIEW</code>, <code>UNAUTHORIZED_SELF_APPROVAL</code>, <code>MISSING_VERIFICATION_REPORT</code>, <code>NEWER_HOLD_OVERRIDES_OLD_APPROVAL</code>; <code>coordinator</code> → <code>STALE_REVISION_AFTER_REVIEW</code>, <code>POST_RELEASE_DEFECT</code>, <code>PENDING_ASSIGNMENT</code>, <code>SOURCE_UNAVAILABLE_OR_UNKNOWN</code>; <code>estimator</code> → <code>STALE_REVISION_AFTER_REVIEW</code>; <code>factory_engineer</code> → <code>MISSING_VERIFICATION_REPORT</code>, <code>POST_RELEASE_DEFECT</code>, <code>OFFLINE_STALE_REVOCATION</code>, <code>NFP_QUALIFICATION_COUPON</code>, <code>NEWER_HOLD_OVERRIDES_OLD_APPROVAL</code>, <code>STALE_ACTION_BROKER_DENIED</code>; <code>cnc_operator</code> → <code>POST_RELEASE_DEFECT</code>, <code>OFFLINE_STALE_REVOCATION</code>, <code>NFP_QUALIFICATION_COUPON</code>, <code>NEWER_HOLD_OVERRIDES_OLD_APPROVAL</code>, <code>STALE_ACTION_BROKER_DENIED</code>; <code>installer</code> → <code>SITE_EVIDENCE_MISSING</code>, <code>POST_RELEASE_DEFECT</code>, <code>SOURCE_UNAVAILABLE_OR_UNKNOWN</code></li>
+<li><code>buildBilingualLabels()</code> ต้องให้ label ห้าคำถามตามลำดับนี้: <code>What is safe now?</code>, <code>What happened and why?</code>, <code>What exact scope and revision are affected?</code>, <code>What is the consequence and permitted use?</code>, <code>What is my next authorized action?</code>; และ <code>ตอนนี้อะไรปลอดภัย?</code>, <code>เกิดอะไรขึ้นและเพราะเหตุใด?</code>, <code>ขอบเขตและ revision ใดได้รับผลกระทบ?</code>, <code>ผลที่ตามมาและการใช้งานที่อนุญาตคืออะไร?</code>, <code>การกระทำถัดไปที่ฉันมีสิทธิ์ทำคืออะไร?</code></li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 4: รัน targeted test เพื่อยืนยัน GREEN</strong></li>
+</ul>
+<p>Run: <code>npm.cmd run test:run -- tests/section4-prototype/fixtures.contract.test.ts</code></p>
+<p>Expected: PASS, 6 tests</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit Task 1</strong></li>
+</ul>
+<pre><code class="language-powershell">git add docs/prototypes/section-4-safe-recovery/fixtures.js tests/section4-prototype/loadPrototype.ts tests/section4-prototype/fixtures.contract.test.ts
+git commit -m "feat: add Section 4 prototype fixtures"</code></pre>
+<hr>
+<h3>Task 2: Pure Role Projection และ Simulate-only Behavior</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>docs/prototypes/section-4-safe-recovery/projection.js</code></li>
+<li>Create: <code>tests/section4-prototype/projection.behavior.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: <code>globalThis.MONOLITH_SECTION4_FIXTURES</code></li>
+<li>Produces: <code>globalThis.MONOLITH_SECTION4_PROJECTION</code></li>
+<li>Functions: <code>projectRoleView(input)</code>, <code>simulateAction(input)</code>, <code>validateCoverage()</code></li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน failing projection tests</strong></li>
+</ul>
+<pre><code class="language-ts">import { describe, expect, it } from 'vitest';
+import { loadClassicScripts } from './loadPrototype';
+
+const context = loadClassicScripts(['fixtures.js', 'projection.js']);
+const api = context.MONOLITH_SECTION4_PROJECTION;
+
+describe('Section 4 role projection', () =&gt; {
+  it('answers exactly five universal questions', () =&gt; {
+    const view = api.projectRoleView({ fixtureId: 'SITE_EVIDENCE_MISSING', roleId: 'client', language: 'en' });
+    expect(view.questions).toHaveLength(5);
+  });
+
+  it('keeps client copy free of policy, quorum, broker, and lifecycle jargon', () =&gt; {
+    const view = api.projectRoleView({ fixtureId: 'SITE_EVIDENCE_MISSING', roleId: 'client', language: 'en' });
+    expect(JSON.stringify(view.primaryCard)).not.toMatch(/quorum|EgressBroker|CapabilityPolicy|REVERIFYING/);
+  });
+
+  it('fails closed when source status is unavailable or UNKNOWN', () =&gt; {
+    const view = api.projectRoleView({ fixtureId: 'SOURCE_UNAVAILABLE_OR_UNKNOWN', roleId: 'coordinator', language: 'en' });
+    expect(view.primaryCard.statusKey).toBe('PAUSED_UPDATING');
+    expect(view.primaryCard.allowedActionKinds).toEqual(['refresh', 'report', 'escalate']);
+  });
+
+  it('lets newer HOLD dominate old approval', () =&gt; {
+    const view = api.projectRoleView({ fixtureId: 'NEWER_HOLD_OVERRIDES_OLD_APPROVAL', roleId: 'reviewer', language: 'en' });
+    expect(view.primaryCard.currentTruth).toBe('HOLD');
+    expect(view.inspector.supersededTruth).toBe('APPROVED');
+  });
+
+  it('denies stale simulated actions by expected case version', () =&gt; {
+    const result = api.simulateAction({ fixtureId: 'STALE_ACTION_BROKER_DENIED', actionId: 'simulate_export', expectedCaseVersion: 14 });
+    expect(result.outcome).toBe('SIMULATED_DENIED');
+    expect(result.reason).toBe('STALE_CASE_VERSION');
+  });
+
+  it('replaces whole snapshots and never merges fixture facts', () =&gt; {
+    const first = api.projectRoleView({ fixtureId: 'PENDING_ASSIGNMENT', roleId: 'coordinator', language: 'en' });
+    const second = api.projectRoleView({ fixtureId: 'POST_RELEASE_DEFECT', roleId: 'coordinator', language: 'en' });
+    expect(first.snapshotId).not.toBe(second.snapshotId);
+    expect(second.sourceFixtureIds).toEqual(['POST_RELEASE_DEFECT']);
+  });
+});</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: รัน targeted test เพื่อยืนยัน RED</strong></li>
+</ul>
+<p>Run: <code>npm.cmd run test:run -- tests/section4-prototype/projection.behavior.test.ts</code></p>
+<p>Expected: FAIL เพราะยังไม่มี <code>projection.js</code></p>
+<ul>
+<li>[ ] <strong>Step 3: Implement pure projection API</strong></li>
+</ul>
+<pre><code class="language-js">(function publishSection4Projection(global) {
+  'use strict';
+  const data = global.MONOLITH_SECTION4_FIXTURES;
+  if (!data) throw new Error('MONOLITH_SECTION4_FIXTURES is required');
+
+  function findFixture(fixtureId) {
+    const fixture = data.fixtures.find((item) =&gt; item.id === fixtureId);
+    if (!fixture) throw new Error(`Unknown fixture: ${fixtureId}`);
+    return fixture;
+  }
+
+  function projectRoleView({ fixtureId, roleId, language }) {
+    const fixture = findFixture(fixtureId);
+    if (!data.coverageManifest[roleId]?.includes(fixtureId)) throw new Error('ROLE_FIXTURE_NOT_COVERED');
+    const failClosed = fixture.sourceStatus !== 'FRESH' || fixture.impactCoverage === 'UNKNOWN';
+    return Object.freeze({
+      snapshotId: `${fixture.id}@${fixture.fixtureVersion}`,
+      sourceFixtureIds: [fixture.id],
+      primaryCard: buildPrimaryCard(fixture, roleId, language, failClosed),
+      questions: buildFiveQuestions(fixture, roleId, language),
+      inspector: buildInspector(fixture, language),
+      simulatedAction: fixture.actionSimulation,
+    });
+  }
+
+  function simulateAction({ fixtureId, actionId, expectedCaseVersion }) {
+    const fixture = findFixture(fixtureId);
+    if (expectedCaseVersion !== fixture.caseProjection.caseVersion) {
+      return Object.freeze({ outcome: 'SIMULATED_DENIED', reason: 'STALE_CASE_VERSION', simulated: true });
+    }
+    if (actionId !== fixture.actionSimulation.id) {
+      return Object.freeze({ outcome: 'SIMULATED_DENIED', reason: 'ACTION_NOT_ALLOWED', simulated: true });
+    }
+    return Object.freeze({ ...fixture.actionSimulation.result, simulated: true });
+  }
+
+  function validateCoverage() {
+    return data.roles.every((role) =&gt; data.coverageManifest[role.id]?.length &gt; 0);
+  }
+
+  global.MONOLITH_SECTION4_PROJECTION = Object.freeze({ projectRoleView, simulateAction, validateCoverage });
+})(globalThis);</code></pre>
+<p>Implement <code>buildPrimaryCard</code>, <code>buildFiveQuestions</code> และ <code>buildInspector</code> เป็น pure functions โดย authority มาจาก fixture facts เท่านั้น การเปลี่ยน <code>roleId</code> เปลี่ยน presentation แต่ไม่เปลี่ยน permission และ fail-closed view มีเฉพาะ <code>refresh</code>, <code>report</code>, <code>escalate</code></p>
+<p>Projection helper outputs ถูกล็อกไว้ดังนี้: <code>buildPrimaryCard(...)</code> คืน <code>statusKey</code>, <code>currentTruth</code>, <code>title</code>, <code>consequence</code>, <code>permittedUse</code>, <code>nextAction</code> และ <code>allowedActionKinds</code>; <code>buildFiveQuestions(...)</code> คืน <code>{ key, label, value }</code> ห้า rows ตามลำดับ label ที่ freeze ไว้ข้างต้น; <code>buildInspector(...)</code> คืน <code>lifecycle</code>, <code>currentEvidence</code>, <code>supersededEvidence</code>, <code>policyBasis</code>, <code>brokerDecision</code> และ <code>freshness</code> หาก authority input ขาดหาย, unavailable หรือเป็น <code>UNKNOWN</code> ต้องบังคับ <code>PAUSED_UPDATING</code> และจำกัด <code>allowedActionKinds</code> เหลือ <code>refresh</code>, <code>report</code>, <code>escalate</code></p>
+<ul>
+<li>[ ] <strong>Step 4: รัน contract suites เพื่อยืนยัน GREEN</strong></li>
+</ul>
+<p>Run: <code>npm.cmd run test:run -- tests/section4-prototype/fixtures.contract.test.ts tests/section4-prototype/projection.behavior.test.ts</code></p>
+<p>Expected: PASS, 12 tests</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit Task 2</strong></li>
+</ul>
+<pre><code class="language-powershell">git add docs/prototypes/section-4-safe-recovery/projection.js tests/section4-prototype/projection.behavior.test.ts
+git commit -m "feat: add Section 4 role projection"</code></pre>
+<hr>
+<h3>Task 3: Bilingual Standalone Shells, Corporate Identity และ Static Boundary</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>docs/prototypes/section-4-safe-recovery/prototype.en.html</code></li>
+<li>Create: <code>docs/prototypes/section-4-safe-recovery/prototype.th.html</code></li>
+<li>Create: <code>docs/prototypes/section-4-safe-recovery/styles.css</code></li>
+<li>Create: <code>tests/section4-prototype/artifact.boundary.test.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>DOM IDs: <code>review-shell</code>, <code>role-select</code>, <code>scenario-select</code>, <code>start-participant</code>, <code>prototype-banner</code>, <code>decision-card</code>, <code>five-questions</code>, <code>simulate-action</code>, <code>proof-inspector</code>, <code>open-proof</code>, <code>evaluator-panel</code>, <code>live-status</code>, <code>language-link</code></li>
+<li>CSS tokens: <code>--ink</code>, <code>--paper</code>, <code>--surface</code>, <code>--sage</code>, <code>--amber</code>, <code>--hold</code>, <code>--line</code>, <code>--focus</code></li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เขียน failing boundary/accessibility tests</strong></li>
+</ul>
+<pre><code class="language-ts">import fs from 'node:fs';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { prototypeRoot } from './loadPrototype';
+
+const files = ['prototype.en.html', 'prototype.th.html', 'styles.css', 'fixtures.js', 'projection.js', 'prototype.js'];
+const forbidden = /fetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|serviceWorker|localStorage|sessionStorage|indexedDB|document\.cookie|createObjectURL|clipboard\.write|download\s*=|&lt;form[^&gt;]+action=|(?:src|server|supabase)\//i;
+
+describe('Section 4 standalone artifact boundary', () =&gt; {
+  it('contains no forbidden runtime, network, persistence, or download surface', () =&gt; {
+    for (const file of files) {
+      const source = fs.readFileSync(path.join(prototypeRoot, file), 'utf8');
+      expect(source).not.toMatch(forbidden);
+    }
+  });
+
+  it.each([['prototype.en.html', 'en'], ['prototype.th.html', 'th']])('%s declares language and permanent banner', (file, language) =&gt; {
+    const html = fs.readFileSync(path.join(prototypeRoot, file), 'utf8');
+    expect(html).toContain(`&lt;html lang="${language}"&gt;`);
+    expect(html).toContain('DESIGN PROTOTYPE — NO AUTHORITY — NOT FOR PRODUCTION');
+    expect(html).toContain('id="live-status"');
+    expect(html).toContain('aria-live="polite"');
+  });
+
+  it('uses classic relative scripts in the same order for both languages', () =&gt; {
+    for (const file of ['prototype.en.html', 'prototype.th.html']) {
+      const html = fs.readFileSync(path.join(prototypeRoot, file), 'utf8');
+      expect(html.indexOf('fixtures.js')).toBeLessThan(html.indexOf('projection.js'));
+      expect(html.indexOf('projection.js')).toBeLessThan(html.indexOf('prototype.js'));
+      expect(html).not.toContain('type="module"');
+    }
+  });
+
+  it('defines visible focus, reduced motion, reflow, and non-color status shapes', () =&gt; {
+    const css = fs.readFileSync(path.join(prototypeRoot, 'styles.css'), 'utf8');
+    expect(css).toMatch(/:focus-visible/);
+    expect(css).toMatch(/prefers-reduced-motion/);
+    expect(css).toMatch(/@media\s*\(max-width:/);
+    expect(css).toMatch(/\.status-shape/);
+  });
+});</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: รัน boundary test เพื่อยืนยัน RED</strong></li>
+</ul>
+<p>Run: <code>npm.cmd run test:run -- tests/section4-prototype/artifact.boundary.test.ts</code></p>
+<p>Expected: FAIL เพราะยังไม่มี bilingual shells, stylesheet และ controller</p>
+<ul>
+<li>[ ] <strong>Step 3: สร้าง HTML shells สองภาษาด้วย structural IDs ชุดเดียวกัน</strong></li>
+</ul>
+<p>แต่ละไฟล์ต้องใช้ structural order นี้และแปล visible copy ตามภาษา:</p>
+<pre><code class="language-html">&lt;body data-language="en"&gt;
+  &lt;a class="skip-link" href="#decision-card"&gt;Skip to recovery decision&lt;/a&gt;
+  &lt;div id="prototype-banner" role="note"&gt;DESIGN PROTOTYPE — NO AUTHORITY — NOT FOR PRODUCTION&lt;/div&gt;
+  &lt;header class="masthead"&gt;
+    &lt;div&gt;&lt;p class="eyebrow"&gt;MONOLITH · SAFE RECOVERY&lt;/p&gt;&lt;h1&gt;Recovery Decision Prototype&lt;/h1&gt;&lt;/div&gt;
+    &lt;a id="language-link" href="prototype.th.html" hreflang="th"&gt;ไทย&lt;/a&gt;
+  &lt;/header&gt;
+  &lt;main class="prototype-layout"&gt;
+    &lt;aside id="review-shell" aria-label="Design review controls"&gt;
+      &lt;label for="role-select"&gt;Role&lt;/label&gt;&lt;select id="role-select"&gt;&lt;/select&gt;
+      &lt;label for="scenario-select"&gt;Scenario&lt;/label&gt;&lt;select id="scenario-select"&gt;&lt;/select&gt;
+      &lt;button id="start-participant" type="button"&gt;Start participant view&lt;/button&gt;
+    &lt;/aside&gt;
+    &lt;article id="decision-card" tabindex="-1" aria-labelledby="decision-title"&gt;
+      &lt;div class="status-line"&gt;&lt;span class="status-shape" aria-hidden="true"&gt;&lt;/span&gt;&lt;strong id="decision-title"&gt;&lt;/strong&gt;&lt;/div&gt;
+      &lt;div id="five-questions"&gt;&lt;/div&gt;
+      &lt;button id="simulate-action" type="button"&gt;&lt;/button&gt;
+      &lt;button id="open-proof" type="button" aria-expanded="false" aria-controls="proof-inspector"&gt;Why is work paused?&lt;/button&gt;
+    &lt;/article&gt;
+    &lt;aside id="proof-inspector" hidden aria-label="Why and proof inspector"&gt;&lt;/aside&gt;
+    &lt;aside id="evaluator-panel" hidden aria-label="Evaluator harness"&gt;&lt;/aside&gt;
+  &lt;/main&gt;
+  &lt;p id="live-status" class="sr-only" aria-live="polite"&gt;&lt;/p&gt;
+  &lt;script src="fixtures.js"&gt;&lt;/script&gt;&lt;script src="projection.js"&gt;&lt;/script&gt;&lt;script src="prototype.js"&gt;&lt;/script&gt;
+&lt;/body&gt;</code></pre>
+<p>English ใช้ <code>lang="en"</code> และลิงก์ไป <code>prototype.th.html</code>; Thai ใช้ <code>lang="th"</code> และลิงก์กลับ <code>prototype.en.html</code> IDs, script order และ semantic structure ต้องเหมือนกัน ห้ามใช้ <code>type="module"</code></p>
+<ul>
+<li>[ ] <strong>Step 4: Implement corporate-identity stylesheet ร่วมกัน</strong></li>
+</ul>
+<p>ใช้ exact CSS tokens และ base rules ต่อไปนี้:</p>
+<pre><code class="language-css">:root {
+  --ink: #1f2a2d; --paper: #f4f0e8; --surface: #fffdf8; --sage: #61756a;
+  --amber: #9b6b22; --hold: #9e3e36; --line: #d7d0c5; --focus: #155eef;
+  --shadow: 0 18px 48px rgba(31, 42, 45, .12); --radius: 20px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--ink); background: var(--paper); font: 16px/1.55 "Noto Sans Thai", "Segoe UI", sans-serif; }
+#prototype-banner { background: var(--ink); color: white; padding: .7rem 1rem; text-align: center; font-weight: 800; letter-spacing: .04em; }
+.prototype-layout { display: grid; grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr) minmax(18rem, 24rem); gap: 1rem; padding: 1rem; }
+#decision-card, #review-shell, #proof-inspector, #evaluator-panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.25rem; }
+.status-shape { width: .9rem; height: .9rem; display: inline-block; border: 3px solid currentColor; transform: rotate(45deg); margin-inline-end: .65rem; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+@media (max-width: 860px) { .prototype-layout { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }</code></pre>
+<p>ให้มี text label ข้าง status shape เสมอ ห้ามสร้าง green/red-only state และให้ review shell เป็น visual secondary โดย participant mode ต้องเอาออกจาก layout</p>
+<ul>
+<li>[ ] <strong>Step 5: เพิ่ม empty controller stub และรัน boundary test ให้ GREEN</strong></li>
+</ul>
+<p>สร้าง <code>prototype.js</code> เป็น IIFE strict mode ที่ยังไม่มี external capability จากนั้นรัน:</p>
+<p><code>npm.cmd run test:run -- tests/section4-prototype/artifact.boundary.test.ts</code></p>
+<p>Expected: PASS, 5 tests</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit Task 3</strong></li>
+</ul>
+<pre><code class="language-powershell">git add docs/prototypes/section-4-safe-recovery/prototype.en.html docs/prototypes/section-4-safe-recovery/prototype.th.html docs/prototypes/section-4-safe-recovery/styles.css docs/prototypes/section-4-safe-recovery/prototype.js tests/section4-prototype/artifact.boundary.test.ts
+git commit -m "feat: add bilingual Section 4 prototype shell"</code></pre>
+<hr>
+<h3>Task 4: Participant Flow, Proof Inspector, Simulation และ Evaluator Harness</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Modify: <code>docs/prototypes/section-4-safe-recovery/prototype.js</code></li>
+<li>Modify เฉพาะเมื่อ accessibility assertion ต้องการ: HTML สองไฟล์และ <code>styles.css</code></li>
+<li>Create: <code>tests/section4-prototype/dom.integration.test.ts</code></li>
+<li>Modify: <code>tests/section4-prototype/loadPrototype.ts</code></li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Consumes: fixture/projection globals และ DOM IDs จาก Task 3</li>
+<li>Controller state อยู่ภายใน IIFE ไม่ publish runtime global</li>
+<li>Evaluator shape: <code>{ fixtureId, registryVersion, roleId, scenarioId, risk, language, viewport, startedAt, completedAt, safeFirstAction, backtrackingCount, proofOpened, supportUsed, workload, unsafeAction }</code></li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: เพิ่ม JSDOM loader และเขียน failing integration tests</strong></li>
+</ul>
+<pre><code class="language-ts">// เพิ่มใน tests/section4-prototype/loadPrototype.ts
+import { JSDOM } from 'jsdom';
+
+export function loadPrototypeDom(language: 'en' | 'th') {
+  const html = fs.readFileSync(path.join(prototypeRoot, `prototype.${language}.html`), 'utf8');
+  const dom = new JSDOM(html, { url: `file://${path.join(prototypeRoot, `prototype.${language}.html`)}`, runScripts: 'outside-only' });
+  for (const file of ['fixtures.js', 'projection.js', 'prototype.js']) {
+    dom.window.eval(fs.readFileSync(path.join(prototypeRoot, file), 'utf8'));
+  }
+  dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
+  return dom;
+}</code></pre>
+<pre><code class="language-ts">// tests/section4-prototype/dom.integration.test.ts
+import { describe, expect, it } from 'vitest';
+import { loadPrototypeDom } from './loadPrototype';
+
+describe.each(['en', 'th'] as const)('Section 4 %s participant flow', (language) =&gt; {
+  it('renders eight roles and covered scenarios', () =&gt; {
+    const { window } = loadPrototypeDom(language);
+    expect(window.document.querySelectorAll('#role-select option')).toHaveLength(8);
+    expect(window.document.querySelectorAll('#scenario-select option').length).toBeGreaterThan(0);
+  });
+
+  it('hides review selectors after participant mode starts', () =&gt; {
+    const { window } = loadPrototypeDom(language);
+    (window.document.querySelector('#start-participant') as HTMLButtonElement).click();
+    expect(window.document.querySelector('#review-shell')?.hasAttribute('hidden')).toBe(true);
+    expect(window.document.activeElement?.id).toBe('decision-card');
+  });
+
+  it('opens proof on demand and announces the change', () =&gt; {
+    const { window } = loadPrototypeDom(language);
+    (window.document.querySelector('#open-proof') as HTMLButtonElement).click();
+    expect(window.document.querySelector('#proof-inspector')?.hasAttribute('hidden')).toBe(false);
+    expect(window.document.querySelector('#open-proof')?.getAttribute('aria-expanded')).toBe('true');
+    expect(window.document.querySelector('#live-status')?.textContent).not.toBe('');
+  });
+
+  it('marks every action outcome as simulated', () =&gt; {
+    const { window } = loadPrototypeDom(language);
+    (window.document.querySelector('#simulate-action') as HTMLButtonElement).click();
+    expect(window.document.querySelector('#live-status')?.textContent).toMatch(/SIMULATED|จำลอง/);
+  });
+});</code></pre>
+<p>เพิ่ม evaluator assertions ภาษาอังกฤษอีกสามข้อ: session เริ่มจาก immutable fixture identity, support/unsafe flags update เฉพาะ in-memory และ summary ไม่มี export/download control รวม expected 11 tests</p>
+<ul>
+<li>[ ] <strong>Step 2: รัน integration test เพื่อยืนยัน RED</strong></li>
+</ul>
+<p>Run: <code>npm.cmd run test:run -- tests/section4-prototype/dom.integration.test.ts</code></p>
+<p>Expected: FAIL เพราะ controller stub ยังไม่ populate/operate shell</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement in-memory controller</strong></li>
+</ul>
+<pre><code class="language-js">(function startSection4Prototype(global) {
+  'use strict';
+  const data = global.MONOLITH_SECTION4_FIXTURES;
+  const projection = global.MONOLITH_SECTION4_PROJECTION;
+  if (!data || !projection) throw new Error('Section 4 prototype dependencies are missing');
+
+  function initialize() {
+    if (document.documentElement.dataset.prototypeReady === 'true') return;
+    document.documentElement.dataset.prototypeReady = 'true';
+    const language = document.body.dataset.language === 'th' ? 'th' : 'en';
+    const state = {
+      language,
+      roleId: 'client',
+      fixtureId: data.coverageManifest.client[0],
+      participantMode: false,
+      proofOpened: false,
+      evaluator: null,
+    };
+
+    populateRoleOptions(state);
+    populateScenarioOptions(state);
+    bindEvents(state);
+    render(state);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize, { once: true });
+  } else {
+    initialize();
+  }
+
+  function render(state) {
+    const view = projection.projectRoleView({ fixtureId: state.fixtureId, roleId: state.roleId, language: state.language });
+    renderDecisionCard(view, state);
+    renderFiveQuestions(view, state);
+    renderInspector(view, state);
+    renderEvaluator(state);
+  }
+
+  function announce(message) {
+    document.getElementById('live-status').textContent = message;
+  }
+
+  function simulate(state) {
+    const view = projection.projectRoleView({ fixtureId: state.fixtureId, roleId: state.roleId, language: state.language });
+    const result = projection.simulateAction({
+      fixtureId: state.fixtureId,
+      actionId: view.simulatedAction.id,
+      expectedCaseVersion: view.simulatedAction.expectedCaseVersion,
+    });
+    announce(formatSimulatedOutcome(result, state.language));
+    if (result.nextFixtureId) state.fixtureId = result.nextFixtureId;
+    render(state);
+  }
+})(globalThis);</code></pre>
+<p>Implement named render/populate/bind helpers โดยไม่มี inline handlers Selector change ต้องแทน whole fixture snapshot <code>startParticipant</code> ซ่อน review controls สร้าง evaluator record ด้วย <code>performance.now()</code> และ focus <code>decision-card</code> ส่วน <code>openProof</code> toggle <code>hidden</code>/<code>aria-expanded</code> Evaluator panel เปิดได้จาก review mode เท่านั้นและมี on-screen summary โดยไม่มี link, file, copy, export หรือ network action เพิ่ม integration assertion ว่า <code>DOMContentLoaded</code> ครั้งที่สองไม่สร้าง option หรือ event binding ซ้ำ</p>
+<ul>
+<li>[ ] <strong>Step 4: รัน prototype tests ทั้งหมดให้ GREEN</strong></li>
+</ul>
+<p>Run: <code>npm.cmd run test:run -- tests/section4-prototype</code></p>
+<p>Expected: PASS, 4 test files, 28 tests</p>
+<ul>
+<li>[ ] <strong>Step 5: รัน documentation boundary check</strong></li>
+</ul>
+<p>Run: <code>git diff --check -- docs/prototypes/section-4-safe-recovery tests/section4-prototype</code></p>
+<p>Expected: exit 0 ไม่มี whitespace error</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit Task 4</strong></li>
+</ul>
+<pre><code class="language-powershell">git add docs/prototypes/section-4-safe-recovery tests/section4-prototype
+git commit -m "feat: complete Section 4 recovery prototype"</code></pre>
+<hr>
+<h3>Task 5: Final Contract Verification และ Bilingual Implementation Report</h3>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>docs/reports/2026-08-03-monolith-section-4-standalone-prototype-implementation.en.md</code></li>
+<li>Create: <code>docs/reports/2026-08-03-monolith-section-4-standalone-prototype-implementation.th.md</code></li>
+<li>Generate: matching <code>.en.html</code> และ <code>.th.html</code></li>
+<li>Modify prototype/test files เฉพาะเมื่อ verification พบ defect</li>
+</ul>
+<p><strong>Interfaces:</strong></p>
+<ul>
+<li>Report link ไป prototype HTML สองภาษา, Section 4 spec, pre-build scrutiny, commit IDs และ fresh verification evidence</li>
+<li>Report ห้าม claim production readiness</li>
+</ul>
+<ul>
+<li>[ ] <strong>Step 1: รัน complete targeted verification suite</strong></li>
+</ul>
+<p>Run: <code>npm.cmd run test:run -- tests/section4-prototype</code></p>
+<p>Expected: PASS, 4 test files, 28 tests, 0 failures</p>
+<ul>
+<li>[ ] <strong>Step 2: รัน final forbidden-capability scan</strong></li>
+</ul>
+<pre><code class="language-powershell">rg -n "fetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|serviceWorker|localStorage|sessionStorage|indexedDB|document\.cookie|createObjectURL|clipboard\.write|download\s*=|&lt;form[^&gt;]+action=|(?:src|server|supabase)/" docs/prototypes/section-4-safe-recovery</code></pre>
+<p>Expected: ไม่พบ match; <code>rg</code> exit code 1 คือผลผ่านของ absence check</p>
+<ul>
+<li>[ ] <strong>Step 3: ตรวจ exact inventory และ bilingual parity</strong></li>
+</ul>
+<p>Read-only check ต้องรายงาน: 2 HTML + 1 CSS + 3 JavaScript, roles 8, domain scenarios 7, truth-pressure scenarios 4, <code>lang</code>/banner สองไฟล์, structural IDs ตรงกัน, ไม่มี replacement character และ SHA-256 ของ prototype ทั้ง 6 ไฟล์ โดย summary ต้องเป็น <code>FAIL=0</code></p>
+<ul>
+<li>[ ] <strong>Step 4: เขียน implementation reports สองภาษา</strong></li>
+</ul>
+<p>แต่ละ report ต้องมี scope/non-operational boundary, delivered files/links, 8 corrections, fixture/role/scenario coverage, test command/count/hashes, ข้อจำกัดว่าหลักฐาน JSDOM/contract ไม่ใช่ production authority หรือ field usability และ next gate คือ owner visual review ตามด้วย facilitated pilot planning โดยยังไม่ runtime integration</p>
+<ul>
+<li>[ ] <strong>Step 5: Render และ verify report HTML</strong></li>
+</ul>
+<pre><code class="language-powershell">python ..\tools\render_docs.py docs\reports\2026-08-03-monolith-section-4-standalone-prototype-implementation.en.md docs\reports\2026-08-03-monolith-section-4-standalone-prototype-implementation.th.md
+git diff --check -- docs/prototypes/section-4-safe-recovery tests/section4-prototype docs/reports/2026-08-03-monolith-section-4-standalone-prototype-implementation.*</code></pre>
+<p>Expected: สร้าง HTML สองไฟล์และ diff check exit 0</p>
+<ul>
+<li>[ ] <strong>Step 6: ตรวจ staged scope และ Commit Task 5</strong></li>
+</ul>
+<p>Stage เฉพาะ implementation reports 4 ไฟล์และ prototype/test correction ที่ตรวจยืนยันใน task นี้ ตรวจ <code>git diff --cached --name-status</code> ว่าไม่มี unrelated dirty file แล้ว commit:</p>
+<pre><code class="language-powershell">git commit -m "docs: report Section 4 prototype verification"</code></pre>
+<hr>
+<h2>Plan Self-review Checklist</h2>
+<ul>
+<li>[ ] Requirement ทุกข้อใน Section 4 Sections 14–16 map ไปยัง task หรือ assertion ด้านบน</li>
+<li>[ ] ไม่มี task ใดเพิ่ม runtime import, network, persistence, download, hosted deployment หรือ authority</li>
+<li>[ ] V1 roles ทั้งแปดและ scenario IDs ที่บังคับทั้ง 11 มี coverage ชัดเจน</li>
+<li>[ ] English/Thai ใช้ canonical facts และ structural IDs ชุดเดียวกัน</li>
+<li>[ ] Simulated outcome ทุกผลมี qualifier ที่เห็นชัดและตรวจ case version</li>
+<li>[ ] Evaluator data อยู่ใน memory และซ่อนจาก participant</li>
+<li>[ ] ไม่มี <code>TBD</code>, <code>TODO</code>, “implement later” หรือ unspecified error-handling step</li>
+<li>[ ] ทุก task มี RED test, minimal implementation, GREEN verification และ scoped commit</li>
+</ul>
+<h2>การส่งต่อเพื่อดำเนินการ</h2>
+<p>หลังแผนนี้ได้รับอนุมัติ ให้เลือก execution mode หนึ่งทาง:</p>
+<ol>
+<li><strong>Inline execution (แนะนำสำหรับรอบนี้):</strong> ใช้ <code>executing-plans</code>, TDD และ checkpoints ด้านบนใน task นี้ เป็นค่าเริ่มต้นเพราะยังไม่ได้รับคำสั่งให้แบ่งงาน</li>
+<li><strong>Subagent-driven execution:</strong> ใช้ <code>subagent-driven-development</code> เฉพาะเมื่อเจ้าของอนุญาตให้แบ่งงานอย่างชัดเจน</li>
+</ol>
+</main></body>
+</html>
