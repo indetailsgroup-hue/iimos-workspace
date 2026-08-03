@@ -10,6 +10,9 @@ const root = resolve(import.meta.dirname, "..");
 const repo = resolve(root, "..");
 const spec = "docs/superpowers/specs/2026-08-01-monolith-line-flex-studio-design";
 const plan = "docs/superpowers/plans/2026-08-01-monolith-line-flex-studio-implementation";
+const designApprovalSpec = "docs/superpowers/specs/2026-08-02-monolith-line-design-approval-port-a1-design";
+const designApprovalPlan = "docs/superpowers/plans/2026-08-02-monolith-line-design-approval-port-a1-implementation";
+const designApprovalGuide = "docs/guides/line-design-approval-sandbox-a1-guide";
 const research = "docs/research/2026-08-01-monolith-line-human-surface-deep-research";
 const implementationReport = "docs/reports/2026-08-01-line-flex-studio-implementation-report";
 const verificationSummary = "artifacts/line-flex-studio/verification-summary.json";
@@ -17,9 +20,11 @@ const guideStems = [
   "docs/guides/line-flex-studio-user-guide",
   "docs/guides/line-developer-console-installation",
   "docs/guides/line-flex-action-vs-liff-decision-guide",
-  "docs/guides/line-flex-performance-rendering-checklist"
+  "docs/guides/line-flex-performance-rendering-checklist",
+  designApprovalGuide
 ];
 const documentStems = [spec, plan, research, ...guideStems, implementationReport];
+const manifestStems = [...documentStems, designApprovalSpec, designApprovalPlan];
 const read = (path) => readFile(resolve(root, path), "utf8").then((contents) => contents.replace(/\r\n?/g, "\n"));
 const editions = ["en", "th"];
 const exactConclusion = "MONOLITH should be a multi-tenant, revision-controlled project and product operating system. LINE is a replaceable Human Surface. Daph is one pilot tenant. Broader customer messaging remains NO-GO until every Trust P0 gate passes with fresh evidence.";
@@ -27,12 +32,142 @@ const readinessBoundaries = {
   en: "Source presence does not prove deployment or production readiness.",
   th: "การมี source ไม่ได้พิสูจน์ deployment หรือความพร้อมใช้งานจริงระดับ production"
 };
+const designApprovalGuideSectionClaims = {
+  en: {
+    preamble: [
+      "Human Surface contract-ready with sandbox adapter — not connected to MONOLITH runtime."
+    ],
+    2: [
+      "Only the `design-approval` preset routes through the A1 `DesignApprovalPort`; the other four presets keep the legacy local demo journey.",
+      "The A1 review token is opaque and non-secret; it carries no customer, tenant, role, recipient, project, or authorization claim."
+    ],
+    4: [
+      "`providerContext` is display provenance only; it is not tenant authority and must not be read as a tenant assertion."
+    ],
+    6: [
+      "Sandbox Verification Record — Demo · No Business Effect",
+      "A1 performs no workflow mutation, sends no LINE message, writes no database record, creates no cryptographic signature, and makes no production audit claim."
+    ],
+    7: [
+      "The A1 ledger is session-only: reload or browser restart may reset it, so replay guarantees do not survive that reset."
+    ],
+    8: [
+      "The defensible result is contract evidence for A1 only. It is not runtime integration, production readiness, customer delivery, or approval authority."
+    ],
+    9: [
+      "A2 promotion requires separate owner approval and all seven gates below; passing A1 alone does not authorize runtime integration."
+    ]
+  },
+  th: {
+    preamble: [
+      "Human Surface contract-ready with sandbox adapter — ยังไม่เชื่อมต่อ MONOLITH runtime"
+    ],
+    2: [
+      "เฉพาะ preset `design-approval` เท่านั้นที่ route ผ่าน A1 `DesignApprovalPort`; presets อีกสี่รายการยังใช้ legacy local demo journey",
+      "A1 review token เป็น opaque และ non-secret; token นี้ไม่มี customer, tenant, role, recipient, project หรือ authorization claim"
+    ],
+    4: [
+      "`providerContext` เป็นเพียง display provenance ไม่ใช่ tenant authority และห้ามตีความเป็น tenant assertion"
+    ],
+    6: [
+      "Sandbox Verification Record — Demo · No Business Effect",
+      "A1 ไม่ทำ workflow mutation, ไม่ส่งข้อความ LINE, ไม่เขียน database record, ไม่สร้าง cryptographic signature และไม่อ้างว่า production audit เสร็จสมบูรณ์"
+    ],
+    7: [
+      "A1 ledger เป็น session-only: การ reload หรือ restart browser อาจ reset ledger จึงไม่มี replay guarantee หลังการ reset นั้น"
+    ],
+    8: [
+      "ผลที่รองรับได้คือ contract evidence ของ A1 เท่านั้น ไม่ใช่ runtime integration, production readiness, customer delivery หรือ approval authority"
+    ],
+    9: [
+      "การ promote ไป A2 ต้องได้รับ owner approval แยกและผ่าน gate ทั้งเจ็ดข้อด้านล่าง; การผ่าน A1 เพียงอย่างเดียวไม่อนุญาต runtime integration"
+    ]
+  }
+};
+const versionConflictGuidance = {
+  en: "Start a new sandbox review to load the adapter-owned current snapshot; no MONOLITH workflow is queried.",
+  th: "เริ่ม sandbox review ใหม่เพื่อโหลด adapter-owned current snapshot; โดยไม่มีการ query MONOLITH workflow"
+};
+const a2PromotionGateTerms = [
+  "A1 contract and browser evidence",
+  "canonical server-owned revision source",
+  "tenant–organization–site mapping",
+  "customer-design-view database contract tests",
+  "narrow LIFF confirmation transport design",
+  "rollback, idempotency, audit, and error semantics",
+  "local environment and secret-handling authority"
+];
+const prohibitedDesignApprovalClaims = {
+  en: [
+    ["runtime integration", /\b(?:A1|the A1 (?:sandbox|journey|result)|the defensible result|this (?:sandbox|journey|result))\s+(?:(?:is|is now|has become|runs as)\s+(?:fully\s+)?(?:runtime[- ]integrated|integrated (?:with|into) (?:the )?MONOLITH runtime)|(?:connects|integrates|has connected|is connected)\s+(?:directly\s+)?(?:to|with|into)\s+(?:the\s+)?MONOLITH runtime)\b/i],
+    ["production readiness", /\b(?:A1|the A1 (?:sandbox|journey|result)|the defensible result|this (?:sandbox|journey|result))\s+(?:is|is now|has become)\s+(?:fully\s+)?(?:production[- ]ready|ready for production)\b/i],
+    ["workflow effect", /(?:(?<!no )\b(?:the )?MONOLITH workflow\s+(?:is|was|has been)\s+(?:queried|updated|mutated|changed|approved)|\b(?:A1|the A1 (?:sandbox|journey|result)|the defensible result|this (?:sandbox|journey|result))\s+(?:(?:changes|updates|mutates|queries|approves)|has (?:changed|updated|mutated|queried|approved))\s+(?:the\s+)?MONOLITH workflow)\b/i],
+    ["approval effect", /(?:(?<!no )\b(?:workflow|design|customer) approval\s+(?:is|was|has been)\s+(?:approved|granted|recorded|completed)|\b(?:A1|the A1 (?:sandbox|journey|result)|the defensible result|this (?:sandbox|journey|result))\s+(?:(?:records|grants|approves|completes)|has (?:recorded|granted|approved|completed))\s+(?:the\s+)?(?:workflow|design|customer) approval)\b/i]
+  ],
+  th: [
+    ["runtime integration", /(?:A1|ผลที่รองรับได้|ผลลัพธ์ A1|sandbox A1)\s*(?:เชื่อมต่อ(?:กับ)?|เชื่อมกับ|เชื่อมเข้ากับ|ทำงานร่วมกับ)\s*MONOLITH runtime(?:\s*(?:แล้ว|เรียบร้อยแล้ว|อย่างสมบูรณ์))?/iu],
+    ["production readiness", /(?:A1|ผลที่รองรับได้|ผลลัพธ์ A1|sandbox A1)\s*(?:พร้อมใช้งานจริง(?:ระดับ production)?|เป็น production[- ]ready)(?:\s*(?:แล้ว|เรียบร้อยแล้ว))?/iu],
+    ["workflow effect", /(?:(?<!ไม่)มีการ\s+(?:query|เรียกใช้|อัปเดต|เปลี่ยน)\s+MONOLITH workflow|MONOLITH workflow\s+(?:ถูก query|ถูกเรียกใช้|เปลี่ยน|อัปเดต|ได้รับอนุมัติ)(?:แล้ว|เรียบร้อยแล้ว)?|(?:A1|ผลที่รองรับได้|ผลลัพธ์ A1|sandbox A1)\s*(?:ได้)?(?:query|เรียกใช้|อัปเดต|เปลี่ยน)\s+MONOLITH workflow(?:แล้ว|เรียบร้อยแล้ว)?)/iu],
+    ["approval effect", /(?:(?:workflow|design|customer)\s*approval\s+(?:ได้รับอนุมัติ|สำเร็จ|เสร็จสมบูรณ์|ถูกบันทึก)(?:แล้ว|เรียบร้อยแล้ว)?|(?:A1|ผลที่รองรับได้|ผลลัพธ์ A1|sandbox A1)\s*(?:ได้)?(?:บันทึก|อนุมัติ|ให้)\s*(?:workflow|design|customer)\s*approval(?:แล้ว|เรียบร้อยแล้ว)?)/iu]
+  ]
+};
 const templateMarker = /\b(TBD|TODO|FIXME|implement later|fill in details)\b/i;
 const unsafeReadinessClaim = /production[- ]ready because|tests exist, therefore production/i;
 
 const proseOnly = (markdown) => markdown
+  .replace(/<!--[\s\S]*?-->/g, "")
   .replace(/^(`{3,}|~{3,})[^\r\n]*(?:\r?\n)[\s\S]*?^\1[ \t]*$/gm, "")
   .replace(/(`+)([^`\r\n]*?)\1/g, "");
+
+const visibleGuideMarkdown = (markdown) => {
+  const withoutComments = markdown.replace(
+    /<!--[\s\S]*?(?:-->|$)/g,
+    (comment) => comment.replace(/[^\r\n]/g, " ")
+  );
+  const visibleLines = [];
+  let fence = null;
+  for (const line of withoutComments.split(/\n/)) {
+    const hasCr = line.endsWith("\r");
+    const content = hasCr ? line.slice(0, -1) : line;
+    const maskedLine = `${" ".repeat(content.length)}${hasCr ? "\r" : ""}`;
+    if (fence) {
+      const closer = content.match(/^[ \t]{0,3}(`+|~+)[ \t]*$/);
+      if (closer && closer[1][0] === fence.character && closer[1].length >= fence.length) {
+        fence = null;
+      }
+      visibleLines.push(maskedLine);
+      continue;
+    }
+
+    const opener = content.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
+    if (opener) {
+      fence = { character: opener[1][0], length: opener[1].length };
+      visibleLines.push(maskedLine);
+      continue;
+    }
+    visibleLines.push(line);
+  }
+  return visibleLines.join("\n");
+};
+
+const visibleGuideProse = (markdown) => visibleGuideMarkdown(markdown)
+  .replace(/(`+)([^\r\n]*?)\1/g, "$2");
+
+const visibleClaimCount = (markdown, claim) => {
+  const visibleMarkdown = visibleGuideMarkdown(markdown);
+  const inlineRanges = [...visibleMarkdown.matchAll(/(`+)([^\r\n]*?)\1/g)]
+    .map((match) => [match.index, match.index + match[0].length]);
+  let count = 0;
+  let index = visibleMarkdown.indexOf(claim);
+  while (index !== -1) {
+    const end = index + claim.length;
+    if (!inlineRanges.some(([start, finish]) => index >= start && end <= finish)) {
+      count += 1;
+    }
+    index = visibleMarkdown.indexOf(claim, index + claim.length);
+  }
+  return count;
+};
 
 const requireReadinessBoundary = (markdown, language) => {
   assert.ok(
@@ -50,8 +185,92 @@ const section = (markdown, number) => {
   return relativeEnd === -1 ? tail : tail.slice(0, relativeEnd);
 };
 
-const h2s = (markdown) => [...markdown.matchAll(/^## (\d+)\. (.+)$/gm)]
+const guideSection = (markdown, number) => {
+  const visibleMarkdown = visibleGuideMarkdown(markdown);
+  const start = visibleMarkdown.search(new RegExp(`^ {0,3}## ${number}\\. `, "m"));
+  assert.notEqual(start, -1, `missing guide section ${number}`);
+  const bodyStart = visibleMarkdown.indexOf("\n", start) + 1;
+  const visibleTail = visibleMarkdown.slice(bodyStart);
+  const relativeEnd = visibleTail.search(/^ {0,3}##\s+/m);
+  const end = relativeEnd === -1 ? markdown.length : bodyStart + relativeEnd;
+  return markdown.slice(bodyStart, end);
+};
+
+const h2s = (markdown) => [...visibleGuideMarkdown(markdown).matchAll(/^ {0,3}## (\d+)\. (.+)$/gm)]
   .map((match) => ({ number: Number(match[1]), title: match[2] }));
+
+const guidePreamble = (markdown) => {
+  const end = visibleGuideMarkdown(markdown).search(/^ {0,3}## 1\. /m);
+  assert.notEqual(end, -1, "missing guide section 1");
+  return markdown.slice(0, end);
+};
+
+const assertUniqueSectionClaim = (markdown, body, claim, language, sectionName) => {
+  assert.ok(
+    visibleClaimCount(body, claim) > 0,
+    `${language}: section ${sectionName} missing exact claim: ${claim}`
+  );
+  assert.equal(
+    visibleClaimCount(markdown, claim),
+    1,
+    `${language}: exact claim must appear once in section ${sectionName}: ${claim}`
+  );
+};
+
+const assertNoProhibitedDesignApprovalClaims = (markdown, language) => {
+  const prose = visibleGuideProse(markdown);
+  for (const [label, pattern] of prohibitedDesignApprovalClaims[language]) {
+    assert.doesNotMatch(prose, pattern, `${language}: prohibited affirmative ${label} claim`);
+  }
+};
+
+const setExpectedVersionConflictGuidance = (markdown, language) => markdown.replace(
+  /^\| `version_conflict` \|.*$/m,
+  `| \`version_conflict\` | ${versionConflictGuidance[language]} |`
+);
+
+const validateDesignApprovalGuide = (markdown, language) => {
+  assertNoProhibitedDesignApprovalClaims(markdown, language);
+  assert.deepEqual(
+    h2s(markdown).map(({ number }) => number),
+    Array.from({ length: 9 }, (_, index) => index + 1),
+    `${language}: A1 guide must have exactly numbered sections 1–9`
+  );
+
+  for (const [sectionName, claims] of Object.entries(designApprovalGuideSectionClaims[language])) {
+    const body = sectionName === "preamble" ? guidePreamble(markdown) : guideSection(markdown, Number(sectionName));
+    for (const claim of claims) {
+      assertUniqueSectionClaim(markdown, body, claim, language, sectionName);
+    }
+  }
+
+  const versionBody = guideSection(markdown, 5);
+  assert.ok(
+    versionBody.includes(`| \`version_conflict\` | ${versionConflictGuidance[language]} |`),
+    `${language}: section 5 missing exact version-conflict guidance`
+  );
+
+  const a2Start = visibleGuideMarkdown(markdown).search(/^ {0,3}## 9\. /m);
+  assert.notEqual(a2Start, -1, `${language}: missing A2 section 9`);
+  const beforeA2 = visibleGuideProse(markdown.slice(0, a2Start));
+  const a2Body = visibleGuideProse(guideSection(markdown, 9));
+  const gates = [...a2Body.matchAll(/^(\d+)\. (.+)$/gm)]
+    .map((match) => ({ number: Number(match[1]), text: match[2] }));
+  assert.deepEqual(
+    gates.map(({ number }) => number),
+    Array.from({ length: 7 }, (_, index) => index + 1),
+    `${language}: section 9 must contain exactly ordered A2 gates 1–7`
+  );
+  a2PromotionGateTerms.forEach((term, index) => {
+    assert.ok(gates[index].text.includes(term), `${language}: A2 gate ${index + 1} missing: ${term}`);
+    assert.ok(!beforeA2.includes(term), `${language}: A2 gate ${index + 1} appears before section 9: ${term}`);
+    assert.equal(
+      markdown.split(term).length - 1,
+      1,
+      `${language}: A2 gate ${index + 1} term must appear exactly once: ${term}`
+    );
+  });
+};
 
 const tableRow = (body, state) => {
   const line = body.split("\n").find((candidate) => candidate.startsWith(`| ${state} |`));
@@ -226,7 +445,7 @@ const validateVerificationSummary = async (summary) => {
 test("approved document manifest is bilingual, standalone, and deterministically rendered", async () => {
   const scratch = await mkdtemp(join(tmpdir(), "lineos-document-manifest-"));
   try {
-    for (const stem of documentStems) {
+    for (const stem of manifestStems) {
       for (const language of editions) {
         const sourceMd = resolve(root, `${stem}.${language}.md`);
         const sourceHtml = resolve(root, `${stem}.${language}.html`);
@@ -484,6 +703,371 @@ test("Studio user guides cover the complete safe operator journey", async () => 
     const markdown = await read(`docs/guides/line-flex-studio-user-guide.${language}.md`);
     for (const phrase of required) {
       assert.ok(markdown.includes(phrase), `${language} Studio guide missing: ${phrase}`);
+    }
+  }
+});
+
+test("A1 operating guides preserve exact claims in their intended sections and ordered A2 gates", async () => {
+  for (const language of editions) {
+    const markdown = await read(`${designApprovalGuide}.${language}.md`);
+    validateDesignApprovalGuide(markdown, language);
+  }
+});
+
+test("A1 guide contract rejects removed negation and affirmative authority mutations in both languages", async () => {
+  const affirmativeCopy = {
+    en: {
+      runtime: "The defensible result is runtime-integrated.",
+      production: "A1 is production-ready.",
+      workflow: "The MONOLITH workflow has been approved. Workflow approval has been granted.",
+      version: "Start a new sandbox review to load the adapter-owned current snapshot; the MONOLITH workflow is queried and workflow approval has been granted."
+    },
+    th: {
+      runtime: "ผลที่รองรับได้เชื่อมต่อ MONOLITH runtime แล้ว",
+      production: "A1 พร้อมใช้งานจริงระดับ production แล้ว",
+      workflow: "MONOLITH workflow ได้รับอนุมัติแล้ว และ workflow approval ได้รับอนุมัติแล้ว",
+      version: "เริ่ม sandbox review ใหม่เพื่อโหลด adapter-owned current snapshot; มีการ query MONOLITH workflow และ workflow approval ได้รับอนุมัติแล้ว"
+    }
+  };
+
+  for (const language of editions) {
+    const markdown = setExpectedVersionConflictGuidance(
+      await read(`${designApprovalGuide}.${language}.md`),
+      language
+    );
+    const completionClaim = designApprovalGuideSectionClaims[language][8][0];
+    const noEffectClaim = designApprovalGuideSectionClaims[language][6][1];
+    const fixtures = [
+      ["runtime integration reversal", markdown.replace(completionClaim, affirmativeCopy[language].runtime), /prohibited affirmative runtime integration claim/],
+      ["production-ready injection", markdown.replace(completionClaim, `${completionClaim}\n\n${affirmativeCopy[language].production}`), /prohibited affirmative production readiness claim/],
+      ["workflow-approved injection", markdown.replace(completionClaim, `${completionClaim}\n\n${affirmativeCopy[language].workflow}`), /prohibited affirmative workflow effect claim/],
+      ["version-conflict negation reversal", markdown.replace(/^\| `version_conflict` \|.*$/m, `| \`version_conflict\` | ${affirmativeCopy[language].version} |`), /prohibited affirmative workflow effect claim/],
+      ["no-effect negation removal", markdown.replace(noEffectClaim, ""), /section 6 missing exact claim/]
+    ];
+
+    for (const [label, candidate, expected] of fixtures) {
+      assert.notEqual(candidate, markdown, `${language}: mutation fixture did not change guide: ${label}`);
+      assert.throws(
+        () => validateDesignApprovalGuide(candidate, language),
+        expected,
+        `${language}: contract accepted mutation fixture: ${label}`
+      );
+    }
+  }
+});
+
+test("A1 guide contract rejects visible affirmative runtime, production, and workflow equivalents", async (t) => {
+  const equivalents = {
+    en: [
+      ["runtime connection", "A1 connects to the MONOLITH runtime.", /prohibited affirmative runtime integration claim/],
+      ["production readiness", "A1 is ready for production.", /prohibited affirmative production readiness claim/],
+      ["workflow mutation", "A1 changes the MONOLITH workflow.", /prohibited affirmative workflow effect claim/]
+    ],
+    th: [
+      ["runtime connection", "A1 เชื่อมต่อกับ MONOLITH runtime แล้ว", /prohibited affirmative runtime integration claim/],
+      ["production readiness", "A1 พร้อมใช้งานจริงแล้ว", /prohibited affirmative production readiness claim/],
+      ["workflow mutation", "A1 เปลี่ยน MONOLITH workflow แล้ว", /prohibited affirmative workflow effect claim/]
+    ]
+  };
+
+  for (const language of editions) {
+    const markdown = await read(`${designApprovalGuide}.${language}.md`);
+    const completionClaim = designApprovalGuideSectionClaims[language][8][0];
+    for (const [label, affirmativeClaim, expected] of equivalents[language]) {
+      await t.test(`${language}: ${label}`, () => {
+        const candidate = markdown.replace(completionClaim, `${completionClaim}\n\n${affirmativeClaim}`);
+        assert.notEqual(candidate, markdown, `${language}: affirmative-equivalent fixture did not change guide`);
+        assert.throws(
+          () => validateDesignApprovalGuide(candidate, language),
+          expected,
+          `${language}: contract accepted affirmative equivalent: ${affirmativeClaim}`
+        );
+      });
+    }
+  }
+});
+
+test("A1 guide contract scans inline-formatted authority claims and active approval voice", async (t) => {
+  const visibleClaims = {
+    en: [
+      ["formatted runtime subject", "`A1` connects to the MONOLITH runtime.", /prohibited affirmative runtime integration claim/],
+      ["formatted production predicate", "A1 is `ready for production`.", /prohibited affirmative production readiness claim/],
+      ["formatted workflow object", "A1 changes `MONOLITH workflow`.", /prohibited affirmative workflow effect claim/],
+      ["active approval voice", "A1 records design approval.", /prohibited affirmative approval effect claim/]
+    ],
+    th: [
+      ["formatted runtime subject", "`A1` เชื่อมต่อกับ MONOLITH runtime แล้ว", /prohibited affirmative runtime integration claim/],
+      ["formatted production predicate", "A1 `พร้อมใช้งานจริงแล้ว`", /prohibited affirmative production readiness claim/],
+      ["formatted workflow object", "A1 เปลี่ยน `MONOLITH workflow` แล้ว", /prohibited affirmative workflow effect claim/],
+      ["active approval voice", "A1 บันทึก design approval แล้ว", /prohibited affirmative approval effect claim/]
+    ]
+  };
+
+  for (const language of editions) {
+    const markdown = await read(`${designApprovalGuide}.${language}.md`);
+    const completionClaim = designApprovalGuideSectionClaims[language][8][0];
+    for (const [label, affirmativeClaim, expected] of visibleClaims[language]) {
+      await t.test(`${language}: ${label}`, () => {
+        const candidate = markdown.replace(completionClaim, `${completionClaim}\n\n${affirmativeClaim}`);
+        assert.notEqual(candidate, markdown, `${language}: visible-claim fixture did not change guide`);
+        assert.throws(
+          () => validateDesignApprovalGuide(candidate, language),
+          expected,
+          `${language}: contract accepted visible authority claim: ${affirmativeClaim}`
+        );
+      });
+    }
+  }
+});
+
+test("A1 guide contract rejects natural perfect-tense and integration authority claims", async (t) => {
+  const naturalClaims = {
+    en: [
+      ["runtime integration", "A1 integrates with the MONOLITH runtime.", /prohibited affirmative runtime integration claim/],
+      ["workflow update", "A1 has updated the MONOLITH workflow.", /prohibited affirmative workflow effect claim/],
+      ["approval record", "A1 has recorded design approval.", /prohibited affirmative approval effect claim/]
+    ],
+    th: [
+      ["runtime integration", "A1 เชื่อมกับ MONOLITH runtime แล้ว", /prohibited affirmative runtime integration claim/],
+      ["workflow update", "A1 ได้อัปเดต MONOLITH workflow แล้ว", /prohibited affirmative workflow effect claim/],
+      ["approval record", "A1 ได้บันทึก design approval แล้ว", /prohibited affirmative approval effect claim/]
+    ]
+  };
+
+  for (const language of editions) {
+    const markdown = await read(`${designApprovalGuide}.${language}.md`);
+    const completionClaim = designApprovalGuideSectionClaims[language][8][0];
+    for (const [label, affirmativeClaim, expected] of naturalClaims[language]) {
+      await t.test(`${language}: ${label}`, () => {
+        const candidate = markdown.replace(completionClaim, `${completionClaim}\n\n${affirmativeClaim}`);
+        assert.notEqual(candidate, markdown, `${language}: natural-claim fixture did not change guide`);
+        assert.throws(
+          () => validateDesignApprovalGuide(candidate, language),
+          expected,
+          `${language}: contract accepted natural authority claim: ${affirmativeClaim}`
+        );
+      });
+    }
+  }
+});
+
+test("A1 guide contract does not classify explicit bilingual negations as affirmative authority", () => {
+  const safeNegations = {
+    en: [
+      "`A1` does not connect to the MONOLITH runtime.",
+      "A1 is not `ready for production`.",
+      "A1 does not change `MONOLITH workflow`.",
+      "A1 does not record design approval.",
+      "A1 does not integrate with the MONOLITH runtime.",
+      "A1 has not updated the MONOLITH workflow.",
+      "A1 has not recorded design approval.",
+      versionConflictGuidance.en
+    ],
+    th: [
+      "`A1` ไม่เชื่อมต่อกับ MONOLITH runtime",
+      "A1 `ยังไม่พร้อมใช้งานจริง`",
+      "A1 ไม่เปลี่ยน `MONOLITH workflow`",
+      "A1 ไม่บันทึก design approval",
+      "A1 ไม่เชื่อมกับ MONOLITH runtime",
+      "A1 ไม่ได้อัปเดต MONOLITH workflow",
+      "A1 ไม่ได้บันทึก design approval",
+      versionConflictGuidance.th
+    ]
+  };
+
+  for (const language of editions) {
+    assert.doesNotThrow(
+      () => assertNoProhibitedDesignApprovalClaims(safeNegations[language].join("\n"), language),
+      `${language}: approved negation was classified as affirmative authority`
+    );
+  }
+});
+
+test("A1 required claims must remain visible rather than living in comments or code fixtures", async (t) => {
+  const hidingForms = [
+    ["HTML comment", (markdown, claim) => markdown.replace(claim, `<!-- ${claim} -->`)],
+    ["fenced fixture", (markdown, claim) => {
+      const sourceLine = markdown.split("\n").find((line) => line.includes(claim));
+      assert.ok(sourceLine, "fenced fixture requires a source line");
+      return markdown.replace(sourceLine, `\`\`\`text\n${claim}\n\`\`\``);
+    }],
+    ["fence closed by a longer delimiter", (markdown, claim) => {
+      const sourceLine = markdown.split("\n").find((line) => line.includes(claim));
+      assert.ok(sourceLine, "longer-closer fixture requires a source line");
+      return markdown.replace(sourceLine, `\`\`\`text\n${claim}\n\`\`\`\``);
+    }]
+  ];
+
+  for (const language of editions) {
+    const markdown = await read(`${designApprovalGuide}.${language}.md`);
+    const claims = [
+      ["runtime-disconnected", designApprovalGuideSectionClaims[language].preamble[0], /section preamble missing exact claim/],
+      ["no-effect", designApprovalGuideSectionClaims[language][6][1], /section 6 missing exact claim/]
+    ];
+    for (const [claimName, claim, expected] of claims) {
+      for (const [formName, hide] of hidingForms) {
+        await t.test(`${language}: ${claimName} in ${formName}`, () => {
+          const candidate = hide(markdown, claim);
+          assert.notEqual(candidate, markdown, `${language}: hidden-claim fixture did not change guide`);
+          assert.throws(
+            () => validateDesignApprovalGuide(candidate, language),
+            expected,
+            `${language}: contract accepted ${claimName} only in ${formName}`
+          );
+        });
+      }
+    }
+  }
+});
+
+test("A1 runtime-disconnected preamble cannot be satisfied by whole-claim inline code", async (t) => {
+  for (const language of editions) {
+    await t.test(language, async () => {
+      const markdown = await read(`${designApprovalGuide}.${language}.md`);
+      const claim = designApprovalGuideSectionClaims[language].preamble[0];
+      const candidate = markdown.replace(claim, `\`${claim}\``);
+      assert.notEqual(candidate, markdown, `${language}: whole-claim inline fixture did not change guide`);
+      assert.throws(
+        () => validateDesignApprovalGuide(candidate, language),
+        /section preamble missing exact claim/,
+        `${language}: contract accepted the mandatory preamble only as inline code`
+      );
+    });
+  }
+});
+
+test("A1 unclosed HTML comments hide mandatory prose through end of file", async (t) => {
+  for (const language of editions) {
+    await t.test(language, async () => {
+      const markdown = await read(`${designApprovalGuide}.${language}.md`);
+      const claim = designApprovalGuideSectionClaims[language].preamble[0];
+      const candidate = markdown.replace(claim, `<!-- ${claim}`);
+      assert.notEqual(candidate, markdown, `${language}: unclosed-comment fixture did not change guide`);
+      assert.throws(
+        () => validateDesignApprovalGuide(candidate, language),
+        /A1 guide must have exactly numbered sections 1–9/,
+        `${language}: contract accepted mandatory prose after an unclosed HTML-comment opener`
+      );
+    });
+  }
+});
+
+test("A1 guide contract rejects A2 gates moved out of section 9 or placed out of order", async () => {
+  for (const language of editions) {
+    const markdown = setExpectedVersionConflictGuidance(
+      await read(`${designApprovalGuide}.${language}.md`),
+      language
+    );
+    const a2Body = guideSection(markdown, 9);
+    const gates = [...a2Body.matchAll(/^(\d+)\. (.+)$/gm)]
+      .map((match) => ({ number: Number(match[1]), text: match[2] }));
+    assert.equal(gates.length, 7, `${language}: fixture requires seven source gates`);
+
+    const first = `1. ${gates[0].text}`;
+    const second = `2. ${gates[1].text}`;
+    const swapped = markdown.replace(`${first}\n${second}`, `1. ${gates[1].text}\n2. ${gates[0].text}`);
+    assert.notEqual(swapped, markdown, `${language}: A2 order fixture did not change guide`);
+    assert.throws(
+      () => validateDesignApprovalGuide(swapped, language),
+      /A2 gate 1 missing/,
+      `${language}: contract accepted out-of-order A2 gates`
+    );
+
+    const seventh = `7. ${gates[6].text}`;
+    const moved = markdown
+      .replace(`${seventh}\n`, "")
+      .replace(/^## 9\. /m, `${seventh}\n\n## 9. `);
+    assert.notEqual(moved, markdown, `${language}: A2 section fixture did not change guide`);
+    assert.throws(
+      () => validateDesignApprovalGuide(moved, language),
+      /section 9 must contain exactly ordered A2 gates 1–7/,
+      `${language}: contract accepted an A2 gate outside section 9`
+    );
+
+    const sourceHeading = language === "en" ? "## Official sources" : "## แหล่งข้อมูลทางการ";
+    const movedBelowSources = markdown
+      .replace(`${seventh}\n`, "")
+      .replace(`${sourceHeading}\n`, `${sourceHeading}\n\n${seventh}\n`);
+    assert.notEqual(movedBelowSources, markdown, `${language}: below-sources fixture did not change guide`);
+    assert.throws(
+      () => validateDesignApprovalGuide(movedBelowSources, language),
+      /section 9 must contain exactly ordered A2 gates 1–7/,
+      `${language}: contract accepted A2 gate 7 below the sources H2 boundary`
+    );
+  }
+});
+
+test("A1 section 9 stops at CommonMark H2 headings indented up to three spaces", async (t) => {
+  for (const language of editions) {
+    await t.test(language, async () => {
+      const markdown = await read(`${designApprovalGuide}.${language}.md`);
+      const a2Body = guideSection(markdown, 9);
+      const gates = [...a2Body.matchAll(/^(\d+)\. (.+)$/gm)]
+        .map((match) => ({ number: Number(match[1]), text: match[2] }));
+      assert.equal(gates.length, 7, `${language}: indented-H2 fixture requires seven source gates`);
+      const seventh = `7. ${gates[6].text}`;
+      const sourceHeading = language === "en" ? "## Official sources" : "## แหล่งข้อมูลทางการ";
+      const candidate = markdown
+        .replace(`${seventh}\n`, "")
+        .replace(`${sourceHeading}\n`, `  ${sourceHeading}\n\n${seventh}\n`);
+      assert.notEqual(candidate, markdown, `${language}: indented-H2 fixture did not change guide`);
+      assert.throws(
+        () => validateDesignApprovalGuide(candidate, language),
+        /section 9 must contain exactly ordered A2 gates 1–7/,
+        `${language}: contract accepted gate 7 below a two-space-indented H2`
+      );
+    });
+  }
+});
+
+test("A1 numbered section headings must be visible rather than hidden in comments or fences", async (t) => {
+  const hidingForms = [
+    ["multiline HTML comment", (heading) => `<!--\n${heading}\n-->`],
+    ["fenced block", (heading) => `\`\`\`text\n${heading}\n\`\`\``]
+  ];
+
+  for (const language of editions) {
+    const markdown = await read(`${designApprovalGuide}.${language}.md`);
+    for (const sectionNumber of [2, 9]) {
+      const heading = markdown.split("\n").find((line) => line.startsWith(`## ${sectionNumber}. `));
+      assert.ok(heading, `${language}: hidden-heading fixture requires section ${sectionNumber}`);
+      for (const [formName, hide] of hidingForms) {
+        await t.test(`${language}: section ${sectionNumber} in ${formName}`, () => {
+          const candidate = markdown.replace(heading, hide(heading));
+          assert.notEqual(candidate, markdown, `${language}: hidden-heading fixture did not change guide`);
+          assert.throws(
+            () => validateDesignApprovalGuide(candidate, language),
+            /A1 guide must have exactly numbered sections 1–9/,
+            `${language}: hidden section ${sectionNumber} heading was accepted from ${formName}`
+          );
+        });
+      }
+    }
+  }
+});
+
+test("A1 guide contract parses A2 gates only from visible section-9 prose", async (t) => {
+  const hidingForms = [
+    ["HTML comment", (gateBlock) => `<!--\n${gateBlock}\n-->`],
+    ["fenced block", (gateBlock) => `\`\`\`text\n${gateBlock}\n\`\`\``]
+  ];
+
+  for (const language of editions) {
+    const markdown = await read(`${designApprovalGuide}.${language}.md`);
+    const a2Body = guideSection(markdown, 9);
+    const gateLines = [...a2Body.matchAll(/^(\d+)\. (.+)$/gm)].map((match) => match[0]);
+    assert.equal(gateLines.length, 7, `${language}: visible-gate fixture requires seven source gates`);
+    const gateBlock = gateLines.join("\n");
+    for (const [formName, hide] of hidingForms) {
+      await t.test(`${language}: all gates in ${formName}`, () => {
+        const candidate = markdown.replace(gateBlock, hide(gateBlock));
+        assert.notEqual(candidate, markdown, `${language}: hidden-gate fixture did not change guide`);
+        assert.throws(
+          () => validateDesignApprovalGuide(candidate, language),
+          /section 9 must contain exactly ordered A2 gates 1–7/,
+          `${language}: contract accepted all seven A2 gates from ${formName}`
+        );
+      });
     }
   }
 });
