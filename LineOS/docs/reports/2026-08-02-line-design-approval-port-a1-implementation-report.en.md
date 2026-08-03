@@ -65,7 +65,7 @@ GREEN requires durable raw artifacts, internally coherent evidence-time manifest
 
 ## Automated verification
 
-The durable successful post-review JUnit artifact is `artifacts/line-design-approval-a1/full-suite.junit.xml`: 38,262 canonical-LF bytes, canonical-LF SHA-256 `1BD65CBD498EF4E798D82EBD53A7B72BFAA729360B2CB4268C85282157EFCBB4`, 336 `<testcase>` elements, and Node footer totals of 351 tests, 351 passed, with zero fail, cancelled, skipped, or `todo`.
+The durable successful post-review JUnit artifact is `artifacts/line-design-approval-a1/full-suite.junit.xml`: 38,260 canonical-LF bytes, canonical-LF SHA-256 `8A7384801EACA8795BC8451BFA0609108087AE0E307578D4454E31E9C2198469`, 336 `<testcase>` elements, and Node footer totals of 351 tests, 351 passed, with zero fail, cancelled, skipped, or `todo`.
 
 The 336 XML elements and 351 Node summary tests are different reporter concepts and are both parsed by the executable contract. The stored canonical-LF hash identifies the chosen timing-dependent observed run independent of Git checkout line endings; it is not replaced by an arbitrary hexadecimal claim.
 
@@ -108,14 +108,14 @@ Observed record digest: `98aa18f7ac400d7739ba66b9c9dc876f5df3ffbc9a6aae582e0fb10
 
 The explicitly path-sorted 14-file served-resource manifest has canonical-LF source snapshot SHA-256 `B1289E1BF03136CA4BE362B711786590B844249DBE5CAAF5C06D5F6D060D8DC4`.
 
-The browser recapture, both screenshots, and this served-source snapshot are bound to commit `d0d2db69c66d850871633bb62cde9ad3ee7d3964`. That commit descends from the immutable Task 8 evidence-time base and is itself an ancestor of the verified HEAD, so the later recapture remains historically ordered without rewriting the original 11-path capture.
+The browser recapture, both screenshots, and this served-source snapshot record historical capture commit `d0d2db69c66d850871633bb62cde9ad3ee7d3964`. Commit IDs are historical metadata, not replay/rebase ancestry authority. The portable authority is the explicitly sorted manifest, its aggregate hash, and the per-file hashes that the contract recomputes from the checked-out files.
 
 | Evidence | Dimensions | SHA-256 | Inspection |
 |---|---:|---|---|
 | `artifacts/line-design-approval-a1/desktop-1440.png` | 1440 × 1000 | `C1E35E86FDE474203F89393F1B6584FF728E3B519E939E766A0A9C3B780C4CB3` | PASS |
 | `artifacts/line-design-approval-a1/mobile-390.png` | 390 × 844 | `7499CED9BCA4A24DB15961D4491CE23E4CE1D3D973CEC8BC2CCAA42CF61E9BD7` | PASS |
 
-Every Git-text evidence identity and byte count uses `normalization = canonical-lf`, converting CRLF and lone CR to LF before SHA-256 and counting. PNG hashes, signatures, and dimensions use raw bytes. The contract verifies these semantics, the source snapshot, raw observation, and evidence-time base commit.
+Every Git-text evidence identity and byte count uses `normalization = canonical-lf`, converting CRLF and lone CR to LF before SHA-256 and counting. PNG hashes, signatures, and dimensions use raw bytes. The contract verifies these semantics, the source snapshot, raw observation, captured-status hashes, and the syntax of historical commit identifiers without coupling validity to the current clone's ancestry.
 
 Uncoordinated substitution is detected; coordinated edits are not signature/tamper proof.
 

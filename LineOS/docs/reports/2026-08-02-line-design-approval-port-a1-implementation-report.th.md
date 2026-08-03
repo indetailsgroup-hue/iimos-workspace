@@ -65,7 +65,7 @@ GREEN บังคับให้มี durable raw artifacts, evidence-time man
 
 ## การตรวจอัตโนมัติ
 
-Durable post-review JUnit artifact ที่สำเร็จคือ `artifacts/line-design-approval-a1/full-suite.junit.xml`: 38,262 canonical-LF bytes, canonical-LF SHA-256 `1BD65CBD498EF4E798D82EBD53A7B72BFAA729360B2CB4268C85282157EFCBB4`, มี `<testcase>` 336 elements และ Node footer ระบุ 351 tests, ผ่าน 351, fail/cancelled/skipped/`todo` เท่ากับศูนย์
+Durable post-review JUnit artifact ที่สำเร็จคือ `artifacts/line-design-approval-a1/full-suite.junit.xml`: 38,260 canonical-LF bytes, canonical-LF SHA-256 `8A7384801EACA8795BC8451BFA0609108087AE0E307578D4454E31E9C2198469`, มี `<testcase>` 336 elements และ Node footer ระบุ 351 tests, ผ่าน 351, fail/cancelled/skipped/`todo` เท่ากับศูนย์
 
 336 XML elements และ 351 Node summary tests เป็นคนละแนวคิดของ reporter และ executable contract parse ทั้งคู่ Stored canonical-LF hash ระบุ timing-dependent observed run ที่เลือกไว้จริงโดยไม่ขึ้นกับ line endings ของ Git checkout และไม่ยอมรับ hexadecimal claim ใด ๆ ที่ไม่ผูกกับไฟล์
 
@@ -108,14 +108,14 @@ Record digest ที่สังเกตคือ `98aa18f7ac400d7739ba66b9c9dc
 
 Served-resource manifest 14 ไฟล์ที่ sort ตาม path อย่างชัดเจนมี canonical-LF source snapshot SHA-256 `B1289E1BF03136CA4BE362B711786590B844249DBE5CAAF5C06D5F6D060D8DC4`
 
-การเก็บหลักฐาน browser รอบล่าสุด, screenshot ทั้งสอง และ served-source snapshot นี้ผูกกับ commit `d0d2db69c66d850871633bb62cde9ad3ee7d3964` โดย commit ดังกล่าวสืบต่อจาก immutable Task 8 evidence-time base และเป็น ancestor ของ HEAD ที่ตรวจแล้ว จึงรักษาลำดับเวลาได้โดยไม่เขียนทับ captured manifest 11 paths เดิม
+การเก็บหลักฐาน browser รอบล่าสุด, screenshot ทั้งสอง และ served-source snapshot นี้บันทึก historical capture commit `d0d2db69c66d850871633bb62cde9ad3ee7d3964` Commit ID เป็น historical metadata ไม่ใช่ replay/rebase ancestry authority ส่วน authority ที่พกพาได้คือ manifest ที่ sort ชัดเจน, aggregate hash และ per-file hashes ที่ contract คำนวณใหม่จากไฟล์ใน checkout ปัจจุบัน
 
 | หลักฐาน | มิติ | SHA-256 | Inspection |
 |---|---:|---|---|
 | `artifacts/line-design-approval-a1/desktop-1440.png` | 1440 × 1000 | `C1E35E86FDE474203F89393F1B6584FF728E3B519E939E766A0A9C3B780C4CB3` | PASS |
 | `artifacts/line-design-approval-a1/mobile-390.png` | 390 × 844 | `7499CED9BCA4A24DB15961D4491CE23E4CE1D3D973CEC8BC2CCAA42CF61E9BD7` | PASS |
 
-ทุก identity และ byte count ของ Git-text evidence ใช้ `normalization = canonical-lf` โดยแปลง CRLF และ lone CR เป็น LF ก่อนทำ SHA-256 และนับ bytes ส่วน PNG hash, signature และ dimensions ใช้ raw bytes Contract ตรวจ semantics เหล่านี้, source snapshot, raw observation และ evidence-time base commit
+ทุก identity และ byte count ของ Git-text evidence ใช้ `normalization = canonical-lf` โดยแปลง CRLF และ lone CR เป็น LF ก่อนทำ SHA-256 และนับ bytes ส่วน PNG hash, signature และ dimensions ใช้ raw bytes Contract ตรวจ semantics เหล่านี้, source snapshot, raw observation, captured-status hashes และรูปแบบของ historical commit identifiers โดยไม่ผูก validity เข้ากับ ancestry ของ clone ปัจจุบัน
 
 ตรวจพบการแทนที่ที่ไม่ประสานกัน แต่ coordinated edits ไม่ใช่ signature/tamper proof.
 

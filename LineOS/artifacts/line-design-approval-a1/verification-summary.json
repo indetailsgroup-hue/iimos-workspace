@@ -207,8 +207,8 @@
       "junit": {
         "path": "artifacts/line-design-approval-a1/full-suite.junit.xml",
         "normalization": "canonical-lf",
-        "canonicalLfSha256": "1BD65CBD498EF4E798D82EBD53A7B72BFAA729360B2CB4268C85282157EFCBB4",
-        "canonicalLfBytes": 38262,
+        "canonicalLfSha256": "8A7384801EACA8795BC8451BFA0609108087AE0E307578D4454E31E9C2198469",
+        "canonicalLfBytes": 38260,
         "testcaseElements": 336,
         "nodeSummary": {
           "tests": 351,
