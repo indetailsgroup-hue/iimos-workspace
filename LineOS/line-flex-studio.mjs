@@ -1,4 +1,6 @@
-import { canonicalize, createDraft, updateDraftAtPath } from "./line-flex-model.mjs";
+import {
+  canonicalize, createDraft, deepFreeze, updateDraftAtPath
+} from "./line-flex-model.mjs";
 import { PRESET_IDS, getPreset } from "./line-flex-presets.mjs";
 import { buildFlexMessage, measureUtf8Bytes } from "./line-flex-json.mjs";
 import { validateDraft } from "./line-flex-validator.mjs";
@@ -6,6 +8,13 @@ import {
   createDemoTransaction, confirmDemoTransaction
 } from "./line-flex-actions.mjs";
 import { createDemoReceipt } from "./line-flex-receipt.mjs";
+import { assertReviewSnapshot } from "./line-design-approval-contract.mjs";
+import {
+  sandboxVerificationRecordRowsFor
+} from "./line-design-approval-record.mjs";
+import {
+  createSandboxDesignApprovalPort
+} from "./line-design-approval-sandbox.mjs";
 
 export function createInitialStudioState() {
   const language = "th";
@@ -83,6 +92,295 @@ export function isStudioDraftDirty(state) {
   return canonicalize(state.draft) !== canonicalize(baseline);
 }
 
+const LEGACY_DEMO_PRESET_IDS = new Set([
+  "quote-order", "sla-escalation", "site-update", "issue-evidence"
+]);
+const CLEARING_STUDIO_EVENTS = new Set([
+  "language.changed", "preset.changed", "field.changed", "draft.reset"
+]);
+
+export function selectStudioJourney(presetId) {
+  if (presetId === "design-approval") return "design-approval-port";
+  if (LEGACY_DEMO_PRESET_IDS.has(presetId)) return "legacy-demo";
+  throw new Error("unknown_studio_journey");
+}
+
+export function shouldClearDesignApprovalReview(eventType) {
+  return CLEARING_STUDIO_EVENTS.has(eventType);
+}
+
+const DESIGN_APPROVAL_REVIEW_LABELS = deepFreeze({
+  en: [
+    "Provider context", "Work item reference", "Request reference",
+    "Revision label", "Revision ID", "Requested action", "Consequence",
+    "Issued at", "Expires at"
+  ],
+  th: [
+    "บริบทผู้ให้บริการ", "รหัสงาน", "รหัสคำขอ", "ชื่อรุ่นแบบ", "รหัสรุ่นแบบ",
+    "การดำเนินการที่ร้องขอ", "ผลของการทดลอง", "เวลาออกเซสชัน", "หมดอายุ"
+  ]
+});
+
+const supportedLanguage = (language) => {
+  if (language !== "en" && language !== "th") throw new Error("unsupported_language");
+  return language;
+};
+
+const captureReviewSnapshot = (snapshot) => {
+  assertReviewSnapshot(snapshot);
+  return assertReviewSnapshot(deepFreeze({
+    reviewSessionId: snapshot.reviewSessionId,
+    serverIssuedIdempotencyKey: snapshot.serverIssuedIdempotencyKey,
+    mode: snapshot.mode,
+    businessEffect: snapshot.businessEffect,
+    providerContext: snapshot.providerContext,
+    workItemRef: snapshot.workItemRef,
+    approvalRequestRef: snapshot.approvalRequestRef,
+    revisionLabel: snapshot.revisionLabel,
+    revisionId: snapshot.revisionId,
+    artifactManifestSha256: snapshot.artifactManifestSha256,
+    digestAlgorithm: snapshot.digestAlgorithm,
+    canonicalizationVersion: snapshot.canonicalizationVersion,
+    expectedWorkflowVersion: snapshot.expectedWorkflowVersion,
+    reviewArtifacts: snapshot.reviewArtifacts.map((artifact) => ({
+      kind: artifact.kind,
+      label: artifact.label,
+      uri: artifact.uri
+    })),
+    requestedCanonicalAction: snapshot.requestedCanonicalAction,
+    plainLanguageConsequence: snapshot.plainLanguageConsequence,
+    issuedAt: snapshot.issuedAt,
+    expiresAt: snapshot.expiresAt
+  }));
+};
+
+export function designApprovalReviewRowsFor(snapshot, language) {
+  const selectedLanguage = supportedLanguage(language);
+  assertReviewSnapshot(snapshot);
+  const labels = DESIGN_APPROVAL_REVIEW_LABELS[selectedLanguage];
+  const values = [
+    snapshot.providerContext,
+    snapshot.workItemRef,
+    snapshot.approvalRequestRef,
+    snapshot.revisionLabel,
+    snapshot.revisionId,
+    snapshot.requestedCanonicalAction,
+    snapshot.plainLanguageConsequence,
+    snapshot.issuedAt,
+    snapshot.expiresAt
+  ];
+  const rows = values.map((value, index) => [labels[index], String(value)]);
+  snapshot.reviewArtifacts.forEach((artifact, index) => {
+    rows.push([
+      selectedLanguage === "en" ? `Review artifact ${index + 1}` : `หลักฐานแบบ ${index + 1}`,
+      `${artifact.label} · ${artifact.uri}`
+    ]);
+  });
+  return deepFreeze(rows);
+}
+
+const DESIGN_APPROVAL_ERROR_COPY = deepFreeze({
+  en: {
+    expired: "This sandbox session is no longer available. Open the latest LINE message and try again.",
+    stale_revision: "The reviewed revision is no longer current. Open the latest LINE message and try again.",
+    version_conflict: "The current workflow view changed. Open the latest LINE message and try again.",
+    idempotency_conflict: "This confirmation could not be completed safely. Open the latest LINE message and try again.",
+    unauthorized: "This request is unavailable. Check the latest LINE message or contact your service team.",
+    not_available: "This request is unavailable. Check the latest LINE message or contact your service team.",
+    invalid_request: "This confirmation could not be completed. Open the latest LINE message and try again.",
+    temporarily_unavailable: "The sandbox service is temporarily unavailable. Please try again."
+  },
+  th: {
+    expired: "เซสชัน Sandbox นี้ไม่พร้อมใช้งานแล้ว โปรดเปิดข้อความ LINE ล่าสุดและลองใหม่",
+    stale_revision: "รุ่นแบบที่ตรวจไม่ใช่รุ่นปัจจุบันแล้ว โปรดเปิดข้อความ LINE ล่าสุดและลองใหม่",
+    version_conflict: "ข้อมูล workflow ปัจจุบันเปลี่ยนแล้ว โปรดเปิดข้อความ LINE ล่าสุดและลองใหม่",
+    idempotency_conflict: "ไม่สามารถดำเนินการยืนยันนี้ได้อย่างปลอดภัย โปรดเปิดข้อความ LINE ล่าสุดและลองใหม่",
+    unauthorized: "คำขอนี้ไม่พร้อมใช้งาน โปรดตรวจข้อความ LINE ล่าสุดหรือติดต่อทีมบริการ",
+    not_available: "คำขอนี้ไม่พร้อมใช้งาน โปรดตรวจข้อความ LINE ล่าสุดหรือติดต่อทีมบริการ",
+    invalid_request: "ไม่สามารถดำเนินการยืนยันนี้ได้ โปรดเปิดข้อความ LINE ล่าสุดและลองใหม่",
+    temporarily_unavailable: "บริการ Sandbox ไม่พร้อมใช้งานชั่วคราว โปรดลองอีกครั้ง"
+  }
+});
+
+export function designApprovalErrorCopyFor(outcome, language) {
+  const messages = DESIGN_APPROVAL_ERROR_COPY[supportedLanguage(language)];
+  if (!Object.hasOwn(messages, outcome)) throw new Error("unsupported_review_outcome");
+  return messages[outcome];
+}
+
+const DESIGN_APPROVAL_RECEIPT_COPY = deepFreeze({
+  en: {
+    title: "Sandbox Verification Record — Demo · No Business Effect",
+    ribbon: "SANDBOX — NO BUSINESS EFFECT",
+    workflowDisclosure: "MONOLITH workflow and approval state did not change. This record captures only the sandbox confirmation attempt.",
+    digestDisclosure: "The SHA-256 digest is integrity metadata for this sandbox record, not a digital signature.",
+    ready: "Sandbox verification record is ready. Workflow and approval state did not change."
+  },
+  th: {
+    title: "Sandbox Verification Record — Demo · No Business Effect",
+    ribbon: "SANDBOX — NO BUSINESS EFFECT",
+    workflowDisclosure: "workflow และ approval state ของ MONOLITH ไม่เปลี่ยน บันทึกนี้เก็บเฉพาะการทดลองยืนยันใน Sandbox",
+    digestDisclosure: "ค่า SHA-256 digest เป็นข้อมูลตรวจความครบถ้วนของบันทึก Sandbox นี้ ไม่ใช่ลายเซ็นดิจิทัล",
+    ready: "บันทึกการยืนยันใน Sandbox พร้อมแล้ว โดย workflow และ approval state ไม่เปลี่ยน"
+  }
+});
+
+export function designApprovalReceiptCopyFor(language) {
+  return DESIGN_APPROVAL_RECEIPT_COPY[supportedLanguage(language)];
+}
+
+const DESIGN_APPROVAL_REVIEW_COPY = deepFreeze({
+  en: {
+    ribbon: "PRIVATE SANDBOX REVIEW · NO BUSINESS EFFECT",
+    title: "Private design review · Sandbox",
+    description: "Review the adapter-owned revision and consequence before recording a sandbox confirmation attempt. No workflow or approval state will change.",
+    confirm: "Confirm sandbox attempt",
+    emptyOutcome: "No sandbox confirmation attempt has been recorded.",
+    ready: "Sandbox review opened. No business state has changed."
+  },
+  th: {
+    ribbon: "ตรวจแบบส่วนตัวใน SANDBOX · ไม่มีผลต่อธุรกิจ",
+    title: "ตรวจแบบส่วนตัว · Sandbox",
+    description: "ตรวจรุ่นแบบและผลที่มาจาก adapter ก่อนบันทึกการทดลองยืนยัน โดย workflow และ approval state จะไม่เปลี่ยน",
+    confirm: "ยืนยันการทดลองใน Sandbox",
+    emptyOutcome: "ยังไม่มีการบันทึกการทดลองยืนยันใน Sandbox",
+    ready: "เปิดรายการตรวจใน Sandbox แล้ว โดยสถานะธุรกิจยังไม่เปลี่ยน"
+  }
+});
+
+const designApprovalReviewCopyFor = (language) =>
+  DESIGN_APPROVAL_REVIEW_COPY[supportedLanguage(language)];
+
+export function setConfirmationBusy(button, busy) {
+  button.disabled = busy;
+  if (busy) button.setAttribute("aria-busy", "true");
+  else button.removeAttribute("aria-busy");
+}
+
+const terminalDesignApprovalResult = (outcome, language) => deepFreeze({
+  outcome,
+  message: designApprovalErrorCopyFor(outcome, language)
+});
+
+export function createDesignApprovalJourneyController(port) {
+  if (typeof port?.openReview !== "function" ||
+      typeof port?.confirmReview !== "function") {
+    throw new Error("invalid_design_approval_port");
+  }
+
+  const idleState = (reason = null) => deepFreeze({ phase: "idle", reason });
+  let state = idleState();
+  let generation = 0;
+  let pendingConfirmation = null;
+
+  const clear = (reason = "cleared") => {
+    generation += 1;
+    pendingConfirmation = null;
+    state = idleState(reason);
+  };
+
+  const open = async ({ reviewToken, language }) => {
+    const selectedLanguage = supportedLanguage(language);
+    clear("open");
+    const currentGeneration = generation;
+    state = deepFreeze({ phase: "opening", language: selectedLanguage });
+    let response;
+    try {
+      response = await port.openReview(reviewToken);
+    } catch {
+      response = { outcome: "temporarily_unavailable" };
+    }
+    if (currentGeneration !== generation) return deepFreeze({ status: "cleared" });
+    try {
+      if (response?.outcome) {
+        const result = terminalDesignApprovalResult(response.outcome, selectedLanguage);
+        clear(response.outcome);
+        return result;
+      }
+      const snapshot = captureReviewSnapshot(response);
+      const rows = designApprovalReviewRowsFor(snapshot, selectedLanguage);
+      state = deepFreeze({
+        phase: "ready", language: selectedLanguage, snapshot
+      });
+      return deepFreeze({ outcome: "review_opened", snapshot, rows });
+    } catch {
+      const result = terminalDesignApprovalResult(
+        "temporarily_unavailable",
+        selectedLanguage
+      );
+      clear("temporarily_unavailable");
+      return result;
+    }
+  };
+
+  const confirm = () => {
+    if (pendingConfirmation) return pendingConfirmation;
+    if (state.phase !== "ready") {
+      return Promise.resolve(terminalDesignApprovalResult(
+        "not_available",
+        state.language ?? "en"
+      ));
+    }
+
+    const active = state;
+    const currentGeneration = generation;
+    state = deepFreeze({
+      phase: "confirming", language: active.language, snapshot: active.snapshot
+    });
+    const input = deepFreeze({
+      reviewSessionId: active.snapshot.reviewSessionId,
+      serverIssuedIdempotencyKey: active.snapshot.serverIssuedIdempotencyKey,
+      expectedRevisionId: active.snapshot.revisionId,
+      decision: "confirm"
+    });
+
+    const operation = (async () => {
+      let response;
+      try {
+        response = await port.confirmReview(input);
+      } catch {
+        response = { outcome: "temporarily_unavailable" };
+      }
+      if (currentGeneration !== generation) return deepFreeze({ status: "cleared" });
+      try {
+        if (response?.outcome === "sandbox_recorded" ||
+            response?.outcome === "sandbox_replayed") {
+          const copy = designApprovalReceiptCopyFor(active.language);
+          const rows = sandboxVerificationRecordRowsFor(response.record, active.language);
+          const result = deepFreeze({
+            outcome: response.outcome,
+            title: copy.title,
+            rows,
+            copy
+          });
+          clear(response.outcome);
+          return result;
+        }
+        const result = terminalDesignApprovalResult(
+          response?.outcome ?? "temporarily_unavailable",
+          active.language
+        );
+        clear(response?.outcome ?? "temporarily_unavailable");
+        return result;
+      } catch {
+        const result = terminalDesignApprovalResult(
+          "temporarily_unavailable",
+          active.language
+        );
+        clear("temporarily_unavailable");
+        return result;
+      }
+    })();
+    pendingConfirmation = operation;
+    operation.finally(() => {
+      if (pendingConfirmation === operation) pendingConfirmation = null;
+    });
+    return operation;
+  };
+
+  return deepFreeze({ open, confirm, clear, getState: () => state });
+}
+
 const BLOCKS = ["header", "hero", "body", "footer"];
 const FIELDS = {
   header: [
@@ -136,8 +434,11 @@ const COPY = {
     unexpectedReceipt: "The demo receipt could not be created because of an unexpected error.",
     privateReview: "PRIVATE REVIEW — DEMO",
     liffTitle: "Private review · Demo",
+    liffDescription: "Review the bound demo values before confirming the demo intent.",
     receiptTitle: "Verification Receipt — Demo",
     receiptRibbon: "DEMO — NOT A PRODUCTION SIGNATURE",
+    receiptDescription: "This demo receipt records the confirmation shown below.",
+    digestDisclosure: "The SHA-256 digest is demo integrity metadata, not a production signature.",
     receiptReady: "Verification Receipt — Demo is ready.",
     productionNotice: "Production signing and audit require the MONOLITH Trust Kernel.",
     reviewLabels: {
@@ -179,8 +480,11 @@ const COPY = {
     unexpectedReceipt: "สร้างหลักฐาน Demo ไม่สำเร็จเนื่องจากข้อผิดพลาดที่ไม่คาดคิด",
     privateReview: "ตรวจแบบส่วนตัว — Demo",
     liffTitle: "ตรวจแบบส่วนตัว · Demo",
+    liffDescription: "ตรวจค่าที่ผูกกับ Demo ก่อนยืนยันเจตนาการทดลอง",
     receiptTitle: "หลักฐานการยืนยัน — Demo · Verification Receipt — Demo",
     receiptRibbon: "DEMO — NOT A PRODUCTION SIGNATURE · เดโม — ไม่ใช่ลายเซ็นสำหรับระบบจริง",
+    receiptDescription: "หลักฐาน Demo นี้บันทึกการยืนยันที่แสดงด้านล่าง",
+    digestDisclosure: "ค่า SHA-256 digest เป็นข้อมูลตรวจความครบถ้วนของ Demo ไม่ใช่ลายเซ็นสำหรับระบบจริง",
     receiptReady: "Verification Receipt — Demo พร้อมแล้ว",
     productionNotice: "การลงนามและบันทึกหลักฐานในระบบจริงต้องผ่าน MONOLITH Trust Kernel",
     reviewLabels: {
@@ -294,7 +598,7 @@ function appendPair(doc, target, label, value) {
   target.append(row);
 }
 
-function installJourney(doc, controller) {
+function installJourney(doc, controller, designApprovalPort) {
   const liff = doc.getElementById("liff-dialog");
   const receiptDialog = doc.getElementById("receipt-dialog");
   const review = liff.querySelector("[data-liff-review]");
@@ -302,13 +606,23 @@ function installJourney(doc, controller) {
   const confirm = liff.querySelector("[data-confirm-demo]");
   const cancel = liff.querySelector('button[value="cancel"]');
   const closeReceipt = receiptDialog.querySelector("[data-close-receipt]");
+  const reviewMode = liff.querySelector("[data-review-mode]");
+  const businessEffect = liff.querySelector("[data-business-effect]");
+  const reviewExpiry = liff.querySelector("[data-review-expiry]");
+  const artifactManifest = liff.querySelector("[data-artifact-manifest-sha256]");
+  const reviewOutcome = liff.querySelector("[data-review-outcome] span");
+  const designJourney = designApprovalPort ?
+    createDesignApprovalJourneyController(designApprovalPort) : null;
   let transaction = null;
   let reviewLanguage = "th";
+  let activeJourney = null;
   let confirming = false;
+  let openingDesignReview = false;
 
-  const hasJourneyApis = () =>
+  const hasDialogApis = () =>
     typeof liff?.showModal === "function" && typeof liff?.close === "function" &&
-    typeof receiptDialog?.showModal === "function" && typeof receiptDialog?.close === "function" &&
+    typeof receiptDialog?.showModal === "function" && typeof receiptDialog?.close === "function";
+  const hasLegacyJourneyApis = () => hasDialogApis() &&
     typeof doc.defaultView.crypto?.randomUUID === "function" &&
     typeof doc.defaultView.crypto?.subtle?.digest === "function";
   const staleErrors = new Set([
@@ -329,26 +643,94 @@ function installJourney(doc, controller) {
     if (liff.open && typeof liff.close === "function") liff.close(returnValue);
     else controller.nodes.run.focus();
   };
+  const resetReviewSurface = () => {
+    review.replaceChildren();
+    reviewMode.textContent = "sandbox";
+    businessEffect.textContent = "none";
+    reviewExpiry.textContent = "—";
+    artifactManifest.textContent = "—";
+    reviewOutcome.textContent = activeJourney === "design-approval-port" ?
+      designApprovalReviewCopyFor(controller.getState().language).emptyOutcome : "—";
+  };
+  const renderRows = (target, ribbon, rows) => {
+    target.replaceChildren(make(doc, "p", {
+      className: "demo-ribbon", text: ribbon
+    }));
+    for (const [label, value] of rows) appendPair(doc, target, label, value);
+  };
+  const clearForStudioChange = (reason) => {
+    transaction = null;
+    activeJourney = null;
+    designJourney?.clear(reason);
+    resetReviewSurface();
+    if (liff.open && typeof liff.close === "function") liff.close("cleared");
+  };
 
-  controller.nodes.run.addEventListener("click", () => {
+  controller.nodes.run.addEventListener("click", async () => {
     const current = controller.render();
     const copy = copyForState();
     if (!current.canRunJourney || !current.canExport) {
       controller.announce(copy.validationBlocked);
       return;
     }
-    if (!hasJourneyApis()) {
+    if (!hasDialogApis()) {
       controller.announce(copy.apiUnavailable);
       return;
     }
     const draft = controller.getState().draft;
+    const journey = selectStudioJourney(controller.getState().presetId);
+    reviewLanguage = draft.language;
+    activeJourney = journey;
+
+    if (journey === "design-approval-port") {
+      if (openingDesignReview) return;
+      if (!designJourney) {
+        const message = designApprovalErrorCopyFor("not_available", reviewLanguage);
+        reviewOutcome.textContent = message;
+        controller.announce(message);
+        activeJourney = null;
+        return;
+      }
+      openingDesignReview = true;
+      controller.nodes.run.disabled = true;
+      controller.nodes.run.setAttribute("aria-busy", "true");
+      try {
+        const result = await designJourney.open({
+          reviewToken: draft.reviewToken,
+          language: reviewLanguage
+        });
+        if (result.status === "cleared") return;
+        if (result.outcome !== "review_opened") {
+          reviewOutcome.textContent = result.message;
+          controller.announce(result.message);
+          activeJourney = null;
+          return;
+        }
+        const designCopy = designApprovalReviewCopyFor(reviewLanguage);
+        renderRows(review, designCopy.ribbon, result.rows);
+        reviewMode.textContent = result.snapshot.mode;
+        businessEffect.textContent = result.snapshot.businessEffect;
+        reviewExpiry.textContent = result.snapshot.expiresAt;
+        artifactManifest.textContent = result.snapshot.artifactManifestSha256;
+        reviewOutcome.textContent = designCopy.emptyOutcome;
+        liff.showModal();
+        controller.announce(designCopy.ready);
+      } finally {
+        openingDesignReview = false;
+        controller.nodes.run.removeAttribute("aria-busy");
+        controller.nodes.run.disabled = controller.render().hasBlockingErrors;
+      }
+      return;
+    }
+
+    if (!hasLegacyJourneyApis()) {
+      activeJourney = null;
+      controller.announce(copy.apiUnavailable);
+      return;
+    }
     try {
-      reviewLanguage = draft.language;
       transaction = createDemoTransaction(draft);
-      review.replaceChildren(make(doc, "p", {
-        className: "demo-ribbon", text: copy.privateReview
-      }));
-      for (const [label, value] of [
+      renderRows(review, copy.privateReview, [
         [copy.reviewLabels.tenant, draft.context.tenantName],
         [copy.reviewLabels.recipient, transaction.recipientRef],
         [copy.reviewLabels.project, draft.body.project],
@@ -357,43 +739,81 @@ function installJourney(doc, controller) {
         [copy.reviewLabels.consequence, draft.body.trustNote],
         [copy.reviewLabels.actionMode, transaction.actionMode],
         [copy.reviewLabels.expires, transaction.expiresAt]
-      ]) appendPair(doc, review, label, value);
+      ]);
+      reviewMode.textContent = "demo";
+      businessEffect.textContent = "none";
+      reviewExpiry.textContent = transaction.expiresAt;
+      artifactManifest.textContent = "—";
+      reviewOutcome.textContent = "—";
       liff.showModal();
     } catch {
       transaction = null;
+      activeJourney = null;
       controller.announce(copy.apiUnavailable);
     }
   });
 
   cancel.addEventListener("click", () => {
     transaction = null;
+    designJourney?.clear("cancel");
+    activeJourney = null;
     closeReview("cancel");
   });
   liff.addEventListener("cancel", () => {
     transaction = null;
+    designJourney?.clear("dialog.cancel");
+    activeJourney = null;
   });
-  liff.addEventListener("close", () => controller.nodes.run.focus());
+  liff.addEventListener("close", () => {
+    transaction = null;
+    designJourney?.clear("dialog.close");
+    activeJourney = null;
+    controller.nodes.run.focus();
+  });
 
   confirm.addEventListener("click", async () => {
-    if (confirming || !transaction) return;
+    if (confirming || !activeJourney) return;
     confirming = true;
-    confirm.disabled = true;
-    confirm.setAttribute("aria-busy", "true");
+    setConfirmationBusy(confirm, true);
     try {
       const current = controller.render();
       if (!current.canRunJourney || !current.canExport) {
         throw new Error("validation_blocked");
       }
-      if (!hasJourneyApis()) throw new Error("browser_api_unavailable");
+      if (!hasDialogApis()) throw new Error("browser_api_unavailable");
+
+      if (activeJourney === "design-approval-port") {
+        const result = await designJourney.confirm();
+        if (result.status === "cleared") return;
+        if (result.outcome !== "sandbox_recorded" &&
+            result.outcome !== "sandbox_replayed") {
+          reviewOutcome.textContent = result.message;
+          controller.announce(result.message);
+          closeReview("rejected");
+          return;
+        }
+        controller.nodes.receiptTitle.textContent = result.title;
+        controller.nodes.receiptDescription.textContent = result.copy.workflowDisclosure;
+        controller.nodes.receiptDigestDisclosure.textContent = result.copy.digestDisclosure;
+        renderRows(receiptTarget, result.copy.ribbon, result.rows);
+        reviewOutcome.textContent = result.outcome;
+        closeReview("confirmed");
+        receiptDialog.showModal();
+        controller.announce(result.copy.ready);
+        return;
+      }
+
+      if (!transaction || !hasLegacyJourneyApis()) {
+        throw new Error("browser_api_unavailable");
+      }
       const confirmation = confirmDemoTransaction(transaction, current.draft);
       const receipt = await createDemoReceipt(transaction, confirmation);
       const copy = COPY[reviewLanguage];
-      receiptTarget.replaceChildren(make(doc, "p", {
-        className: "demo-ribbon", text: copy.receiptRibbon
-      }));
-      for (const [label, value] of receiptRowsFor(receipt, reviewLanguage)) {
-        appendPair(doc, receiptTarget, label, value);
-      }
+      renderRows(
+        receiptTarget,
+        copy.receiptRibbon,
+        receiptRowsFor(receipt, reviewLanguage)
+      );
       receiptTarget.append(make(doc, "p", { text: copy.productionNotice }));
       transaction = null;
       closeReview("confirmed");
@@ -401,12 +821,16 @@ function installJourney(doc, controller) {
       controller.announce(copy.receiptReady);
     } catch (error) {
       transaction = null;
-      controller.announce(errorCopy(error));
+      designJourney?.clear("controller.error");
+      const message = activeJourney === "design-approval-port" ?
+        designApprovalErrorCopyFor("temporarily_unavailable", reviewLanguage) :
+        errorCopy(error);
+      reviewOutcome.textContent = message;
+      controller.announce(message);
       closeReview("rejected");
     } finally {
       confirming = false;
-      confirm.disabled = false;
-      confirm.removeAttribute("aria-busy");
+      setConfirmationBusy(confirm, false);
     }
   });
 
@@ -415,6 +839,8 @@ function installJourney(doc, controller) {
     else controller.nodes.run.focus();
   });
   receiptDialog.addEventListener("close", () => controller.nodes.run.focus());
+  resetReviewSurface();
+  return { clearForStudioChange };
 }
 
 function installResponsiveTabs(doc) {
@@ -481,8 +907,9 @@ function installResponsiveTabs(doc) {
   apply();
 }
 
-export function bindStudio(doc) {
+export function bindStudio(doc, options = {}) {
   let state = createInitialStudioState();
+  let journeyBinding = null;
   const byId = (id) => doc.getElementById(id);
   const nodes = {
     language: byId("language-toggle"), tenant: byId("tenant-context"),
@@ -494,6 +921,9 @@ export function bindStudio(doc) {
     editorTitle: byId("editor-title"), previewTitle: byId("preview-title"),
     jsonTitle: byId("json-title"), validationTitle: byId("validation-title"),
     liffTitle: byId("liff-title"), receiptTitle: byId("receipt-title"),
+    liffDescription: byId("liff-description"),
+    receiptDescription: byId("receipt-description"),
+    receiptDigestDisclosure: byId("receipt-digest-disclosure"),
     cancel: byId("cancel-journey"), confirm: byId("confirm-journey"),
     closeReceipt: byId("close-receipt"), skip: doc.querySelector(".skip-link")
   };
@@ -505,6 +935,9 @@ export function bindStudio(doc) {
     }, 0);
   };
   const dispatch = (event) => {
+    if (shouldClearDesignApprovalReview(event.type)) {
+      journeyBinding?.clearForStudioChange(event.type);
+    }
     state = reduceStudioState(state, event);
     render(event.type !== "field.changed");
   };
@@ -632,10 +1065,25 @@ export function bindStudio(doc) {
     nodes.previewTitle.textContent = copy.previewTitle;
     nodes.jsonTitle.textContent = copy.jsonTitle;
     nodes.validationTitle.textContent = copy.validationTitle;
-    nodes.liffTitle.textContent = copy.liffTitle;
-    nodes.receiptTitle.textContent = copy.receiptTitle;
+    const journey = selectStudioJourney(state.presetId);
+    if (journey === "design-approval-port") {
+      const reviewCopy = designApprovalReviewCopyFor(state.language);
+      const receiptCopy = designApprovalReceiptCopyFor(state.language);
+      nodes.liffTitle.textContent = reviewCopy.title;
+      nodes.liffDescription.textContent = reviewCopy.description;
+      nodes.receiptTitle.textContent = receiptCopy.title;
+      nodes.receiptDescription.textContent = receiptCopy.workflowDisclosure;
+      nodes.receiptDigestDisclosure.textContent = receiptCopy.digestDisclosure;
+      nodes.confirm.textContent = reviewCopy.confirm;
+    } else {
+      nodes.liffTitle.textContent = copy.liffTitle;
+      nodes.liffDescription.textContent = copy.liffDescription;
+      nodes.receiptTitle.textContent = copy.receiptTitle;
+      nodes.receiptDescription.textContent = copy.receiptDescription;
+      nodes.receiptDigestDisclosure.textContent = copy.digestDisclosure;
+      nodes.confirm.textContent = copy.confirm;
+    }
     nodes.cancel.textContent = copy.cancel;
-    nodes.confirm.textContent = copy.confirm;
     nodes.closeReceipt.textContent = copy.close;
     nodes.skip.textContent = copy.skip;
     if (rebuildControls) {
@@ -745,10 +1193,14 @@ export function bindStudio(doc) {
   });
 
   const controller = { getState: () => state, dispatch, render, announce, nodes };
-  installJourney(doc, controller);
+  journeyBinding = installJourney(doc, controller, options.designApprovalPort);
   installResponsiveTabs(doc);
   render();
   return controller;
 }
 
-if (typeof document !== "undefined") bindStudio(document);
+if (typeof document !== "undefined") {
+  bindStudio(document, {
+    designApprovalPort: createSandboxDesignApprovalPort()
+  });
+}
