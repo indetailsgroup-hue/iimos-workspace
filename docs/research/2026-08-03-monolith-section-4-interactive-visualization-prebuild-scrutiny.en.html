@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>MONOLITH Section 4 Interactive Visualization — Pre-build Scrutiny</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>MONOLITH Section 4 Interactive Visualization — Pre-build Scrutiny</h1>
+<p><strong>Status:</strong> OWNER REVIEW — FIX-THEN-BUILD</p>
+<p><strong>Date:</strong> 3 August 2026</p>
+<p><strong>Reviewed artifact:</strong> <a href="../superpowers/specs/2026-08-03-monolith-section-4-safe-recovery-proof-design.en.html">Section 4 Safe Recovery &amp; Proof Design</a></p>
+<p><strong>Review boundary:</strong> the approved next design deliverable—a bilingual, interactive, explicitly non-operational Section 4 visualization. This review does not authorize runtime, schema, policy, egress, release, or machine-control implementation.</p>
+<h2>1. Intent</h2>
+<p>The visualization should let any V1 role understand the current safe state, reason, affected scope, consequence, permitted use, and one next authorized action without exposing backstage complexity or creating apparent runtime authority.</p>
+<h2>2. Simpler alternative first</h2>
+<p>Do <strong>not</strong> begin by adding a new page to the product, integrating APIs, or reproducing the entire recovery state machine as a dashboard.</p>
+<p>The smallest useful deliverable is a standalone, fixture-driven prototype with:</p>
+<ol>
+<li>one role-aware <strong>Recovery Decision Card</strong> as the primary surface;</li>
+<li>one progressive-disclosure <strong>Why / Proof inspector</strong> as the secondary surface;</li>
+<li>deterministic role/scenario fixtures and an evaluation mode; and</li>
+<li>no network calls, no product-store imports, no export/download path, and no authority-bearing action.</li>
+</ol>
+<p>This reuses the approved <code>RecoveryCase</code> projection instead of creating a new presentation entity. It validates whether users understand the Decision Chain UX before any broker or runtime integration risk is introduced.</p>
+<h2>3. End-to-end trace</h2>
+<h3>Intended prototype path</h3>
+<p><strong>Role + seeded scenario → deterministic fixture → RecoveryCase-derived projection → role decision card → optional proof inspector → simulated response → measurement record</strong></p>
+<h3>Trace against the approved contract</h3>
+<ul>
+<li>The role view must answer five universal questions and fail closed on stale, missing, mismatched, unavailable, or UNKNOWN inputs: Section 4 lines 368–378.</li>
+<li>The denominator is the eight-role registry <code>V1-CASEWORK-KITCHEN-RECOVERY-01</code>: Section 4 lines 380–393.</li>
+<li>The current visualization contract instead begins with two system-oriented synchronized views and says “the reviewer” selects scenarios: Section 4 lines 431–446.</li>
+<li>The prototype must support role/scenario/language/device measurement cells: Section 4 lines 450–456.</li>
+<li>A visualization may exist before broker convergence only when clearly non-operational and unable to claim server authorization: Section 4 lines 350–360 and 523–525.</li>
+</ul>
+<h3>Trace against current product source</h3>
+<ul>
+<li>The current AppShell enables a real Export button from displayed gate/spec state: <code>src/components/layout/AppShell.tsx:176,213-221</code>.</li>
+<li>App wires that button to <code>handleExport</code>: <code>src/App.tsx:717-742,878-892</code>.</li>
+<li>The packet path creates and downloads a ZIP in the browser: <code>src/factory/packet/useFactoryPacket.ts:341-365</code>.</li>
+<li>An exact search found no current runtime <code>RecoveryCase</code>, <code>RecoveryEvent</code>, <code>DecisionReceipt</code>, <code>CapabilityPolicy</code>, or <code>EgressBroker</code> implementation under <code>src</code>, <code>server</code>, or <code>supabase</code>; these remain target contracts.</li>
+<li>No existing interactive Section 4 prototype was found under <code>docs</code>; the current artifacts are the specification and its research/scrutiny appendices.</li>
+</ul>
+<p><strong>Verified consequence:</strong> embedding the prototype in the current application would place simulated recovery controls next to reachable export behavior and could imply authority the runtime does not possess. The safe design-validation path is an isolated standalone artifact.</p>
+<h2>4. Findings</h2>
+<h3>[BLOCKER] 1. The prototype isolation boundary is not frozen</h3>
+<p><strong>Finding:</strong> “Clearly labelled non-operational” does not specify whether the prototype can import product stores, call APIs, write state, download artifacts, or appear beside real export controls.</p>
+<p><strong>Why it matters:</strong> a convincing mock action inside the existing AppShell can be mistaken for an authorized action, while the current AppShell exposes a real Export path.</p>
+<p><strong>Evidence:</strong> Section 4 lines 350–360 and 523–525 permit a non-operational visualization; <code>src/components/layout/AppShell.tsx:176,221</code> and <code>src/factory/packet/useFactoryPacket.ts:341-365</code> show reachable export/download behavior.</p>
+<p><strong>Suggested change:</strong> require a standalone docs artifact using deterministic local fixtures, with no runtime imports, network, persistence, downloads, or egress. Add a permanent “DESIGN PROTOTYPE — NO AUTHORITY — NOT FOR PRODUCTION” banner.</p>
+<h3>[MAJOR] 2. The information architecture is system-first rather than role-first</h3>
+<p><strong>Finding:</strong> Section 14 makes the Recovery Case/Event Chain and Capability Gate/Egress the two primary views, while Section 13 promises calm role language and one primary action.</p>
+<p><strong>Why it matters:</strong> clients and non-technical roles would meet lifecycle, policy, quorum, and broker concepts before answering their immediate decision question.</p>
+<p><strong>Evidence:</strong> Section 4 lines 364–378 define the role experience; lines 431–434 define the current visualization entry surface.</p>
+<p><strong>Suggested change:</strong> make the role-aware Recovery Decision Card the primary screen. Put event chain, evidence, policy, and broker detail behind a “Why is work paused?” or “View proof” disclosure; expose the full inspector by default only in reviewer/test mode.</p>
+<h3>[MAJOR] 3. Role coverage is contradicted by a reviewer-only scenario control</h3>
+<p><strong>Finding:</strong> the frozen denominator contains eight roles, but Section 14 states only that “the reviewer” selects representative scenarios.</p>
+<p><strong>Why it matters:</strong> the artifact could be declared complete after proving the reviewer view while omitting client, estimator/procurement, installer/field, or factory comprehension.</p>
+<p><strong>Evidence:</strong> Section 4 lines 380–393 freeze eight roles; line 436 names only the reviewer; lines 452–454 require results per role/scenario cell.</p>
+<p><strong>Suggested change:</strong> provide separate Role and Scenario selectors plus a versioned coverage manifest. Do not force all 56 Cartesian combinations into the user interface; require at least one risk-relevant seeded scenario per role and explicit coverage for every registry role.</p>
+<h3>[MAJOR] 4. “The same fields” conflicts with role-derived presentation</h3>
+<p><strong>Finding:</strong> Section 14 says every scenario updates the same fields, but Section 13 requires five universal questions plus policy-critical role fields and progressive disclosure.</p>
+<p><strong>Why it matters:</strong> a fixed raw-field dashboard either overwhelms clients or hides evidence needed by reviewers, factory engineers, and field verifiers.</p>
+<p><strong>Evidence:</strong> Section 4 lines 368–378 define the derived role view; lines 384–393 define role-specific critical information; line 446 requires the same fields.</p>
+<p><strong>Suggested change:</strong> freeze the five universal questions as the shared skeleton, not a shared raw-field list. Each fixture must map additional role-critical fields and explicitly declare which details are hidden, summarized, or expanded.</p>
+<h3>[MAJOR] 5. The scenario library does not pressure-test the new truth rules</h3>
+<p><strong>Finding:</strong> the seven scenarios cover domain and control failures but do not explicitly cover pending assignment acceptance, temporarily unavailable truth, UNKNOWN impact, conflicting newer HOLD versus older Approved display, or broker denial after a stale action.</p>
+<p><strong>Why it matters:</strong> the prototype could validate only coherent snapshots and never demonstrate the fail-closed behaviors added by the approved corrections.</p>
+<p><strong>Evidence:</strong> Section 4 lines 438–444 list the scenarios; lines 378, 474–477, and 488–497 define the missing pressure states.</p>
+<p><strong>Suggested change:</strong> add four cross-cutting deterministic fixtures: <code>PENDING_ASSIGNMENT</code>, <code>SOURCE_UNAVAILABLE_OR_UNKNOWN</code>, <code>NEWER_HOLD_OVERRIDES_OLD_APPROVAL</code>, and <code>STALE_ACTION_BROKER_DENIED</code>.</p>
+<h3>[MAJOR] 6. Simulated actions have no frozen outcome semantics</h3>
+<p><strong>Finding:</strong> the visualization requires a next action but does not define what clicking it can do in a non-operational artifact.</p>
+<p><strong>Why it matters:</strong> a dead button cannot test Decision Chain comprehension, while a button that resembles a successful commit can falsely imply server authorization.</p>
+<p><strong>Evidence:</strong> Section 4 lines 364–378 require one next action and server revalidation; lines 350–360 forbid the visualization from issuing an <code>EgressGrant</code> or claiming authorization.</p>
+<p><strong>Suggested change:</strong> actions may transition only between deterministic fixture snapshots and must say “Simulate.” Every result shows the expected case version, simulated policy result, and whether runtime would require server revalidation. No success message may say Approved, Released, Resumed, or Downloaded without the visible “SIMULATED” qualifier.</p>
+<h3>[MAJOR] 7. The measurement contract has no prototype harness</h3>
+<p><strong>Finding:</strong> Section 15 defines clock boundaries, cell reporting, exclusions, confidence intervals, and stop conditions, but Section 14 does not define how the prototype exposes stable scenario identity or records test observations.</p>
+<p><strong>Why it matters:</strong> informal walkthroughs cannot establish the 30-second and 95% claims and can hide a failing role through selective scenarios.</p>
+<p><strong>Evidence:</strong> Section 4 lines 450–456 and 478–479 define the measurement obligations; no matching harness contract exists in lines 429–446.</p>
+<p><strong>Suggested change:</strong> add a separate evaluator mode with immutable fixture ID, role-registry version, scenario, risk, language, viewport, start/stop markers, answer rubric, support event, unsafe-action flag, and export-free local result summary. Keep this evaluator surface hidden from participants.</p>
+<h3>[MAJOR] 8. Visual safety and bilingual accessibility semantics are under-specified</h3>
+<p><strong>Finding:</strong> the specification requires Thai/English accessibility and a non-operational label but does not freeze how status, severity, proof type, mutable projection, and simulated action remain distinguishable without color or English jargon.</p>
+<p><strong>Why it matters:</strong> applying an approved corporate identity can make the prototype attractive while status meaning remains inaccessible or misleading.</p>
+<p><strong>Evidence:</strong> Section 4 line 303 requires role-specific accessibility tests in Thai and English; lines 364–378 require calm language and truth distinction; line 446 requires projection/proof separation.</p>
+<p><strong>Suggested change:</strong> require text + icon/shape semantics, keyboard navigation, visible focus, screen-reader announcements, Thai/English fixture parity, responsive layouts, and client-safe vocabulary. Corporate identity may style the surface but cannot carry safety meaning by color alone.</p>
+<h2>5. Minimum pre-build correction contract</h2>
+<p>Freeze these eight items before creating the visualization:</p>
+<ol>
+<li>standalone fixture-only artifact boundary;</li>
+<li>role decision card first, proof/system inspector second;</li>
+<li>eight-role coverage manifest with separate role/scenario controls;</li>
+<li>five universal questions plus role-critical fields, not one raw field set;</li>
+<li>four truth-pressure fixtures in addition to the seven domain scenarios;</li>
+<li>simulate-only action and outcome semantics;</li>
+<li>evaluator harness matching the measurement protocol; and</li>
+<li>persistent non-operational, bilingual, accessible visual semantics.</li>
+</ol>
+<p>The fixture schema may reuse Section 4 names, but it is test data—not a new persisted contract or runtime authority.</p>
+<h2>6. Verdict</h2>
+<p><strong>FIX-THEN-BUILD.</strong> The Section 4 architecture does not need rework. The visualization contract needs the eight bounded pre-build corrections above because its current reviewer/system-first framing does not yet guarantee a safe, role-first, measurable, non-operational prototype.</p>
+</main></body>
+</html>
