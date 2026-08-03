@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>MONOLITH Smallest Lovable Experience Design</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>MONOLITH Smallest Lovable Experience Design</h1>
+<p><strong>Status:</strong> OWNER DECISION — Approved 3 August 2026 <strong>Product direction:</strong> Studio-first, Powered by MONOLITH <strong>Experience direction:</strong> Calm Editorial · Human Action First <strong>North Star:</strong> MONOLITH makes the next right action obvious—and makes the complicated work behind it dependable.</p>
+<h2>1. Decision Summary</h2>
+<p>MONOLITH will be designed as a <strong>Calm Decision &amp; Exception OS</strong> for interior-design studios, not as a feature-complete project-management dashboard. It wins studio owners/project managers and designers first, then extends trustworthy projections to factories, installers, craftspeople, and customers.</p>
+<p>The smallest lovable product is an <strong>Attention Cockpit followed by one authority-bound Client Decision Loop</strong>. The implementation sequence remains strict:</p>
+<ol>
+<li>Project Context Foundation establishes correct identity and authority.</li>
+<li>Project Cockpit projects existing authoritative data and does not become a new source of truth.</li>
+<li>One Decision Pipeline closes one client design-decision loop.</li>
+<li>One Exception Projection shows one normalized factory blocker.</li>
+<li>Effect Ledger/Outbox makes backstage effects reliable and recoverable.</li>
+<li>Role Views and LINE are introduced only after authority gates pass.</li>
+</ol>
+<p>The approved Wave 1 implementation remains narrower than the complete lovable-product wedge: presentation contract, safety invariants, and read-only Project Cockpit only. Decision mutation, runtime role adaptation, customer action, factory production action, and LINE remain deferred.</p>
+<h2>2. Evidence and Provenance</h2>
+<p>Research was conducted with Perplexity multi-source Search and high-context Reason. The single Deep Research endpoint timed out without returning content, so no result from that failed request was used. Perplexity results were filtered toward primary, peer-reviewed, official, and credible first-party sources.</p>
+<div class="tablewrap"><table><thead><tr><th>Finding</th><th>Evidence</th><th>Design implication</th><th>Classification</th></tr></thead><tbody>
+<tr><td>Usefulness, ease of use, and compatibility correlate strongly with technology adoption</td><td>Meta-analysis of digital-transformation and SME IT-adoption research</td><td>Fit the studio's real workflow before expanding features</td><td>EXTERNAL EVIDENCE</td></tr>
+<tr><td>Progressive disclosure improves learnability, efficiency, and error prevention when the primary/secondary split is correct</td><td>Nielsen Norman Group</td><td>Show frequent actions and critical risk first; move rare technical detail behind explicit links</td><td>EXTERNAL EVIDENCE</td></tr>
+<tr><td>Users need continuous, honest visibility into system state</td><td>Nielsen Norman Group</td><td>Distinguish saved, sending, pending, failed, stale, and partially complete states</td><td>EXTERNAL EVIDENCE</td></tr>
+<tr><td>Transactional outbox and idempotent processing address dual writes, retries, and duplicate delivery</td><td>AWS guidance</td><td>Save business state and effect intent together; make retries safe and visible</td><td>EXTERNAL EVIDENCE</td></tr>
+<tr><td>Explanations can increase trust even when a recommendation is wrong</td><td>Microsoft HAX research</td><td>Explain sources and limitations; never use explanation as a substitute for human authority</td><td>EXTERNAL EVIDENCE</td></tr>
+<tr><td>Construction adoption is constrained by situation-awareness gaps, differing conventions, and field conditions</td><td>Construction UX research</td><td>Delay broad field rollout and use a field-specific presentation profile</td><td>EXTERNAL EVIDENCE</td></tr>
+<tr><td>One primary action per attention item will reduce hesitation</td><td>Derived from progressive disclosure and Human Action First</td><td>Treat as a user-research hypothesis, not a universal rule</td><td>INFERENCE / TESTABLE HYPOTHESIS</td></tr>
+</tbody></table></div>
+<h2>3. Repository and Product Boundary</h2>
+<p>This design describes the active product in the nested <code>determined-williams/</code> repository. The parent repository is the governance/bootstrap root. Substantial runtime implementation exists in the nested product, but source presence does not prove production readiness. Shadow mode and NOT-FOR-PRODUCTION remain active safety constraints.</p>
+<p>This design does not authorize a new tenant model, production release, schema migration, external message delivery, or role-based permission implementation. Project Context and authority must be supplied by their canonical server-owned foundation before write actions are enabled.</p>
+<h2>4. Priority Users and Jobs</h2>
+<h3>4.1 Studio owner / project manager</h3>
+<p>The cockpit must help them:</p>
+<ul>
+<li>know which project needs attention without checking several channels;</li>
+<li>confirm project, site, room, client, revision, freshness, and authority;</li>
+<li>understand consequence, deadline, and accountable owner;</li>
+<li>obtain a client decision without repeated chasing;</li>
+<li>see whether a factory blocker threatens schedule or scope;</li>
+<li>know whether an effect succeeded, remains pending, or needs recovery.</li>
+</ul>
+<h3>4.2 Designer</h3>
+<p>The experience must help them:</p>
+<ul>
+<li>protect uninterrupted design work from avoidable coordination overhead;</li>
+<li>identify the design consequence of a client decision or factory blocker;</li>
+<li>distinguish draft, ready for review, approved, released, and superseded states;</li>
+<li>compare relevant revisions and source evidence;</li>
+<li>prepare one clear decision without assembling context manually.</li>
+</ul>
+<h3>4.3 Downstream users</h3>
+<p>Factories and installers initially receive authoritative projections, not ownership of the studio's project model. Customers initially receive a narrow decision experience, not a general portal. This limits behavioral change and protects authority boundaries.</p>
+<h2>5. Experience Promise</h2>
+<p>Within ten seconds of opening a project, a common-case user should be able to answer:</p>
+<ol>
+<li>Where am I—studio, project, site/room, and revision?</li>
+<li>How fresh is this information and where did it come from?</li>
+<li>Is the current state safe to act on?</li>
+<li>What matters most now, and why?</li>
+<li>What is the best next action available to me?</li>
+</ol>
+<p>The ten-second target is a product hypothesis for validation, not an external benchmark.</p>
+<h2>6. Experience Architecture</h2>
+<pre><code class="language-text">Project Context Foundation
+        ↓ authoritative identity and capability
+Project Cockpit Read Model
+        ↓ attention-ranked projection
+Human Action Card
+        ↓ authority check before any write
+Decision / Exception Pipeline
+        ↓ committed business state + effect intent
+Effect Ledger / Outbox
+        ↓ delivery, retry, reconciliation
+Receipt Projection</code></pre>
+<p>The front stage never reconstructs authority, infers a tenant from <code>site_code</code>, or treats a local role as permission. The backstage performs orchestration; the user sees clear states, receipts, and recovery choices.</p>
+<h2>7. Project Cockpit Contract</h2>
+<h3>7.1 Information hierarchy</h3>
+<p>The default view answers questions in this order:</p>
+<ol>
+<li><strong>Context:</strong> project identity, site/room, revision, freshness, and viewing authority.</li>
+<li><strong>Safety:</strong> ready for review, blocked, draft, stale, or shadow/NFP.</li>
+<li><strong>Attention:</strong> a short ranked list of decisions and exceptions, not an activity feed.</li>
+<li><strong>Consequence:</strong> effect on design, schedule, cost, factory, or customer commitment.</li>
+<li><strong>Action:</strong> one primary human task.</li>
+<li><strong>Evidence:</strong> sources, history, receipts, and recovery through progressive disclosure.</li>
+</ol>
+<h3>7.2 Attention Card</h3>
+<p>Every card contains:</p>
+<ul>
+<li>plain-language event or need;</li>
+<li>why it matters;</li>
+<li>affected scope;</li>
+<li>accountable owner;</li>
+<li>due time when meaningful;</li>
+<li>one primary action;</li>
+<li>at most two visible secondary actions;</li>
+<li>source and freshness indicator.</li>
+</ul>
+<p>Examples of primary actions are <code>Review decision</code>, <code>Confirm project</code>, <code>Inspect blocker</code>, and <code>Retry delivery</code>. The action is absent or disabled when identity, authority, revision, or safety state is unresolved.</p>
+<h3>7.3 Progressive disclosure</h3>
+<ul>
+<li><strong>Level 1 — Attention:</strong> state, consequence, owner, deadline, primary action.</li>
+<li><strong>Level 2 — Working context:</strong> options, affected items, source files, revision comparison.</li>
+<li><strong>Level 3 — Authority and provenance:</strong> capability used, actor, revision lineage, history.</li>
+<li><strong>Level 4 — Recovery:</strong> attempts, provider response, effect ID, retry and reconciliation controls.</li>
+</ul>
+<p>Links use predictable labels: <code>Why this is shown</code>, <code>Compare revisions</code>, <code>Delivery history</code>, and <code>Recovery details</code>.</p>
+<h2>8. One Client Decision Loop</h2>
+<p>This section defines the first post-authority action; it is not part of the read-only Wave 1 implementation.</p>
+<p>An Authority-bound Decision Brief contains:</p>
+<ul>
+<li>immutable project and revision context;</li>
+<li>one question or decision scope;</li>
+<li>curated options;</li>
+<li>plain-language consequence of each option;</li>
+<li>studio recommendation clearly separated from the client's choice;</li>
+<li>affected items and source evidence;</li>
+<li>deadline and what happens next;</li>
+<li>authorized recipient and response capability;</li>
+<li>revocation or supersession state;</li>
+<li>durable receipt.</li>
+</ul>
+<p>Client approval is not production release unless a separate, explicit authority rule says so. A new revision invalidates or supersedes stale decision briefs according to server policy.</p>
+<h2>9. One Factory Blocker Projection</h2>
+<p>The first factory experience is a projection into the studio cockpit. It includes:</p>
+<ul>
+<li>affected project, revision, location, and item;</li>
+<li>blocker category and evidence;</li>
+<li>consequence and latest safe decision time;</li>
+<li>reporter and accountable studio owner;</li>
+<li>freshness and reconciliation state;</li>
+<li>NFP/shadow status when applicable.</li>
+</ul>
+<p>It does not authorize production, operate machines, schedule labor, or create a full factory workspace. During shadow mode, wording is evidence-oriented: <code>Inspect packet</code>, <code>Review blocker</code>, or <code>Run shadow verification</code>, never <code>Start work</code> or <code>Start production</code>.</p>
+<h2>10. Honest State and Recovery Model</h2>
+<div class="tablewrap"><table><thead><tr><th>State</th><th>User-facing behavior</th><th>Required backstage behavior</th></tr></thead><tbody>
+<tr><td>No attention</td><td>“Nothing needs your attention right now,” with scope and last refresh</td><td>Preserve query time and sources</td></tr>
+<tr><td>Loading</td><td>Keep context visible; state what is being checked</td><td>Resolve authoritative context before projections</td></tr>
+<tr><td>Refreshing</td><td>Show last known data with refreshing indicator</td><td>Do not silently replace versions</td></tr>
+<tr><td>Stale</td><td>Identify old and current revisions</td><td>Block stale action unless explicitly authorized</td></tr>
+<tr><td>Permission denied</td><td>Explain view/action boundary and access path</td><td>Enforce server-side and audit denial</td></tr>
+<tr><td>Saved, delivery pending</td><td>Distinguish committed work from an incomplete external effect</td><td>Keep outbox pending and retries idempotent</td></tr>
+<tr><td>Transient failure</td><td>Show last safe state and one retry action</td><td>Use bounded retry/backoff and correlation ID</td></tr>
+<tr><td>Conflict</td><td>Preserve both facts and require authorized resolution</td><td>Halt the affected effect and reconcile explicitly</td></tr>
+<tr><td>Shadow / NFP</td><td>Persistent non-themeable safety language</td><td>Block or sandbox production effects</td></tr>
+</tbody></table></div>
+<p>A receipt records project, revision, actor, authority, requested action, business object, effect ID, current state, timestamp, destination, attempts, provider response, retry eligibility, and recovery action. The normal UI summarizes this; technical detail remains available on demand.</p>
+<h2>11. Surface Profiles and One Semantic Language</h2>
+<p>The semantic states remain invariant: <code>Draft</code>, <code>Needs review</code>, <code>Approved</code>, <code>Released</code>, <code>Blocked</code>, <code>Delivery pending</code>, <code>Failed</code>, and <code>Shadow / NOT-FOR-PRODUCTION</code>.</p>
+<div class="tablewrap"><table><thead><tr><th>Profile</th><th>Primary need</th><th>Presentation behavior</th></tr></thead><tbody>
+<tr><td>Calm — Owner/PM</td><td>Confidence and prioritization</td><td>Spacious, consequence-led, attention-ranked, minimal visible controls</td></tr>
+<tr><td>Workspace — Designer</td><td>Context and comparison</td><td>Denser, source- and revision-aware, preserves creative workspace</td></tr>
+<tr><td>Field — Factory/Installer</td><td>Fast comprehension under adverse conditions</td><td>High contrast, short language, large targets, connectivity state, evidence capture</td></tr>
+<tr><td>Customer</td><td>Confident decision</td><td>Studio-first, plain language, one decision, consequence, receipt, next step</td></tr>
+</tbody></table></div>
+<p>Presentation profiles never grant permission or hide required safety information.</p>
+<h2>12. Controlled Brand Kit</h2>
+<p>The hierarchy is <strong>Studio-first, Powered by MONOLITH</strong>.</p>
+<p>A server-resolved studio profile may control:</p>
+<ul>
+<li>studio name and logo;</li>
+<li>approved accessible accent;</li>
+<li>greeting and client-facing tone;</li>
+<li>approved imagery;</li>
+<li>bounded terminology aliases.</li>
+</ul>
+<p>MONOLITH always controls:</p>
+<ul>
+<li>project and revision identity;</li>
+<li>authority and permission language;</li>
+<li>draft/approval/release semantics;</li>
+<li>warning, error, pending, and recovery meaning;</li>
+<li>audit receipts;</li>
+<li>NFP and production-safety language;</li>
+<li>minimum typography, contrast, focus, and target-size rules.</li>
+</ul>
+<p>Brand styling may soften the experience but must never soften risk.</p>
+<h2>13. Accessibility and Field Physics</h2>
+<p>WCAG 2.2 AA is the baseline, not the ceiling. Status is communicated with text and programmatic semantics, not color alone. Thai body copy is at least 14px with line-height at least 1.5; metadata is at least 12px; general interactive targets are at least 44px; field controls remain at least 48px. Field physics wins when brand styling conflicts with sunlight readability, gloved use, latency, or safety.</p>
+<h2>14. Explicit Non-goals</h2>
+<p>The smallest lovable product does not include:</p>
+<ul>
+<li>a universal dashboard or general-purpose project-management suite;</li>
+<li>a general customer portal;</li>
+<li>a complete factory or installer operating system;</li>
+<li>chat replacement;</li>
+<li>LINE before authority and effect reliability;</li>
+<li>automatic production release or customer commitment;</li>
+<li>AI decisions presented as authority;</li>
+<li>silent project-state mutation;</li>
+<li>exactly-once delivery claims;</li>
+<li>unrestricted workflow or brand customization;</li>
+<li>retrospective analytics without a next action.</li>
+</ul>
+<h2>15. Success Measures</h2>
+<p>These are initial hypotheses to validate, not external benchmarks:</p>
+<div class="tablewrap"><table><thead><tr><th>Measure</th><th align="right">Initial gate</th></tr></thead><tbody>
+<tr><td>Confirm project context in common cases</td><td align="right">≤10 seconds</td></tr>
+<tr><td>Identify the most important attention item</td><td align="right">≤15 seconds</td></tr>
+<tr><td>Complete intended primary action without facilitation</td><td align="right">≥80%</td></tr>
+<tr><td>Correctly describe success, pending, or failure state</td><td align="right">≥90%</td></tr>
+<tr><td>Critical wrong-project/revision actions</td><td align="right">0</td></tr>
+<tr><td>Partial failures presented as complete</td><td align="right">0</td></tr>
+<tr><td>Production effects allowed in shadow mode</td><td align="right">0</td></tr>
+<tr><td>Pilot users voluntarily return for a real task</td><td align="right">≥60%</td></tr>
+</tbody></table></div>
+<p>Failure of identity, state comprehension, or shadow safety is a stop-and-redesign signal even if aesthetic preference is high.</p>
+<h2>16. Four-week Validation Protocol</h2>
+<h3>Week 1 — Understand real work</h3>
+<p>Interview and observe 3–4 owners/PMs, 3–4 designers, 2 factory/installer contacts, and 2 recent decision-making customers. Reconstruct real decisions, blockers, artifacts, authority, and terminology.</p>
+<h3>Week 2 — Test the cockpit</h3>
+<p>With 6–8 primary users, test context confirmation, attention discovery, consequence comprehension, progressive disclosure, NFP recognition, and partial-failure recovery.</p>
+<h3>Week 3 — Non-production vertical slice</h3>
+<p>Exercise Project Context, read-only Cockpit, a non-live decision object, authority denial, effect ledger/outbox, fake delivery, duplicate events, stale revisions, timeouts, and shadow guards.</p>
+<h3>Week 4 — Controlled pilot</h3>
+<p>Use 2–3 studios on non-production or low-risk work. Observe voluntary return, parallel use of existing channels, trust in receipts, vocabulary failures, and whether MONOLITH reduces chasing instead of adding another place to check.</p>
+<h2>17. Acceptance Criteria</h2>
+<p>This design is satisfied only when:</p>
+<ul>
+<li>Project Context is visible before every meaningful action;</li>
+<li>Project Cockpit remains a read model;</li>
+<li>attention is ranked by consequence rather than recency alone;</li>
+<li>every attention item has one clear primary human action or an explicit reason no action is available;</li>
+<li>write actions fail closed on identity, authority, revision, or safety ambiguity;</li>
+<li>asynchronous effects expose honest receipt and recovery states;</li>
+<li>semantic and safety meaning is invariant across profiles and brands;</li>
+<li>NFP cannot be hidden or restyled into production readiness;</li>
+<li>role views and LINE remain blocked until authority and effect gates pass;</li>
+<li>user testing validates task comprehension, not aesthetic preference alone.</li>
+</ul>
+<h2>18. Sources</h2>
+<ul>
+<li>Nielsen Norman Group, <a href="https://www.nngroup.com/articles/progressive-disclosure/" target="_blank" rel="noopener">Progressive Disclosure</a></li>
+<li>Nielsen Norman Group, <a href="https://www.nngroup.com/articles/recognition-and-recall/" target="_blank" rel="noopener">Recognition and Recall in User Interfaces</a></li>
+<li>Nielsen Norman Group, <a href="https://www.nngroup.com/articles/visibility-system-status/" target="_blank" rel="noopener">Visibility of System Status</a></li>
+<li>W3C, <a href="https://www.w3.org/TR/WCAG22/" target="_blank" rel="noopener">Web Content Accessibility Guidelines 2.2</a></li>
+<li>AWS Prescriptive Guidance, <a href="https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html" target="_blank" rel="noopener">Transactional Outbox Pattern</a></li>
+<li>AWS Builders' Library, <a href="https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/" target="_blank" rel="noopener">Making Retries Safe with Idempotent APIs</a></li>
+<li>Microsoft Research, <a href="https://www.microsoft.com/en-us/research/blog/guidelines-for-human-ai-interaction-design/" target="_blank" rel="noopener">Guidelines for Human-AI Interaction</a></li>
+<li>Chalmers University, <a href="https://odr.chalmers.se/items/b7339ddc-796b-495a-a2a8-0607699beeb3" target="_blank" rel="noopener">Enabling Connected Construction Sites</a></li>
+<li>Santini et al., <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC8841366/" target="_blank" rel="noopener">Drivers of Digital Transformation Adoption</a></li>
+</ul>
+</main></body>
+</html>

@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="tools/render_docs.py">
+<title>แบบออกแบบประสบการณ์ที่เล็กที่สุดแต่ผู้ใช้รักของ MONOLITH</title>
+<style>
+:root{--fg:#1a1c1e;--muted:#5a6570;--bg:#fff;--surface:#f6f8fa;--border:#d5dbe1;
+--accent:#0b5fa5;--warn-bg:#fff8e6;--warn-bd:#e0a800;--code:#0f172a}
+@media(prefers-color-scheme:dark){:root{--fg:#e6e9ec;--muted:#9aa5b1;--bg:#14171a;
+--surface:#1d2126;--border:#333b44;--accent:#6ab0f3;--warn-bg:#2a2410;--warn-bd:#b8860b;--code:#dbe4ee}}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1.25rem 5rem;background:var(--bg);color:var(--fg);
+font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",
+"Sarabun",Roboto,"Helvetica Neue",Arial,sans-serif;
+-webkit-text-size-adjust:100%}
+main{max-width:78ch;margin:0 auto}
+h1,h2,h3,h4{line-height:1.3;margin:2.2em 0 .7em;font-weight:650}
+h1{font-size:1.9rem;margin-top:0;border-bottom:2px solid var(--border);padding-bottom:.4em}
+h2{font-size:1.42rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+h3{font-size:1.16rem}h4{font-size:1rem}
+p,ul,ol{margin:0 0 1.05em}
+a{color:var(--accent);text-decoration-thickness:.08em;text-underline-offset:.15em}
+code{font:.88em/1.5 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+background:var(--surface);border:1px solid var(--border);border-radius:4px;
+padding:.12em .38em;color:var(--code);word-break:break-word}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+padding:1rem;overflow-x:auto;margin:0 0 1.3em}
+pre code{background:none;border:0;padding:0;white-space:pre;word-break:normal}
+blockquote{margin:1.3em 0;padding:.9em 1.1em;background:var(--warn-bg);
+border-left:4px solid var(--warn-bd);border-radius:0 6px 6px 0}
+blockquote > :last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 0 1.4em;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{padding:.55em .8em;text-align:left;vertical-align:top;
+border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td[align=right],th[align=right]{text-align:right}
+hr{border:0;border-top:1px solid var(--border);margin:2.4em 0}
+del{opacity:.55}
+ul,ol{padding-left:1.5em}li{margin:.3em 0}
+@media print{
+  body{padding:0;font-size:11pt;background:#fff;color:#000}
+  main{max-width:none}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.82em;color:#444}
+  pre,blockquote,.tablewrap{break-inside:avoid}
+  h1,h2,h3{break-after:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body><main>
+<h1>แบบออกแบบประสบการณ์ที่เล็กที่สุดแต่ผู้ใช้รักของ MONOLITH</h1>
+<p><strong>สถานะ:</strong> OWNER DECISION — อนุมัติวันที่ 3 สิงหาคม 2026 <strong>ทิศทางผลิตภัณฑ์:</strong> Studio-first, Powered by MONOLITH <strong>ทิศทางประสบการณ์:</strong> Calm Editorial · Human Action First <strong>North Star:</strong> MONOLITH ทำให้สิ่งที่ควรทำต่อไปชัดเจน และทำให้งานยากเบื้องหลังไว้ใจได้</p>
+<h2>1. สรุปการตัดสินใจ</h2>
+<p>MONOLITH จะถูกออกแบบเป็น <strong>Calm Decision &amp; Exception OS</strong> สำหรับสตูดิโอออกแบบภายใน ไม่ใช่ dashboard บริหารโครงการที่รวมทุก feature ระบบจะชนะใจเจ้าของสตูดิโอ/ผู้จัดการโครงการและดีไซเนอร์ก่อน แล้วจึงขยาย authoritative projections ที่ไว้ใจได้ไปยังโรงงาน ผู้ติดตั้ง ช่าง และลูกค้า</p>
+<p>ผลิตภัณฑ์ที่เล็กที่สุดแต่ผู้ใช้รักคือ <strong>Attention Cockpit ตามด้วย Client Decision Loop หนึ่งวงจรที่ผูกกับ authority</strong> โดยลำดับ implementation ต้องคงที่:</p>
+<ol>
+<li>Project Context Foundation ทำ identity และ authority ให้ถูกต้อง</li>
+<li>Project Cockpit ฉายข้อมูล authoritative เดิมและไม่เป็น source of truth ใหม่</li>
+<li>One Decision Pipeline ปิดวงจรการตัดสินใจด้านแบบของลูกค้าหนึ่งวงจร</li>
+<li>One Exception Projection แสดง factory blocker แบบ normalized หนึ่งชนิด</li>
+<li>Effect Ledger/Outbox ทำให้งานหลังบ้านเชื่อถือและกู้คืนได้</li>
+<li>Role Views และ LINE เพิ่มหลัง authority gates ผ่านเท่านั้น</li>
+</ol>
+<p>Wave 1 ที่อนุมัติยังเล็กกว่า lovable-product wedge ฉบับเต็ม โดยมีเพียง presentation contract, safety invariants และ Project Cockpit แบบ read-only ส่วน decision mutation, runtime role adaptation, customer action, factory production action และ LINE ยังถูกเลื่อนไว้</p>
+<h2>2. หลักฐานและที่มา</h2>
+<p>งานวิจัยใช้ Perplexity multi-source Search และ high-context Reason ส่วน Deep Research endpoint เดี่ยวหมดเวลาโดยไม่คืนเนื้อหา จึงไม่ได้นำผลจาก request ที่ล้มเหลวมาใช้ ผลการค้นหาถูกคัดไปทางแหล่งปฐมภูมิ งาน peer-reviewed มาตรฐานทางการ และงานวิจัย first-party ที่น่าเชื่อถือ</p>
+<div class="tablewrap"><table><thead><tr><th>ข้อค้นพบ</th><th>หลักฐาน</th><th>ผลต่อการออกแบบ</th><th>ประเภท</th></tr></thead><tbody>
+<tr><td>Usefulness, ease of use และ compatibility มีความสัมพันธ์สูงกับการยอมรับเทคโนโลยี</td><td>Meta-analysis ด้าน digital transformation และการยอมรับ IT ของ SME</td><td>ต้องเข้ากับ workflow จริงของสตูดิโอก่อนขยาย feature</td><td>EXTERNAL EVIDENCE</td></tr>
+<tr><td>Progressive disclosure ช่วย learnability, efficiency และ error prevention หากแบ่งข้อมูลหลัก/รองถูกต้อง</td><td>Nielsen Norman Group</td><td>แสดง action ที่ใช้บ่อยและความเสี่ยงสำคัญก่อน ส่วนรายละเอียดเทคนิคที่ใช้น้อยอยู่หลังลิงก์ชัดเจน</td><td>EXTERNAL EVIDENCE</td></tr>
+<tr><td>ผู้ใช้ต้องเห็นสถานะระบบที่ต่อเนื่องและตรงความจริง</td><td>Nielsen Norman Group</td><td>แยก saved, sending, pending, failed, stale และ partially complete ให้ชัด</td><td>EXTERNAL EVIDENCE</td></tr>
+<tr><td>Transactional outbox และ idempotent processing ช่วยจัดการ dual writes, retries และ duplicate delivery</td><td>แนวทางของ AWS</td><td>บันทึก business state และ effect intent พร้อมกัน และทำ retry ให้ปลอดภัย/มองเห็นได้</td><td>EXTERNAL EVIDENCE</td></tr>
+<tr><td>Explanation สามารถเพิ่มความเชื่อถือแม้คำแนะนำผิด</td><td>งานวิจัย Microsoft HAX</td><td>อธิบาย source และ limitation แต่ห้ามใช้คำอธิบายแทน human authority</td><td>EXTERNAL EVIDENCE</td></tr>
+<tr><td>การยอมรับเทคโนโลยีในงานก่อสร้างถูกจำกัดด้วย situation awareness, convention ที่ต่างกัน และสภาพหน้างาน</td><td>งานวิจัย Construction UX</td><td>เลื่อน broad field rollout และใช้ field-specific presentation profile</td><td>EXTERNAL EVIDENCE</td></tr>
+<tr><td>หนึ่ง primary action ต่อ attention item จะลดความลังเล</td><td>อนุมานจาก progressive disclosure และ Human Action First</td><td>ต้องทดสอบกับผู้ใช้จริง ไม่ถือเป็นกฎสากล</td><td>INFERENCE / TESTABLE HYPOTHESIS</td></tr>
+</tbody></table></div>
+<h2>3. ขอบเขต Repository และผลิตภัณฑ์</h2>
+<p>แบบออกแบบนี้กล่าวถึงผลิตภัณฑ์ที่อยู่ใน nested repository <code>determined-williams/</code> ส่วน parent repository เป็น governance/bootstrap root มี implementation จำนวนมากอยู่ใน nested product แต่การมี source ไม่ได้พิสูจน์ production readiness และ shadow mode กับ NOT-FOR-PRODUCTION ยังคงเป็นข้อบังคับด้านความปลอดภัย</p>
+<p>แบบออกแบบนี้ไม่อนุญาต tenant model ใหม่, production release, schema migration, external message delivery หรือ role-based permission implementation Project Context และ authority ต้องมาจาก canonical server-owned foundation ก่อนเปิด write action</p>
+<h2>4. ผู้ใช้ลำดับแรกและงานที่ต้องช่วย</h2>
+<h3>4.1 เจ้าของสตูดิโอ / ผู้จัดการโครงการ</h3>
+<p>Cockpit ต้องช่วยให้พวกเขา:</p>
+<ul>
+<li>รู้ว่าโครงการใดต้องสนใจโดยไม่ไล่ตรวจหลายช่องทาง</li>
+<li>ยืนยัน project, site, room, client, revision, freshness และ authority</li>
+<li>เข้าใจผลกระทบ กำหนดเวลา และ accountable owner</li>
+<li>ได้คำตัดสินจากลูกค้าโดยไม่ต้องตามซ้ำ</li>
+<li>เห็นว่า factory blocker กระทบเวลาและ scope หรือไม่</li>
+<li>รู้ว่า effect สำเร็จ ยังรอ หรือจำเป็นต้องกู้คืน</li>
+</ul>
+<h3>4.2 ดีไซเนอร์</h3>
+<p>ประสบการณ์ต้องช่วยให้พวกเขา:</p>
+<ul>
+<li>ปกป้องเวลาทำงานออกแบบจาก coordination overhead ที่หลีกเลี่ยงได้</li>
+<li>เห็นผลกระทบต่อแบบจาก client decision หรือ factory blocker</li>
+<li>แยก draft, ready for review, approved, released และ superseded</li>
+<li>เปรียบเทียบ revision และ source evidence ที่เกี่ยวข้อง</li>
+<li>เตรียมหนึ่งคำตัดสินที่ชัดโดยไม่รวบรวม context ด้วยมือ</li>
+</ul>
+<h3>4.3 ผู้ใช้ปลายทาง</h3>
+<p>ในระยะแรก โรงงานและผู้ติดตั้งจะได้รับ authoritative projections ไม่ใช่ความเป็นเจ้าของ project model ของสตูดิโอ ลูกค้าจะได้รับ decision experience แบบแคบ ไม่ใช่ portal ทั่วไป แนวทางนี้ลดการบังคับเปลี่ยนพฤติกรรมและรักษา authority boundaries</p>
+<h2>5. คำมั่นของประสบการณ์</h2>
+<p>ภายในสิบวินาทีหลังเปิดโครงการ ในกรณีทั่วไปผู้ใช้ควรตอบได้ว่า:</p>
+<ol>
+<li>ฉันอยู่ที่ studio, project, site/room และ revision ใด</li>
+<li>ข้อมูลใหม่เพียงใดและมาจากแหล่งไหน</li>
+<li>สถานะปัจจุบันปลอดภัยที่จะลงมือหรือไม่</li>
+<li>เรื่องใดสำคัญที่สุดตอนนี้ และเพราะอะไร</li>
+<li>next action ที่ดีที่สุดสำหรับฉันคืออะไร</li>
+</ol>
+<p>เป้าหมายสิบวินาทีเป็นสมมติฐานผลิตภัณฑ์สำหรับการทดสอบ ไม่ใช่ benchmark ภายนอก</p>
+<h2>6. Experience Architecture</h2>
+<pre><code class="language-text">Project Context Foundation
+        ↓ authoritative identity and capability
+Project Cockpit Read Model
+        ↓ attention-ranked projection
+Human Action Card
+        ↓ authority check before any write
+Decision / Exception Pipeline
+        ↓ committed business state + effect intent
+Effect Ledger / Outbox
+        ↓ delivery, retry, reconciliation
+Receipt Projection</code></pre>
+<p>Front stage ห้ามสร้าง authority ใหม่ ห้ามอนุมาน tenant จาก <code>site_code</code> และห้ามถือ local role เป็น permission หลังบ้านทำ orchestration ส่วนผู้ใช้เห็น states, receipts และ recovery choices ที่เข้าใจง่าย</p>
+<h2>7. สัญญาของ Project Cockpit</h2>
+<h3>7.1 ลำดับข้อมูล</h3>
+<p>หน้าเริ่มต้นต้องตอบตามลำดับนี้:</p>
+<ol>
+<li><strong>Context:</strong> project identity, site/room, revision, freshness และ viewing authority</li>
+<li><strong>Safety:</strong> ready for review, blocked, draft, stale หรือ shadow/NFP</li>
+<li><strong>Attention:</strong> รายการ decision และ exception แบบสั้นที่จัดอันดับแล้ว ไม่ใช่ activity feed</li>
+<li><strong>Consequence:</strong> ผลต่อ design, schedule, cost, factory หรือ customer commitment</li>
+<li><strong>Action:</strong> หนึ่ง primary human task</li>
+<li><strong>Evidence:</strong> source, history, receipt และ recovery ผ่าน progressive disclosure</li>
+</ol>
+<h3>7.2 Attention Card</h3>
+<p>ทุก card ประกอบด้วย:</p>
+<ul>
+<li>เหตุการณ์หรือสิ่งที่ต้องการด้วยภาษาธรรมดา</li>
+<li>เหตุผลที่สำคัญ</li>
+<li>scope ที่ได้รับผล</li>
+<li>accountable owner</li>
+<li>due time เมื่อมีความหมาย</li>
+<li>หนึ่ง primary action</li>
+<li>secondary actions ที่มองเห็นไม่เกินสองรายการ</li>
+<li>source และ freshness indicator</li>
+</ul>
+<p>ตัวอย่าง primary action ได้แก่ <code>Review decision</code>, <code>Confirm project</code>, <code>Inspect blocker</code> และ <code>Retry delivery</code> Action ต้องหายไปหรือ disabled เมื่อ identity, authority, revision หรือ safety state ยังไม่ชัด</p>
+<h3>7.3 Progressive disclosure</h3>
+<ul>
+<li><strong>Level 1 — Attention:</strong> state, consequence, owner, deadline, primary action</li>
+<li><strong>Level 2 — Working context:</strong> options, affected items, source files, revision comparison</li>
+<li><strong>Level 3 — Authority and provenance:</strong> capability ที่ใช้, actor, revision lineage, history</li>
+<li><strong>Level 4 — Recovery:</strong> attempts, provider response, effect ID, retry และ reconciliation controls</li>
+</ul>
+<p>ลิงก์ใช้ชื่อที่คาดเดาได้ เช่น <code>Why this is shown</code>, <code>Compare revisions</code>, <code>Delivery history</code> และ <code>Recovery details</code></p>
+<h2>8. One Client Decision Loop</h2>
+<p>ส่วนนี้กำหนด action แรกหลัง authority พร้อม และยังไม่อยู่ใน Wave 1 แบบ read-only</p>
+<p>Authority-bound Decision Brief ประกอบด้วย:</p>
+<ul>
+<li>immutable project และ revision context</li>
+<li>หนึ่งคำถามหรือ decision scope</li>
+<li>curated options</li>
+<li>ผลกระทบของแต่ละตัวเลือกด้วยภาษาธรรมดา</li>
+<li>studio recommendation ที่แยกชัดจากคำตอบของลูกค้า</li>
+<li>affected items และ source evidence</li>
+<li>deadline และสิ่งที่จะเกิดขึ้นต่อ</li>
+<li>authorized recipient และ response capability</li>
+<li>revocation หรือ supersession state</li>
+<li>durable receipt</li>
+</ul>
+<p>Client approval ไม่ใช่ production release เว้นแต่กฎ authority ที่แยกและชัดเจนกำหนดเช่นนั้น Revision ใหม่ต้อง invalidate หรือ supersede decision brief ที่ stale ตาม server policy</p>
+<h2>9. One Factory Blocker Projection</h2>
+<p>ประสบการณ์โรงงานชุดแรกเป็น projection เข้าสู่ studio cockpit โดยมี:</p>
+<ul>
+<li>project, revision, location และ item ที่ได้รับผล</li>
+<li>blocker category และ evidence</li>
+<li>consequence และเวลาปลอดภัยล่าสุดที่ต้องตัดสินใจ</li>
+<li>reporter และ accountable studio owner</li>
+<li>freshness และ reconciliation state</li>
+<li>NFP/shadow status เมื่อเกี่ยวข้อง</li>
+</ul>
+<p>Projection นี้ไม่ authorize production, ควบคุมเครื่อง, จัดตารางแรงงาน หรือสร้าง factory workspace เต็มระบบ ระหว่าง shadow mode ให้ใช้ถ้อยคำเชิงตรวจหลักฐาน เช่น <code>Inspect packet</code>, <code>Review blocker</code> หรือ <code>Run shadow verification</code> ห้ามใช้ <code>Start work</code> หรือ <code>Start production</code></p>
+<h2>10. Honest State และ Recovery Model</h2>
+<div class="tablewrap"><table><thead><tr><th>State</th><th>พฤติกรรมที่ผู้ใช้เห็น</th><th>พฤติกรรมหลังบ้านที่ต้องมี</th></tr></thead><tbody>
+<tr><td>ไม่มี attention</td><td>“ตอนนี้ไม่มีเรื่องที่ต้องดำเนินการ” พร้อม scope และ last refresh</td><td>เก็บ query time และ sources</td></tr>
+<tr><td>Loading</td><td>รักษา context ให้เห็นและบอกว่ากำลังตรวจอะไร</td><td>Resolve authoritative context ก่อน projections</td></tr>
+<tr><td>Refreshing</td><td>แสดงข้อมูลล่าสุดที่ทราบพร้อม refreshing indicator</td><td>ห้ามเปลี่ยน version แบบเงียบ ๆ</td></tr>
+<tr><td>Stale</td><td>ระบุ revision เก่าและ revision ปัจจุบัน</td><td>Block stale action เว้นแต่ได้รับ authority ชัดเจน</td></tr>
+<tr><td>Permission denied</td><td>อธิบายขอบเขต view/action และทางขอสิทธิ์</td><td>Enforce ที่ server และ audit การปฏิเสธ</td></tr>
+<tr><td>Saved, delivery pending</td><td>แยกงานที่ commit แล้วออกจาก external effect ที่ยังไม่ครบ</td><td>คง outbox เป็น pending และ retry แบบ idempotent</td></tr>
+<tr><td>Transient failure</td><td>แสดงสถานะปลอดภัยล่าสุดและหนึ่ง retry action</td><td>ใช้ bounded retry/backoff และ correlation ID</td></tr>
+<tr><td>Conflict</td><td>รักษาข้อเท็จจริงทั้งสองและต้องให้ผู้มี authority ตัดสิน</td><td>Halt effect ที่เกี่ยวข้องและ reconcile อย่างชัดเจน</td></tr>
+<tr><td>Shadow / NFP</td><td>Safety language ถาวรที่ theme เปลี่ยนไม่ได้</td><td>Block หรือ sandbox production effects</td></tr>
+</tbody></table></div>
+<p>Receipt บันทึก project, revision, actor, authority, requested action, business object, effect ID, current state, timestamp, destination, attempts, provider response, retry eligibility และ recovery action UI ปกติสรุปให้สั้นและเปิดรายละเอียดเทคนิคเมื่อผู้ใช้ร้องขอ</p>
+<h2>11. Surface Profiles และ Semantic Language เดียวกัน</h2>
+<p>Semantic states ต้องไม่เปลี่ยน ได้แก่ <code>Draft</code>, <code>Needs review</code>, <code>Approved</code>, <code>Released</code>, <code>Blocked</code>, <code>Delivery pending</code>, <code>Failed</code> และ <code>Shadow / NOT-FOR-PRODUCTION</code></p>
+<div class="tablewrap"><table><thead><tr><th>Profile</th><th>ความต้องการหลัก</th><th>พฤติกรรมการนำเสนอ</th></tr></thead><tbody>
+<tr><td>Calm — Owner/PM</td><td>ความมั่นใจและการจัดลำดับ</td><td>โปร่ง สื่อผลกระทบก่อน จัดอันดับ attention และมี controls ที่มองเห็นน้อย</td></tr>
+<tr><td>Workspace — Designer</td><td>Context และการเปรียบเทียบ</td><td>หนาแน่นขึ้น เห็น source/revision และรักษาพื้นที่สร้างสรรค์</td></tr>
+<tr><td>Field — Factory/Installer</td><td>เข้าใจเร็วภายใต้สภาพไม่เอื้อ</td><td>High contrast, ภาษาสั้น, target ใหญ่, connectivity state และ evidence capture</td></tr>
+<tr><td>Customer</td><td>ตัดสินใจอย่างมั่นใจ</td><td>Studio-first, ภาษาธรรมดา, หนึ่ง decision, consequence, receipt และ next step</td></tr>
+</tbody></table></div>
+<p>Presentation profiles ห้ามให้ permission และห้ามซ่อน safety information ที่จำเป็น</p>
+<h2>12. Controlled Brand Kit</h2>
+<p>ลำดับแบรนด์คือ <strong>Studio-first, Powered by MONOLITH</strong></p>
+<p>Server-resolved studio profile ควบคุมได้:</p>
+<ul>
+<li>ชื่อและโลโก้สตูดิโอ</li>
+<li>accent ที่ผ่าน accessibility</li>
+<li>greeting และ client-facing tone</li>
+<li>approved imagery</li>
+<li>terminology aliases แบบมีขอบเขต</li>
+</ul>
+<p>MONOLITH ควบคุมเสมอ:</p>
+<ul>
+<li>project และ revision identity</li>
+<li>authority และ permission language</li>
+<li>draft/approval/release semantics</li>
+<li>ความหมายของ warning, error, pending และ recovery</li>
+<li>audit receipts</li>
+<li>NFP และ production-safety language</li>
+<li>ข้อกำหนดขั้นต่ำด้าน typography, contrast, focus และ target size</li>
+</ul>
+<p>Brand styling ทำให้ประสบการณ์อบอุ่นขึ้นได้ แต่ห้ามทำให้ความเสี่ยงดูเบาลง</p>
+<h2>13. Accessibility และ Field Physics</h2>
+<p>WCAG 2.2 AA เป็น baseline ไม่ใช่เพดาน สถานะต้องสื่อด้วยข้อความและ programmatic semantics ไม่ใช้สีอย่างเดียว เนื้อหาภาษาไทยไม่น้อยกว่า 14px และ line-height ไม่น้อยกว่า 1.5; metadata ไม่น้อยกว่า 12px; interactive target ทั่วไปไม่น้อยกว่า 44px; field controls คงขั้นต่ำ 48px Field physics ต้องชนะเมื่อ brand styling ขัดกับการอ่านกลางแดด การใช้ถุงมือ latency หรือ safety</p>
+<h2>14. สิ่งที่ไม่ทำอย่างชัดเจน</h2>
+<p>ผลิตภัณฑ์ที่เล็กที่สุดแต่ผู้ใช้รักไม่รวม:</p>
+<ul>
+<li>universal dashboard หรือ general-purpose project-management suite</li>
+<li>customer portal ทั่วไป</li>
+<li>factory หรือ installer operating system เต็มรูปแบบ</li>
+<li>chat replacement</li>
+<li>LINE ก่อน authority และ effect reliability</li>
+<li>automatic production release หรือ customer commitment</li>
+<li>AI decision ที่นำเสนอเป็น authority</li>
+<li>silent project-state mutation</li>
+<li>exactly-once delivery claim</li>
+<li>workflow หรือ brand customization แบบไม่จำกัด</li>
+<li>retrospective analytics ที่ไม่มี next action</li>
+</ul>
+<h2>15. ตัววัดความสำเร็จ</h2>
+<p>ตัวเลขต่อไปนี้เป็นสมมติฐานเริ่มต้นสำหรับทดสอบ ไม่ใช่ benchmark ภายนอก:</p>
+<div class="tablewrap"><table><thead><tr><th>ตัววัด</th><th align="right">Gate เริ่มต้น</th></tr></thead><tbody>
+<tr><td>ยืนยัน project context ในกรณีทั่วไป</td><td align="right">≤10 วินาที</td></tr>
+<tr><td>พบ attention item ที่สำคัญที่สุด</td><td align="right">≤15 วินาที</td></tr>
+<tr><td>ทำ primary action สำเร็จโดยไม่ต้องช่วย</td><td align="right">≥80%</td></tr>
+<tr><td>อธิบาย success, pending หรือ failure ได้ถูกต้อง</td><td align="right">≥90%</td></tr>
+<tr><td>Critical wrong-project/revision actions</td><td align="right">0</td></tr>
+<tr><td>Partial failure ที่แสดงเป็น complete</td><td align="right">0</td></tr>
+<tr><td>Production effect ที่ผ่าน shadow mode</td><td align="right">0</td></tr>
+<tr><td>Pilot users กลับมาใช้กับงานจริงโดยสมัครใจ</td><td align="right">≥60%</td></tr>
+</tbody></table></div>
+<p>หาก identity, state comprehension หรือ shadow safety ล้มเหลว ต้องหยุดและออกแบบใหม่ แม้ผู้ใช้จะชอบความสวยงามก็ตาม</p>
+<h2>16. แผนทดสอบสี่สัปดาห์</h2>
+<h3>สัปดาห์ 1 — เข้าใจงานจริง</h3>
+<p>สัมภาษณ์และสังเกต Owner/PM 3–4 คน, ดีไซเนอร์ 3–4 คน, ผู้เกี่ยวข้องจากโรงงาน/ติดตั้ง 2 คน และลูกค้าที่เพิ่งตัดสินใจ 2 คน ย้อนสร้าง decision, blocker, artifact, authority และ terminology จากงานจริง</p>
+<h3>สัปดาห์ 2 — ทดสอบ Cockpit</h3>
+<p>ทดสอบกับ primary users 6–8 คน ครอบคลุม context confirmation, attention discovery, consequence comprehension, progressive disclosure, NFP recognition และ partial-failure recovery</p>
+<h3>สัปดาห์ 3 — Non-production vertical slice</h3>
+<p>ทดสอบ Project Context, read-only Cockpit, non-live decision object, authority denial, effect ledger/outbox, fake delivery, duplicate events, stale revisions, timeouts และ shadow guards</p>
+<h3>สัปดาห์ 4 — Controlled pilot</h3>
+<p>ใช้กับสตูดิโอ 2–3 แห่งในงาน non-production หรือความเสี่ยงต่ำ สังเกต voluntary return, การใช้ช่องทางเดิมคู่ขนาน, ความเชื่อถือใน receipts, vocabulary failures และว่า MONOLITH ลดการตามงานหรือเพิ่มอีกที่หนึ่งให้ต้องตรวจ</p>
+<h2>17. Acceptance Criteria</h2>
+<p>แบบออกแบบนี้ถือว่าบรรลุเมื่อ:</p>
+<ul>
+<li>Project Context มองเห็นได้ก่อนทุก meaningful action</li>
+<li>Project Cockpit ยังคงเป็น read model</li>
+<li>Attention จัดอันดับตาม consequence ไม่ใช่ recency อย่างเดียว</li>
+<li>ทุก attention item มี primary human action ที่ชัดหนึ่งรายการ หรือมีเหตุผลชัดว่าทำไมยังลงมือไม่ได้</li>
+<li>Write action fail closed เมื่อ identity, authority, revision หรือ safety คลุมเครือ</li>
+<li>Asynchronous effects แสดง receipt และ recovery state ตามความจริง</li>
+<li>Semantic และ safety meaning คงที่ข้าม profiles และ brands</li>
+<li>NFP ไม่สามารถถูกซ่อนหรือแต่งให้ดูพร้อมผลิต</li>
+<li>Role Views และ LINE ยังถูก block จนกว่า authority และ effect gates ผ่าน</li>
+<li>User testing ตรวจ task comprehension ไม่ใช่ aesthetic preference อย่างเดียว</li>
+</ul>
+<h2>18. แหล่งอ้างอิง</h2>
+<ul>
+<li>Nielsen Norman Group, <a href="https://www.nngroup.com/articles/progressive-disclosure/" target="_blank" rel="noopener">Progressive Disclosure</a></li>
+<li>Nielsen Norman Group, <a href="https://www.nngroup.com/articles/recognition-and-recall/" target="_blank" rel="noopener">Recognition and Recall in User Interfaces</a></li>
+<li>Nielsen Norman Group, <a href="https://www.nngroup.com/articles/visibility-system-status/" target="_blank" rel="noopener">Visibility of System Status</a></li>
+<li>W3C, <a href="https://www.w3.org/TR/WCAG22/" target="_blank" rel="noopener">Web Content Accessibility Guidelines 2.2</a></li>
+<li>AWS Prescriptive Guidance, <a href="https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html" target="_blank" rel="noopener">Transactional Outbox Pattern</a></li>
+<li>AWS Builders' Library, <a href="https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/" target="_blank" rel="noopener">Making Retries Safe with Idempotent APIs</a></li>
+<li>Microsoft Research, <a href="https://www.microsoft.com/en-us/research/blog/guidelines-for-human-ai-interaction-design/" target="_blank" rel="noopener">Guidelines for Human-AI Interaction</a></li>
+<li>Chalmers University, <a href="https://odr.chalmers.se/items/b7339ddc-796b-495a-a2a8-0607699beeb3" target="_blank" rel="noopener">Enabling Connected Construction Sites</a></li>
+<li>Santini et al., <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC8841366/" target="_blank" rel="noopener">Drivers of Digital Transformation Adoption</a></li>
+</ul>
+</main></body>
+</html>
