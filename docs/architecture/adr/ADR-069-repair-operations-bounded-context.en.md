@@ -2,6 +2,8 @@
 
 **Status:** Owner-approved Phase A architecture decision with mandatory pre-Phase-B conditions
 
+**Written ADR approval:** `APPROVED — 7 August 2026`
+
 **Date:** 7 August 2026
 
 **Runtime authority:** None
@@ -185,6 +187,8 @@ Phase A is complete only when:
 
 **Verdict:** `APPROVED WITH CONDITIONS — PHASE A ONLY`
 
-**Next allowed action:** owner review of this written ADR
+**Written ADR approval:** `APPROVED — 7 August 2026`
 
-**Next prohibited action:** Phase-B implementation planning or code until the owner approves this written ADR and separately authorizes planning.
+**Next allowed action:** request separate owner authorization to prepare the Phase-B Implementation Plan
+
+**Next prohibited action:** preparing the Phase-B Implementation Plan or writing Phase-B code until that separate authorization is explicitly granted.
