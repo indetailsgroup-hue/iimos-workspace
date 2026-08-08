@@ -116,6 +116,8 @@ import { useSpecStore } from '../core/store/useSpecStore';
 import { useVerifyStatusStore } from '../core/store/useVerifyStatusStore';
 import { VerifyVerdictPill } from '../components/ui/VerifyVerdictPill';
 import { RoleGateDialog } from '../components/ui/RoleGateDialog';
+import { ProjectContextGate } from '../project-context/ProjectContextGate';
+import { ProjectContextProvider } from '../project-context/ProjectContextProvider';
 
 // ============================================================================
 // Types
@@ -924,6 +926,20 @@ function NotFoundPage() {
   );
 }
 
+function BoundProjectDesignerPage() {
+  const { projectId } = useParams<{ projectId: string }>();
+  if (!projectId) return <Navigate to="/projects" replace />;
+  return (
+    <ProjectContextProvider designProjectId={projectId}>
+      <ProjectContextGate routeProjectId={projectId}>
+        <Suspense fallback={<WorkspaceLoadingFallback />}>
+          <DesignerWorkspace />
+        </Suspense>
+      </ProjectContextGate>
+    </ProjectContextProvider>
+  );
+}
+
 // ============================================================================
 // Router Configuration
 // ============================================================================
@@ -951,11 +967,7 @@ export const router = createBrowserRouter([
   // Project Designer - T018: Lazy loaded
   {
     path: '/projects/:projectId/design',
-    element: (
-      <Suspense fallback={<WorkspaceLoadingFallback />}>
-        <DesignerWorkspace />
-      </Suspense>
-    ),
+    element: <BoundProjectDesignerPage />,
   },
   // Project Validation
   {
