@@ -4,7 +4,7 @@
 
 begin;
 create extension if not exists pgtap;
-select plan(51);
+select plan(72);
 
 select has_column('public', 'installation_projects', 'design_project_id',
   'installation_projects has server-issued design_project_id');
@@ -418,6 +418,259 @@ select ok(
     )
     from task3_failure_baseline baseline),
   'forced failure leaves no idempotency, Work Item, installation, or design identity residue'
+);
+
+select has_table('public', 'project_context_bridge_import',
+  'Bridge v2 has a binding-scoped idempotency register');
+select has_function(
+  'public', 'rpc_bridge_import_cutlist_v2',
+  array['uuid','uuid','uuid','bigint','text','text','jsonb','text','text'],
+  'rpc_bridge_import_cutlist_v2 has the complete ProjectContext tuple signature'
+);
+
+select lives_ok(
+  $$insert into task3_open_results(sequence_no, context)
+    select 3, public.rpc_open_customer_job(
+      '{"project_display_name":"Atomic Project B","project_type":"new_build"}'::jsonb,
+      'task4-open-project-b')$$,
+  'Bridge v2 fixture opens independent project B'
+);
+
+create temporary table task4_rejection_baseline on commit drop as
+select
+  (select count(*) from public.work_packages) as packages,
+  (select count(*) from public.package_materials) as materials,
+  (select count(*) from public.project_context_bridge_import) as imports;
+
+select throws_ok(
+  $$select public.rpc_bridge_import_cutlist_v2(
+      (select (context ->> 'work_item_id')::uuid from task3_open_results where sequence_no = 1),
+      (select (context ->> 'installation_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'design_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'binding_version')::bigint from task3_open_results where sequence_no = 3),
+      'MW-201', 'Mixed Work Item', '[{"name":"Plywood","qty":2}]'::jsonb,
+      repeat('a',64), 'task4-reject-mixed-work')$$,
+  '23514', null,
+  'Bridge v2 rejects a mixed Work Item and project tuple'
+);
+select throws_ok(
+  $$select public.rpc_bridge_import_cutlist_v2(
+      (select (context ->> 'work_item_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'installation_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'design_project_id')::uuid from task3_open_results where sequence_no = 1),
+      (select (context ->> 'binding_version')::bigint from task3_open_results where sequence_no = 3),
+      'MW-201', 'Mixed Design', '[{"name":"Plywood","qty":2}]'::jsonb,
+      repeat('a',64), 'task4-reject-mixed-design')$$,
+  '23514', null,
+  'Bridge v2 rejects a mixed design and installation tuple'
+);
+select throws_ok(
+  $$select public.rpc_bridge_import_cutlist_v2(
+      (select (context ->> 'work_item_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'installation_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'design_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'binding_version')::bigint + 1 from task3_open_results where sequence_no = 3),
+      'MW-201', 'Stale Version', '[{"name":"Plywood","qty":2}]'::jsonb,
+      repeat('a',64), 'task4-reject-stale')$$,
+  '40001', null,
+  'Bridge v2 rejects a stale binding version'
+);
+select throws_ok(
+  $$select public.rpc_bridge_import_cutlist_v2(
+      (select (context ->> 'work_item_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'installation_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'design_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'binding_version')::bigint from task3_open_results where sequence_no = 3),
+      'MW-201', 'Malformed Array', '{}'::jsonb,
+      repeat('a',64), 'task4-reject-array')$$,
+  '22023', null,
+  'Bridge v2 rejects non-array items'
+);
+select throws_ok(
+  $$select public.rpc_bridge_import_cutlist_v2(
+      (select (context ->> 'work_item_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'installation_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'design_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'binding_version')::bigint from task3_open_results where sequence_no = 3),
+      'MW-201', 'Malformed Item', '[{"name":"Plywood","qty":0}]'::jsonb,
+      repeat('a',64), 'task4-reject-item')$$,
+  '22023', null,
+  'Bridge v2 rejects malformed material items before mutation'
+);
+select throws_ok(
+  $$select public.rpc_bridge_import_cutlist_v2(
+      (select (context ->> 'work_item_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'installation_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'design_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'binding_version')::bigint from task3_open_results where sequence_no = 3),
+      'MW-201', 'Bad Hash', '[{"name":"Plywood","qty":2}]'::jsonb,
+      'not-a-sha256', 'task4-reject-hash')$$,
+  '22023', null,
+  'Bridge v2 rejects malformed content hash before mutation'
+);
+
+update public.installation_projects
+set binding_state = 'QUARANTINED'
+where id = (select (context ->> 'installation_project_id')::uuid
+            from task3_open_results where sequence_no = 3);
+select throws_ok(
+  $$select public.rpc_bridge_import_cutlist_v2(
+      (select (context ->> 'work_item_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'installation_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'design_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select binding_version from public.installation_projects
+        where id = (select (context ->> 'installation_project_id')::uuid
+                    from task3_open_results where sequence_no = 3)),
+      'MW-201', 'Quarantined', '[{"name":"Plywood","qty":2}]'::jsonb,
+      repeat('a',64), 'task4-reject-quarantine')$$,
+  '55000', null,
+  'Bridge v2 rejects a quarantined binding'
+);
+update public.installation_projects
+set binding_state = 'ACTIVE'
+where id = (select (context ->> 'installation_project_id')::uuid
+            from task3_open_results where sequence_no = 3);
+
+update public.installation_projects
+set status = 'cancelled'
+where id = (select (context ->> 'installation_project_id')::uuid
+            from task3_open_results where sequence_no = 3);
+select throws_ok(
+  $$select public.rpc_bridge_import_cutlist_v2(
+      (select (context ->> 'work_item_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'installation_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'design_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select binding_version from public.installation_projects
+        where id = (select (context ->> 'installation_project_id')::uuid
+                    from task3_open_results where sequence_no = 3)),
+      'MW-201', 'Cancelled', '[{"name":"Plywood","qty":2}]'::jsonb,
+      repeat('a',64), 'task4-reject-cancelled')$$,
+  '55000', null,
+  'Bridge v2 rejects a cancelled installation'
+);
+update public.installation_projects
+set status = 'active'
+where id = (select (context ->> 'installation_project_id')::uuid
+            from task3_open_results where sequence_no = 3);
+
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11000000-0000-0000-0000-000000000002","email":"unauthorized@example.test","app_metadata":{"roles":[],"site_codes":["OTHER-SITE"]}}',
+  true
+);
+select throws_ok(
+  $$select public.rpc_bridge_import_cutlist_v2(
+      (select (context ->> 'work_item_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'installation_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'design_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select binding_version from public.installation_projects
+        where id = (select (context ->> 'installation_project_id')::uuid
+                    from task3_open_results where sequence_no = 3)),
+      'MW-201', 'Unauthorized', '[{"name":"Plywood","qty":2}]'::jsonb,
+      repeat('a',64), 'task4-reject-authority')$$,
+  '42501', null,
+  'Bridge v2 rejects a caller outside site and membership authority'
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11000000-0000-0000-0000-000000000001","email":"project-owner@example.test","app_metadata":{"roles":[],"site_codes":["BKK-HQ-01"]}}',
+  true
+);
+
+select ok(
+  (select
+    baseline.packages = (select count(*) from public.work_packages)
+    and baseline.materials = (select count(*) from public.package_materials)
+    and baseline.imports = (select count(*) from public.project_context_bridge_import)
+    from task4_rejection_baseline baseline),
+  'every rejected Bridge v2 case leaves package, material, and import state unchanged'
+);
+
+create temporary table task4_import_results(sequence_no int primary key, result jsonb) on commit drop;
+select lives_ok(
+  $$insert into task4_import_results(sequence_no, result)
+    select 1, public.rpc_bridge_import_cutlist_v2(
+      (select (context ->> 'work_item_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'installation_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'design_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select binding_version from public.installation_projects
+        where id = (select (context ->> 'installation_project_id')::uuid
+                    from task3_open_results where sequence_no = 3)),
+      'MW-201', 'Project B Package',
+      '[{"name":"Plywood","qty":2,"unit":"sheet"},{"name":"Edge Band","qty":5,"unit":"m"}]'::jsonb,
+      repeat('a',64), 'task4-import-shared')$$,
+  'exact active project B tuple imports one cut list'
+);
+select ok(
+  (select
+    result ->> 'already' = 'false'
+    and (result ->> 'imported')::int = 2
+    and (select count(*) from public.work_packages where id = (result ->> 'package_id')::uuid) = 1
+    and (select count(*) from public.package_materials where package_id = (result ->> 'package_id')::uuid) = 2
+    from task4_import_results where sequence_no = 1),
+  'successful Bridge v2 import returns exact mutation evidence'
+);
+select lives_ok(
+  $$insert into task4_import_results(sequence_no, result)
+    select 2, public.rpc_bridge_import_cutlist_v2(
+      (select (context ->> 'work_item_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'installation_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'design_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select binding_version from public.installation_projects
+        where id = (select (context ->> 'installation_project_id')::uuid
+                    from task3_open_results where sequence_no = 3)),
+      'MW-201', 'Project B Package',
+      '[{"name":"Plywood","qty":2,"unit":"sheet"},{"name":"Edge Band","qty":5,"unit":"m"}]'::jsonb,
+      repeat('a',64), 'task4-import-shared')$$,
+  'same canonical binding and client key retries safely'
+);
+select ok(
+  (select retry.result ->> 'already' = 'true'
+    and retry.result ->> 'package_id' = original.result ->> 'package_id'
+    and (select count(*) from public.package_materials
+      where package_id = (original.result ->> 'package_id')::uuid) = 2
+    from task4_import_results original cross join task4_import_results retry
+    where original.sequence_no = 1 and retry.sequence_no = 2),
+  'Bridge v2 retry returns the original package without duplicate material mutation'
+);
+select lives_ok(
+  $$insert into task4_import_results(sequence_no, result)
+    select 3, public.rpc_bridge_import_cutlist_v2(
+      (select (context ->> 'work_item_id')::uuid from task3_open_results where sequence_no = 1),
+      (select (context ->> 'installation_project_id')::uuid from task3_open_results where sequence_no = 1),
+      (select (context ->> 'design_project_id')::uuid from task3_open_results where sequence_no = 1),
+      (select binding_version from public.installation_projects
+        where id = (select (context ->> 'installation_project_id')::uuid
+                    from task3_open_results where sequence_no = 1)),
+      'MW-202', 'Project A Package', '[{"name":"Plywood","qty":2,"unit":"sheet"}]'::jsonb,
+      repeat('a',64), 'task4-import-shared')$$,
+  'same content hash and client key remain independent in project A scope'
+);
+select ok(
+  (select count(*) = 2 from public.project_context_bridge_import
+    where client_key = 'task4-import-shared' and content_hash = repeat('a',64))
+  and (select count(distinct installation_project_id) = 2
+    from public.project_context_bridge_import where client_key = 'task4-import-shared'),
+  'Bridge v2 idempotency never deduplicates across project bindings'
+);
+select throws_ok(
+  $$select public.rpc_bridge_import_cutlist_v2(
+      (select (context ->> 'work_item_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'installation_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select (context ->> 'design_project_id')::uuid from task3_open_results where sequence_no = 3),
+      (select binding_version from public.installation_projects
+        where id = (select (context ->> 'installation_project_id')::uuid
+                    from task3_open_results where sequence_no = 3)),
+      'MW-203', 'Changed Request', '[{"name":"Plywood","qty":3}]'::jsonb,
+      repeat('b',64), 'task4-import-shared')$$,
+  '23505', null,
+  'same project and client key cannot be rebound to different content'
+);
+select ok(
+  (select count(*) = 2 from public.package_materials
+    where package_id = (select (result ->> 'package_id')::uuid
+                        from task4_import_results where sequence_no = 1)),
+  'idempotency conflict leaves the successful package unchanged'
 );
 
 select * from finish();
