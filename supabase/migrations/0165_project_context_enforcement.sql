@@ -100,4 +100,3 @@ revoke execute on function public.rpc_bridge_import_cutlist(
 revoke execute on function public.rpc_field_create_project(
   text, text, uuid, uuid, boolean, text
 ) from public, anon, authenticated;
-
