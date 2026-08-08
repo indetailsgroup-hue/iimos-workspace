@@ -4,7 +4,7 @@
 
 begin;
 create extension if not exists pgtap;
-select plan(72);
+select plan(79);
 
 select has_column('public', 'installation_projects', 'design_project_id',
   'installation_projects has server-issued design_project_id');
@@ -672,6 +672,91 @@ select ok(
                         from task4_import_results where sequence_no = 1)),
   'idempotency conflict leaves the successful package unchanged'
 );
+
+-- Task 9 final enforcement: validate exact identity constraints and remove
+-- authenticated access to the two legacy entry points.
+select has_trigger(
+  'public', 'installation_projects',
+  'trg_installation_project_context_complete',
+  'active installation projects have a deferred complete-context constraint'
+);
+select ok(
+  exists (
+    select 1 from pg_indexes
+    where schemaname = 'public'
+      and tablename = 'installation_projects'
+      and indexname = 'ux_installation_projects_design_project'
+      and indexdef ilike 'create unique index%design_project_id%'
+  ),
+  'design_project_id retains exact uniqueness'
+);
+select ok(
+  exists (
+    select 1 from pg_indexes
+    where schemaname = 'public'
+      and tablename = 'installation_projects'
+      and indexname = 'ux_installation_projects_work_item'
+      and indexdef ilike 'create unique index%work_item_id%'
+  ),
+  'work_item_id retains exact uniqueness'
+);
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.rpc_bridge_import_cutlist(uuid,text,text,jsonb,text,text)',
+    'EXECUTE'
+  ),
+  'authenticated cannot execute legacy Bridge v1'
+);
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.rpc_field_create_project(text,text,uuid,uuid,boolean,text)',
+    'EXECUTE'
+  ),
+  'authenticated cannot execute direct project creation'
+);
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.rpc_open_customer_job(jsonb,text)',
+    'EXECUTE'
+  ) and has_function_privilege(
+    'authenticated',
+    'public.rpc_bridge_import_cutlist_v2(uuid,uuid,uuid,bigint,text,text,jsonb,text,text)',
+    'EXECUTE'
+  ),
+  'authenticated retains only the approved atomic-open and Bridge v2 entry points'
+);
+
+-- Earlier expand/reconciliation fixtures intentionally include incomplete active
+-- rows. Retire only those transaction-local fixtures before proving the final
+-- deferred constraint; no production row is backfilled or guessed.
+update public.installation_projects
+set status = 'cancelled'
+where status = 'active'
+  and (
+    work_item_id is null
+    or design_project_id is null
+    or binding_version is null
+    or binding_state is distinct from 'ACTIVE'
+  );
+
+insert into public.installation_projects(id, site_code, name, status)
+values (
+  '39000000-0000-0000-0000-000000000009',
+  'SITE-A',
+  'Task 9 incomplete active fixture',
+  'active'
+);
+select throws_ok(
+  $$set constraints trg_installation_project_context_complete immediate$$,
+  '23514', null,
+  'an active installation cannot commit without Work Item and design identity'
+);
+delete from public.installation_projects
+where id = '39000000-0000-0000-0000-000000000009';
+set constraints all deferred;
 
 select * from finish();
 rollback;
