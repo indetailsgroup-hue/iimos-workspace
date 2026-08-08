@@ -8,6 +8,7 @@ import { ProjectContextGate } from '../ProjectContextGate';
 import { ProjectContextProvider, type ProjectContextResolver } from '../ProjectContextProvider';
 import type { ProjectContextV1 } from '../types';
 import { parseProjectContextV1 } from '../types';
+import { useProjectStore } from '../../core/store/useProjectStore';
 
 const PROJECT_A = '11111111-1111-4111-8111-111111111111';
 const PROJECT_B = '22222222-2222-4222-8222-222222222222';
@@ -81,6 +82,7 @@ describe('ProjectContextGate', () => {
     await Promise.resolve();
     expect(screen.getByText('DESIGNER_MOUNTED')).toBeInTheDocument();
     expect(screen.queryByTestId('project-context-blocked')).not.toBeInTheDocument();
+    expect(useProjectStore.getState().metadata?.id).toBe(PROJECT_B);
     expect(signals[0].aborted).toBe(true);
   });
 

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import { resolveProjectContext } from './api';
 import { parseProjectContextV1, type ProjectContextV1 } from './types';
+import { clearBoundProject, loadBoundProject } from './projectState';
 
 export type ProjectContextResolver = (
   designProjectId: string,
@@ -26,14 +27,16 @@ export function ProjectContextProvider({
     const requestGeneration = generation.current + 1;
     generation.current = requestGeneration;
     const controller = new AbortController();
+    clearBoundProject();
     setState({ status: 'LOADING', context: null, reason: null });
 
     resolveContext(designProjectId, controller.signal)
       .then((candidate) => {
+        if (controller.signal.aborted || generation.current !== requestGeneration) return;
         const parsed = parseProjectContextV1(candidate);
-        if (!controller.signal.aborted && generation.current === requestGeneration) {
-          setState({ status: 'RESOLVED', context: parsed, reason: null });
-        }
+        const loadResult = loadBoundProject(parsed);
+        if (loadResult === 'QUARANTINED') throw new Error('project_context_cache_quarantined');
+        setState({ status: 'RESOLVED', context: parsed, reason: null });
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted || generation.current !== requestGeneration) return;
@@ -41,7 +44,10 @@ export function ProjectContextProvider({
         setState({ status: 'BLOCKED', context: null, reason });
       });
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      clearBoundProject();
+    };
   }, [designProjectId, resolveContext]);
 
   const value = useMemo(() => state, [state]);

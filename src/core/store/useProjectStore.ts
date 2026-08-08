@@ -50,6 +50,7 @@ import {
   remove,
 } from '../persistence/unsafeStorage';
 import { getMinifixFullConfigForThickness } from '../manufacturing/hardware/minifixDefaults';
+import type { ProjectContextV1 } from '../../project-context/types';
 
 // ============================================
 // TYPES
@@ -114,6 +115,11 @@ export interface SavedProject {
   updatedAt: number;
 }
 
+export type ProjectScope =
+  | { kind: 'NONE' }
+  | { kind: 'SCRATCH' }
+  | { kind: 'BOUND'; context: ProjectContextV1 };
+
 // ============================================
 // CONSTANTS
 // ============================================
@@ -141,6 +147,39 @@ function createDefaultMetadata(name: string = 'Untitled Project'): ProjectMetada
   };
 }
 
+export function hydrateProjectData(projectData: ProjectData): void {
+  const cabinet = {
+    ...projectData.cabinet,
+    materials: {
+      ...projectData.cabinet.materials,
+      overrides: new Map(Object.entries(projectData.cabinet.materials?.overrides || {})),
+    },
+  };
+  let cabinetsToRestore = projectData.cabinets?.length ? projectData.cabinets.map((savedCab: any) => (
+    savedCab.id === cabinet.id
+      ? { ...cabinet, scenePosition: savedCab.scenePosition || [0, 0, 0], sceneRotation: savedCab.sceneRotation || [0, 0, 0] }
+      : { ...savedCab, scenePosition: savedCab.scenePosition || [0, 0, 0], sceneRotation: savedCab.sceneRotation || [0, 0, 0] }
+  )) : [cabinet];
+  cabinetsToRestore = cabinetsToRestore.map((cab: any) => {
+    if (cab.hardware?.minifixConfig) return cab;
+    const coreId = cab.materials?.defaultCore || 'core-pb-18';
+    const woodThickness = coreId.includes('16') ? 16 : coreId.includes('19') ? 19 : 18;
+    return {
+      ...cab,
+      hardware: {
+        ...cab.hardware,
+        minifixConfig: getMinifixFullConfigForThickness(woodThickness),
+        minifixPresetId: `builtin_minifix_${woodThickness}mm`,
+      },
+    };
+  });
+  useCabinetStore.setState({
+    cabinet: cabinetsToRestore.find((candidate: any) => candidate.id === cabinet.id) || cabinet,
+    cabinets: cabinetsToRestore,
+    activeCabinetId: cabinet.id,
+  });
+}
+
 // ============================================
 // STORE
 // ============================================
@@ -151,6 +190,7 @@ interface ProjectState {
   lastSaved: number | null;
   autoSaveEnabled: boolean;
   savedProjects: SavedProject[];
+  projectScope: ProjectScope;
 }
 
 interface ProjectActions {
@@ -191,6 +231,7 @@ export const useProjectStore = create<ProjectStore>()((set, get) => ({
   lastSaved: null,
   autoSaveEnabled: true,
   savedProjects: [],
+  projectScope: { kind: 'NONE' },
   
   // ========== PROJECT LIFECYCLE ==========
   
@@ -204,6 +245,7 @@ export const useProjectStore = create<ProjectStore>()((set, get) => ({
       metadata,
       isDirty: false,
       lastSaved: null,
+      projectScope: { kind: 'SCRATCH' },
     });
     
     // Save immediately
@@ -258,6 +300,15 @@ export const useProjectStore = create<ProjectStore>()((set, get) => ({
     
     // Save to localStorage via G9 boundary
     try {
+      const scope = get().projectScope;
+      if (scope.kind === 'BOUND') {
+        writeJson(`monolith-bound-project:${scope.context.design_project_id}`, {
+          project_context: scope.context,
+          project: projectData,
+        });
+        set({ metadata: updatedMetadata, isDirty: false, lastSaved: Date.now() });
+        return;
+      }
       writeJson(STORAGE_KEY, projectData);
 
       // Update projects list
@@ -310,68 +361,13 @@ export const useProjectStore = create<ProjectStore>()((set, get) => ({
         return false;
       }
 
-      // Restore cabinet state - convert overrides back to Map
-      const cabinet = {
-        ...projectData.cabinet,
-        materials: {
-          ...projectData.cabinet.materials,
-          overrides: new Map(Object.entries(projectData.cabinet.materials?.overrides || {})),
-        },
-      };
-
-      // Restore cabinets array with scenePosition/sceneRotation
-      let cabinetsToRestore = [cabinet];
-      if (projectData.cabinets && projectData.cabinets.length > 0) {
-        // Merge saved scene positions into cabinets
-        cabinetsToRestore = projectData.cabinets.map((savedCab: any) => {
-          // For the active cabinet, merge with full cabinet data
-          if (savedCab.id === cabinet.id) {
-            return {
-              ...cabinet,
-              scenePosition: savedCab.scenePosition || [0, 0, 0],
-              sceneRotation: savedCab.sceneRotation || [0, 0, 0],
-            };
-          }
-          // For other cabinets, use saved data with defaults
-          return {
-            ...savedCab,
-            scenePosition: savedCab.scenePosition || [0, 0, 0],
-            sceneRotation: savedCab.sceneRotation || [0, 0, 0],
-          };
-        });
-      }
-
-      // v4.1 Migration: Auto-apply hardware config to cabinets that don't have one
-      // This ensures legacy projects get Minifix S200 + Dowel hardware automatically
-      cabinetsToRestore = cabinetsToRestore.map((cab: any) => {
-        if (!cab.hardware?.minifixConfig) {
-          // Determine wood thickness from core material (default 18mm)
-          const coreId = cab.materials?.defaultCore || 'core-pb-18';
-          const woodThickness = coreId.includes('16') ? 16 : coreId.includes('19') ? 19 : 18;
-          const minifixConfig = getMinifixFullConfigForThickness(woodThickness);
-          return {
-            ...cab,
-            hardware: {
-              ...cab.hardware,
-              minifixConfig,
-              minifixPresetId: `builtin_minifix_${woodThickness}mm`,
-            },
-          };
-        }
-        return cab;
-      });
-
-      // Set cabinet and also sync to cabinets array
-      useCabinetStore.setState({
-        cabinet: cabinetsToRestore.find((c: any) => c.id === cabinet.id) || cabinet,
-        cabinets: cabinetsToRestore,
-        activeCabinetId: cabinet.id
-      });
+      hydrateProjectData(projectData);
       
       set({
         metadata: projectData.metadata,
         isDirty: false,
         lastSaved: projectData.metadata.updatedAt,
+        projectScope: { kind: 'SCRATCH' },
       });
       return true;
     } catch (error) {
@@ -394,6 +390,7 @@ export const useProjectStore = create<ProjectStore>()((set, get) => ({
         metadata: null,
         isDirty: false,
         lastSaved: null,
+        projectScope: { kind: 'NONE' },
       });
     }
 
@@ -564,6 +561,7 @@ export const useProjectStore = create<ProjectStore>()((set, get) => ({
   // ========== INITIALIZE ==========
 
   initialize: () => {
+    if (get().projectScope.kind === 'BOUND') return;
     // Load projects list
     get().loadProjectsList();
 
