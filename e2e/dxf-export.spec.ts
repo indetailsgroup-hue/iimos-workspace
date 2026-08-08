@@ -347,23 +347,12 @@ test.describe('DXF Export', () => {
         });
 
         test('should show Select All / Deselect All buttons', async ({ page }) => {
-            // Same self-clearing known gap as the sibling test — see its comment.
-            test.fail();
-
             const selectAllButton = page.getByRole('button', { name: /select all/i });
             const deselectAllButton = page.getByRole('button', { name: /deselect|clear/i });
 
             const hasSelectAll = await selectAllButton.isVisible({ timeout: 3000 }).catch(() => false);
             const hasDeselectAll = await deselectAllButton.isVisible({ timeout: 3000 }).catch(() => false);
 
-            // Same known gap as the sibling test: the toggle mounts only on the Export tab
-            // for FACTORY/ADMIN. Recorded in the report rather than skipped silently.
-            test.info().annotations.push({
-                type: 'coverage-gap',
-                description:
-                    'Select All/Deselect All not reachable without driving role FACTORY/ADMIN + Export tab; ' +
-                    `observed selectAll=${hasSelectAll} deselectAll=${hasDeselectAll}`,
-            });
             expect(
                 hasSelectAll || hasDeselectAll,
                 'panel-selection toggle not reachable — precondition not driven by this spec',
