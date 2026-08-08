@@ -1,22 +1,32 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
-
-const SITE = 'BKK-HQ-01'; // dogfood single-site (C12)
 
 export function NewProject({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState('');
   const [ptype, setPtype] = useState<'new_build' | 'renovation'>('new_build');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const idempotencyKey = useRef(
+    globalThis.crypto?.randomUUID?.() ?? `field-open-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
 
   async function create() {
     setBusy(true); setErr('');
-    const { error } = await supabase().rpc('rpc_field_create_project', {
-      p_name: name, p_site_code: SITE, p_use_preset: true, p_project_type: ptype,
-    });
-    setBusy(false);
-    if (error) { setErr(error.message); return; }
-    onDone();
+    try {
+      const { error } = await supabase().rpc('rpc_open_customer_job', {
+        p_request: {
+          project_display_name: name.trim(),
+          project_type: ptype,
+        },
+        p_idempotency_key: idempotencyKey.current,
+      });
+      if (error) { setErr(error.message); return; }
+      onDone();
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : 'เปิดโครงการไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

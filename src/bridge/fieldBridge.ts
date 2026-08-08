@@ -1,15 +1,16 @@
 /**
- * Field Bridge (MONOLITH Designer → ระบบหน้างาน) — Phase 1 (ADR-057)
+ * Field Bridge (MONOLITH Designer → ระบบหน้างาน) — ProjectContext v2
  *
- * ส่ง cutlist จาก FactoryPacket เข้าระบบหน้างาน (rpc_bridge_import_cutlist, 0153):
+ * ส่ง cutlist จาก FactoryPacket เข้าระบบหน้างานผ่าน tuple-bound Bridge v2:
  *   - aggregate cutlist rows ตาม materialId (จำนวน = ชิ้นตัดรวม) — เป็นข้อมูลช่วยสั่งของ
  *   - แนบ manifest.contentHash (SHA-256) → ลง audit ฝั่ง IIMOS = ID-chain เริ่มต้น
  *   - idempotent: clientKey ต่อการส่งหนึ่งครั้ง (retry ปลอดภัย)
  *
  * ยังไม่ผูก UI ในเฟสนี้ (รอ auth story ฝั่ง MONOLITH — เฟส 2)
- * work_item id รับผ่าน deep link ?work_item= (ดู readWorkItemFromUrl)
+ * Complete identity tuple comes only from an active server-issued ProjectContext.
  */
 import type { FactoryPacket } from '../factory/packet/types';
+import { parseProjectContextV1, type ProjectContextV1 } from '../project-context/types';
 
 export interface BridgeItem {
   name: string;
@@ -19,6 +20,9 @@ export interface BridgeItem {
 
 export interface BridgePayload {
   p_work_item_id: string;
+  p_installation_project_id: string;
+  p_design_project_id: string;
+  p_expected_binding_version: number;
   p_package_code: string;
   p_package_name: string | null;
   p_items: BridgeItem[];
@@ -35,33 +39,16 @@ export interface BridgeTarget {
   accessToken: string;
 }
 
-export const FIELD_WORK_ITEM_KEY = 'monolith_work_item';
-
-/** อ่าน ?work_item= จาก URL (deep link จาก DesignerHome) แล้วจำใน sessionStorage */
-export function readWorkItemFromUrl(
-  href: string = typeof location !== 'undefined' ? location.href : '',
-  storage: Pick<Storage, 'getItem' | 'setItem'> | null =
-    typeof sessionStorage !== 'undefined' ? sessionStorage : null,
-): string | null {
-  try {
-    const u = new URL(href);
-    const wi = u.searchParams.get('work_item');
-    if (wi && storage) storage.setItem(FIELD_WORK_ITEM_KEY, wi);
-    return wi ?? storage?.getItem(FIELD_WORK_ITEM_KEY) ?? null;
-  } catch {
-    return storage?.getItem(FIELD_WORK_ITEM_KEY) ?? null;
-  }
-}
-
 /** aggregate cutlist ตาม material → รายการวัสดุสำหรับ IIMOS (เฟส 2: รับ cutlist ตรง) */
 export function buildPayloadFromCutList(
   cutList: Pick<FactoryPacket['cutList'], 'rows'>,
-  workItemId: string,
+  projectContext: ProjectContextV1,
   packageCode: string,
   packageName: string | undefined,
   contentHash: string | null,
   clientKey: string,
 ): BridgePayload {
+  const context = parseProjectContextV1(projectContext);
   const byMaterial = new Map<string, number>();
   for (const row of cutList.rows) {
     byMaterial.set(row.materialId, (byMaterial.get(row.materialId) ?? 0) + row.qty);
@@ -70,7 +57,10 @@ export function buildPayloadFromCutList(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, qty]) => ({ name, qty, unit: 'ชิ้น(ตัด)' }));
   return {
-    p_work_item_id: workItemId,
+    p_work_item_id: context.work_item_id,
+    p_installation_project_id: context.installation_project_id,
+    p_design_project_id: context.design_project_id,
+    p_expected_binding_version: context.binding_version,
     p_package_code: packageCode.trim().toUpperCase(),
     p_package_name: packageName?.trim() || null,
     p_items: items,
@@ -82,14 +72,14 @@ export function buildPayloadFromCutList(
 /** aggregate จาก FactoryPacket เต็มใบ (เฟส 1 — คง signature เดิม) */
 export function buildBridgePayload(
   packet: FactoryPacket,
-  workItemId: string,
+  projectContext: ProjectContextV1,
   packageCode: string,
   packageName?: string,
   clientKey?: string,
 ): BridgePayload {
   return buildPayloadFromCutList(
     packet.cutList,
-    workItemId,
+    projectContext,
     packageCode,
     packageName,
     packet.manifest.contentHash ?? null,
@@ -145,10 +135,21 @@ export async function sha256Hex(text: string): Promise<string> {
 /** ยิงเข้าระบบหน้างาน — คืน {package_id, imported, skipped, already} */
 export async function sendCutListToIimos(
   target: BridgeTarget,
+  projectContext: ProjectContextV1,
   payload: BridgePayload,
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ package_id?: string; imported?: number; skipped?: number; already: boolean }> {
-  const res = await fetchImpl(`${target.url}/rest/v1/rpc/rpc_bridge_import_cutlist`, {
+  const context = parseProjectContextV1(projectContext);
+  if (context.installation_status !== 'active') {
+    throw new Error('project_context_installation_not_active');
+  }
+  if (payload.p_work_item_id !== context.work_item_id
+      || payload.p_installation_project_id !== context.installation_project_id
+      || payload.p_design_project_id !== context.design_project_id
+      || payload.p_expected_binding_version !== context.binding_version) {
+    throw new Error('project_context_payload_mismatch');
+  }
+  const res = await fetchImpl(`${target.url}/rest/v1/rpc/rpc_bridge_import_cutlist_v2`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

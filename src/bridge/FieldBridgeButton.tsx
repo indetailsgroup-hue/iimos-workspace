@@ -3,17 +3,17 @@
  *
  * ปุ่ม "🌉 ส่งเข้าหน้างาน" ใน header: ส่ง cutlist ของ scene ปัจจุบันเข้า IIMOS
  *   - auth: reuse session ของ Field App (origin เดียวกันบน Pages → localStorage แชร์)
- *   - work_item: จาก deep link ?work_item= (DesignerHome) หรือพิมพ์เอง
+ *   - identity: complete tuple from active server-issued ProjectContext only
  *   - contentHash: sha256 ของ cutlist JSON จริง (ID-chain — ADR-051 spine ข้อ 1)
  *   - idempotent: clientKey = hash → ส่งซ้ำแบบเดิม = ระบบไม่ import ซ้ำ
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useCabinetStore } from '../core/store/useCabinetStore';
+import { useProjectStore } from '../core/store/useProjectStore';
 import { buildCutListData } from '../factory/packet/builders/buildCutList';
 import {
   buildPayloadFromCutList,
   readFieldSession,
-  readWorkItemFromUrl,
   sendCutListToIimos,
   sha256Hex,
 } from './fieldBridge';
@@ -23,19 +23,15 @@ const SUPABASE_ANON = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefi
 
 export function FieldBridgeButton() {
   const [open, setOpen] = useState(false);
-  const [workItem, setWorkItem] = useState('');
   const [pkgCode, setPkgCode] = useState('MW-001');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const cabinets = useCabinetStore((s) => s.cabinets);
+  const projectScope = useProjectStore((s) => s.projectScope);
+  const projectContext = projectScope.kind === 'BOUND' ? projectScope.context : null;
 
   const session = useMemo(() => readFieldSession(), [open]);
   const configured = SUPABASE_URL.length > 0 && SUPABASE_ANON.length > 0;
-
-  useEffect(() => {
-    const wi = readWorkItemFromUrl();
-    if (wi) setWorkItem(wi);
-  }, []);
 
   const partCount = useMemo(
     () => (open ? buildCutListData(cabinets).summary.totalParts : 0),
@@ -47,14 +43,16 @@ export function FieldBridgeButton() {
     setMsg(null);
     try {
       if (!session) throw new Error('ยังไม่มี session — เปิด Field App แล้วล็อกอินก่อน');
+      if (!projectContext) throw new Error('ProjectContext ไม่พร้อม — เปิดจาก bound project route เท่านั้น');
       const cutList = buildCutListData(cabinets);
       if (cutList.rows.length === 0) throw new Error('scene ยังไม่มีชิ้นงาน — ออกแบบตู้ก่อน');
       const hash = 'sha256:' + (await sha256Hex(JSON.stringify(cutList)));
       const payload = buildPayloadFromCutList(
-        cutList, workItem.trim(), pkgCode, undefined, hash, hash,
+        cutList, projectContext, pkgCode, undefined, hash, hash,
       );
       const r = await sendCutListToIimos(
         { url: SUPABASE_URL, anonKey: SUPABASE_ANON, accessToken: session.accessToken },
+        projectContext,
         payload,
       );
       setMsg({
@@ -90,15 +88,11 @@ export function FieldBridgeButton() {
               ? `ล็อกอินเป็น ${session.email} (session จาก Field App)`
               : '⚠️ ยังไม่ล็อกอิน — เปิด Field App ล็อกอินก่อน แล้วกลับมากดใหม่'}
           </div>
-          <label className="block space-y-1">
-            <span className="text-xs opacity-70">Work Item (จากปุ่ม "เปิดใน MONOLITH" หรือวางเอง)</span>
-            <input
-              value={workItem}
-              onChange={(e) => setWorkItem(e.target.value)}
-              placeholder="uuid ของ work item"
-              className="w-full px-2 py-1.5 rounded bg-surface-0 border border-oi-border"
-            />
-          </label>
+          <div className="text-xs opacity-70">
+            {projectContext
+              ? `ProjectContext: ${projectContext.project_display_name} · binding v${projectContext.binding_version}`
+              : '⚠️ ไม่มี active ProjectContext — ห้ามส่งจาก scratch workspace'}
+          </div>
           <label className="block space-y-1">
             <span className="text-xs opacity-70">รหัส Package</span>
             <input
@@ -111,7 +105,7 @@ export function FieldBridgeButton() {
           <div className="text-xs opacity-70">scene ปัจจุบัน: {cabinets.length} ตู้ · {partCount} ชิ้นตัด</div>
           <button
             onClick={send}
-            disabled={busy || !configured || !session || !workItem.trim() || !pkgCode.trim()}
+            disabled={busy || !configured || !session || !projectContext || !pkgCode.trim()}
             className="w-full py-2 rounded-md font-medium bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {busy ? 'กำลังส่ง…' : 'ส่ง cutlist เข้าระบบหน้างาน'}

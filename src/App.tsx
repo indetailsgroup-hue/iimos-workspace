@@ -32,7 +32,6 @@ import { CameraController, ViewType, VIEW_PRESETS } from './components/canvas/Vi
 import { ProjectToolbar } from './components/ui/ProjectToolbar';
 import { GateToolbar } from './components/ui/GateToolbar';
 import { SceneToolbar } from './components/ui/SceneToolbar';
-import { readWorkItemFromUrl } from './bridge/fieldBridge';
 import { FieldBridgeButton } from './bridge/FieldBridgeButton';
 import { useCabinetStore } from './core/store/useCabinetStore';
 import { useProjectStore } from './core/store/useProjectStore';
@@ -258,8 +257,6 @@ function Viewport({ currentView, showDimensions = false, hideTooltip = false, on
   const isOrtho = preset.isOrtho ?? false;
   const orthoZoom = preset.orthoZoom ?? 0.4;
 
-  // Field deep link (ADR-057 Phase 1): DesignerHome เปิดมาพร้อม ?work_item= — จำไว้ให้ bridge ใช้
-  useEffect(() => { readWorkItemFromUrl(); }, []);
 
   // WebGL context loss recovery - increment key to force Canvas remount
   const [contextLossCount, setContextLossCount] = useState(0);
