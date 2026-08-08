@@ -4,7 +4,7 @@
 
 begin;
 create extension if not exists pgtap;
-select plan(27);
+select plan(51);
 
 select has_column('public', 'installation_projects', 'design_project_id',
   'installation_projects has server-issued design_project_id');
@@ -204,6 +204,220 @@ select throws_ok(
   $$select public.rpc_resolve_project_context('40000000-0000-0000-0000-000000000099')$$,
   'P0002', null,
   'resolver rejects an unbound or missing design project'
+);
+
+select has_view('public', 'project_context_reconciliation_snapshot',
+  'deterministic reconciliation snapshot exists');
+select has_table('public', 'project_context_reconciliation_decision',
+  'append-only reconciliation decision register exists');
+select has_table('public', 'project_context_open_request',
+  'atomic-open idempotency register exists');
+select has_column('public', 'project_context_open_request', 'principal',
+  'idempotency scope uses a stable server-derived principal');
+select has_function('public', 'rpc_open_customer_job', array['jsonb', 'text'],
+  'rpc_open_customer_job(jsonb,text) exists');
+
+select lives_ok(
+  $$insert into public.work_item(id, site_code, current_step, status, version, data)
+      values
+        ('21000000-0000-0000-0000-000000000101', 'SITE-A', 'Design', 'in_progress', 1, '{}'::jsonb),
+        ('21000000-0000-0000-0000-000000000103', 'SITE-B', 'Design', 'in_progress', 1, '{}'::jsonb),
+        ('21000000-0000-0000-0000-000000000104', 'SITE-A', 'Design', 'in_progress', 1,
+          '{"project_display_name":"Similarity Is Not Authority"}'::jsonb);
+    insert into public.installation_projects(id, site_code, work_item_id, name, status)
+      values
+        ('31000000-0000-0000-0000-000000000101', 'SITE-A',
+          '21000000-0000-0000-0000-000000000101', 'Verified legacy', 'active'),
+        ('31000000-0000-0000-0000-000000000102', 'SITE-A', null, 'Orphan legacy', 'active'),
+        ('31000000-0000-0000-0000-000000000103', 'SITE-A',
+          '21000000-0000-0000-0000-000000000103', 'Cross-site legacy', 'active'),
+        ('31000000-0000-0000-0000-000000000104', 'SITE-A', null,
+          'Similarity Is Not Authority', 'active')$$,
+  'legacy reconciliation fixtures insert without assigning authority'
+);
+select results_eq(
+  $$select installation_project_id, classification
+      from public.project_context_reconciliation_snapshot
+      where installation_project_id in (
+        '31000000-0000-0000-0000-000000000101',
+        '31000000-0000-0000-0000-000000000102',
+        '31000000-0000-0000-0000-000000000103')
+      order by installation_project_id$$,
+  $$values
+      ('31000000-0000-0000-0000-000000000101'::uuid, 'VERIFIED_BINDING'::text),
+      ('31000000-0000-0000-0000-000000000102'::uuid, 'QUARANTINED_ORPHAN'::text),
+      ('31000000-0000-0000-0000-000000000103'::uuid, 'CONFLICT'::text)$$,
+  'reconciliation classification uses explicit Work Item and site evidence'
+);
+select is(
+  (select classification from public.project_context_reconciliation_snapshot
+    where installation_project_id = '31000000-0000-0000-0000-000000000104'),
+  'QUARANTINED_ORPHAN',
+  'matching name and nearby creation time never authorize an automatic binding'
+);
+
+select lives_ok(
+  $$insert into public.project_context_reconciliation_decision(
+      installation_project_id, classification, evidence, decided_by)
+    values (
+      '31000000-0000-0000-0000-000000000102', 'QUARANTINED_ORPHAN',
+      '{"basis":"missing_work_item","source_ids":["31000000-0000-0000-0000-000000000102"]}'::jsonb,
+      'test-governance')$$,
+  'reconciliation evidence can be appended'
+);
+select throws_ok(
+  $$update public.project_context_reconciliation_decision
+      set evidence = '{"basis":"rewritten"}'::jsonb$$,
+  '55000', null,
+  'reconciliation evidence cannot be updated'
+);
+select throws_ok(
+  $$delete from public.project_context_reconciliation_decision$$,
+  '55000', null,
+  'reconciliation evidence cannot be deleted'
+);
+
+select lives_ok(
+  $$insert into public.process_model(
+      process_step, sub_process_group, canonical_order, approval_quorum, requires_approval)
+    select 'Customer Intake', 'Customer Job', 1, null, false
+    where not exists (select 1 from public.process_model)$$,
+  'atomic-open fixture has one canonical first workflow step'
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11000000-0000-0000-0000-000000000001","email":"project-owner@example.test","app_metadata":{"roles":[],"site_codes":["BKK-HQ-01"]}}',
+  true
+);
+
+create temporary table task3_open_results(sequence_no int primary key, context jsonb) on commit drop;
+select lives_ok(
+  $$insert into task3_open_results(sequence_no, context)
+    select 1, public.rpc_open_customer_job(
+      '{"project_display_name":"Atomic Project","project_type":"new_build"}'::jsonb,
+      'task3-open-001')$$,
+  'atomic open creates and returns one ProjectContext'
+);
+select ok(
+  (select
+    context - 'issued_at' = jsonb_build_object(
+      'schema_version', 'project-context.v1',
+      'work_item_id', context ->> 'work_item_id',
+      'workflow_version', 0,
+      'installation_project_id', context ->> 'installation_project_id',
+      'design_project_id', context ->> 'design_project_id',
+      'site_code', 'BKK-HQ-01',
+      'project_display_name', 'Atomic Project',
+      'binding_version', 1,
+      'binding_state', 'ACTIVE',
+      'installation_status', 'active'
+    )
+    and jsonb_typeof(context -> 'issued_at') = 'string'
+    from task3_open_results where sequence_no = 1),
+  'atomic open returns exactly ProjectContext v1 with server-derived site'
+);
+select ok(
+  (select
+      (select count(*) from public.work_item wi
+        where wi.id = (r.context ->> 'work_item_id')::uuid) = 1
+      and (select count(*) from public.installation_projects ip
+        where ip.id = (r.context ->> 'installation_project_id')::uuid
+          and ip.work_item_id = (r.context ->> 'work_item_id')::uuid
+          and ip.design_project_id = (r.context ->> 'design_project_id')::uuid) = 1
+      and (select count(*) from public.installation_rooms room
+        where room.project_id = (r.context ->> 'installation_project_id')::uuid) = 5
+      and (select count(*) from public.installation_tasks task
+        join public.installation_rooms room on room.id = task.room_id
+        where room.project_id = (r.context ->> 'installation_project_id')::uuid) = 15
+      and (select count(*) from public.workflow_audit_log audit
+        where audit.work_item_id = (r.context ->> 'work_item_id')::uuid
+          and audit.event_type = 'customer_job_opened') = 1
+    from task3_open_results r where r.sequence_no = 1),
+  'atomic open commits one canonical identity tuple, approved presets, and audit evidence'
+);
+select lives_ok(
+  $$insert into task3_open_results(sequence_no, context)
+    select 2, public.rpc_open_customer_job(
+      '{"project_type":"new_build","project_display_name":"Atomic Project"}'::jsonb,
+      'task3-open-001')$$,
+  'same idempotency key and canonical request safely retries'
+);
+select ok(
+  (select (a.context ->> 'work_item_id') = (b.context ->> 'work_item_id')
+      and (a.context ->> 'installation_project_id') = (b.context ->> 'installation_project_id')
+      and (a.context ->> 'design_project_id') = (b.context ->> 'design_project_id')
+    from task3_open_results a cross join task3_open_results b
+    where a.sequence_no = 1 and b.sequence_no = 2),
+  'retry returns the original canonical identity tuple'
+);
+select is(
+  (select count(*) from public.project_context_open_request
+    where principal = '11000000-0000-0000-0000-000000000001'
+      and idempotency_key = 'task3-open-001'),
+  1::bigint,
+  'retry stores one record under the stable authenticated principal'
+);
+select throws_ok(
+  $$select public.rpc_open_customer_job(
+      '{"project_display_name":"Different Request","project_type":"new_build"}'::jsonb,
+      'task3-open-001')$$,
+  '23505', null,
+  'same idempotency key with different request is rejected'
+);
+select throws_ok(
+  $$select public.rpc_open_customer_job(
+      '{"project_display_name":"Free-form Site","site_code":"BKK-HQ-01"}'::jsonb,
+      'task3-open-site')$$,
+  '22023', null,
+  'client payload cannot supply free-form site authority'
+);
+select throws_ok(
+  $$select public.rpc_open_customer_job(
+      '{"project_display_name":"Free-form Foreman","foreman_employee_id":"11000000-0000-0000-0000-000000000099"}'::jsonb,
+      'task3-open-foreman')$$,
+  '22023', null,
+  'atomic-open v1 cannot accept unverified staffing authority'
+);
+
+create temporary table task3_failure_baseline on commit drop as
+select
+  (select count(*) from public.project_context_open_request) as open_requests,
+  (select count(*) from public.work_item) as work_items,
+  (select count(*) from public.installation_projects) as installation_projects,
+  (select count(*) from public.installation_projects where design_project_id is not null) as design_identities;
+
+create or replace function pg_temp.task3_force_installation_failure()
+returns trigger language plpgsql as $$
+begin
+  if new.name = 'Force rollback' then
+    raise exception 'task3 forced failure';
+  end if;
+  return new;
+end;
+$$;
+select lives_ok(
+  $$create trigger task3_force_installation_failure
+    before insert on public.installation_projects
+    for each row execute function pg_temp.task3_force_installation_failure()$$,
+  'forced-failure fixture installs after Work Item creation boundary'
+);
+select throws_ok(
+  $$select public.rpc_open_customer_job(
+      '{"project_display_name":"Force rollback","project_type":"new_build"}'::jsonb,
+      'task3-open-failure')$$,
+  'P0001', null,
+  'forced failure aborts atomic customer-job opening'
+);
+select ok(
+  (select
+    baseline.open_requests = (select count(*) from public.project_context_open_request)
+    and baseline.work_items = (select count(*) from public.work_item)
+    and baseline.installation_projects = (select count(*) from public.installation_projects)
+    and baseline.design_identities = (
+      select count(*) from public.installation_projects where design_project_id is not null
+    )
+    from task3_failure_baseline baseline),
+  'forced failure leaves no idempotency, Work Item, installation, or design identity residue'
 );
 
 select * from finish();
