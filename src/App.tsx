@@ -35,6 +35,7 @@ import { SceneToolbar } from './components/ui/SceneToolbar';
 import { FieldBridgeButton } from './bridge/FieldBridgeButton';
 import { useCabinetStore } from './core/store/useCabinetStore';
 import { useProjectStore } from './core/store/useProjectStore';
+import { requireBoundDesignProjectId } from './project-context/identifiers';
 import { useIntentPanelStore } from './designer/state/useIntentPanelStore';
 import { useSpecStore, useSpecState, useGateStatus } from './core/store/useSpecStore';
 import { useToolStore, handleToolHotkey, useToolHotkeys } from './core/store/useToolStore';
@@ -728,7 +729,7 @@ export function App() {
 
       // ADR-061 packet store: ส่ง packet ขึ้น server ให้โรงงานดึง (hash-anchored)
       // job key ฝั่ง server = project id (ตัวเดียวกับ freeze)
-      const serverJobId = useProjectStore.getState().metadata?.id;
+      const serverJobId = requireBoundDesignProjectId(useProjectStore.getState().projectScope);
       if (serverJobId) {
         const { uploadPacket } = await import('./core/api/stateApi');
         const up = await uploadPacket(serverJobId, result.blob);

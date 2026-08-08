@@ -679,12 +679,8 @@ function ProjectHomePage() {
 // Project Validation Page Wrapper
 // ============================================================================
 
-function ProjectValidationPage() {
-  const { projectId } = useParams<{ projectId: string }>();
+function ProjectValidationPage({ designProjectId }: { designProjectId: string }) {
   const navigate = useNavigate();
-
-  // Use projectId as jobId for validation
-  const jobId = projectId || 'current';
 
   return (
     <div style={{
@@ -702,7 +698,7 @@ function ProjectValidationPage() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <button
-            onClick={() => navigate(`/projects/${projectId}`)}
+            onClick={() => navigate(`/projects/${designProjectId}`)}
             style={{
               padding: '8px 16px',
               background: '#1f2937',
@@ -725,12 +721,13 @@ function ProjectValidationPage() {
           color: '#6b7280',
           fontFamily: 'monospace',
         }}>
-          Project: {projectId}
+          Project: {designProjectId}
         </div>
       </div>
 
       {/* Validation Screen */}
-      <ValidationScreen jobId={jobId} />
+      {/* Legacy ValidationScreen prop is a server project key, not FactoryPacket.jobId. */}
+      <ValidationScreen jobId={designProjectId} />
     </div>
   );
 }
@@ -940,6 +937,18 @@ function BoundProjectDesignerPage() {
   );
 }
 
+function BoundProjectValidationPage() {
+  const { projectId } = useParams<{ projectId: string }>();
+  if (!projectId) return <Navigate to="/projects" replace />;
+  return (
+    <ProjectContextProvider designProjectId={projectId}>
+      <ProjectContextGate routeProjectId={projectId}>
+        <ProjectValidationPage designProjectId={projectId} />
+      </ProjectContextGate>
+    </ProjectContextProvider>
+  );
+}
+
 // ============================================================================
 // Router Configuration
 // ============================================================================
@@ -972,7 +981,7 @@ export const router = createBrowserRouter([
   // Project Validation
   {
     path: '/projects/:projectId/validation',
-    element: <ProjectValidationPage />,
+    element: <BoundProjectValidationPage />,
   },
   // Legacy project route (redirect)
   {

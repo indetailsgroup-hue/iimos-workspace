@@ -27,6 +27,7 @@ import type {
   PacketGateResult,
   PacketManifest,
 } from './types';
+import { requireBoundDesignProjectId } from '../../project-context/identifiers';
 
 // ============================================
 // PREVIEW TYPES (B3)
@@ -148,7 +149,7 @@ export function useFactoryPacket(): UseFactoryPacketReturn {
   const cabinets = useCabinetStore((s) => s.cabinets);
   const drillMap = useDrillMapStore((s) => s.drillMap);
   const gateResult = useGateStore((s) => s.lastResult);
-  const projectId = useProjectStore((s) => s.metadata?.id);
+  const projectScope = useProjectStore((s) => s.projectScope);
 
   /**
    * Generate preview without downloading (B3)
@@ -166,10 +167,11 @@ export function useFactoryPacket(): UseFactoryPacketReturn {
     setError(null);
 
     try {
+      const projectId = requireBoundDesignProjectId(projectScope);
       // Build input with stable job ID
       const input: BuildFactoryPacketInput = {
         jobId: `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        projectId: projectId || 'default-project',
+        projectId,
         toolVersion: 'MONOLITH Designer 1.0.0',
       };
 
@@ -230,7 +232,7 @@ export function useFactoryPacket(): UseFactoryPacketReturn {
     } finally {
       setIsPreviewing(false);
     }
-  }, [cabinets, drillMap, gateResult, projectId]);
+  }, [cabinets, drillMap, gateResult, projectScope]);
 
   /**
    * Download the last preview as ZIP
@@ -247,6 +249,7 @@ export function useFactoryPacket(): UseFactoryPacketReturn {
     setError(null);
 
     try {
+      requireBoundDesignProjectId(projectScope);
       const result = await createAndDownloadZipBundle(cachedPacketOutput);
       setLastResult(result);
       return result;
@@ -258,7 +261,7 @@ export function useFactoryPacket(): UseFactoryPacketReturn {
     } finally {
       setIsGenerating(false);
     }
-  }, [cachedPacketOutput]);
+  }, [cachedPacketOutput, projectScope]);
 
   /**
    * Generate and download factory packet in one step
@@ -274,10 +277,11 @@ export function useFactoryPacket(): UseFactoryPacketReturn {
     setError(null);
 
     try {
+      const projectId = requireBoundDesignProjectId(projectScope);
       // Build input
       const input: BuildFactoryPacketInput = {
         jobId: `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        projectId: projectId || 'default-project',
+        projectId,
         toolVersion: 'MONOLITH Designer 1.0.0',
       };
 
@@ -304,7 +308,7 @@ export function useFactoryPacket(): UseFactoryPacketReturn {
     } finally {
       setIsGenerating(false);
     }
-  }, [cabinets, drillMap, gateResult, projectId]);
+  }, [cabinets, drillMap, gateResult, projectScope]);
 
   const clearError = useCallback(() => {
     setError(null);
@@ -342,7 +346,7 @@ export async function generateFactoryPacketFromStores(): Promise<ZipBundleResult
   const cabinets = useCabinetStore.getState().cabinets;
   const drillMap = useDrillMapStore.getState().drillMap;
   const gateResult = useGateStore.getState().lastResult;
-  const projectId = useProjectStore.getState().metadata?.id;
+  const projectId = requireBoundDesignProjectId(useProjectStore.getState().projectScope);
 
   if (cabinets.length === 0) {
     throw new Error('No cabinets to export');
@@ -350,7 +354,7 @@ export async function generateFactoryPacketFromStores(): Promise<ZipBundleResult
 
   const input: BuildFactoryPacketInput = {
     jobId: `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    projectId: projectId || 'default-project',
+    projectId,
     toolVersion: 'MONOLITH Designer 1.0.0',
   };
 
@@ -373,7 +377,7 @@ export async function generateFactoryPacketPreviewFromStores(): Promise<PacketPr
   const cabinets = useCabinetStore.getState().cabinets;
   const drillMap = useDrillMapStore.getState().drillMap;
   const gateResult = useGateStore.getState().lastResult;
-  const projectId = useProjectStore.getState().metadata?.id;
+  const projectId = requireBoundDesignProjectId(useProjectStore.getState().projectScope);
 
   if (cabinets.length === 0) {
     throw new Error('No cabinets to export');
@@ -381,7 +385,7 @@ export async function generateFactoryPacketPreviewFromStores(): Promise<PacketPr
 
   const input: BuildFactoryPacketInput = {
     jobId: `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    projectId: projectId || 'default-project',
+    projectId,
     toolVersion: 'MONOLITH Designer 1.0.0',
   };
 
