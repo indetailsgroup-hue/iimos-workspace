@@ -8,7 +8,7 @@ export interface ProjectContextV1 {
   project_display_name: string;
   binding_version: number;
   binding_state: 'ACTIVE';
-  installation_status: string;
+  installation_status: 'active';
   issued_at: string;
 }
 
@@ -58,7 +58,7 @@ export function parseProjectContextV1(value: unknown): ProjectContextV1 {
   if (value.binding_state !== 'ACTIVE') throw new Error('project_context_binding_not_active');
   if (!hasText(value.site_code)) throw new Error('project_context_site_invalid');
   if (!hasText(value.project_display_name)) throw new Error('project_context_display_name_invalid');
-  if (!hasText(value.installation_status) || value.installation_status.toLowerCase() === 'cancelled') {
+  if (value.installation_status !== 'active') {
     throw new Error('project_context_installation_status_invalid');
   }
   if (!hasText(value.issued_at) || !Number.isFinite(Date.parse(value.issued_at))) {

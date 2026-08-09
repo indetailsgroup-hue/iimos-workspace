@@ -1,8 +1,10 @@
 import { parseAndValidateSafe } from '../core/gate/validateExternalState';
 import { ProjectDataSchema } from '../core/schema/project.schema';
 import { useCabinetStore } from '../core/store/useCabinetStore';
+import { useDrillMapStore } from '../core/store/useDrillMapStore';
 import { useSpecStore } from '../core/store/useSpecStore';
 import { useVerifyStatusStore } from '../core/store/useVerifyStatusStore';
+import { useGateStore } from '../gate/ui/gateStore';
 import {
   hydrateProjectData,
   useProjectStore,
@@ -58,6 +60,8 @@ function clearRuntimeProject(): void {
     currentReleaseId: null,
   });
   useVerifyStatusStore.setState({ byJobId: {} });
+  useDrillMapStore.getState().clearDrillMap();
+  useGateStore.getState().reset();
 }
 
 function quarantine(designProjectId: string, raw: string): BoundProjectLoadResult {

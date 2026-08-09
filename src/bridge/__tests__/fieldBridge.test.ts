@@ -87,14 +87,14 @@ describe('tuple-bound Field Bridge v2', () => {
     )).rejects.toThrow('project_context_');
     expect(fetchImpl).not.toHaveBeenCalled();
 
-    const completed = activeContext({ installation_status: 'completed' });
-    const completedPayload = buildBridgePayload(fakePacket(), completed, 'MW-001');
+    const completed = { ...activeContext(), installation_status: 'completed' } as unknown as ProjectContextV1;
+    const completedPayload = buildBridgePayload(fakePacket(), context, 'MW-001');
     await expect(sendCutListToIimos(
       { url: 'https://demo.supabase.co', anonKey: 'anon', accessToken: 'tok' },
       completed,
       completedPayload,
       fetchImpl as unknown as typeof fetch,
-    )).rejects.toThrow('project_context_installation_not_active');
+    )).rejects.toThrow('project_context_installation_status_invalid');
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 

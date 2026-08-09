@@ -112,7 +112,9 @@ describe('ProjectContextGate', () => {
   });
 
   it.each([
-    ['cancelled installation', context(PROJECT_A, { installation_status: 'cancelled' })],
+    ['cancelled installation', { ...context(PROJECT_A), installation_status: 'cancelled' }],
+    ['completed installation', { ...context(PROJECT_A), installation_status: 'completed' }],
+    ['customer-review installation', { ...context(PROJECT_A), installation_status: 'customer_review' }],
     ['unexpected field', { ...context(PROJECT_A), project_context_id: PROJECT_A }],
     ['missing authority field', (() => {
       const candidate = { ...context(PROJECT_A) } as Partial<ProjectContextV1>;

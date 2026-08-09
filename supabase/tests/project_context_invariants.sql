@@ -4,7 +4,7 @@
 
 begin;
 create extension if not exists pgtap;
-select plan(79);
+select plan(83);
 
 select has_column('public', 'installation_projects', 'design_project_id',
   'installation_projects has server-issued design_project_id');
@@ -164,6 +164,41 @@ select throws_ok(
   $$select public.rpc_resolve_project_context('40000000-0000-0000-0000-000000000003')$$,
   '55000', null,
   'resolver rejects cancelled installation state'
+);
+
+select lives_ok(
+  $$insert into public.work_item(id, site_code, current_step, status, version)
+      values
+        ('20000000-0000-0000-0000-000000000007', 'SITE-A', 'Design', 'in_progress', 1),
+        ('20000000-0000-0000-0000-000000000008', 'SITE-A', 'Design', 'in_progress', 1);
+    insert into public.installation_projects(
+      id, site_code, work_item_id, name, status, design_project_id, binding_version, binding_state)
+    values
+      ('30000000-0000-0000-0000-000000000007', 'SITE-A',
+       '20000000-0000-0000-0000-000000000007', 'Completed', 'completed',
+       '40000000-0000-0000-0000-000000000007', 1, 'ACTIVE'),
+      ('30000000-0000-0000-0000-000000000008', 'SITE-A',
+       '20000000-0000-0000-0000-000000000008', 'Customer review', 'customer_review',
+       '40000000-0000-0000-0000-000000000008', 1, 'ACTIVE')$$,
+  'non-active fixtures insert for resolver rejection'
+);
+select throws_ok(
+  $$select public.rpc_resolve_project_context('40000000-0000-0000-0000-000000000007')$$,
+  '55000', null,
+  'resolver rejects completed installation state'
+);
+select throws_ok(
+  $$select public.rpc_resolve_project_context('40000000-0000-0000-0000-000000000008')$$,
+  '55000', null,
+  'resolver rejects customer-review installation state'
+);
+select ok(
+  (select count(*) = 2 from public.installation_projects
+    where design_project_id in (
+      '40000000-0000-0000-0000-000000000007',
+      '40000000-0000-0000-0000-000000000008'
+    )),
+  'non-active resolver rejection does not mutate either binding'
 );
 
 select lives_ok(

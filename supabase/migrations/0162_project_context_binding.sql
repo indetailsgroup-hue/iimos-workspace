@@ -188,8 +188,8 @@ begin
       using errcode = 'object_not_in_prerequisite_state';
   end if;
 
-  if v.installation_status = 'cancelled' then
-    raise exception 'cancelled installation cannot issue an active project context'
+  if v.installation_status is distinct from 'active' then
+    raise exception 'non-active installation cannot issue an active project context: %', v.installation_status
       using errcode = 'object_not_in_prerequisite_state';
   end if;
 
