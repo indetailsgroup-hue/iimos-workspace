@@ -1,0 +1,85 @@
+name: ProjectContext PR Gate
+
+on:
+  pull_request:
+    branches:
+      - codex/repair-operations-phase-a-adr
+  workflow_dispatch:
+
+concurrency:
+  group: project-context-pr-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  project-context-pr-gate:
+    name: ProjectContext PR Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start disposable local Supabase and apply migrations
+        run: supabase start
+
+      - name: ProjectContext pgTAP
+        run: |
+          set -o pipefail
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+            -tA -v ON_ERROR_STOP=1 \
+            -f supabase/tests/project_context_invariants.sql | tee project-context-pgtap.tap
+          if grep -qE '^(not ok|Bail out!|# Looks like)' project-context-pgtap.tap; then
+            echo "::error::ProjectContext pgTAP failure"
+            exit 1
+          fi
+          test "$(grep -cE '^ok ' project-context-pgtap.tap)" -eq 83
+
+      - name: Focused ProjectContext, Bridge, and Factory Vitest
+        run: >-
+          npm run test:run --
+          src/project-context/__tests__/ProjectContextGate.test.tsx
+          src/project-context/__tests__/ProjectStateBoundary.test.ts
+          src/project-context/__tests__/identifierConsumers.test.ts
+          src/bridge/__tests__/fieldBridge.test.ts
+          packages/field-app/src/screens/__tests__/NewProject.test.tsx
+          --reporter=default
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: ProjectContext browser simulation
+        run: >-
+          npx playwright test
+          e2e/project-context-cross-project-isolation.spec.ts
+          --project=chromium
+          --reporter=list
+
+      - name: Typecheck
+        run: npm run typecheck:all
+
+      - name: Upload ProjectContext gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-context-pr-gate-${{ github.sha }}
+          path: |
+            project-context-pgtap.tap
+            playwright-report/
+          retention-days: 90
+
+      - name: Stop disposable local Supabase
+        if: always()
+        run: supabase stop --no-backup
