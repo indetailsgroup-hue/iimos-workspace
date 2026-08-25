@@ -166,6 +166,10 @@ export interface PacketCutListRow {
   cutH: number;
   /** Grain direction */
   grain: 'HORIZONTAL' | 'VERTICAL' | 'NONE';
+  /** Developed (unrolled) length for curved panels (mm). Present only when panel has a curve profile. */
+  developedLength?: number;
+  /** Number of kerf cuts for this panel. Present only when panel has a curve profile. */
+  kerfCount?: number;
   /** Notes */
   note?: string;
 }
@@ -299,6 +303,8 @@ export interface FactoryPacket {
   gateResult: PacketGateResult;
   /** ADR-061(c): Connector OS compiler ops — artifact คู่ขนาน (ยังไม่แทน drillMap) */
   connectorOps?: import('./builders/buildConnectorOps').PacketConnectorOps;
+  /** Phase 6: Curved Panel System — kerf slot patterns by panel */
+  kerfPatterns?: import('../../cnc/mapping/mapKerfPatternToOps').KerfPatternsByPanelId;
 }
 
 // ============================================
