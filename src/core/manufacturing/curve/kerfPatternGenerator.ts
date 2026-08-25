@@ -26,7 +26,7 @@ import {
   type KerfBendingResult,
 } from '../../catalog/KerfBending';
 import { computeCurveProfile, type KerfZone } from './curveProfile';
-import type { PanelProfile } from '../../types/Cabinet';
+import type { PanelProfile, PanelEdge } from '../../types/Cabinet';
 
 // ============================================
 // PUBLIC TYPES
@@ -54,6 +54,11 @@ export interface KerfCut {
 export interface KerfPattern {
   /** Zone boundaries (mm along edge). */
   zone: { start: number; end: number };
+  /**
+   * Which panel edge this zone belongs to (TOP | BOTTOM | LEFT | RIGHT).
+   * Used by KerfPatternOverlay to orient cut segments in 3-D canvas space.
+   */
+  edge: PanelEdge;
   /** Individual kerf cuts sorted by position ascending. */
   cuts: KerfCut[];
   /** Center-to-center spacing (mm). */
@@ -220,6 +225,7 @@ function generateZonePattern(
 
   const pattern: KerfPattern = {
     zone: { start: zone.start, end: zone.end },
+    edge: zone.edge,
     cuts,
     spacing: bendingResult.kerfSpacing,
     count: bendingResult.kerfCount,

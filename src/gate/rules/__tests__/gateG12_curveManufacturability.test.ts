@@ -70,6 +70,7 @@ function makeKerfPattern(
 ): KerfPattern {
   return {
     zone: { start: zoneStart, end: zoneEnd },
+    edge: 'TOP',
     cuts: cuts ?? [
       { position: 75, depth: 9, angleDeg: 0 },
       { position: 90, depth: 9, angleDeg: 0 },
