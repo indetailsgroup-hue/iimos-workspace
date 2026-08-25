@@ -83,7 +83,7 @@ function makeKerfPattern(
       kerfCount: 3, kerfSpacing: 15, kerfDepth: 9, webThickness: 3,
       minBendRadius: 96, safetyFactor: 1.2, warnings: [], errors: [],
       springBackFactor: 0.05, designRadius: 190,
-    } as KerfPattern['source'],
+    } as unknown as KerfPattern['source'],
   };
 }
 
