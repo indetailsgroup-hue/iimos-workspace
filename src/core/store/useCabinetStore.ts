@@ -42,6 +42,8 @@ import {
   type DoorOverlayType,
   type DoorOpeningDirection,
   type GrainDirection,
+  type PanelProfile,
+  type SkinConfig,
 } from '../types/Cabinet';
 import {
   generateDrawerPanels,
@@ -2291,6 +2293,10 @@ interface CabinetActions {
   updateGrainDirection: (panelId: string, direction: GrainDirection) => void;
   updatePanelEdge: (panelId: string, side: 'top' | 'bottom' | 'left' | 'right', edgeId: string | null) => void;
 
+  // Per-panel curved-profile actions (Phase 1 — Curved Panel System)
+  updatePanelProfile: (panelId: string, profile: PanelProfile | undefined) => void;
+  updateSkinConfig: (panelId: string, skin: SkinConfig | undefined) => void;
+
   // Per-panel position actions
   updatePanelPositionOverride: (panelId: string, field: keyof PanelPositionOverrides, value: number | null) => void;
   resetPanelPosition: (panelId: string) => void;
@@ -3419,6 +3425,34 @@ export const useCabinetStore = create<CabinetStore>()(
 
         panel.grainDirection = direction;
 
+        cabinet.updatedAt = Date.now();
+        state.cabinet = cabinet;
+      });
+    },
+
+    updatePanelProfile: (panelId, profile) => {
+      set((state) => {
+        if (!state.activeCabinetId) return;
+        const cabinetIndex = state.cabinets.findIndex(c => c.id === state.activeCabinetId);
+        if (cabinetIndex === -1) return;
+        const cabinet = state.cabinets[cabinetIndex];
+        const panel = cabinet.panels.find(p => p.id === panelId);
+        if (!panel) return;
+        panel.profile = profile;
+        cabinet.updatedAt = Date.now();
+        state.cabinet = cabinet;
+      });
+    },
+
+    updateSkinConfig: (panelId, skin) => {
+      set((state) => {
+        if (!state.activeCabinetId) return;
+        const cabinetIndex = state.cabinets.findIndex(c => c.id === state.activeCabinetId);
+        if (cabinetIndex === -1) return;
+        const cabinet = state.cabinets[cabinetIndex];
+        const panel = cabinet.panels.find(p => p.id === panelId);
+        if (!panel) return;
+        panel.skin = skin;
         cabinet.updatedAt = Date.now();
         state.cabinet = cabinet;
       });
