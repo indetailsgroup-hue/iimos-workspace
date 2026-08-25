@@ -29,6 +29,7 @@ import {
 import { ActivityTimeline } from "../components/activity/ActivityTimeline";
 import { CncGeneratePanel, GcodePreviewPanel } from "../components/cnc";
 import type { GcodeBundle } from "../../cnc/post/types";
+import { ExportOptionsDialog } from "../../components/ui/ExportOptionsDialog";
 
 export interface JobDetailProps {
   jobId: string;
@@ -65,6 +66,9 @@ export function JobDetail({ jobId, onBack }: JobDetailProps): React.ReactElement
 
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [exportConfig, setExportConfig] = useState<ExportRequest | null>(null);
+
+  // ExportOptionsDialog overlay state
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
   // D2.2: CNC G-code generation state
   const [gcodeBundle, setGcodeBundle] = useState<GcodeBundle | null>(null);
@@ -242,6 +246,7 @@ export function JobDetail({ jobId, onBack }: JobDetailProps): React.ReactElement
             onConfigChange={setExportConfig}
             gatedExportState={gatedExportState}
             onGatedExport={handleGatedExport}
+            onOpenExportDialog={() => setExportDialogOpen(true)}
           />
         )}
 
@@ -271,6 +276,19 @@ export function JobDetail({ jobId, onBack }: JobDetailProps): React.ReactElement
         bundle={gcodeBundle}
         visible={showGcodePreview}
         onClose={() => setShowGcodePreview(false)}
+      />
+
+      {/* Export Options Dialog (Phase 6.2) — verifyResult + jobStatus from store */}
+      <ExportOptionsDialog
+        open={exportDialogOpen}
+        jobId={jobId}
+        verifyResult={verifyResult}
+        jobStatus={selectedJob.status}
+        onClose={() => setExportDialogOpen(false)}
+        onExportSuccess={() => {
+          setExportDialogOpen(false);
+          loadJobDetailData(jobId);
+        }}
       />
     </div>
   );
@@ -572,6 +590,8 @@ interface ExportTabProps {
   onConfigChange: (config: ExportRequest) => void;
   gatedExportState: import("../components/export").ExportCacheEntry;
   onGatedExport: () => void;
+  /** Opens the ExportOptionsDialog overlay (Phase 6.2) */
+  onOpenExportDialog: () => void;
 }
 
 function ExportTab({
@@ -597,6 +617,7 @@ function ExportTab({
   onConfigChange,
   gatedExportState,
   onGatedExport,
+  onOpenExportDialog,
 }: ExportTabProps): React.ReactElement {
   // Use gated export mode
   const useGatedExport = true;
@@ -612,6 +633,35 @@ function ExportTab({
           margin: "0 auto",
         }}
       >
+        {/* Export Options Dialog trigger */}
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button
+            onClick={onOpenExportDialog}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "8px 16px",
+              backgroundColor: "transparent",
+              border: "1px solid #8b5cf6",
+              borderRadius: 8,
+              color: "#8b5cf6",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "#8b5cf620";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+            }}
+          >
+            ⚙️ Export Options
+          </button>
+        </div>
+
         {/* Export Lock Banner */}
         <ExportLockBanner
           verifyResult={verifyResult}
