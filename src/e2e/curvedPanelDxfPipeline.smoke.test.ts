@@ -1294,3 +1294,103 @@ describe('@smoke — Stage 11: HATCH_CURVED is absent when all panels are straig
     expect(output.content).toContain('SMOKE_STRAIGHT_SIDE');
   });
 });
+
+// ============================================================
+// @smoke — Stage 12: HATCH_CURVED scales to 2 when one straight
+//   panel from Stage 11 is replaced with a curved panel.
+//
+// Replaces STRAIGHT_ROW (SMOKE_STRAIGHT_SHELF) with the ARC
+// curved panel (SMOKE_DOOR).  The remaining two straight panels
+// carry no hatch, so the count rises from 0 → 2.
+//
+//   HATCH_CURVED count  = 2  (1 curved panel × 2 diagonals)
+//   PARTS_CURVED count  = 4  (1 curved rect  × 4 lines)
+//   PARTS count         = 8  (2 straight rects × 4 lines each)
+// ============================================================
+
+describe('@smoke — Stage 12: HATCH_CURVED scales to 2 when one straight is replaced with a curved panel', () => {
+  function runStage12() {
+    const { row: curvedRow, kerfCount } = buildCurvedRow(); // ARC panel (SMOKE_DOOR)
+
+    // STRAIGHT_ROW replaced by curvedRow; STRAIGHT_ROW_2 + STRAIGHT_ROW_3 remain
+    const { sheets, unplacedParts } = runNesting([curvedRow, STRAIGHT_ROW_2, STRAIGHT_ROW_3]);
+
+    const planned: PlannedSheet = {
+      index1: 1,
+      sheetId: 'SHEET_001',
+      materialId: MATERIAL_ID,
+    };
+
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const placements = sheets[0].placements;
+    const curvedP   = placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const straight2 = placements.find((p) => p.partId === 'SMOKE_STRAIGHT_BACK')!;
+    const straight3 = placements.find((p) => p.partId === 'SMOKE_STRAIGHT_SIDE')!;
+
+    // ENTITIES section only — TABLES layer definitions must not be counted
+    const entitiesStart = output.content.indexOf('ENTITIES');
+    const entities = output.content.slice(entitiesStart);
+
+    const countLayer = (layer: string): number =>
+      entities
+        .split('LINE')
+        .slice(1)
+        .filter((seg) => seg.includes(`\n8\n${layer}\n`))
+        .length;
+
+    return {
+      output, entities,
+      curvedP, straight2, straight3,
+      kerfCount, unplacedParts, sheets,
+      countLayer,
+    };
+  }
+
+  it('one curved + two straight panels placed on sheets[0] — no unplaced parts', () => {
+    const { unplacedParts, sheets } = runStage12();
+    expect(unplacedParts).toHaveLength(0);
+    const ids = sheets[0].placements.map((p) => p.partId);
+    expect(ids).toContain('SMOKE_DOOR');
+    expect(ids).toContain('SMOKE_STRAIGHT_BACK');
+    expect(ids).toContain('SMOKE_STRAIGHT_SIDE');
+  });
+
+  it('curved placement has isCurved=true; straight placements have isCurved falsy', () => {
+    const { curvedP, straight2, straight3 } = runStage12();
+    expect(curvedP.isCurved).toBe(true);
+    expect(straight2.isCurved).toBeFalsy();
+    expect(straight3.isCurved).toBeFalsy();
+  });
+
+  it('HATCH_CURVED count is exactly 2 — replacing one straight with one curved adds exactly 2 hatch lines', () => {
+    const { countLayer } = runStage12();
+    expect(countLayer('HATCH_CURVED')).toBe(2);
+  });
+
+  it('PARTS_CURVED count is exactly 4 — one curved rect × 4 lines', () => {
+    const { countLayer } = runStage12();
+    expect(countLayer('PARTS_CURVED')).toBe(4);
+  });
+
+  it('PARTS count is exactly 8 — two straight rects × 4 lines each', () => {
+    const { countLayer } = runStage12();
+    expect(countLayer('PARTS')).toBe(8);
+  });
+
+  it('(CURVED / N cuts) sub-label is present for the curved panel', () => {
+    const { entities, kerfCount } = runStage12();
+    expect(entities).toContain(`(CURVED / ${kerfCount} cuts)`);
+  });
+
+  it('all three part labels are present in the DXF', () => {
+    const { output } = runStage12();
+    expect(output.content).toContain('SMOKE_DOOR');
+    expect(output.content).toContain('SMOKE_STRAIGHT_BACK');
+    expect(output.content).toContain('SMOKE_STRAIGHT_SIDE');
+  });
+});
