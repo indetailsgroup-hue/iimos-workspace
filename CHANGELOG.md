@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.4] - 2026-08-26
+
+### 🧪 Smoke Suite — Stage 19 (Diagonal Intersection at BBox Centre)
+
+Patch adds Stage 19 to `curvedPanelDxfPipeline.smoke.test.ts`, asserting
+that the midpoint of both HATCH_CURVED diagonals for each panel equals the
+centre of the flat-blank placement bounding box — i.e. the two diagonals
+bisect each other at the bbox centre.
+
+This verifies that neither diagonal is skewed, shifted, or computed with
+an off-centre origin, catching asymmetry bugs that pure length checks
+(Stages 15–18) cannot detect.
+
+**Fixture:** standard mixed-panel sheet (ARC + S_CURVE), same FFDH layout
+as Stages 17–18.
+
+**Assertions (8 total):**
+- ARC diagonal-1 midpoint x/y ≈ `arcMinX + arcEffW/2`, `arcMinY + arcEffH/2`
+- ARC diagonal-2 midpoint x/y ≈ same bbox centre
+- S_CURVE diagonal-1 midpoint x/y ≈ `sCurveMinX + sCurveEffW/2`, `sCurveMinY + sCurveEffH/2`
+- S_CURVE diagonal-2 midpoint x/y ≈ same bbox centre
+
+**New tests added:** 8 (130 → 138 in smoke file)
+
+---
+
 ## [2.2.3] - 2026-08-26
 
 ### 🧪 Smoke Suite — Stage 18 (X-Hatch Symmetry Assertion)
