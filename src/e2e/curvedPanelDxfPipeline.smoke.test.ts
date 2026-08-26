@@ -595,3 +595,92 @@ describe('@smoke S-CURVE — Stage 5: DxfSheetOutput.bytes is a valid UTF-8 Uint
     expect(decoded).toContain(`(CURVED / ${kerfCount} cuts)`);
   });
 });
+
+// ============================================================
+// @smoke S-CURVE — Stage 6: HATCH_CURVED X-lines span flat-blank footprint
+//
+// The X-hatch in buildDxfSheets.ts spans the FULL placement rectangle
+// (placement.x, placement.y) → (placement.x + effectiveW, placement.y + effectiveH)
+// where effectiveW/H are the rotated flat-blank dimensions, NOT the finish dimensions.
+//
+// For TOP-edge S_CURVE:
+//   correction   = developedLength − projectedDepth ≈ 151.800 mm
+//   flatBlankW   = finishWidth  = 500 mm        (no correction on perpendicular axis)
+//   flatBlankH   = finishHeight + correction ≈ 1051.800 mm
+//
+// FFDH picks rotation=90 (shelf height = 500 mm < 1051.800 mm → less wasted space),
+// so effectiveW ≈ 1051.800 mm (horizontal) and effectiveH = 500 mm (vertical).
+// ============================================================
+
+describe('@smoke S-CURVE — Stage 6: HATCH_CURVED X-lines span flat-blank footprint', () => {
+  function runStage6() {
+    const fields = computeCurveFields(S_CURVE_PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const { row } = buildSCurveRow();
+    const { sheets } = runNesting([row]);
+
+    const planned: PlannedSheet = {
+      index1: 1,
+      sheetId: 'SHEET_001',
+      materialId: MATERIAL_ID,
+    };
+
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const placement = sheets
+      .flatMap((s) => s.placements)
+      .find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+
+    // Mirror getRotatedDimensions() (private in buildDxfSheets.ts)
+    const isRotated = placement.rotation === 90 || placement.rotation === 270;
+    const effectiveW = isRotated ? placement.cutH : placement.cutW;
+    const effectiveH = isRotated ? placement.cutW : placement.cutH;
+
+    const correction = fields.developedLength - fields.projectedDepth;
+
+    return { fields, placement, output, effectiveW, effectiveH, correction };
+  }
+
+  it('placement.cutW equals finishWidth — no correction on perpendicular axis', () => {
+    const { placement } = runStage6();
+    // TOP-edge curve: correction is applied only to the HEIGHT dimension
+    expect(placement.cutW).toBe(S_CURVE_PANEL_STUB.finishWidth); // 500 mm
+  });
+
+  it('placement.cutH ≈ finishHeight + chord correction (flat-blank from arc geometry)', () => {
+    const { placement, correction } = runStage6();
+    const expectedFlatH = S_CURVE_PANEL_STUB.finishHeight + correction;
+    // Flat blank must be taller than the finish panel by the arc-to-projection difference
+    expect(placement.cutH).toBeCloseTo(expectedFlatH, 3);
+  });
+
+  it('flat-blank height is greater than finish height (correction > 0)', () => {
+    const { placement } = runStage6();
+    expect(placement.cutH).toBeGreaterThan(S_CURVE_PANEL_STUB.finishHeight);
+  });
+
+  it('hatch footprint area equals flatBlankW × flatBlankH (covers full flat blank)', () => {
+    const { effectiveW, effectiveH, correction } = runStage6();
+    const expectedArea =
+      S_CURVE_PANEL_STUB.finishWidth *
+      (S_CURVE_PANEL_STUB.finishHeight + correction);
+    // area is rotation-invariant: effectiveW × effectiveH = flatBlankW × flatBlankH
+    expect(effectiveW * effectiveH).toBeCloseTo(expectedArea, 3);
+  });
+
+  it('DXF contains far-corner x-coordinate of HATCH_CURVED diagonal', () => {
+    const { placement, effectiveW, output } = runStage6();
+    const farX = placement.x + effectiveW; // ≈ 10 + 1051.800 = 1061.800...
+    // String(farX) appears verbatim in the DXF LINE entity for the X-hatch
+    expect(output.content).toContain(String(farX));
+  });
+
+  it('DXF contains far-corner y-coordinate of HATCH_CURVED diagonal', () => {
+    const { placement, effectiveH, output } = runStage6();
+    const farY = placement.y + effectiveH; // ≈ 10 + 500 = 510
+    expect(output.content).toContain(String(farY));
+  });
+});
