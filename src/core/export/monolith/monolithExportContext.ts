@@ -143,6 +143,8 @@ export interface NestingSheet {
     rotation: 0 | 90 | 180 | 270;
     cutW: number;
     cutH: number;
+    /** True when this part is a curved panel (kerf-bent blank) */
+    isCurved?: boolean;
   }>;
 
   /** Utilization percentage */

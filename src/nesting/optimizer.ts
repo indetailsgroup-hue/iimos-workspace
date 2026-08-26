@@ -227,6 +227,14 @@ export function runNesting(
   }
 
   const parts = extractNestingParts(cutListRows);
+
+  // Build partId → isCurved lookup so placement mapper can carry the flag
+  // through the FFDH result (Placement type doesn't carry isCurved itself).
+  const isCurvedMap = new Map<string, boolean>();
+  for (const p of parts) {
+    if (p.isCurved) isCurvedMap.set(p.id, true);
+  }
+
   const groups = groupByMaterial(parts);
 
   const allSheets: NestingSheet[] = [];
@@ -268,6 +276,7 @@ export function runNesting(
           rotation: p.rotation as 0 | 90 | 180 | 270,
           cutW: p.cutW,
           cutH: p.cutH,
+          isCurved: isCurvedMap.get(p.partId) ?? undefined,
         })),
         utilization: sr.utilization,
       });

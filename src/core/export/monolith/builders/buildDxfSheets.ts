@@ -81,6 +81,33 @@ class DxfBuilder {
   }
 
   /**
+   * Add TABLES section with LAYER definitions (R12-compatible).
+   *
+   * Each layer entry: name, flags (0 = on), color number.
+   * Color codes (ACI palette):
+   *   1=red, 2=yellow, 3=green, 4=cyan, 7=white/black
+   */
+  addLayerTable(layers: Array<{ name: string; color: number }>): void {
+    this.add(0, 'SECTION');
+    this.add(2, 'TABLES');
+
+    this.add(0, 'TABLE');
+    this.add(2, 'LAYER');
+    this.add(70, layers.length); // max entries
+
+    for (const layer of layers) {
+      this.add(0, 'LAYER');
+      this.add(2, layer.name);  // Layer name
+      this.add(70, 0);          // Flags: 0 = on/thawed
+      this.add(62, layer.color); // Color number (positive = on)
+      this.add(6, 'CONTINUOUS'); // Linetype
+    }
+
+    this.add(0, 'ENDTAB');
+    this.add(0, 'ENDSEC');
+  }
+
+  /**
    * Add LINE entity
    */
   addLine(x1: number, y1: number, x2: number, y2: number, layer: string = '0'): void {
@@ -137,6 +164,19 @@ class DxfBuilder {
     return this.lines.join('\n');
   }
 }
+
+/**
+ * Standard DXF layer definitions for MONOLITH nesting sheets.
+ * ACI color codes: 1=red, 2=yellow, 3=green, 4=cyan, 7=white
+ */
+const NESTING_LAYERS = [
+  { name: 'SHEET',        color: 7 }, // white — sheet boundary
+  { name: 'PARTS',        color: 3 }, // green — flat (non-curved) parts
+  { name: 'PARTS_CURVED', color: 1 }, // red   — kerf-bent curved parts
+  { name: 'HATCH_CURVED', color: 4 }, // cyan  — X-hatch inside curved parts
+  { name: 'LABELS',       color: 2 }, // yellow — part ID / dimension text
+  { name: 'TEXT',         color: 7 }, // white — sheet-level annotations
+] as const;
 
 /**
  * Build minimal DXF header for R12 compatibility
@@ -205,6 +245,9 @@ export function buildDxfSheet(input: DxfSheetInput): DxfSheetOutput {
   // Build header
   buildHeader(builder, nesting.sheetW, nesting.sheetH);
 
+  // TABLES section: layer color definitions (R12)
+  builder.addLayerTable([...NESTING_LAYERS]);
+
   // Build entities section
   builder.startSection('ENTITIES');
 
@@ -246,8 +289,23 @@ export function buildDxfSheet(input: DxfSheetInput): DxfSheetOutput {
       placement.rotation
     );
 
-    // Part rectangle (layer: PARTS)
-    builder.addRectangle(placement.x, placement.y, w, h, 'PARTS');
+    // Part rectangle — curved parts on PARTS_CURVED (red), flat on PARTS (green)
+    const partLayer = placement.isCurved ? 'PARTS_CURVED' : 'PARTS';
+    builder.addRectangle(placement.x, placement.y, w, h, partLayer);
+
+    // X-hatch for curved parts: two diagonal lines on HATCH_CURVED (cyan)
+    if (placement.isCurved) {
+      builder.addLine(
+        placement.x,     placement.y,
+        placement.x + w, placement.y + h,
+        'HATCH_CURVED'
+      );
+      builder.addLine(
+        placement.x + w, placement.y,
+        placement.x,     placement.y + h,
+        'HATCH_CURVED'
+      );
+    }
 
     // Part label (layer: LABELS)
     const labelX = placement.x + w / 2 - 20;
@@ -261,6 +319,11 @@ export function buildDxfSheet(input: DxfSheetInput): DxfSheetOutput {
     // Rotation indicator (if rotated)
     if (placement.rotation !== 0) {
       builder.addText(labelX, labelY - 28, `R${placement.rotation}`, 5, 'LABELS');
+    }
+
+    // Curved sub-label: "(CURVED / N cuts)"
+    if (placement.isCurved) {
+      builder.addText(labelX, labelY - 40, '(CURVED)', 5, 'LABELS');
     }
   }
 
