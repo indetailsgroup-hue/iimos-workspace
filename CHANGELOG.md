@@ -7,6 +7,151 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.0] - 2026-08-26
+
+### 🧪 Smoke Suite — Geometric Invariant Suite (Stages 14–21)
+
+Minor release formalising the full geometric invariant specification for
+`HATCH_CURVED` diagonals in the DXF nesting output, and adding two
+comprehensive JSDoc invariant tables to the codebase.
+
+**Total smoke test delta: 109 → 151 (+42 tests)**
+
+---
+
+#### Stage 14 — HATCH\_CURVED X-lines confined within flat-blank bounding box (`6328f92e`, 2026-08-26)
+
+Asserts that every `X` line emitted for a curved panel lies strictly inside
+the flat-blank placement bounding box. Guards against off-by-one origins or
+scale bugs that would bleed hatch lines outside the allocated sheet region.
+
+**7 assertions added. Smoke total: 109 tests.**
+
+---
+
+#### Stage 15 — Diagonal length equals `sqrt(effectiveW² + effectiveH²)` (`b5dcbf1a`, 2026-08-26)
+
+Asserts that both HATCH\_CURVED diagonals for ARC and S\_CURVE panels have
+length equal to `Math.sqrt(effW² + effH²)`, where `effectiveW` / `effectiveH`
+are the FFDH-post-rotation flat-blank dimensions.
+
+This pins the Pythagorean diagonal length as a formal invariant independent
+of FFDH rotation or grain lock.
+
+**6 assertions added. Smoke total: 109 → 115.**
+
+---
+
+#### Stage 16 — Diagonal strictly longer than the finish-panel shorter side (`e5a60918`, 2026-08-26)
+
+Asserts that the flat-blank diagonal is always strictly longer than the
+shorter finish dimension, confirming that the kerf-correction expansion is
+reflected in every HATCH\_CURVED line and is never accidentally suppressed.
+
+Covers both ARC and S\_CURVE fixtures (2 assertions each).
+
+**4 assertions added. Smoke total: 115 → 119.**
+
+---
+
+#### Stage 17 — Spatial partition: ARC and S\_CURVE occupy non-overlapping bbox regions on a mixed sheet (`f66cb5a4`, 2026-08-26)
+
+Verifies that FFDH places the two curved panels in distinct, non-overlapping
+bounding boxes, and that each bbox's `HATCH_CURVED` lines are strictly confined
+to their own region — ensuring the DXF layer carries no cross-panel bleed.
+
+**7 assertions added. Smoke total: 119 → 126.**
+
+---
+
+#### Stage 18 — Diagonal-2 lengths equal bbox diagonal for both ARC and S\_CURVE on mixed sheet (`56c0a24b`, 2026-08-26)
+
+Asserts that the anti-diagonal (diagonal-2) of each panel equals the
+endpoint-derived bbox diagonal, and that both diagonals of the same panel
+are equal in length. Confirms the X-hatch is symmetric about the bbox centre.
+
+**4 assertions added. Smoke total: 126 → 130.**
+
+---
+
+#### Stage 19 — Diagonal intersection at bbox centre (`f5c48ab4`, 2026-08-26)
+
+Asserts that the midpoint of both HATCH\_CURVED diagonals for each panel
+equals the centre of the flat-blank placement bounding box.
+
+This catches asymmetry bugs — off-centre origins, skewed start/end points —
+that pure length checks cannot detect.
+
+**8 assertions added. Smoke total: 130 → 138.**
+
+---
+
+#### Stage 20 — Perpendicularity of HATCH\_CURVED diagonals (`9b74baa5`, 2026-08-26)
+
+Uses the dot-product identity `dot(d1, d2) = effectiveH² − effectiveW²`
+(derived from direction vectors `d1=(w,h)` and `d2=(−w,h)`) to assert that
+diagonals are perpendicular only when the flat blank is square.
+
+| Panel       | effectiveW  | effectiveH  | Expected dot              |
+|-------------|-------------|-------------|---------------------------|
+| ARC         | ≈ 909.44    | 400         | ≈ −667 000 (non-perp)     |
+| S\_CURVE   | ≈ 1 051.8   | 500         | ≈ −856 000 (non-perp)     |
+| SQUARE\_ARC| ≈ 509.44    | ≈ 509.44    | ≈ 0 (perpendicular)       |
+
+SQUARE\_ARC is constructed so `finishWidth = 400 + correction`, making
+`flatBlankW = flatBlankH` — the only case where the X forms a true `+`.
+
+**7 assertions added. Smoke total: 138 → 145.**
+
+---
+
+#### Stage 21 — Dot-product sign by orientation (`48c5c5ad`, 2026-08-26)
+
+Asserts that `sign(dot(d1, d2)) = sign(effectiveH² − effectiveW²)`:
+
+- **Negative** when `effectiveW > effectiveH` (landscape flat blank):
+  ARC (`grain=NONE`, FFDH rotates to landscape) and
+  S\_CURVE (`grain=NONE`, FFDH rotates to landscape).
+- **Positive** when `effectiveW < effectiveH` (portrait flat blank):
+  **TALL\_ARC** — `grain='HORIZONTAL'`, FFDH cannot rotate, flat blank stays
+  portrait (`effectiveW=400 < effectiveH≈909.44`).
+
+The `TALL_ARC` fixture exercises the full grain-lock path through
+`optimizer.ts` (`canRotateWithGrain` → `canRotate=false`) and FFDH
+(`canRotatePart` guard) for the first time in the smoke suite.
+
+**6 assertions added. Smoke total: 145 → 151.**
+
+---
+
+### Added
+
+#### JSDoc invariant table — `curvedPanelDxfPipeline.smoke.test.ts` (two-section update, `c7050d27`, 2026-08-26)
+
+Top-of-file JSDoc block split into two sections:
+
+1. **LINE Count Invariants (Stages 7–13)** — stage-by-stage table of expected
+   `HATCH_CURVED` X-line counts for all multi-panel nesting combinations.
+2. **Geometric Invariants of HATCH\_CURVED Diagonals (Stages 14–21)** —
+   describes flat-blank correction formulae, FFDH rotation rules, direction
+   vectors, the dot-product identity `dot(d1,d2) = effH² − effW²`, and a
+   per-stage assertion summary with all three panel types.
+
+---
+
+#### JSDoc invariant table — `buildDxfSheets.ts` (two-section update, `cd635ffd`, 2026-08-26)
+
+The `NESTING_LAYERS` JSDoc block extended with two sections mirroring the smoke
+test documentation:
+
+1. **LINE Count Invariants (Stages 7–13)** — ACI colour codes and hatch-line
+   emission rules (`2 × kerfCount` lines per curved placement).
+2. **Geometric Invariants of HATCH\_CURVED Diagonals (Stages 14–21)** —
+   `getRotatedDimensions` explanation, flat-blank correction formulae,
+   direction-vector derivation, dot-product identity, and a Stage 14–21
+   assertion table anchored to the source implementation.
+
+---
 ## [2.2.6] - 2026-08-26
 
 ### 🧪 Smoke Suite — Stage 21 (Dot-Product Sign: Negative when effectiveW > effectiveH, Positive when effectiveW < effectiveH)
