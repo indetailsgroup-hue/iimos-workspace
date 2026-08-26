@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.6] - 2026-08-26
+
+### 🧪 Smoke Suite — Stage 21 (Dot-Product Sign: Negative when effectiveW > effectiveH, Positive when effectiveW < effectiveH)
+
+Patch adds Stage 21 to `curvedPanelDxfPipeline.smoke.test.ts`, asserting
+that the sign of `dot(d1, d2)` is determined entirely by which flat-blank
+dimension dominates after FFDH placement:
+
+- **ARC** (`grain=NONE`, FFDH rotates to landscape): `effectiveW ≈ 909.44 > effectiveH = 400` → `dot < 0`
+- **S_CURVE** (`grain=NONE`, FFDH rotates to landscape): `effectiveW ≈ 1051.8 > effectiveH = 500` → `dot < 0`
+- **TALL_ARC** (`grain='HORIZONTAL'`, locked to portrait): `effectiveW = 400 < effectiveH ≈ 909.44` → `dot > 0`
+
+Each part additionally asserts the dot-product identity
+`dot(d1, d2) ≈ effH² − effW²` (confirmed numerically via `toBeCloseTo`).
+
+The `TALL_ARC` fixture introduces the `grain: 'HORIZONTAL'` field on
+`CutListRow`, exercising the full grain-lock path through `optimizer.ts`
+(`canRotateWithGrain` → `canRotate=false`) and FFDH (`canRotatePart` guard),
+proving that grain-locked curved panels retain their natural portrait
+orientation on the DXF sheet.
+
+**Smoke test count:** 145 → 151 (+6 tests)
+
+---
+
 ## [2.2.5] - 2026-08-26
 
 ### 🧪 Smoke Suite — Stage 20 (Perpendicularity of HATCH\_CURVED Diagonals)
