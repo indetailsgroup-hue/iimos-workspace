@@ -2490,3 +2490,166 @@ describe('@smoke — Stage 20: perpendicularity of HATCH_CURVED diagonals', () =
     expect(sqEffH ** 2 - sqEffW ** 2).toBeCloseTo(0, 0);
   });
 });
+
+// ============================================================
+// Stage 21 — dot-product sign: negative when effectiveW > effectiveH,
+//            positive when effectiveW < effectiveH
+//
+// Three panel types on one sheet:
+//   ARC       (grain=NONE, FFDH rotates → effectiveW≈909.44 > effectiveH=400)   → dot < 0
+//   S_CURVE   (grain=NONE, FFDH rotates → effectiveW≈1051.8 > effectiveH=500)   → dot < 0
+//   TALL_ARC  (grain=HORIZONTAL, locked → effectiveW=400 < effectiveH≈909.44)   → dot > 0
+// ============================================================
+
+describe('@smoke — Stage 21: dot-product sign is negative when effectiveW > effectiveH, positive when effectiveW < effectiveH', () => {
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function dotProduct(l1: Coords, l2: Coords): number {
+    const v1x = l1.x2 - l1.x1;
+    const v1y = l1.y2 - l1.y1;
+    const v2x = l2.x2 - l2.x1;
+    const v2y = l2.y2 - l2.y1;
+    return v1x * v2x + v1y * v2y;
+  }
+
+  /**
+   * TALL_ARC — same ARC geometry as PANEL_STUB (radius=200, sweepDeg=60)
+   * but with grain='HORIZONTAL' to lock orientation.
+   *
+   * FFDH cannot rotate a grain-locked part → rotation=0:
+   *   effectiveW = flatBlankW = cutW = 400
+   *   effectiveH = flatBlankH = cutH + correction = 800 + 109.44 ≈ 909.44
+   *   → effectiveW < effectiveH → dot(d1, d2) = effH² − effW² > 0
+   */
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+
+    const row: CutListRow = {
+      partId:    'SMOKE_TALL_ARC',
+      cabinetId: 'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:   PANEL_STUB.finishWidth,
+      finishH:   PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:      PANEL_STUB.finishWidth,
+      cutH:      PANEL_STUB.finishHeight,
+      qty:       1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  function runStage21() {
+    const { row: arcRow }     = buildCurvedRow();
+    const { row: sCurveRow }  = buildSCurveRow();
+    const { row: tallArcRow } = buildTallArcRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow, tallArcRow]);
+    expect(sheets).toHaveLength(1);
+
+    const arcP     = sheets[0].placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP  = sheets[0].placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const tallArcP = sheets[0].placements.find((p) => p.partId === 'SMOKE_TALL_ARC')!;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const allCoords    = parseHatchCoords(output.content);
+    const arcLines     = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines  = linesForPlacement(allCoords, sCurveP.y);
+    const tallArcLines = linesForPlacement(allCoords, tallArcP.y);
+
+    expect(arcLines).toHaveLength(2);
+    expect(sCurveLines).toHaveLength(2);
+    expect(tallArcLines).toHaveLength(2);
+
+    const arcEffW    = Math.max(...arcLines.flatMap((c) => [c.x1, c.x2]))
+                     - Math.min(...arcLines.flatMap((c) => [c.x1, c.x2]));
+    const arcEffH    = Math.max(...arcLines.flatMap((c) => [c.y1, c.y2]))
+                     - Math.min(...arcLines.flatMap((c) => [c.y1, c.y2]));
+    const sCurveEffW = Math.max(...sCurveLines.flatMap((c) => [c.x1, c.x2]))
+                     - Math.min(...sCurveLines.flatMap((c) => [c.x1, c.x2]));
+    const sCurveEffH = Math.max(...sCurveLines.flatMap((c) => [c.y1, c.y2]))
+                     - Math.min(...sCurveLines.flatMap((c) => [c.y1, c.y2]));
+    const tallEffW   = Math.max(...tallArcLines.flatMap((c) => [c.x1, c.x2]))
+                     - Math.min(...tallArcLines.flatMap((c) => [c.x1, c.x2]));
+    const tallEffH   = Math.max(...tallArcLines.flatMap((c) => [c.y1, c.y2]))
+                     - Math.min(...tallArcLines.flatMap((c) => [c.y1, c.y2]));
+
+    return {
+      arcLines, sCurveLines, tallArcLines,
+      arcEffW, arcEffH,
+      sCurveEffW, sCurveEffH,
+      tallEffW, tallEffH,
+    };
+  }
+
+  // ── Part A: ARC — effectiveW > effectiveH → dot < 0 ──────────────────────
+
+  it('ARC — dot(d1, d2) < 0 (effectiveW > effectiveH, FFDH rotates to landscape)', () => {
+    const { arcLines } = runStage21();
+    expect(dotProduct(arcLines[0], arcLines[1])).toBeLessThan(0);
+  });
+
+  it('ARC — dot(d1, d2) ≈ arcEffH² − arcEffW² (negative identity, confirms effectiveW > effectiveH)', () => {
+    const { arcLines, arcEffW, arcEffH } = runStage21();
+    const dot = dotProduct(arcLines[0], arcLines[1]);
+    expect(dot).toBeCloseTo(arcEffH ** 2 - arcEffW ** 2, 0);
+  });
+
+  // ── Part B: S_CURVE — effectiveW > effectiveH → dot < 0 ──────────────────
+
+  it('S_CURVE — dot(d1, d2) < 0 (effectiveW > effectiveH, FFDH rotates to landscape)', () => {
+    const { sCurveLines } = runStage21();
+    expect(dotProduct(sCurveLines[0], sCurveLines[1])).toBeLessThan(0);
+  });
+
+  it('S_CURVE — dot(d1, d2) ≈ sCurveEffH² − sCurveEffW² (negative identity, confirms effectiveW > effectiveH)', () => {
+    const { sCurveLines, sCurveEffW, sCurveEffH } = runStage21();
+    const dot = dotProduct(sCurveLines[0], sCurveLines[1]);
+    expect(dot).toBeCloseTo(sCurveEffH ** 2 - sCurveEffW ** 2, 0);
+  });
+
+  // ── Part C: TALL_ARC — effectiveW < effectiveH → dot > 0 ─────────────────
+
+  it('TALL_ARC — dot(d1, d2) > 0 (effectiveW < effectiveH, grain-locked keeps portrait)', () => {
+    const { tallArcLines } = runStage21();
+    expect(dotProduct(tallArcLines[0], tallArcLines[1])).toBeGreaterThan(0);
+  });
+
+  it('TALL_ARC — dot(d1, d2) ≈ tallEffH² − tallEffW² (positive identity, confirms effectiveW < effectiveH)', () => {
+    const { tallArcLines, tallEffW, tallEffH } = runStage21();
+    const dot = dotProduct(tallArcLines[0], tallArcLines[1]);
+    expect(dot).toBeCloseTo(tallEffH ** 2 - tallEffW ** 2, 0);
+  });
+});
