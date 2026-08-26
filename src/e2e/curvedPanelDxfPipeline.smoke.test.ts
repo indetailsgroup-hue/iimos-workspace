@@ -1033,3 +1033,152 @@ describe('@smoke S-CURVE — Stage 9: HATCH_CURVED count scales to 4 with two cu
     expect(output.content).toContain('SMOKE_SCURVE_DOOR');
   });
 });
+
+// ============================================================
+// @smoke S-CURVE — Stage 10: HATCH_CURVED count scales to 6
+//   when THREE curved panels (ARC + S_CURVE + ARC_SMALL) share
+//   the same sheet.
+//
+// Each curved panel contributes exactly 2 HATCH_CURVED diagonal
+// lines.  With three curved panels:
+//
+//   HATCH_CURVED count  = 2 × 3 = 6
+//   PARTS_CURVED count  = 4 × 3 = 12
+//   PARTS count         = 0       (no straight panels)
+//
+// Sheet layout (1220 × 2440, kerfWidth=3.5, edgeClearance=10):
+//   Shelf 1 — ARC panel   (rotation=90) → effectiveH = 400 mm, y=10
+//   Shelf 2 — S_CURVE     (rotation=90) → effectiveH = 500 mm, y=413.5
+//   Shelf 3 — ARC_SMALL   (rotation=90) → effectiveH = 300 mm, y=917.0
+//   Max Y used = 917 + 300 = 1217 mm  ≪  2440 mm  →  all three fit
+//
+// ARC_SMALL profile: same ARC kind, radius=200, sweepDeg=60 as
+// PANEL_STUB — so arcSmallKerfCount === arcKerfCount.
+// ============================================================
+
+/** Third curved panel fixture — smaller ARC with same bend profile */
+const ARC_SMALL_PANEL_STUB = {
+  finishWidth: 300,
+  finishHeight: 500,
+  profile: { kind: 'ARC', edge: 'TOP', radius: 200, sweepDeg: 60 },
+  computed: { realThickness: 18 },
+} as unknown as CabinetPanel;
+
+/**
+ * Build a CutListRow for ARC_SMALL from live computeCurveFields() so
+ * kerfCount is always consistent with the pipeline.
+ */
+function buildArcSmallRow(): { row: CutListRow; kerfCount: number } {
+  const fields = computeCurveFields(ARC_SMALL_PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+
+  const row: CutListRow = {
+    partId: 'SMOKE_ARC_SMALL',
+    cabinetId: 'CAB_SMOKE',
+    materialId: MATERIAL_ID,
+    finishW: ARC_SMALL_PANEL_STUB.finishWidth,
+    finishH: ARC_SMALL_PANEL_STUB.finishHeight,
+    edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+    premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+    cutW: ARC_SMALL_PANEL_STUB.finishWidth,
+    cutH: ARC_SMALL_PANEL_STUB.finishHeight,
+    qty: 1,
+    developedLength: fields.developedLength,
+    projectedDepth:  fields.projectedDepth,
+    kerfCount:       fields.kerfCount,
+    curvedEdge:      fields.curvedEdge ?? undefined,
+  };
+
+  return { row, kerfCount: fields.kerfCount };
+}
+
+describe('@smoke S-CURVE — Stage 10: HATCH_CURVED count scales to 6 with three curved panels', () => {
+  function runStage10() {
+    const { row: arcRow,      kerfCount: arcKerfCount      } = buildCurvedRow();
+    const { row: sCurveRow,   kerfCount: sCurveKerfCount   } = buildSCurveRow();
+    const { row: arcSmallRow, kerfCount: arcSmallKerfCount } = buildArcSmallRow();
+
+    // All three curved rows → same sheet
+    const { sheets, unplacedParts } = runNesting([arcRow, sCurveRow, arcSmallRow]);
+
+    const planned: PlannedSheet = {
+      index1: 1,
+      sheetId: 'SHEET_001',
+      materialId: MATERIAL_ID,
+    };
+
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const placements  = sheets[0].placements;
+    const arcP        = placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP     = placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const arcSmallP   = placements.find((p) => p.partId === 'SMOKE_ARC_SMALL')!;
+
+    // ENTITIES section only — TABLES layer definitions must not be counted
+    const entitiesStart = output.content.indexOf('ENTITIES');
+    const entities = output.content.slice(entitiesStart);
+
+    const countLayer = (layer: string): number =>
+      entities
+        .split('LINE')
+        .slice(1)
+        .filter((seg) => seg.includes(`\n8\n${layer}\n`))
+        .length;
+
+    return {
+      output, entities,
+      arcP, sCurveP, arcSmallP,
+      arcKerfCount, sCurveKerfCount, arcSmallKerfCount,
+      unplacedParts, sheets,
+      countLayer,
+    };
+  }
+
+  it('all three curved panels placed on sheets[0] — no unplaced parts', () => {
+    const { unplacedParts, sheets } = runStage10();
+    expect(unplacedParts).toHaveLength(0);
+    const ids = sheets[0].placements.map((p) => p.partId);
+    expect(ids).toContain('SMOKE_DOOR');
+    expect(ids).toContain('SMOKE_SCURVE_DOOR');
+    expect(ids).toContain('SMOKE_ARC_SMALL');
+  });
+
+  it('all three placements have isCurved=true', () => {
+    const { arcP, sCurveP, arcSmallP } = runStage10();
+    expect(arcP.isCurved).toBe(true);
+    expect(sCurveP.isCurved).toBe(true);
+    expect(arcSmallP.isCurved).toBe(true);
+  });
+
+  it('HATCH_CURVED count is exactly 6 — 2 diagonals per curved panel × 3 panels', () => {
+    const { countLayer } = runStage10();
+    expect(countLayer('HATCH_CURVED')).toBe(6);
+  });
+
+  it('PARTS_CURVED count is exactly 12 — one rect (4 lines) per curved panel × 3 panels', () => {
+    const { countLayer } = runStage10();
+    expect(countLayer('PARTS_CURVED')).toBe(12);
+  });
+
+  it('PARTS count is exactly 0 — no straight panels on this sheet', () => {
+    const { countLayer } = runStage10();
+    expect(countLayer('PARTS')).toBe(0);
+  });
+
+  it('each curved panel carries its own (CURVED / N cuts) sub-label', () => {
+    const { entities, arcKerfCount, sCurveKerfCount } = runStage10();
+    // ARC and ARC_SMALL share the same kerfCount (identical profile + material)
+    expect(entities).toContain(`(CURVED / ${arcKerfCount} cuts)`);
+    expect(entities).toContain(`(CURVED / ${sCurveKerfCount} cuts)`);
+  });
+
+  it('all three part labels are present in the DXF', () => {
+    const { output } = runStage10();
+    expect(output.content).toContain('SMOKE_DOOR');
+    expect(output.content).toContain('SMOKE_SCURVE_DOOR');
+    expect(output.content).toContain('SMOKE_ARC_SMALL');
+  });
+});
