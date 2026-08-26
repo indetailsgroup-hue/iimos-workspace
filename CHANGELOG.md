@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.5] - 2026-08-26
+
+### 🧪 Smoke Suite — Stage 20 (Perpendicularity of HATCH\_CURVED Diagonals)
+
+Patch adds Stage 20 to `curvedPanelDxfPipeline.smoke.test.ts`, asserting
+that the two HATCH\_CURVED diagonals for each curved panel are perpendicular
+(dot product ≈ 0) only when `effectiveW` equals `effectiveH`, and
+non-perpendicular otherwise.
+
+The dot-product identity used is `dot(d1, d2) = effectiveH² − effectiveW²`,
+derived from direction vectors `d1=(w,h)` and `d2=(-w,h)` of the two diagonals
+emitted by `buildDxfSheets`.
+
+**Three-panel fixture on one sheet:**
+
+| Panel       | effectiveW | effectiveH | Expected dot  |
+|-------------|------------|------------|---------------|
+| ARC         | ≈ 909.44   | 400        | ≈ −667 000 (≠ 0) |
+| S\_CURVE    | ≈ 1051.8   | 500        | ≈ −856 000 (≠ 0) |
+| SQUARE\_ARC | ≈ 509.44   | ≈ 509.44   | ≈ 0 (perpendicular) |
+
+SQUARE\_ARC is constructed so `finishWidth = 400 + correction` (where
+`correction = developedLength − projectedDepth` from the standard ARC fixture),
+making `flatBlankW = flatBlankH ≈ 509.44 mm` — a square flat blank.
+
+**Assertions (7 total, 3 parts):**
+
+*Part A — ARC (non-perpendicular):*
+- `|dot(d1, d2)| > 100 000`
+- `dot ≈ arcEffH² − arcEffW²`
+
+*Part B — S\_CURVE (non-perpendicular):*
+- `|dot(d1, d2)| > 100 000`
+- `dot ≈ sCurveEffH² − sCurveEffW²`
+
+*Part C — SQUARE\_ARC (perpendicular):*
+- `effectiveW ≈ effectiveH` (square flat blank)
+- `dot(d1, d2) ≈ 0`
+- `sqEffH² − sqEffW² ≈ 0` (identity consistency check)
+
+**Smoke suite total: 145 tests (was 138 after Stage 19).**
+
+---
+
 ## [2.2.4] - 2026-08-26
 
 ### 🧪 Smoke Suite — Stage 19 (Diagonal Intersection at BBox Centre)
