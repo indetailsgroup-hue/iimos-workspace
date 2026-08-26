@@ -195,7 +195,7 @@ class DxfBuilder {
  * Straight placements (`isCurved` falsy) use the PARTS layer; no hatch is drawn.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * LINE Count Invariants per Sheet  (n = number of placements)
+ * LINE Count Invariants per Sheet  (Stages 7 – 13)
  * ─────────────────────────────────────────────────────────────────────────────
  *
  *   HATCH_CURVED = 2 × curved_count
@@ -203,8 +203,58 @@ class DxfBuilder {
  *   PARTS        = 4 × straight_count
  *   SHEET        = 4                  (always — one sheet boundary rect)
  *
- * These invariants are verified end-to-end in:
- *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 13)
+ * Stage | Curved | Straight | HATCH_CURVED | PARTS_CURVED | PARTS
+ * ------|-------:|----------:|:------------:|:------------:|:-----:
+ *     7 |      1 |         1 |            2 |            4 |     4
+ *     8 |      1 |         2 |            2 |            4 |     8
+ *     9 |      2 |         0 |            4 |            8 |     0
+ *    10 |      3 |         0 |            6 |           12 |     0
+ *    11 |      0 |         3 |            0 |            0 |    12
+ *    12 |      1 |         2 |            2 |            4 |     8
+ *    13 |      2 |         1 |            4 |            8 |     4
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Geometric Invariants of HATCH_CURVED Diagonals  (Stages 14 – 21)
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Effective placement dimensions derive from `getRotatedDimensions(cutW, cutH, rotation)`:
+ *   rotation = 0  → effectiveW = cutW,  effectiveH = cutH
+ *   rotation = 90 → effectiveW = cutH,  effectiveH = cutW
+ *
+ * `cutW` and `cutH` in each Placement store flat-blank dimensions after the
+ * curved correction applied by `runNesting` (optimizer.ts):
+ *   flatBlankH = cutH + (developedLength − projectedDepth)   when curvedEdge ∈ {TOP, BOTTOM}
+ *   flatBlankW = cutW + (developedLength − projectedDepth)   when curvedEdge ∈ {LEFT, RIGHT}
+ *
+ * Direction vectors of the two X-hatch diagonals (from hatch-line code above):
+ *   d1 = ( effectiveW,  effectiveH)   ← bottom-left  to top-right
+ *   d2 = (-effectiveW,  effectiveH)   ← bottom-right to top-left
+ *
+ * Dot-product identity (derivable from direction vectors):
+ *   dot(d1, d2) = −effectiveW² + effectiveH²
+ *              = effectiveH² − effectiveW²
+ *
+ *   → dot < 0  when effectiveW > effectiveH  (landscape flat blank)
+ *   → dot = 0  when effectiveW = effectiveH  (square flat blank)
+ *   → dot > 0  when effectiveW < effectiveH  (portrait flat blank)
+ *
+ * Stage | Panels              | Assertion
+ * ------|---------------------|----------------------------------------------
+ *    14 | S_CURVE (1)         | HATCH_CURVED X-lines confined within flat-blank bbox
+ *    15 | ARC + S_CURVE       | diagonal length = sqrt(effectiveW²+effectiveH²);
+ *       |                     |   flat-blank diag > finish diag
+ *    16 | ARC + S_CURVE       | flat-blank diag > min(finishW, finishH) (shorter-side guard)
+ *    17 | ARC + S_CURVE       | HATCH_CURVED lines spatially partitioned by placement Y;
+ *       |                     |   no cross-contamination between the two curved placements
+ *    18 | ARC + S_CURVE       | diagonal-2 length equals endpoint-derived bbox diagonal
+ *    19 | ARC + S_CURVE       | diagonal-1 and diagonal-2 intersect at placement bbox centre
+ *    20 | ARC + S_CURVE       | dot(d1,d2) ≈ 0 iff effectiveW = effectiveH (square bbox);
+ *       |   + SQUARE_ARC      |   |dot| > 100 000 for non-square panels
+ *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
+ *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
+ *
+ * All invariants are verified end-to-end in:
+ *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 21)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 const NESTING_LAYERS = [
