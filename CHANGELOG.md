@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.2] - 2026-08-26
+
+### 🧪 Smoke Suite — Bbox-Confinement Under Rounding (Stage 23)
+
+Patch release adding a smoke stage that asserts coordinate rounding introduced
+in Stage 22 does not push any `HATCH_CURVED` diagonal endpoint outside the
+flat-blank bounding box derived from the placement coordinates.
+
+**Total smoke test delta: 157 → 163 (+6 tests)**
+
+---
+
+#### Stage 23 — HATCH\_CURVED bbox-confinement invariant preserved after rounding (`d9a6b60b`, 2026-08-26)
+
+Asserts that all four endpoint fields `{ x1, y1, x2, y2 }` of every
+`HATCH_CURVED` diagonal satisfy:
+
+```
+minX − ε ≤ coord ≤ maxX + ε   (horizontal axes)
+minY − ε ≤ coord ≤ maxY + ε   (vertical axes)
+```
+
+where the bbox is derived from the raw (unrounded) placement coordinates and
+`ε = 0.01 mm` (2× the maximum rounding delta of 0.005 mm per coordinate).
+
+Panel set: same three-panel sheet as Stages 19–22
+(SMOKE\_DOOR + SMOKE\_SCURVE\_DOOR + SMOKE\_TALL\_ARC).
+
+Self-contained helpers: `bboxForPlacement()`, `linesForPlacement()`,
+`parseHatchCoords()`, `buildTallArcRow()`, `runStage23()`.
+
+**6 assertions added. Smoke total: 157 → 163.**
+
+---
+
 ## [2.3.1] - 2026-08-26
 
 ### 🧪 Smoke Suite — Endpoint Precision Invariant (Stage 22)
