@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.1] - 2026-08-26
+
+### 🧪 Smoke Suite — Stage 14 & 15 (Geometric Assertions)
+
+Patch adds two new E2E smoke stages to `curvedPanelDxfPipeline.smoke.test.ts`
+that verify the geometric correctness of `HATCH_CURVED` X-line coordinates
+produced by `buildDxfSheets.ts`.
+
+**New tests added:** 13 (109 → 115 in smoke file)
+
+---
+
+### Added
+
+#### Stage 14 — HATCH_CURVED X-lines confined within flat-blank bbox (`6328f92e`, 2026-08-26)
+- **File:** `src/e2e/curvedPanelDxfPipeline.smoke.test.ts`
+- Targets the S_CURVE panel (`r1=200 mm / sweep1=30° / r2=150 mm / sweep2=45°`, MDF 18 mm).
+- Parses every `HATCH_CURVED` LINE entity from the DXF ENTITIES section using
+  group-code regex (`\n<code>\n<value>`) — immune to `edgeClearance=10` coinciding
+  with group code `10`.
+- **7 assertions:**
+  - Exactly 2 `HATCH_CURVED` LINE entities present.
+  - All `x1` start-coordinates ∈ `[placement.x, placement.x + effectiveW]`.
+  - All `y1` start-coordinates ∈ `[placement.y, placement.y + effectiveH]`.
+  - All `x2` end-coordinates ∈ `[placement.x, placement.x + effectiveW]`.
+  - All `y2` end-coordinates ∈ `[placement.y, placement.y + effectiveH]`.
+  - Diagonal-1 runs exactly `(minX, minY) → (maxX, maxY)` (tolerance 0.001 mm).
+  - Diagonal-2 runs exactly `(maxX, minY) → (minX, maxY)` (tolerance 0.001 mm).
+
+#### Stage 15 — HATCH_CURVED diagonal length equals `√(effectiveW²+effectiveH²)` (`b5dcbf1a`, 2026-08-26)
+- **File:** `src/e2e/curvedPanelDxfPipeline.smoke.test.ts`
+- Covers both ARC (`SMOKE_DOOR`) and S_CURVE (`SMOKE_SCURVE_DOOR`) panels.
+- Shared `parseHatchCoords()` helper (same regex pattern as Stage 14) and
+  `diagLen()` Euclidean distance helper scoped to the `describe` block.
+- **6 assertions:**
+  - ARC diagonal-1 length ≈ `√(effectiveW²+effectiveH²)` (`toBeCloseTo` 3 d.p.).
+  - ARC diagonal-2 length ≈ `√(effectiveW²+effectiveH²)`.
+  - S_CURVE diagonal-1 length ≈ `√(effectiveW²+effectiveH²)`.
+  - S_CURVE diagonal-2 length ≈ `√(effectiveW²+effectiveH²)`.
+  - ARC flat-blank diagonal (`≈993.5 mm`) > finish-panel diagonal (`≈894.4 mm`).
+  - S_CURVE flat-blank diagonal (`≈1164.6 mm`) > finish-panel diagonal (`≈1029.6 mm`).
+- Verifies that the arc correction strictly enlarges the flat blank for both
+  profile types, meaning the hatch diagonal is always longer than the
+  finish-size diagonal.
+
+---
+
 ## [2.2.0] - 2026-08-26
 
 ### 🌀 Curved Panel System — Full Implementation (Phases 0–7 + Pipeline Extension)
