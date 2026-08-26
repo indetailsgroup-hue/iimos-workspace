@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.4] - 2026-08-26
+
+### 🧪 Smoke Suite — Shared Midpoint Invariant (Stage 25)
+
+Patch release adding a smoke stage that asserts both `HATCH_CURVED` diagonals
+of every curved panel share the same midpoint, confirming the X-hatch crosses
+at the centre of the flat-blank placement bbox.
+
+**Total smoke test delta: 169 → 175 (+6 tests)**
+
+---
+
+#### Stage 25 — midpoint of diagonal-1 equals midpoint of diagonal-2 (`a99d6abc`, 2026-08-26)
+
+Asserts that for each curved panel the two diagonals satisfy:
+
+```
+(d1.x1 + d1.x2) / 2  ≈  (d2.x1 + d2.x2) / 2   (midX)
+(d1.y1 + d1.y2) / 2  ≈  (d2.y1 + d2.y2) / 2   (midY)
+```
+
+Tolerance: `toBeCloseTo(x, 1)` (±0.05 mm). The 0.01 mm rounding introduced
+in Stage 22 can shift each midpoint coord by at most 0.005 mm, so the
+worst-case midpoint difference is 0.01 mm — well within the ±0.05 mm window.
+
+Helpers: `midX(d: Coords): number`, `midY(d: Coords): number`
+
+Panel set: same three-panel sheet as Stages 19–24
+(SMOKE\_DOOR + SMOKE\_SCURVE\_DOOR + SMOKE\_TALL\_ARC).
+
+**6 assertions added. Smoke total: 169 → 175.**
+
+---
+
 ## [2.3.3] - 2026-08-26
 
 ### 🧪 Smoke Suite — Non-Degenerate Diagonal Invariant (Stage 24)
