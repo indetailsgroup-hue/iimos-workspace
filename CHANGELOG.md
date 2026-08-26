@@ -9,13 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.2.1] - 2026-08-26
 
-### 🧪 Smoke Suite — Stage 14 & 15 (Geometric Assertions)
+### 🧪 Smoke Suite — Stages 14, 15 & 16 (Geometric Assertions)
 
-Patch adds two new E2E smoke stages to `curvedPanelDxfPipeline.smoke.test.ts`
+Patch adds three new E2E smoke stages to `curvedPanelDxfPipeline.smoke.test.ts`
 that verify the geometric correctness of `HATCH_CURVED` X-line coordinates
 produced by `buildDxfSheets.ts`.
 
-**New tests added:** 13 (109 → 115 in smoke file)
+**New tests added:** 17 (109 → 119 in smoke file, 115 → 119 after Stage 16)
 
 ---
 
@@ -51,6 +51,19 @@ produced by `buildDxfSheets.ts`.
 - Verifies that the arc correction strictly enlarges the flat blank for both
   profile types, meaning the hatch diagonal is always longer than the
   finish-size diagonal.
+
+#### Stage 16 — HATCH_CURVED diagonals exceed finish-panel shorter side (`e5a60918`, 2026-08-26)
+- **File:** `src/e2e/curvedPanelDxfPipeline.smoke.test.ts`
+- Covers both ARC (`SMOKE_DOOR`) and S_CURVE (`SMOKE_SCURVE_DOOR`) panels.
+- Minimum-sanity guard: a diagonal shorter than the finish panel's own shorter
+  side indicates a catastrophic sizing bug in the flat-blank correction or FFDH
+  placement. Derived from the Pythagorean bound
+  `flatBlankDiag ≥ max(effectiveW, effectiveH) > min(finishW, finishH)`.
+- **4 assertions** (2 diagonals × 2 panel types):
+  - ARC diagonal-1 > `min(400, 800)` = 400 mm (actual ≈ 993.5 mm).
+  - ARC diagonal-2 > 400 mm.
+  - S_CURVE diagonal-1 > `min(500, 900)` = 500 mm (actual ≈ 1164.6 mm).
+  - S_CURVE diagonal-2 > 500 mm.
 
 ---
 
