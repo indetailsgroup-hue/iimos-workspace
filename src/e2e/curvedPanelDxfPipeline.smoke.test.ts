@@ -260,3 +260,77 @@ describe('@smoke — Stage 4: buildDxfSheet() renders curved DXF', () => {
     expect(dxf).toContain('SMOKE_DOOR');
   });
 });
+
+// ============================================================
+// Stage 5 — bytes field: valid UTF-8 Uint8Array matching content
+// ============================================================
+
+describe('@smoke — Stage 5: DxfSheetOutput.bytes is a valid UTF-8 Uint8Array', () => {
+  function runPipelineFull() {
+    const { row, kerfCount } = buildCurvedRow();
+    const { sheets } = runNesting([row]);
+
+    const planned: PlannedSheet = {
+      index1: 1,
+      sheetId: 'SHEET_001',
+      materialId: MATERIAL_ID,
+    };
+
+    return {
+      output: buildDxfSheet({
+        planned,
+        nesting: sheets[0],
+        profile: getFactoryProfile('DEFAULT'),
+      }),
+      kerfCount,
+    };
+  }
+
+  it('bytes is a Uint8Array', () => {
+    const { output } = runPipelineFull();
+    expect(output.bytes).toBeInstanceOf(Uint8Array);
+  });
+
+  it('bytes is non-empty', () => {
+    const { output } = runPipelineFull();
+    expect(output.bytes.byteLength).toBeGreaterThan(0);
+  });
+
+  it('bytes decodes to the same string as content (UTF-8 round-trip)', () => {
+    const { output } = runPipelineFull();
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(output.bytes);
+    expect(decoded).toBe(output.content);
+  });
+
+  it('byte length equals the UTF-8 encoded length of content', () => {
+    const { output } = runPipelineFull();
+    // Re-encode content independently and compare byte lengths
+    const reEncoded = new TextEncoder().encode(output.content);
+    expect(output.bytes.byteLength).toBe(reEncoded.byteLength);
+  });
+
+  it('bytes is valid UTF-8 (TextDecoder with fatal=true does not throw)', () => {
+    const { output } = runPipelineFull();
+    expect(() =>
+      new TextDecoder('utf-8', { fatal: true }).decode(output.bytes)
+    ).not.toThrow();
+  });
+
+  it('content string is exactly reproducible from bytes (no BOM, no extra bytes)', () => {
+    const { output } = runPipelineFull();
+    // ASCII-only DXF → every code unit maps to exactly one byte
+    const allAscii = [...output.content].every((ch) => ch.codePointAt(0)! < 128);
+    if (allAscii) {
+      expect(output.bytes.byteLength).toBe(output.content.length);
+    }
+    // Regardless of encoding width, decoded text must equal content precisely
+    const decoded = new TextDecoder('utf-8').decode(output.bytes);
+    expect(decoded).toBe(output.content);
+  });
+
+  it('bytes still contains the "(CURVED / N cuts)" sub-label when decoded', () => {
+    const { output, kerfCount } = runPipelineFull();
+    const decoded = new TextDecoder('utf-8').decode(output.bytes);
+    expect(decoded).toContain(`(CURVED / ${kerfCount} cuts)`);
+  });
+});
