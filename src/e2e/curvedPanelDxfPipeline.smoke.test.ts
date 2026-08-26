@@ -1182,3 +1182,115 @@ describe('@smoke S-CURVE — Stage 10: HATCH_CURVED count scales to 6 with three
     expect(output.content).toContain('SMOKE_ARC_SMALL');
   });
 });
+
+// ============================================================
+// @smoke — Stage 11: HATCH_CURVED is absent when all three
+//   curved panels are replaced with straight panels.
+//
+// This is the complement of Stage 10: the same sheet geometry
+// with three straight rows must produce zero HATCH_CURVED lines,
+// zero PARTS_CURVED rects, and no (CURVED / N cuts) sub-label.
+//
+//   HATCH_CURVED count  = 0
+//   PARTS_CURVED count  = 0
+//   PARTS count         = 12  (3 straight rects × 4 lines each)
+// ============================================================
+
+/** Third straight panel — distinct partId and size from STRAIGHT_ROW and STRAIGHT_ROW_2 */
+const STRAIGHT_ROW_3: CutListRow = {
+  partId: 'SMOKE_STRAIGHT_SIDE',
+  cabinetId: 'CAB_SMOKE',
+  materialId: MATERIAL_ID,
+  finishW: 200,
+  finishH: 300,
+  edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+  premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+  cutW: 200,
+  cutH: 300,
+  qty: 1,
+};
+
+describe('@smoke — Stage 11: HATCH_CURVED is absent when all panels are straight', () => {
+  function runStage11() {
+    // Three straight rows — no curved panels at all
+    const { sheets, unplacedParts } = runNesting([STRAIGHT_ROW, STRAIGHT_ROW_2, STRAIGHT_ROW_3]);
+
+    const planned: PlannedSheet = {
+      index1: 1,
+      sheetId: 'SHEET_001',
+      materialId: MATERIAL_ID,
+    };
+
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const placements = sheets[0].placements;
+    const straight1 = placements.find((p) => p.partId === 'SMOKE_STRAIGHT_SHELF')!;
+    const straight2 = placements.find((p) => p.partId === 'SMOKE_STRAIGHT_BACK')!;
+    const straight3 = placements.find((p) => p.partId === 'SMOKE_STRAIGHT_SIDE')!;
+
+    // ENTITIES section only — TABLES layer definitions must not be counted
+    const entitiesStart = output.content.indexOf('ENTITIES');
+    const entities = output.content.slice(entitiesStart);
+
+    const countLayer = (layer: string): number =>
+      entities
+        .split('LINE')
+        .slice(1)
+        .filter((seg) => seg.includes(`\n8\n${layer}\n`))
+        .length;
+
+    return {
+      output, entities,
+      straight1, straight2, straight3,
+      unplacedParts, sheets,
+      countLayer,
+    };
+  }
+
+  it('all three straight panels placed on sheets[0] — no unplaced parts', () => {
+    const { unplacedParts, sheets } = runStage11();
+    expect(unplacedParts).toHaveLength(0);
+    const ids = sheets[0].placements.map((p) => p.partId);
+    expect(ids).toContain('SMOKE_STRAIGHT_SHELF');
+    expect(ids).toContain('SMOKE_STRAIGHT_BACK');
+    expect(ids).toContain('SMOKE_STRAIGHT_SIDE');
+  });
+
+  it('all three placements have isCurved falsy', () => {
+    const { straight1, straight2, straight3 } = runStage11();
+    expect(straight1.isCurved).toBeFalsy();
+    expect(straight2.isCurved).toBeFalsy();
+    expect(straight3.isCurved).toBeFalsy();
+  });
+
+  it('HATCH_CURVED count is exactly 0 — no hatch lines without curved panels', () => {
+    const { countLayer } = runStage11();
+    expect(countLayer('HATCH_CURVED')).toBe(0);
+  });
+
+  it('PARTS_CURVED count is exactly 0 — no curved rects without curved panels', () => {
+    const { countLayer } = runStage11();
+    expect(countLayer('PARTS_CURVED')).toBe(0);
+  });
+
+  it('PARTS count is exactly 12 — three straight rects × 4 lines each', () => {
+    const { countLayer } = runStage11();
+    expect(countLayer('PARTS')).toBe(12);
+  });
+
+  it('no (CURVED / N cuts) sub-label appears anywhere in the DXF', () => {
+    const { entities } = runStage11();
+    expect(entities).not.toContain('(CURVED /');
+  });
+
+  it('all three part labels are present in the DXF', () => {
+    const { output } = runStage11();
+    expect(output.content).toContain('SMOKE_STRAIGHT_SHELF');
+    expect(output.content).toContain('SMOKE_STRAIGHT_BACK');
+    expect(output.content).toContain('SMOKE_STRAIGHT_SIDE');
+  });
+});
