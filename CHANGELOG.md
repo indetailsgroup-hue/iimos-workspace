@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.3] - 2026-08-26
+
+### 🧪 Smoke Suite — Stage 18 (X-Hatch Symmetry Assertion)
+
+Patch adds Stage 18 to `curvedPanelDxfPipeline.smoke.test.ts`, asserting
+that diagonal-2 (the anti-diagonal) of both ARC and S_CURVE placements
+equals the endpoint-derived bbox diagonal and that both diagonals of each
+panel are equal in length.
+
+**New tests added:** 4 (126 → 130 in smoke file)
+
+---
+
+### Added
+
+#### Stage 18 — diagonal-2 lengths equal bbox diagonal for both ARC and S_CURVE on mixed-panel sheet (`56c0a24b`, 2026-08-26)
+- **File:** `src/e2e/curvedPanelDxfPipeline.smoke.test.ts`
+- Covers the same mixed ARC (`SMOKE_DOOR`) + S_CURVE (`SMOKE_SCURVE_DOOR`)
+  fixture as Stage 17, targeting the anti-diagonal (index `[1]` in each
+  placement group) rather than the main diagonal (index `[0]`).
+- Stage 17 verified diagonal-1 for both panel types. Stage 18 extends
+  coverage to diagonal-2 and adds a symmetry check — asserting that
+  both diagonals of each panel share the same length — catching any
+  renderer bug where one endpoint uses finish-size coords while the other
+  uses flat-blank-corrected coords.
+- Reuses the same `linesForPlacement` y-origin grouping and endpoint-derived
+  `effectiveW` / `effectiveH` as Stage 17; only the group index changes
+  from `[0]` to `[1]`.
+- **4 assertions** (2 per panel type):
+  - ARC diagonal-2 length ≈ `√(arcEffW² + arcEffH²)` (`toBeCloseTo` 3 d.p.).
+  - ARC diagonal-1 and diagonal-2 lengths are equal (X-hatch is symmetric).
+  - S_CURVE diagonal-2 length ≈ `√(sCurveEffW² + sCurveEffH²)`.
+  - S_CURVE diagonal-1 and diagonal-2 lengths are equal (X-hatch is symmetric).
+
+---
+
 ## [2.2.2] - 2026-08-26
 
 ### 🧪 Smoke Suite — Stage 17 (Spatial Partition Assertion)
