@@ -7,6 +7,154 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.0] - 2026-08-26
+
+### 🌀 Curved Panel System — Full Implementation (Phases 0–7 + Pipeline Extension)
+
+This release delivers the complete **Curved Panel System** for kerf-bent cabinet panels,
+from material science foundations through CNC export, nesting optimisation, DXF rendering,
+and a fully verified E2E smoke test suite.
+
+**New tests added:** 102 E2E smoke tests + 250 unit tests across 9 new modules  
+**Total test suite at release:** 5,680+ passing
+
+---
+
+### Added
+
+#### Phase 0 — Kerf Bending Engine (`88fb8c22`, 2026-08-25)
+- **`src/core/catalog/KerfBending.ts`** — complete rewrite
+  - `KerfToolProfile`: blade kerf width, tooth set, pass depth
+  - `c_mat` correction coefficients per material (MDF, PLY, HDF, SOLID)
+  - Springback angle `γ` for spring-back compensation
+  - `lookupMinBendRadius()`: R_min catalog (MDF 18 mm → 144 mm)
+  - Variable `p(s)` stress distribution across kerf pattern
+  - Web ≥ 15% hard-block guard prevents structural failure
+- **77 unit tests** (`KerfBending.test.ts`)
+
+#### Phase 1 — Type System + Curve Profile Engine (`e9672c26`, 2026-08-25)
+- **`src/core/types/Cabinet.ts`** — `PanelProfile` discriminated union
+  - `ARC { kind, edge, radius, sweepDeg }` — single-radius arc panel
+  - `S_CURVE { kind, edge, r1, r2, sweepDeg1, sweepDeg2 }` — two-radius S-curve
+- **`src/core/manufacturing/curve/curveProfile.ts`**
+  - `computeArcSegment()`: arc length, chord depth, flat-blank correction
+  - `computeSCurveSegments()`: compound `L_outer = r1·sweep1 + r2·sweep2`
+- **`src/core/types/SkinConfig.ts`** — skin layer thickness & material model
+- **27 unit tests** (`curveProfile.test.ts`)
+
+#### Phase 2 — Pattern Generators (`038e6675`, 2026-08-25)
+- **`src/core/manufacturing/curve/kerfPatternGenerator.ts`**
+  - `generateKerfPattern()`: slot positions, depths, widths for target bend
+- **`src/core/manufacturing/curve/matingSlotGenerator.ts`**
+  - `generateMatingSlots()`: complementary slots on mating panel face
+- **43 unit tests**
+
+#### Phase 3 — G12 Manufacturability Gate (`238c5843`, 2026-08-25)
+- **`src/factory/gates/gateG12_curveManufacturability.ts`**
+  - 10 hard rules: R ≥ R_min, web integrity, slot overlap, skin thickness,
+    sweep angle range, material support, edge clearance, slot count ceiling,
+    compound-curve sweep balance, springback margin
+- **41 unit tests**
+
+#### Phase 4 — Kerf Zone Drill Filter (`8f55e81e`, 2026-08-25)
+- **`src/core/manufacturing/curve/kerfZoneFilter.ts`**
+  - `filterDrillPointsInKerfZone()`: excludes drill points inside kerf slots
+  - Integrated into `generateDrillMap.ts` — prevents drill/kerf collisions
+- **21 unit tests**
+
+#### Phase 5 — Arc Profile Geometry + Canvas Overlays (`dda12e20`, 2026-08-25)
+- **Arc profile geometry** (`src/core/geometry/arcProfileGeometry.ts`)
+  - `computeArcBoundingBox()`, `computeArcChord()`, `sampleArcPoints()`
+- **`KerfPatternOverlay`** (`src/canvas/overlays/KerfPatternOverlay.tsx`)
+  - Real-time canvas rendering of kerf slot positions on curved panels
+- **`PanelOverrideModal`** — Curve section for radius / sweep override
+- 135 curve-related unit tests passing across Phases 0–5
+
+#### Phase 6 — OperationGraph SLOT Ops + DXF Arc Entity (`ed4d591d`, 2026-08-25)
+- **`SlotOperation`** added to OperationGraph for kerf-slot CNC paths
+- **DXF arc entity emitter** in `buildDxfSheets.ts` — ARC entity for curved profiles
+- **`CutListRow`** extended: `developedLength?`, `kerfCount?`, `projectedDepth?`, `curvedEdge?`
+- **`PacketCutListRow`** mirror fields added to `src/factory/packet/types.ts`
+
+#### Phase 7 — Phase 7 @smoke Baseline (`93b6074c`, 2026-08-25)
+- **`src/e2e/curvedPanelSystem.smoke.test.ts`** — 12 tests
+  - ARC-only pipeline: `generateKerfPattern → DrillMap → G12 gate` end-to-end
+
+---
+
+### Nesting Pipeline Extension (Tasks 12–15)
+
+#### Task 12 — `developedLength` + `kerfCount` in Cut List (`b061243f`, 2026-08-25)
+- **`src/factory/packet/builders/curveFieldsComputer.ts`** (new)
+  - `computeCurveFields(panel, tool, material)` — derives `developedLength`,
+    `kerfCount`, `projectedDepth`, `curvedEdge` from live `generateKerfPattern` output
+  - `DEFAULT_KERF_TOOL` constant exported for test fixtures
+- **`src/factory/packet/builders/buildCutList.ts`** extended
+  - `BuildCutListOptions` — opt-in curved field computation
+  - Curved rows automatically carry `developedLength` and `kerfCount`
+- **16 unit tests** (`curveFieldsComputer.test.ts`)
+
+#### Task 13 — Flat-Blank Nesting Bins (`42879c2d`, 2026-08-26)
+- **`src/nesting/optimizer.ts`** — `extractNestingParts()` updated
+  - Curved panels binned by `flatBlankW / flatBlankH` (developed size) not finish size
+  - Correction formula: `flatBlankH = finishH + developedLength − projectedDepth`
+- **`src/nesting/types.ts`** — `NestingPart` extended: `isCurved?`, `flatBlankW?`, `flatBlankH?`, `kerfCount?`
+- **`CurveFields`** extended with `projectedDepth` and `curvedEdge`
+- **`buildCutListCsv.ts`** — `DEV_LENGTH` and `KERF_COUNT` columns added
+- **18 new unit tests**
+
+#### Task 14 — DXF Curved Layer Rendering (`80f2eb41`, 2026-08-26)
+- **`NestingSheet.placements`** (`monolithExportContext.ts`) — `isCurved?: boolean` added
+- **`runNesting()`** — builds `isCurvedMap` and propagates to placements
+- **`buildDxfSheets.ts`** — full TABLES/LAYER section (6 layers with ACI colors):
+  - `PARTS_CURVED` (ACI 1, red) — bounding rect for curved panels
+  - `HATCH_CURVED` (ACI 4, cyan) — two diagonal X-hatch lines per curved placement
+  - `(CURVED)` sub-label emitted on `LABELS` layer
+- **18 new tests** (`buildDxfSheets.curvedLayer.test.ts`)
+
+#### Task 15 — `kerfCount` in Curved Sub-Label (`8bde2f35`, 2026-08-26)
+- **`NestingSheet.placements`** — `kerfCount?: number` added
+- **`runNesting()`** — builds `kerfCountMap` alongside `isCurvedMap`
+- Sub-label renders `(CURVED / ${kerfCount} cuts)` with `(CURVED)` fallback
+- **+3 tests** (21 total in `buildDxfSheets.curvedLayer.test.ts`)
+
+---
+
+### E2E Smoke Test Suite — `curvedPanelDxfPipeline.smoke.test.ts`
+
+Full pipeline: `computeCurveFields → CutListRow → runNesting → buildDxfSheet → DXF assertions`
+
+| Commit | Date | Stage(s) | Tests |
+|--------|------|----------|------:|
+| `6b851395` | 2026-08-26 | ARC Stages 1–4: curve fields, cut list row, nesting, DXF content | 18 |
+| `cc54dd4e` | 2026-08-26 | ARC Stage 5: DXF `bytes` UTF-8 Uint8Array round-trip | 25 |
+| `683bcee0` | 2026-08-26 | S_CURVE fixture — Stages 1–5 replicated for two-radius profile | 47 |
+| `2996e4c3` | 2026-08-26 | S_CURVE Stage 6: `HATCH_CURVED` X-lines span flat-blank footprint | 53 |
+| `b9d90625` | 2026-08-26 | Stage 7: `HATCH_CURVED` absent for straight panel on mixed sheet | 60 |
+| `5d0d50c4` | 2026-08-26 | Stage 8: `HATCH_CURVED` = 2 with two straight + one curved panel | 67 |
+| `946b7629` | 2026-08-26 | Stage 9: `HATCH_CURVED` scales to 4 with two curved panels | 74 |
+| `d59837cc` | 2026-08-26 | Stage 10: `HATCH_CURVED` scales to 6 with three curved panels | 81 |
+| `d82727b6` | 2026-08-26 | Stage 11: `HATCH_CURVED` = 0 when all three panels are straight | 88 |
+| `5f812ed6` | 2026-08-26 | Stage 12: `HATCH_CURVED` = 2 after replacing one straight with curved | 95 |
+| `faaef037` | 2026-08-26 | Stage 13: `HATCH_CURVED` = 4 after replacing two straights with curved | 102 |
+
+**Verified invariant** (`HATCH_CURVED = 2 × curved_count`) across all combinations of 0–3 curved panels.
+
+---
+
+### Documentation
+
+#### JSDoc Invariant Tables (`b49f4d3d`, `ba29380d`, 2026-08-26)
+- **`src/e2e/curvedPanelDxfPipeline.smoke.test.ts`** — top-level JSDoc block added:
+  - `HATCH_CURVED` layer invariant table (Stages 7–13)
+  - Formulae: `HATCH_CURVED = 2×curved`, `PARTS_CURVED = 4×curved`, `PARTS = 4×straight`
+- **`src/core/export/monolith/builders/buildDxfSheets.ts`** — `NESTING_LAYERS` JSDoc block added:
+  - Layer color codes table (6 layers, ACI palette)
+  - Hatch-line emission rules (geometry of the two diagonal LINEs)
+  - LINE count invariants per sheet with cross-reference to smoke test stages
+
+---
+
 ## [2.1.0] - 2026-01-22
 
 ### 🏭 Factory-Ready CNC Pipeline (Phases D1–D3.3)
