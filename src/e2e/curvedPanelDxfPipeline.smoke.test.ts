@@ -39,6 +39,7 @@
  *    13 |      2 |         1 |            4 |            8 |     4
  *    14 |      1 |         0 | bbox-confinement (coordinate assertion, S_CURVE only)
  *    15 | ARC+S_CURVE | — | diagonal length = sqrt(effectiveW²+effectiveH²); flat-blank diag > finish diag
+ *    16 | ARC+S_CURVE | — | flat-blank diag > min(finishW, finishH) (shorter-side guard)
  *
  * ─────────────────────────────────────────────────────────────────────────────
  *
@@ -1792,5 +1793,106 @@ describe('@smoke — Stage 15: HATCH_CURVED diagonal length equals sqrt(effectiv
       S_CURVE_PANEL_STUB.finishWidth ** 2 + S_CURVE_PANEL_STUB.finishHeight ** 2
     );
     expect(flatDiag).toBeGreaterThan(finishDiag);
+  });
+});
+
+// ============================================================
+// @smoke — Stage 16: HATCH_CURVED diagonals are strictly longer
+//          than the finish-panel shorter side for ARC and S_CURVE
+//
+// Because the flat blank is always at least as large as the finish
+// panel in both dimensions (arc correction only adds material, never
+// subtracts), the space diagonal of the flat blank must exceed either
+// individual finish dimension — in particular the shorter one:
+//
+//   flatBlankDiag = sqrt(effectiveW² + effectiveH²)
+//                ≥ max(effectiveW, effectiveH)        (Pythagorean bound)
+//                > min(finishW, finishH)               (correction ≥ 0)
+//
+// Concrete lower bounds from the fixture values:
+//   ARC     shorter side = min(400, 800) = 400 mm
+//           flat-blank diag ≈ 993.5 mm   >> 400 mm ✓
+//
+//   S_CURVE shorter side = min(500, 900) = 500 mm
+//           flat-blank diag ≈ 1164.6 mm  >> 500 mm ✓
+//
+// This is a minimum-sanity guard: a diagonal shorter than the finish
+// panel's own shorter side would indicate a catastrophic sizing bug
+// in the flat-blank correction or FFDH placement.
+// ============================================================
+
+describe('@smoke — Stage 16: HATCH_CURVED diagonals strictly exceed finish-panel shorter side', () => {
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function diagLen(c: Coords): number {
+    return Math.sqrt((c.x2 - c.x1) ** 2 + (c.y2 - c.y1) ** 2);
+  }
+
+  function runFor(row: CutListRow, partId: string) {
+    const { sheets } = runNesting([row]);
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    sheets[0].placements.find((p) => p.partId === partId)!;
+    return { coords: parseHatchCoords(output.content) };
+  }
+
+  // ── ARC panel ────────────────────────────────────────────
+  // shorter finish side = min(400, 800) = 400 mm
+
+  it('ARC — diagonal-1 > min(finishWidth, finishHeight) [400 mm]', () => {
+    const { row } = buildCurvedRow();
+    const { coords } = runFor(row, 'SMOKE_DOOR');
+    const shorterSide = Math.min(PANEL_STUB.finishWidth, PANEL_STUB.finishHeight);
+    expect(diagLen(coords[0])).toBeGreaterThan(shorterSide);
+  });
+
+  it('ARC — diagonal-2 > min(finishWidth, finishHeight) [400 mm]', () => {
+    const { row } = buildCurvedRow();
+    const { coords } = runFor(row, 'SMOKE_DOOR');
+    const shorterSide = Math.min(PANEL_STUB.finishWidth, PANEL_STUB.finishHeight);
+    expect(diagLen(coords[1])).toBeGreaterThan(shorterSide);
+  });
+
+  // ── S_CURVE panel ─────────────────────────────────────────
+  // shorter finish side = min(500, 900) = 500 mm
+
+  it('S_CURVE — diagonal-1 > min(finishWidth, finishHeight) [500 mm]', () => {
+    const { row } = buildSCurveRow();
+    const { coords } = runFor(row, 'SMOKE_SCURVE_DOOR');
+    const shorterSide = Math.min(
+      S_CURVE_PANEL_STUB.finishWidth,
+      S_CURVE_PANEL_STUB.finishHeight
+    );
+    expect(diagLen(coords[0])).toBeGreaterThan(shorterSide);
+  });
+
+  it('S_CURVE — diagonal-2 > min(finishWidth, finishHeight) [500 mm]', () => {
+    const { row } = buildSCurveRow();
+    const { coords } = runFor(row, 'SMOKE_SCURVE_DOOR');
+    const shorterSide = Math.min(
+      S_CURVE_PANEL_STUB.finishWidth,
+      S_CURVE_PANEL_STUB.finishHeight
+    );
+    expect(diagLen(coords[1])).toBeGreaterThan(shorterSide);
   });
 });
