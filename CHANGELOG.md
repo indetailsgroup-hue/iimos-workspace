@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.2] - 2026-08-26
+
+### 🧪 Smoke Suite — Stage 17 (Spatial Partition Assertion)
+
+Patch adds Stage 17 to `curvedPanelDxfPipeline.smoke.test.ts`, asserting
+that `HATCH_CURVED` lines are correctly partitioned between the ARC and
+S_CURVE placements on a mixed-panel sheet.
+
+**New tests added:** 7 (119 → 126 in smoke file)
+
+---
+
+### Added
+
+#### Stage 17 — HATCH_CURVED lines spatially partitioned between ARC and S_CURVE placements (`f66cb5a4`, 2026-08-26)
+- **File:** `src/e2e/curvedPanelDxfPipeline.smoke.test.ts`
+- Covers a sheet containing one ARC panel (`SMOKE_DOOR`) and one S_CURVE panel
+  (`SMOKE_SCURVE_DOOR`) — the same fixture combination as Stage 9.
+- Stage 9 only verified the global `HATCH_CURVED` count (4). Stage 17 parses
+  every line's `(x1, y1, x2, y2)` coordinates and asserts that each of the 4
+  lines is attributed to the correct placement region.
+- **Grouping strategy:** `buildDxfSheets` always starts both diagonals at the
+  placement's `(x, y)` corner, so `min(y1, y2) ≈ placement.y` for both lines in
+  a group (±1 mm tolerance). Because FFDH places ARC and S_CURVE on distinct
+  shelf rows, the y-origins differ by ≥ 400 mm — unambiguous separation.
+- **Effective bbox** for each group is derived from the line endpoints themselves
+  (`maxX − placement.x`, `maxY − placement.y`) since `Placement.w/h` are not
+  present on the nesting type.
+- **Sheet layout** (1220 × 2440, kerfWidth=3.5, edgeClearance=10):
+  - Shelf 1 — S_CURVE panel (rotation=90°) → effectiveH ≈ 500 mm, y = 10
+  - Shelf 2 — ARC panel     (rotation=90°) → effectiveH ≈ 400 mm, y = 513.5
+- **7 assertions:**
+  - Total `HATCH_CURVED` count is exactly 4.
+  - Exactly 2 lines attributed to the S_CURVE placement (y-origin ≈ 10 mm).
+  - Exactly 2 lines attributed to the ARC placement (y-origin ≈ 513.5 mm).
+  - All 4 lines fully accounted for across both groups (arcLines + sCurveLines = 4).
+  - ARC and S_CURVE placements occupy distinct shelf rows (y-origins differ).
+  - ARC-group diagonal-1 length ≈ `√(arcEffW² + arcEffH²)` (endpoint-derived, `toBeCloseTo` 3 d.p.).
+  - S_CURVE-group diagonal-1 length ≈ `√(sCurveEffW² + sCurveEffH²)` (endpoint-derived).
+
+---
+
 ## [2.2.1] - 2026-08-26
 
 ### 🧪 Smoke Suite — Stages 14, 15 & 16 (Geometric Assertions)
