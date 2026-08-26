@@ -79,6 +79,36 @@ export interface CutListRow {
 
   /** Grain direction */
   grain?: 'HORIZONTAL' | 'VERTICAL' | 'NONE';
+
+  // ---- Curved Panel Fields (optional, present only for ARC / S_CURVE profiles) ----
+
+  /**
+   * Developed (flat) arc length of the curved zone, in mm.
+   * = R × sweepRad for ARC; Σ rₙ×sweepRadₙ for S_CURVE.
+   * When present, the nesting optimizer uses this to compute the flat-blank size.
+   */
+  developedLength?: number;
+
+  /**
+   * Total kerf cuts required to achieve the bend.
+   * Passed through to the cut sheet for CNC programming.
+   */
+  kerfCount?: number;
+
+  /**
+   * Projected depth of the curved zone along the bend axis (mm).
+   * = R × (1 − cos(sweepRad)) for ARC.
+   * Flat blank along curved axis = cutDim + (developedLength − projectedDepth).
+   */
+  projectedDepth?: number;
+
+  /**
+   * Which panel edge carries the primary curve (ARC / S_CURVE only).
+   * TOP/BOTTOM: curved axis is HEIGHT → optimizer adjusts cutH.
+   * LEFT/RIGHT: curved axis is WIDTH  → optimizer adjusts cutW.
+   * Absent for ROUNDED_CORNER (corner curve, no single dominant edge).
+   */
+  curvedEdge?: 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT';
 }
 
 // ============================================

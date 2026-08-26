@@ -170,6 +170,17 @@ export interface PacketCutListRow {
   developedLength?: number;
   /** Number of kerf cuts for this panel. Present only when panel has a curve profile. */
   kerfCount?: number;
+  /**
+   * Projected depth of the curved zone along the bend axis (mm).
+   * = R × (1 − cos(sweepRad)) for ARC; sum of per-arc terms for S_CURVE.
+   * Used by the nesting optimizer: flatBlank = cut + (developedLength − projectedDepth).
+   */
+  projectedDepth?: number;
+  /**
+   * Panel edge that carries the primary curve (ARC / S_CURVE).
+   * Absent for ROUNDED_CORNER (corner curve, no single dominant edge).
+   */
+  curvedEdge?: 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT';
   /** Notes */
   note?: string;
 }

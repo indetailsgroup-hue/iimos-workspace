@@ -154,6 +154,8 @@ function panelToCutListRow(
   // ── Curve fields (Task 12) ──────────────────────────────────────────────
   let developedLength: number | undefined;
   let kerfCount: number | undefined;
+  let projectedDepth: number | undefined;
+  let curvedEdge: 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT' | undefined;
 
   if (panel.profile && panel.profile.kind !== 'RECT') {
     const tool = options?.kerfTool ?? DEFAULT_KERF_TOOL;
@@ -166,6 +168,12 @@ function panelToCutListRow(
     if (fields) {
       developedLength = roundToPrecision(fields.developedLength);
       kerfCount = fields.kerfCount; // integer — no rounding needed
+      if (fields.projectedDepth > 0) {
+        projectedDepth = roundToPrecision(fields.projectedDepth);
+      }
+      if (fields.curvedEdge !== null) {
+        curvedEdge = fields.curvedEdge;
+      }
     }
   }
   // ────────────────────────────────────────────────────────────────────────
@@ -196,6 +204,8 @@ function panelToCutListRow(
     note: panel.role,
     ...(developedLength !== undefined ? { developedLength } : {}),
     ...(kerfCount !== undefined ? { kerfCount } : {}),
+    ...(projectedDepth !== undefined ? { projectedDepth } : {}),
+    ...(curvedEdge !== undefined ? { curvedEdge } : {}),
   };
 }
 

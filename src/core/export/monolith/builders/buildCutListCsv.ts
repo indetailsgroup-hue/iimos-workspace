@@ -91,6 +91,10 @@ const CSV_COLUMNS: CsvColumn[] = [
   // Metadata
   { header: 'GRAIN', getValue: (r) => r.grain ?? 'NONE' },
   { header: 'NOTE', getValue: (r) => r.note ?? '' },
+
+  // Curved panel fields (blank when not a curved panel)
+  { header: 'DEV_LENGTH', getValue: (r) => r.developedLength ?? '' },
+  { header: 'KERF_COUNT', getValue: (r) => r.kerfCount ?? '' },
 ];
 
 // ============================================

@@ -33,6 +33,23 @@ export interface CurveFields {
    * = Σ pattern.cuts.length across all KerfPatterns.
    */
   kerfCount: number;
+  /**
+   * Projected depth of the curved zone along the bend axis (mm).
+   * This is the amount by which the finish dimension SHRINKS vs the flat blank
+   * because curvature consumes length.
+   *
+   * For ARC:     R × (1 − cos(sweepRad))
+   * For S_CURVE: r1×(1−cos(s1r)) + r2×(1−cos(s2r))
+   * For ROUNDED_CORNER: corners affect both axes independently; set to 0
+   *   (caller should skip flat-blank correction for ROUNDED_CORNER).
+   */
+  projectedDepth: number;
+  /**
+   * Which panel edge carries the primary curve (ARC / S_CURVE only).
+   * null for ROUNDED_CORNER (curve is at corners, not a single full edge).
+   * Used by the nesting optimizer to know which blank dimension to correct.
+   */
+  curvedEdge: 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT' | null;
 }
 
 // ============================================
@@ -129,7 +146,26 @@ export function computeCurveFields(
     0,
   );
 
-  // Step 2: Generate kerf pattern to count cuts
+  // Step 2: Compute projectedDepth and curvedEdge from profile geometry
+  // projectedDepth = how much the finish dimension is LESS than the flat blank
+  // along the curved axis (the curvature "consumes" length perpendicular to the edge).
+  let projectedDepth = 0;
+  let curvedEdge: CurveFields['curvedEdge'] = null;
+
+  if (profile.kind === 'ARC') {
+    const sweepRad = (profile.sweepDeg * Math.PI) / 180;
+    projectedDepth = profile.radius * (1 - Math.cos(sweepRad));
+    curvedEdge = profile.edge;
+  } else if (profile.kind === 'S_CURVE') {
+    const s1r = (profile.sweepDeg1 * Math.PI) / 180;
+    const s2r = (profile.sweepDeg2 * Math.PI) / 180;
+    projectedDepth = profile.r1 * (1 - Math.cos(s1r)) + profile.r2 * (1 - Math.cos(s2r));
+    curvedEdge = profile.edge;
+  }
+  // ROUNDED_CORNER: corners affect two axes independently; projectedDepth stays 0,
+  // curvedEdge stays null — the optimizer skips flat-blank correction for these.
+
+  // Step 3: Generate kerf pattern to count cuts
   const patternResult = generateKerfPattern({
     profile,
     finishWidth,
@@ -145,5 +181,5 @@ export function computeCurveFields(
     0,
   );
 
-  return { developedLength, kerfCount };
+  return { developedLength, kerfCount, projectedDepth, curvedEdge };
 }

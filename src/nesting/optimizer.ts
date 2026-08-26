@@ -63,6 +63,16 @@ function canRotateWithGrain(grain: GrainDirection): boolean {
  * Grain direction from CutListRow controls rotation:
  * - grain='NONE' or undefined → canRotate=true (free rotation)
  * - grain='HORIZONTAL'|'VERTICAL' → canRotate=false (locked orientation)
+ *
+ * Curved panels (row.developedLength + row.curvedEdge present):
+ * - The flat blank along the curved axis = cutDim + (developedLength − projectedDepth).
+ *   Because the bend "consumes" projectedDepth of the finish dimension, the flat sheet
+ *   must be longer than the cut dimension by the difference between arc length and
+ *   projected depth.
+ * - NestingPart.width/height are set to the FLAT BLANK dimensions so the FFDH
+ *   algorithm bins curved panels by the size of material actually consumed, not the
+ *   smaller post-bend finish footprint.
+ * - isCurved=true is set whenever a non-zero correction is applied.
  */
 export function extractNestingParts(rows: CutListRow[]): NestingPart[] {
   const parts: NestingPart[] = [];
@@ -72,6 +82,33 @@ export function extractNestingParts(rows: CutListRow[]): NestingPart[] {
     const grainDirection = resolveGrain(row.grain);
     const canRotate = canRotateWithGrain(grainDirection);
 
+    // ---- Flat-blank correction for curved panels ----
+    // correction = developedLength − projectedDepth ≥ 0.
+    // For an ARC: developedLength = R×θ, projectedDepth = R×(1−cosθ).
+    //   θ small → correction ≈ 0 (shallow bend, negligible).
+    //   θ=90°  → correction = R×(π/2−1) ≈ R×0.571 (significant quarter-circle).
+    // We only apply the correction when both fields are present AND a curvedEdge is set.
+    const hasCorrection =
+      row.developedLength !== undefined &&
+      row.projectedDepth !== undefined &&
+      row.curvedEdge !== undefined;
+
+    const correction = hasCorrection
+      ? (row.developedLength! - row.projectedDepth!)
+      : 0;
+
+    const flatBlankW =
+      hasCorrection && (row.curvedEdge === 'LEFT' || row.curvedEdge === 'RIGHT')
+        ? row.cutW + correction
+        : row.cutW;
+
+    const flatBlankH =
+      hasCorrection && (row.curvedEdge === 'TOP' || row.curvedEdge === 'BOTTOM')
+        ? row.cutH + correction
+        : row.cutH;
+
+    const isCurved = hasCorrection && correction > 0;
+
     for (let i = 0; i < qty; i++) {
       const id = qty === 1 ? row.partId : `${row.partId}#${i + 1}`;
 
@@ -79,11 +116,15 @@ export function extractNestingParts(rows: CutListRow[]): NestingPart[] {
         id,
         sourcePartId: row.partId,
         cabinetId: row.cabinetId,
-        width: row.cutW,
-        height: row.cutH,
+        width: flatBlankW,
+        height: flatBlankH,
         materialId: row.materialId,
         canRotate,
         grainDirection,
+        isCurved: isCurved || undefined,
+        flatBlankW,
+        flatBlankH,
+        kerfCount: row.kerfCount,
       });
     }
   }
