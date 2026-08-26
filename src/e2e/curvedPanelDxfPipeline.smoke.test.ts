@@ -17,6 +17,29 @@
  * unit suites) and thick on pipeline wiring — every stage must pass its output
  * into the next without data loss.
  *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * HATCH_CURVED Layer Invariant  (verified Stages 7 – 13)
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Every curved placement emits exactly 2 diagonal LINE entities on the
+ * HATCH_CURVED DXF layer; straight placements emit none.  Derived formulae:
+ *
+ *   HATCH_CURVED = 2 × curved_count
+ *   PARTS_CURVED = 4 × curved_count   (one bounding rect = 4 LINEs)
+ *   PARTS        = 4 × straight_count
+ *
+ * Stage | Curved | Straight | HATCH_CURVED | PARTS_CURVED | PARTS
+ * ------|-------:|----------:|:------------:|:------------:|:-----:
+ *     7 |      1 |         1 |            2 |            4 |     4
+ *     8 |      1 |         2 |            2 |            4 |     8
+ *     9 |      2 |         0 |            4 |            8 |     0
+ *    10 |      3 |         0 |            6 |           12 |     0
+ *    11 |      0 |         3 |            0 |            0 |    12
+ *    12 |      1 |         2 |            2 |            4 |     8
+ *    13 |      2 |         1 |            4 |            8 |     4
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
  * Run:
  *   vitest run src/e2e/curvedPanelDxfPipeline.smoke.test.ts
  *
