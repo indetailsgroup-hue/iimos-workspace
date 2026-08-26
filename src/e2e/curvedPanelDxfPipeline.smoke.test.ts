@@ -3306,3 +3306,157 @@ describe('@smoke Stage 25 — midpoint of diagonal-1 equals midpoint of diagonal
     expect(midY(tallArcLines[0])).toBeCloseTo(midY(tallArcLines[1]), 1);
   });
 });
+
+// Stage 26 — Shared midpoint equals the centre of the flat-blank placement bbox
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe('@smoke Stage 26 — shared diagonal midpoint equals bbox centre', () => {
+  /**
+   * Stage 25 showed that both diagonals share the same midpoint.
+   * Stage 26 asserts that this shared midpoint coincides with the geometric
+   * centre of the flat-blank placement bounding box:
+   *
+   *   midX(d)  ≈  (bbox.minX + bbox.maxX) / 2
+   *   midY(d)  ≈  (bbox.minY + bbox.maxY) / 2
+   *
+   * This confirms the X-hatch is centred on the panel, not offset.
+   *
+   * Tolerance: toBeCloseTo(x, 1)  →  ±0.05 mm.
+   * Rounding in addLine() can shift each midpoint coord by at most 0.005 mm,
+   * so the worst-case deviation from the true bbox centre is 0.005 mm —
+   * well within the ±0.05 mm window.
+   *
+   * Panel set: same three-panel sheet as Stages 19–25
+   *            (ARC SMOKE_DOOR + S_CURVE SMOKE_SCURVE_DOOR + TALL_ARC).
+   */
+
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+  type Bbox   = { minX: number; maxX: number; minY: number; maxY: number };
+
+  // ── helpers (self-contained) ──────────────────────────────────────────────
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function bboxForPlacement(p: { x: number; y: number; cutW: number; cutH: number; rotation: number }): Bbox {
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const ew = isRotated ? p.cutH : p.cutW;
+    const eh = isRotated ? p.cutW : p.cutH;
+    return { minX: p.x, maxX: p.x + ew, minY: p.y, maxY: p.y + eh };
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  const midX      = (d: Coords): number => (d.x1 + d.x2) / 2;
+  const midY      = (d: Coords): number => (d.y1 + d.y2) / 2;
+  const centreX   = (b: Bbox):   number => (b.minX + b.maxX) / 2;
+  const centreY   = (b: Bbox):   number => (b.minY + b.maxY) / 2;
+
+  function runStage26() {
+    const { row: arcRow }     = buildCurvedRow();
+    const { row: sCurveRow }  = buildSCurveRow();
+    const { row: tallArcRow } = buildTallArcRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow, tallArcRow]);
+    expect(sheets).toHaveLength(1);
+
+    const arcP     = sheets[0].placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP  = sheets[0].placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const tallArcP = sheets[0].placements.find((p) => p.partId === 'SMOKE_TALL_ARC')!;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const allCoords    = parseHatchCoords(output.content);
+    const arcLines     = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines  = linesForPlacement(allCoords, sCurveP.y);
+    const tallArcLines = linesForPlacement(allCoords, tallArcP.y);
+
+    expect(arcLines).toHaveLength(2);
+    expect(sCurveLines).toHaveLength(2);
+    expect(tallArcLines).toHaveLength(2);
+
+    return {
+      arcLines,    arcBbox:    bboxForPlacement(arcP),
+      sCurveLines, sCurveBbox: bboxForPlacement(sCurveP),
+      tallArcLines, tallBbox:  bboxForPlacement(tallArcP),
+    };
+  }
+
+  // ── Part A: ARC ───────────────────────────────────────────────────────────
+
+  it('ARC — shared midX equals bbox centreX', () => {
+    const { arcLines, arcBbox: b } = runStage26();
+    expect(midX(arcLines[0])).toBeCloseTo(centreX(b), 1);
+  });
+
+  it('ARC — shared midY equals bbox centreY', () => {
+    const { arcLines, arcBbox: b } = runStage26();
+    expect(midY(arcLines[0])).toBeCloseTo(centreY(b), 1);
+  });
+
+  // ── Part B: S_CURVE ───────────────────────────────────────────────────────
+
+  it('S_CURVE — shared midX equals bbox centreX', () => {
+    const { sCurveLines, sCurveBbox: b } = runStage26();
+    expect(midX(sCurveLines[0])).toBeCloseTo(centreX(b), 1);
+  });
+
+  it('S_CURVE — shared midY equals bbox centreY', () => {
+    const { sCurveLines, sCurveBbox: b } = runStage26();
+    expect(midY(sCurveLines[0])).toBeCloseTo(centreY(b), 1);
+  });
+
+  // ── Part C: TALL_ARC ──────────────────────────────────────────────────────
+
+  it('TALL_ARC — shared midX equals bbox centreX', () => {
+    const { tallArcLines, tallBbox: b } = runStage26();
+    expect(midX(tallArcLines[0])).toBeCloseTo(centreX(b), 1);
+  });
+
+  it('TALL_ARC — shared midY equals bbox centreY', () => {
+    const { tallArcLines, tallBbox: b } = runStage26();
+    expect(midY(tallArcLines[0])).toBeCloseTo(centreY(b), 1);
+  });
+});
