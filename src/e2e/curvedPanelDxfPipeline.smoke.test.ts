@@ -1896,3 +1896,154 @@ describe('@smoke — Stage 16: HATCH_CURVED diagonals strictly exceed finish-pan
     expect(diagLen(coords[1])).toBeGreaterThan(shorterSide);
   });
 });
+
+// ============================================================
+// @smoke — Stage 17: Mixed ARC + S_CURVE sheet — HATCH_CURVED
+//          lines are spatially partitioned between the two placements
+//
+// Stage 9 confirms the global count (4) when an ARC and an S_CURVE
+// panel share the same sheet.  Stage 17 goes further: it parses the
+// (x1,y1,x2,y2) coordinates of every HATCH_CURVED line and verifies
+// that the 4 lines are correctly partitioned — exactly 2 per placement
+// — by grouping them according to the y-origin of each placement.
+// It also verifies that the derived effective-bbox diagonal length
+// matches √(effectiveW² + effectiveH²) for each panel type.
+//
+// Grouping strategy: `buildDxfSheets` always draws both diagonals
+// starting from the placement's (x, y) origin, so for both lines in
+// a group min(y1, y2) == placement.y (±1 mm tolerance).  Because FFDH
+// places the two panels on distinct shelf rows the y-origins differ
+// by at least the effectiveH of the first panel, giving unambiguous
+// separation.
+//
+// Sheet layout (1220 × 2440, kerfWidth=3.5, edgeClearance=10):
+//   Shelf 1 — S_CURVE panel (rotation=90) → effectiveH ≈  500 mm, y=10
+//   Shelf 2 — ARC panel     (rotation=90) → effectiveH ≈  400 mm, y=513.5
+//             (FFDH sorts descending by placed height before binning)
+//
+// Assertions (7 total):
+//   1. Total HATCH_CURVED count is exactly 4.
+//   2. Exactly 2 lines belong to the S_CURVE placement (y-origin ≈  10).
+//   3. Exactly 2 lines belong to the ARC placement     (y-origin ≈ 513.5).
+//   4. All 4 lines are accounted for (no unclassified lines).
+//   5. ARC and S_CURVE placements are on different shelf rows (y ≠ y).
+//   6. ARC-group diagonal-1 length ≈ √(arcEffW² + arcEffH²)
+//      where arcEffW / arcEffH are derived from the line endpoints.
+//   7. S_CURVE-group diagonal-1 length ≈ √(sCurveEffW² + sCurveEffH²).
+// ============================================================
+
+describe('@smoke — Stage 17: HATCH_CURVED lines are spatially partitioned between ARC and S_CURVE placements', () => {
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+
+  /** Parse every LINE entity on the HATCH_CURVED layer from the ENTITIES section. */
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  /** Euclidean length of a line segment. */
+  function segLen(c: Coords): number {
+    return Math.sqrt((c.x2 - c.x1) ** 2 + (c.y2 - c.y1) ** 2);
+  }
+
+  /**
+   * Return all lines whose bottom y-coordinate (min of y1, y2) is within
+   * 1 mm of the given placement y-origin.
+   *
+   * `buildDxfSheets` starts both diagonals at the placement's (x, y) corner,
+   * so min(y1, y2) === placement.y for every line in that group.
+   */
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function runStage17() {
+    const { row: arcRow }    = buildCurvedRow();   // SMOKE_DOOR     (ARC)
+    const { row: sCurveRow } = buildSCurveRow();   // SMOKE_SCURVE_DOOR (S_CURVE)
+
+    const { sheets, unplacedParts } = runNesting([arcRow, sCurveRow]);
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const placements = sheets[0].placements;
+    const arcP    = placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP = placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+
+    const allCoords   = parseHatchCoords(output.content);
+    const arcLines    = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines = linesForPlacement(allCoords, sCurveP.y);
+
+    // Derive effective bbox for ARC group from its line endpoints
+    const arcMaxX = Math.max(...arcLines.flatMap((c) => [c.x1, c.x2]));
+    const arcMaxY = Math.max(...arcLines.flatMap((c) => [c.y1, c.y2]));
+    const arcEffW = arcMaxX - arcP.x;
+    const arcEffH = arcMaxY - arcP.y;
+
+    // Derive effective bbox for S_CURVE group from its line endpoints
+    const sCurveMaxX = Math.max(...sCurveLines.flatMap((c) => [c.x1, c.x2]));
+    const sCurveMaxY = Math.max(...sCurveLines.flatMap((c) => [c.y1, c.y2]));
+    const sCurveEffW = sCurveMaxX - sCurveP.x;
+    const sCurveEffH = sCurveMaxY - sCurveP.y;
+
+    return {
+      unplacedParts,
+      arcP, sCurveP,
+      allCoords, arcLines, sCurveLines,
+      arcEffW, arcEffH,
+      sCurveEffW, sCurveEffH,
+    };
+  }
+
+  it('total HATCH_CURVED count is exactly 4 (2 diagonals × 2 curved panels)', () => {
+    const { allCoords } = runStage17();
+    expect(allCoords).toHaveLength(4);
+  });
+
+  it('exactly 2 HATCH_CURVED lines are attributed to the S_CURVE placement (by y-origin)', () => {
+    const { sCurveLines } = runStage17();
+    expect(sCurveLines).toHaveLength(2);
+  });
+
+  it('exactly 2 HATCH_CURVED lines are attributed to the ARC placement (by y-origin)', () => {
+    const { arcLines } = runStage17();
+    expect(arcLines).toHaveLength(2);
+  });
+
+  it('all 4 HATCH_CURVED lines are fully accounted for between the two placement groups', () => {
+    const { arcLines, sCurveLines } = runStage17();
+    expect(arcLines.length + sCurveLines.length).toBe(4);
+  });
+
+  it('ARC and S_CURVE placements occupy distinct shelf rows (different y-origins)', () => {
+    const { arcP, sCurveP } = runStage17();
+    expect(arcP.y).not.toBeCloseTo(sCurveP.y, 0);
+  });
+
+  it('ARC-group diagonal-1 length ≈ √(arcEffW² + arcEffH²) (derived from line endpoints)', () => {
+    const { arcLines, arcEffW, arcEffH } = runStage17();
+    const expected = Math.sqrt(arcEffW ** 2 + arcEffH ** 2);
+    expect(segLen(arcLines[0])).toBeCloseTo(expected, 3);
+  });
+
+  it('S_CURVE-group diagonal-1 length ≈ √(sCurveEffW² + sCurveEffH²) (derived from line endpoints)', () => {
+    const { sCurveLines, sCurveEffW, sCurveEffH } = runStage17();
+    const expected = Math.sqrt(sCurveEffW ** 2 + sCurveEffH ** 2);
+    expect(segLen(sCurveLines[0])).toBeCloseTo(expected, 3);
+  });
+});
