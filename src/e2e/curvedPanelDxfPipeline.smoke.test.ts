@@ -2047,3 +2047,128 @@ describe('@smoke — Stage 17: HATCH_CURVED lines are spatially partitioned betw
     expect(segLen(sCurveLines[0])).toBeCloseTo(expected, 3);
   });
 });
+
+// ============================================================
+// @smoke — Stage 18: Both diagonal-2 lengths equal the endpoint-
+//          derived bbox diagonal for the mixed ARC + S_CURVE sheet
+//
+// Stage 17 verified diagonal-1 (the main diagonal, running from the
+// placement's bottom-left to top-right corner) for both panel types.
+// Stage 18 extends that coverage to diagonal-2 — the anti-diagonal,
+// running from bottom-right to top-left — confirming that the X-hatch
+// is symmetric and that `buildDxfSheets` emits both diagonals with
+// equal length regardless of direction.
+//
+// Because both diagonals span the same bounding box (effectiveW ×
+// effectiveH), their lengths must be identical:
+//
+//   |diag-1| = |diag-2| = √(effectiveW² + effectiveH²)
+//
+// Any discrepancy would indicate a coordinate swap bug in the DXF
+// renderer (e.g. one endpoint using finish-size coords while the
+// other uses flat-blank-corrected coords).
+//
+// The stage reuses the same fixture (buildCurvedRow + buildSCurveRow),
+// the same linesForPlacement grouping strategy, and the same
+// endpoint-derived effectiveW/effectiveH as Stage 17 — only the
+// index into each group changes from [0] to [1].
+//
+// Assertions (4 total):
+//   1. ARC diagonal-2 length ≈ √(arcEffW² + arcEffH²)      (3 d.p.)
+//   2. ARC diagonal-1 and diagonal-2 lengths are equal      (3 d.p.)
+//   3. S_CURVE diagonal-2 length ≈ √(sCurveEffW² + sCurveEffH²) (3 d.p.)
+//   4. S_CURVE diagonal-1 and diagonal-2 lengths are equal  (3 d.p.)
+// ============================================================
+
+describe('@smoke — Stage 18: diagonal-2 lengths equal bbox diagonal for both ARC and S_CURVE on mixed-panel sheet', () => {
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function segLen(c: Coords): number {
+    return Math.sqrt((c.x2 - c.x1) ** 2 + (c.y2 - c.y1) ** 2);
+  }
+
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function runStage18() {
+    const { row: arcRow }    = buildCurvedRow();
+    const { row: sCurveRow } = buildSCurveRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow]);
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const placements = sheets[0].placements;
+    const arcP    = placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP = placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+
+    const allCoords   = parseHatchCoords(output.content);
+    const arcLines    = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines = linesForPlacement(allCoords, sCurveP.y);
+
+    // Effective bbox dimensions derived from endpoints (same as Stage 17)
+    const arcMaxX    = Math.max(...arcLines.flatMap((c) => [c.x1, c.x2]));
+    const arcMaxY    = Math.max(...arcLines.flatMap((c) => [c.y1, c.y2]));
+    const arcEffW    = arcMaxX - arcP.x;
+    const arcEffH    = arcMaxY - arcP.y;
+
+    const sCurveMaxX = Math.max(...sCurveLines.flatMap((c) => [c.x1, c.x2]));
+    const sCurveMaxY = Math.max(...sCurveLines.flatMap((c) => [c.y1, c.y2]));
+    const sCurveEffW = sCurveMaxX - sCurveP.x;
+    const sCurveEffH = sCurveMaxY - sCurveP.y;
+
+    return {
+      arcLines, sCurveLines,
+      arcEffW, arcEffH,
+      sCurveEffW, sCurveEffH,
+    };
+  }
+
+  it('ARC — diagonal-2 length ≈ √(arcEffW² + arcEffH²) (endpoint-derived)', () => {
+    const { arcLines, arcEffW, arcEffH } = runStage18();
+    const expected = Math.sqrt(arcEffW ** 2 + arcEffH ** 2);
+    expect(segLen(arcLines[1])).toBeCloseTo(expected, 3);
+  });
+
+  it('ARC — diagonal-1 and diagonal-2 lengths are equal (X-hatch is symmetric)', () => {
+    const { arcLines, arcEffW, arcEffH } = runStage18();
+    const expected = Math.sqrt(arcEffW ** 2 + arcEffH ** 2);
+    expect(segLen(arcLines[0])).toBeCloseTo(expected, 3);
+    expect(segLen(arcLines[1])).toBeCloseTo(expected, 3);
+  });
+
+  it('S_CURVE — diagonal-2 length ≈ √(sCurveEffW² + sCurveEffH²) (endpoint-derived)', () => {
+    const { sCurveLines, sCurveEffW, sCurveEffH } = runStage18();
+    const expected = Math.sqrt(sCurveEffW ** 2 + sCurveEffH ** 2);
+    expect(segLen(sCurveLines[1])).toBeCloseTo(expected, 3);
+  });
+
+  it('S_CURVE — diagonal-1 and diagonal-2 lengths are equal (X-hatch is symmetric)', () => {
+    const { sCurveLines, sCurveEffW, sCurveEffH } = runStage18();
+    const expected = Math.sqrt(sCurveEffW ** 2 + sCurveEffH ** 2);
+    expect(segLen(sCurveLines[0])).toBeCloseTo(expected, 3);
+    expect(segLen(sCurveLines[1])).toBeCloseTo(expected, 3);
+  });
+});
