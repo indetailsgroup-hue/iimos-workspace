@@ -2172,3 +2172,149 @@ describe('@smoke — Stage 18: diagonal-2 lengths equal bbox diagonal for both A
     expect(segLen(sCurveLines[1])).toBeCloseTo(expected, 3);
   });
 });
+
+// ============================================================
+// Stage 19 — diagonal intersection at bbox centre for ARC + S_CURVE
+// ============================================================
+//
+// A rectangle's two diagonals bisect each other at its centre.
+// For the X-hatch emitted by buildDxfSheets, both HATCH_CURVED
+// diagonals must therefore share the same midpoint, which must
+// equal the centre of the flat-blank placement bbox:
+//
+//   midpoint(diag) = ( minX + effectiveW/2,  minY + effectiveH/2 )
+//
+// where minX/minY are derived from the line endpoints (no Placement
+// w/h fields exist) and effectiveW/H are also endpoint-derived.
+//
+// This asserts that neither diagonal is skewed, shifted, or
+// computed with an off-centre origin — catching any asymmetry in
+// the DXF hatch coordinate emitter that pure length checks
+// (Stages 15–18) cannot detect.
+//
+// Fixture: the standard mixed-panel sheet (ARC + S_CURVE),
+// same FFDH layout as Stages 17–18.
+//
+// Assertions (8 total):
+//   1. ARC diagonal-1 midpoint x ≈ arcMinX + arcEffW / 2  (3 d.p.)
+//   2. ARC diagonal-1 midpoint y ≈ arcMinY + arcEffH / 2  (3 d.p.)
+//   3. ARC diagonal-2 midpoint x ≈ arcMinX + arcEffW / 2  (3 d.p.)
+//   4. ARC diagonal-2 midpoint y ≈ arcMinY + arcEffH / 2  (3 d.p.)
+//   5. S_CURVE diagonal-1 midpoint x ≈ sCurveMinX + sCurveEffW / 2  (3 d.p.)
+//   6. S_CURVE diagonal-1 midpoint y ≈ sCurveMinY + sCurveEffH / 2  (3 d.p.)
+//   7. S_CURVE diagonal-2 midpoint x ≈ sCurveMinX + sCurveEffW / 2  (3 d.p.)
+//   8. S_CURVE diagonal-2 midpoint y ≈ sCurveMinY + sCurveEffH / 2  (3 d.p.)
+// ============================================================
+
+describe('@smoke — Stage 19: diagonal intersection at bbox centre for ARC + S_CURVE', () => {
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function mid(c: Coords): { mx: number; my: number } {
+    return { mx: (c.x1 + c.x2) / 2, my: (c.y1 + c.y2) / 2 };
+  }
+
+  function runStage19() {
+    const { row: arcRow }    = buildCurvedRow();
+    const { row: sCurveRow } = buildSCurveRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow]);
+    expect(sheets).toHaveLength(1);
+
+    const arcP     = sheets[0].placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP  = sheets[0].placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const allCoords   = parseHatchCoords(output.content);
+    const arcLines    = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines = linesForPlacement(allCoords, sCurveP.y);
+
+    expect(arcLines).toHaveLength(2);
+    expect(sCurveLines).toHaveLength(2);
+
+    const arcMinX     = Math.min(...arcLines.flatMap((c) => [c.x1, c.x2]));
+    const arcMinY     = Math.min(...arcLines.flatMap((c) => [c.y1, c.y2]));
+    const arcMaxX     = Math.max(...arcLines.flatMap((c) => [c.x1, c.x2]));
+    const arcMaxY     = Math.max(...arcLines.flatMap((c) => [c.y1, c.y2]));
+    const arcEffW     = arcMaxX - arcMinX;
+    const arcEffH     = arcMaxY - arcMinY;
+
+    const sCurveMinX  = Math.min(...sCurveLines.flatMap((c) => [c.x1, c.x2]));
+    const sCurveMinY  = Math.min(...sCurveLines.flatMap((c) => [c.y1, c.y2]));
+    const sCurveMaxX  = Math.max(...sCurveLines.flatMap((c) => [c.x1, c.x2]));
+    const sCurveMaxY  = Math.max(...sCurveLines.flatMap((c) => [c.y1, c.y2]));
+    const sCurveEffW  = sCurveMaxX - sCurveMinX;
+    const sCurveEffH  = sCurveMaxY - sCurveMinY;
+
+    return {
+      arcLines, sCurveLines,
+      arcMinX, arcMinY, arcEffW, arcEffH,
+      sCurveMinX, sCurveMinY, sCurveEffW, sCurveEffH,
+    };
+  }
+
+  it('ARC — diagonal-1 midpoint x ≈ bbox centre x', () => {
+    const { arcLines, arcMinX, arcEffW } = runStage19();
+    expect(mid(arcLines[0]).mx).toBeCloseTo(arcMinX + arcEffW / 2, 3);
+  });
+
+  it('ARC — diagonal-1 midpoint y ≈ bbox centre y', () => {
+    const { arcLines, arcMinY, arcEffH } = runStage19();
+    expect(mid(arcLines[0]).my).toBeCloseTo(arcMinY + arcEffH / 2, 3);
+  });
+
+  it('ARC — diagonal-2 midpoint x ≈ bbox centre x', () => {
+    const { arcLines, arcMinX, arcEffW } = runStage19();
+    expect(mid(arcLines[1]).mx).toBeCloseTo(arcMinX + arcEffW / 2, 3);
+  });
+
+  it('ARC — diagonal-2 midpoint y ≈ bbox centre y', () => {
+    const { arcLines, arcMinY, arcEffH } = runStage19();
+    expect(mid(arcLines[1]).my).toBeCloseTo(arcMinY + arcEffH / 2, 3);
+  });
+
+  it('S_CURVE — diagonal-1 midpoint x ≈ bbox centre x', () => {
+    const { sCurveLines, sCurveMinX, sCurveEffW } = runStage19();
+    expect(mid(sCurveLines[0]).mx).toBeCloseTo(sCurveMinX + sCurveEffW / 2, 3);
+  });
+
+  it('S_CURVE — diagonal-1 midpoint y ≈ bbox centre y', () => {
+    const { sCurveLines, sCurveMinY, sCurveEffH } = runStage19();
+    expect(mid(sCurveLines[0]).my).toBeCloseTo(sCurveMinY + sCurveEffH / 2, 3);
+  });
+
+  it('S_CURVE — diagonal-2 midpoint x ≈ bbox centre x', () => {
+    const { sCurveLines, sCurveMinX, sCurveEffW } = runStage19();
+    expect(mid(sCurveLines[1]).mx).toBeCloseTo(sCurveMinX + sCurveEffW / 2, 3);
+  });
+
+  it('S_CURVE — diagonal-2 midpoint y ≈ bbox centre y', () => {
+    const { sCurveLines, sCurveMinY, sCurveEffH } = runStage19();
+    expect(mid(sCurveLines[1]).my).toBeCloseTo(sCurveMinY + sCurveEffH / 2, 3);
+  });
+});
