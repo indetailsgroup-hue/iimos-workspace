@@ -166,8 +166,46 @@ class DxfBuilder {
 }
 
 /**
- * Standard DXF layer definitions for MONOLITH nesting sheets.
- * ACI color codes: 1=red, 2=yellow, 3=green, 4=cyan, 7=white
+ * Standard DXF layer definitions for MONOLITH nesting sheets (AutoCAD R12).
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Layer Color Codes  (ACI palette — positive value = layer ON)
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Layer        | ACI | Color  | Purpose
+ * -------------|----:|--------|----------------------------------------
+ * SHEET        |   7 | white  | Sheet boundary rectangle
+ * PARTS        |   3 | green  | Bounding rect of flat (non-curved) parts
+ * PARTS_CURVED |   1 | red    | Bounding rect of kerf-bent curved parts
+ * HATCH_CURVED |   4 | cyan   | X-hatch diagonals inside curved part rect
+ * LABELS       |   2 | yellow | Part ID, dimension text, sub-labels
+ * TEXT         |   7 | white  | Sheet-level annotations (sheet ID, material)
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Hatch-Line Emission Rules
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * HATCH_CURVED lines are emitted only when `placement.isCurved === true`.
+ * Each curved placement produces exactly 2 diagonal LINE entities spanning
+ * the full placement rectangle (corner-to-corner in both directions):
+ *
+ *   Line 1 — (x, y) → (x + w, y + h)   bottom-left  to top-right
+ *   Line 2 — (x + w, y) → (x, y + h)   bottom-right to top-left
+ *
+ * Straight placements (`isCurved` falsy) use the PARTS layer; no hatch is drawn.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * LINE Count Invariants per Sheet  (n = number of placements)
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ *   HATCH_CURVED = 2 × curved_count
+ *   PARTS_CURVED = 4 × curved_count   (one closed rect = 4 LINEs)
+ *   PARTS        = 4 × straight_count
+ *   SHEET        = 4                  (always — one sheet boundary rect)
+ *
+ * These invariants are verified end-to-end in:
+ *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 13)
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 const NESTING_LAYERS = [
   { name: 'SHEET',        color: 7 }, // white — sheet boundary
