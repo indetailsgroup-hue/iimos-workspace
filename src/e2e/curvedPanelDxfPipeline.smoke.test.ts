@@ -38,6 +38,7 @@
  *    12 |      1 |         2 |            2 |            4 |     8
  *    13 |      2 |         1 |            4 |            8 |     4
  *    14 |      1 |         0 | bbox-confinement (coordinate assertion, S_CURVE only)
+ *    15 | ARC+S_CURVE | — | diagonal length = sqrt(effectiveW²+effectiveH²); flat-blank diag > finish diag
  *
  * ─────────────────────────────────────────────────────────────────────────────
  *
@@ -1670,5 +1671,126 @@ describe('@smoke S-CURVE — Stage 14: HATCH_CURVED X-lines confined within flat
         Math.abs(c.y2 - bbox.maxY) < 0.001
     );
     expect(d2).toBeDefined();
+  });
+});
+
+// ============================================================
+// @smoke — Stage 15: HATCH_CURVED diagonal length equals
+//          sqrt(effectiveW² + effectiveH²) for ARC and S_CURVE
+//
+// The X-hatch diagonals in buildDxfSheets.ts run corner-to-corner
+// across the flat-blank placement rectangle, so their Euclidean
+// length is exactly the space diagonal of that rectangle:
+//
+//   length = sqrt(effectiveW² + effectiveH²)
+//
+// where effectiveW / effectiveH are the post-rotation flat-blank
+// dimensions (cutH / cutW when rotation=90, else cutW / cutH).
+//
+// Because the arc correction enlarges the flat blank beyond the
+// finish-panel size, the flat-blank diagonal must be strictly
+// greater than the finish-panel diagonal for every curved profile:
+//
+//   ARC    : finish diag = sqrt(400² + 800²) ≈  894.4 mm
+//            flat-blank diag ≈ sqrt(effectiveW²+effectiveH²) > 894.4 mm
+//
+//   S_CURVE: finish diag = sqrt(500² + 900²) ≈ 1029.6 mm
+//            flat-blank diag ≈ sqrt(effectiveW²+effectiveH²) > 1029.6 mm
+// ============================================================
+
+describe('@smoke — Stage 15: HATCH_CURVED diagonal length equals sqrt(effectiveW²+effectiveH²)', () => {
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+
+  /** Parse all HATCH_CURVED LINE entity coordinates from a DXF content string. */
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  /** Euclidean distance between the two endpoints of a LINE segment. */
+  function diagLen(c: Coords): number {
+    return Math.sqrt((c.x2 - c.x1) ** 2 + (c.y2 - c.y1) ** 2);
+  }
+
+  /** Run the full pipeline for a single curved CutListRow; return coords + effectiveDims. */
+  function runFor(row: CutListRow, partId: string) {
+    const { sheets } = runNesting([row]);
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const placement = sheets[0].placements.find((p) => p.partId === partId)!;
+    const isRotated = placement.rotation === 90 || placement.rotation === 270;
+    const effectiveW = isRotated ? placement.cutH : placement.cutW;
+    const effectiveH = isRotated ? placement.cutW : placement.cutH;
+    const expectedLen = Math.sqrt(effectiveW ** 2 + effectiveH ** 2);
+    const coords = parseHatchCoords(output.content);
+    return { coords, effectiveW, effectiveH, expectedLen };
+  }
+
+  // ── ARC panel (SMOKE_DOOR) ────────────────────────────────
+
+  it('ARC — diagonal-1 length equals sqrt(effectiveW² + effectiveH²)', () => {
+    const { row } = buildCurvedRow();
+    const { coords, expectedLen } = runFor(row, 'SMOKE_DOOR');
+    expect(diagLen(coords[0])).toBeCloseTo(expectedLen, 3);
+  });
+
+  it('ARC — diagonal-2 length equals sqrt(effectiveW² + effectiveH²)', () => {
+    const { row } = buildCurvedRow();
+    const { coords, expectedLen } = runFor(row, 'SMOKE_DOOR');
+    expect(diagLen(coords[1])).toBeCloseTo(expectedLen, 3);
+  });
+
+  // ── S_CURVE panel (SMOKE_SCURVE_DOOR) ────────────────────
+
+  it('S_CURVE — diagonal-1 length equals sqrt(effectiveW² + effectiveH²)', () => {
+    const { row } = buildSCurveRow();
+    const { coords, expectedLen } = runFor(row, 'SMOKE_SCURVE_DOOR');
+    expect(diagLen(coords[0])).toBeCloseTo(expectedLen, 3);
+  });
+
+  it('S_CURVE — diagonal-2 length equals sqrt(effectiveW² + effectiveH²)', () => {
+    const { row } = buildSCurveRow();
+    const { coords, expectedLen } = runFor(row, 'SMOKE_SCURVE_DOOR');
+    expect(diagLen(coords[1])).toBeCloseTo(expectedLen, 3);
+  });
+
+  // ── Flat-blank diagonal > finish-size diagonal ────────────
+  // The arc correction strictly enlarges the flat blank, so the
+  // DXF hatch diagonal must exceed the finish-panel diagonal.
+
+  it('ARC — flat-blank diagonal > finish-panel diagonal (correction is strictly positive)', () => {
+    const { row } = buildCurvedRow();
+    const { coords } = runFor(row, 'SMOKE_DOOR');
+    const flatDiag = diagLen(coords[0]);
+    const finishDiag = Math.sqrt(
+      PANEL_STUB.finishWidth ** 2 + PANEL_STUB.finishHeight ** 2
+    );
+    expect(flatDiag).toBeGreaterThan(finishDiag);
+  });
+
+  it('S_CURVE — flat-blank diagonal > finish-panel diagonal (correction is strictly positive)', () => {
+    const { row } = buildSCurveRow();
+    const { coords } = runFor(row, 'SMOKE_SCURVE_DOOR');
+    const flatDiag = diagLen(coords[0]);
+    const finishDiag = Math.sqrt(
+      S_CURVE_PANEL_STUB.finishWidth ** 2 + S_CURVE_PANEL_STUB.finishHeight ** 2
+    );
+    expect(flatDiag).toBeGreaterThan(finishDiag);
   });
 });
