@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.3] - 2026-08-26
+
+### 🧪 Smoke Suite — Non-Degenerate Diagonal Invariant (Stage 24)
+
+Patch release adding a smoke stage that asserts no `HATCH_CURVED` diagonal
+LINE entity is degenerate (zero-length), i.e. every diagonal satisfies
+`|x1 − x2| + |y1 − y2| > 1e-6` across all three panel types.
+
+**Total smoke test delta: 163 → 169 (+6 tests)**
+
+---
+
+#### Stage 24 — all HATCH\_CURVED diagonals have non-zero length (`b4841a8c`, 2026-08-26)
+
+Asserts that both diagonals of every curved panel satisfy:
+
+```
+|x1 − x2| + |y1 − y2| > 1e-6
+```
+
+The threshold (1e-6 mm) is five orders of magnitude below the 0.01 mm
+rounding quantum introduced in Stage 22, so any geometrically real diagonal
+passes trivially while a truly degenerate zero-length line would fail.
+
+Helper: `isNonDegenerate(d: Coords): boolean`
+
+Panel set: same three-panel sheet as Stages 19–23
+(SMOKE\_DOOR + SMOKE\_SCURVE\_DOOR + SMOKE\_TALL\_ARC).
+
+**6 assertions added. Smoke total: 163 → 169.**
+
+---
+
 ## [2.3.2] - 2026-08-26
 
 ### 🧪 Smoke Suite — Bbox-Confinement Under Rounding (Stage 23)
