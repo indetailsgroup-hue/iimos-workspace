@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.5] - 2026-08-26
+
+### 🧪 Smoke Suite — Bbox-Centred Midpoint Invariant (Stage 26)
+
+Patch release adding a smoke stage that asserts the shared diagonal midpoint
+coincides with the geometric centre of the flat-blank placement bbox,
+confirming the X-hatch is centred on the panel.
+
+**Total smoke test delta: 175 → 181 (+6 tests)**
+
+---
+
+#### Stage 26 — shared diagonal midpoint equals bbox centre (`8213e50b`, 2026-08-26)
+
+Asserts that for each curved panel the shared midpoint of the two diagonals
+satisfies:
+
+```
+midX(d)  ≈  (bbox.minX + bbox.maxX) / 2
+midY(d)  ≈  (bbox.minY + bbox.maxY) / 2
+```
+
+Tolerance: `toBeCloseTo(x, 1)` (±0.05 mm). The 0.01 mm rounding introduced
+in Stage 22 can shift each midpoint coord by at most 0.005 mm — well within
+the ±0.05 mm window.
+
+Helpers: `centreX(b: Bbox): number`, `centreY(b: Bbox): number`,
+`bboxForPlacement(p)`.
+
+Panel set: same three-panel sheet as Stages 19–25
+(SMOKE\_DOOR + SMOKE\_SCURVE\_DOOR + SMOKE\_TALL\_ARC).
+
+**6 assertions added. Smoke total: 175 → 181.**
+
+---
+
 ## [2.3.4] - 2026-08-26
 
 ### 🧪 Smoke Suite — Shared Midpoint Invariant (Stage 25)
