@@ -108,17 +108,23 @@ class DxfBuilder {
   }
 
   /**
-   * Add LINE entity
+   * Add LINE entity.
+   *
+   * All four endpoint coordinates are rounded to 0.01 mm before emission so
+   * CAM software never receives irrational floating-point values (e.g. from
+   * arc-length corrections).  Rounding delta is at most 0.005 mm, which is
+   * well within CNC kerf-width tolerance (Stage 22 smoke invariant).
    */
   addLine(x1: number, y1: number, x2: number, y2: number, layer: string = '0'): void {
+    const r = (v: number): number => Math.round(v * 100) / 100;
     this.add(0, 'LINE');
-    this.add(8, layer); // Layer
-    this.add(10, x1);   // Start X
-    this.add(20, y1);   // Start Y
-    this.add(30, 0);    // Start Z
-    this.add(11, x2);   // End X
-    this.add(21, y2);   // End Y
-    this.add(31, 0);    // End Z
+    this.add(8, layer);    // Layer
+    this.add(10, r(x1));   // Start X  (rounded to 0.01 mm)
+    this.add(20, r(y1));   // Start Y
+    this.add(30, 0);       // Start Z
+    this.add(11, r(x2));   // End X    (rounded to 0.01 mm)
+    this.add(21, r(y2));   // End Y
+    this.add(31, 0);       // End Z
   }
 
   /**

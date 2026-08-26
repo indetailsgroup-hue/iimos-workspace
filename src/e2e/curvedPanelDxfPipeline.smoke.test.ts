@@ -716,8 +716,9 @@ describe('@smoke S-CURVE — Stage 6: HATCH_CURVED X-lines span flat-blank footp
   it('DXF contains far-corner x-coordinate of HATCH_CURVED diagonal', () => {
     const { placement, effectiveW, output } = runStage6();
     const farX = placement.x + effectiveW; // ≈ 10 + 1051.800 = 1061.800...
-    // String(farX) appears verbatim in the DXF LINE entity for the X-hatch
-    expect(output.content).toContain(String(farX));
+    // addLine() rounds to 0.01 mm — compare rounded value (Stage 22 invariant)
+    const farXRounded = Math.round(farX * 100) / 100;
+    expect(output.content).toContain(String(farXRounded));
   });
 
   it('DXF contains far-corner y-coordinate of HATCH_CURVED diagonal', () => {
@@ -1764,13 +1765,13 @@ describe('@smoke — Stage 15: HATCH_CURVED diagonal length equals sqrt(effectiv
   it('ARC — diagonal-1 length equals sqrt(effectiveW² + effectiveH²)', () => {
     const { row } = buildCurvedRow();
     const { coords, expectedLen } = runFor(row, 'SMOKE_DOOR');
-    expect(diagLen(coords[0])).toBeCloseTo(expectedLen, 3);
+    expect(diagLen(coords[0])).toBeCloseTo(expectedLen, 1);
   });
 
   it('ARC — diagonal-2 length equals sqrt(effectiveW² + effectiveH²)', () => {
     const { row } = buildCurvedRow();
     const { coords, expectedLen } = runFor(row, 'SMOKE_DOOR');
-    expect(diagLen(coords[1])).toBeCloseTo(expectedLen, 3);
+    expect(diagLen(coords[1])).toBeCloseTo(expectedLen, 1);
   });
 
   // ── S_CURVE panel (SMOKE_SCURVE_DOOR) ────────────────────
@@ -1778,13 +1779,13 @@ describe('@smoke — Stage 15: HATCH_CURVED diagonal length equals sqrt(effectiv
   it('S_CURVE — diagonal-1 length equals sqrt(effectiveW² + effectiveH²)', () => {
     const { row } = buildSCurveRow();
     const { coords, expectedLen } = runFor(row, 'SMOKE_SCURVE_DOOR');
-    expect(diagLen(coords[0])).toBeCloseTo(expectedLen, 3);
+    expect(diagLen(coords[0])).toBeCloseTo(expectedLen, 1);
   });
 
   it('S_CURVE — diagonal-2 length equals sqrt(effectiveW² + effectiveH²)', () => {
     const { row } = buildSCurveRow();
     const { coords, expectedLen } = runFor(row, 'SMOKE_SCURVE_DOOR');
-    expect(diagLen(coords[1])).toBeCloseTo(expectedLen, 3);
+    expect(diagLen(coords[1])).toBeCloseTo(expectedLen, 1);
   });
 
   // ── Flat-blank diagonal > finish-size diagonal ────────────
@@ -2667,5 +2668,166 @@ describe('@smoke — Stage 21: dot-product sign is negative when effectiveW > ef
     const { tallArcLines, tallEffW, tallEffH } = runStage21();
     const dot = dotProduct(tallArcLines[0], tallArcLines[1]);
     expect(dot).toBeCloseTo(tallEffH ** 2 - tallEffW ** 2, 0);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Stage 22 — HATCH_CURVED endpoint precision: multiples of 0.01 mm
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe('@smoke Stage 22 — HATCH_CURVED endpoint coords rounded to 0.01 mm precision', () => {
+  /**
+   * buildDxfSheets.addLine() rounds all four endpoint coordinates via
+   *   Math.round(v * 100) / 100
+   * before writing to DXF.  This ensures CNC output never carries irrational
+   * arc-length floats.  Max rounding delta: 0.005 mm (< CNC kerf-width).
+   *
+   * Panel set: ARC (SMOKE_DOOR) + S_CURVE (SMOKE_SCURVE_DOOR) + TALL_ARC
+   * Same three-panel sheet as Stages 19–21.
+   *
+   * Invariant (per diagonal, per panel type):
+   *   ∀ v ∈ { x1, y1, x2, y2 } : Math.abs(v * 100 − Math.round(v * 100)) < 1e-6
+   */
+
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+
+  // ── helpers (self-contained) ──────────────────────────────────────────────
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  /** Returns true iff v is a multiple of 0.01 mm (within 1e-6 float tolerance). */
+  function isRounded(v: number): boolean {
+    return Math.abs(v * 100 - Math.round(v * 100)) < 1e-6;
+  }
+
+  function runStage22() {
+    const { row: arcRow }     = buildCurvedRow();
+    const { row: sCurveRow }  = buildSCurveRow();
+    const { row: tallArcRow } = buildTallArcRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow, tallArcRow]);
+    expect(sheets).toHaveLength(1);
+
+    const arcP     = sheets[0].placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP  = sheets[0].placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const tallArcP = sheets[0].placements.find((p) => p.partId === 'SMOKE_TALL_ARC')!;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const allCoords    = parseHatchCoords(output.content);
+    const arcLines     = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines  = linesForPlacement(allCoords, sCurveP.y);
+    const tallArcLines = linesForPlacement(allCoords, tallArcP.y);
+
+    expect(arcLines).toHaveLength(2);
+    expect(sCurveLines).toHaveLength(2);
+    expect(tallArcLines).toHaveLength(2);
+
+    return { arcLines, sCurveLines, tallArcLines };
+  }
+
+  // ── Part A: ARC ───────────────────────────────────────────────────────────
+
+  it('ARC — diagonal-1 all four endpoint coords are multiples of 0.01 mm', () => {
+    const { arcLines } = runStage22();
+    const d = arcLines[0];
+    expect(isRounded(d.x1)).toBe(true);
+    expect(isRounded(d.y1)).toBe(true);
+    expect(isRounded(d.x2)).toBe(true);
+    expect(isRounded(d.y2)).toBe(true);
+  });
+
+  it('ARC — diagonal-2 all four endpoint coords are multiples of 0.01 mm', () => {
+    const { arcLines } = runStage22();
+    const d = arcLines[1];
+    expect(isRounded(d.x1)).toBe(true);
+    expect(isRounded(d.y1)).toBe(true);
+    expect(isRounded(d.x2)).toBe(true);
+    expect(isRounded(d.y2)).toBe(true);
+  });
+
+  // ── Part B: S_CURVE ───────────────────────────────────────────────────────
+
+  it('S_CURVE — diagonal-1 all four endpoint coords are multiples of 0.01 mm', () => {
+    const { sCurveLines } = runStage22();
+    const d = sCurveLines[0];
+    expect(isRounded(d.x1)).toBe(true);
+    expect(isRounded(d.y1)).toBe(true);
+    expect(isRounded(d.x2)).toBe(true);
+    expect(isRounded(d.y2)).toBe(true);
+  });
+
+  it('S_CURVE — diagonal-2 all four endpoint coords are multiples of 0.01 mm', () => {
+    const { sCurveLines } = runStage22();
+    const d = sCurveLines[1];
+    expect(isRounded(d.x1)).toBe(true);
+    expect(isRounded(d.y1)).toBe(true);
+    expect(isRounded(d.x2)).toBe(true);
+    expect(isRounded(d.y2)).toBe(true);
+  });
+
+  // ── Part C: TALL_ARC ──────────────────────────────────────────────────────
+
+  it('TALL_ARC — diagonal-1 all four endpoint coords are multiples of 0.01 mm', () => {
+    const { tallArcLines } = runStage22();
+    const d = tallArcLines[0];
+    expect(isRounded(d.x1)).toBe(true);
+    expect(isRounded(d.y1)).toBe(true);
+    expect(isRounded(d.x2)).toBe(true);
+    expect(isRounded(d.y2)).toBe(true);
+  });
+
+  it('TALL_ARC — diagonal-2 all four endpoint coords are multiples of 0.01 mm', () => {
+    const { tallArcLines } = runStage22();
+    const d = tallArcLines[1];
+    expect(isRounded(d.x1)).toBe(true);
+    expect(isRounded(d.y1)).toBe(true);
+    expect(isRounded(d.x2)).toBe(true);
+    expect(isRounded(d.y2)).toBe(true);
   });
 });
