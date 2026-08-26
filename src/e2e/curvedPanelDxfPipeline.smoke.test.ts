@@ -3030,3 +3030,141 @@ describe('@smoke Stage 23 — rounded HATCH_CURVED endpoints remain within flat-
     expect(d.y2).toBeLessThanOrEqual(b.maxY + ε);
   });
 });
+
+// Stage 24 — Every HATCH_CURVED diagonal is non-degenerate (non-zero length)
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe('@smoke Stage 24 — all HATCH_CURVED diagonals have non-zero length', () => {
+  /**
+   * A degenerate LINE entity (x1=x2 AND y1=y2) would produce a zero-length
+   * mark in CNC DXF output and is meaningless as a hatch guide.
+   * Stage 24 asserts that both diagonals of every curved panel satisfy:
+   *
+   *   |x1 − x2| + |y1 − y2| > 1e-6
+   *
+   * This threshold (1e-6 mm) is five orders of magnitude below the 0.01 mm
+   * rounding quantum introduced in Stage 22, so any geometrically real diagonal
+   * passes trivially while a truly degenerate line would fail.
+   *
+   * Panel set: same three-panel sheet as Stages 19–23
+   *            (ARC SMOKE_DOOR + S_CURVE SMOKE_SCURVE_DOOR + TALL_ARC).
+   */
+
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+
+  // ── helpers (self-contained) ──────────────────────────────────────────────
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  /** Returns true when a LINE entity spans a non-zero distance. */
+  function isNonDegenerate(d: Coords): boolean {
+    return Math.abs(d.x1 - d.x2) + Math.abs(d.y1 - d.y2) > 1e-6;
+  }
+
+  function runStage24() {
+    const { row: arcRow }     = buildCurvedRow();
+    const { row: sCurveRow }  = buildSCurveRow();
+    const { row: tallArcRow } = buildTallArcRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow, tallArcRow]);
+    expect(sheets).toHaveLength(1);
+
+    const arcP     = sheets[0].placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP  = sheets[0].placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const tallArcP = sheets[0].placements.find((p) => p.partId === 'SMOKE_TALL_ARC')!;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const allCoords    = parseHatchCoords(output.content);
+    const arcLines     = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines  = linesForPlacement(allCoords, sCurveP.y);
+    const tallArcLines = linesForPlacement(allCoords, tallArcP.y);
+
+    expect(arcLines).toHaveLength(2);
+    expect(sCurveLines).toHaveLength(2);
+    expect(tallArcLines).toHaveLength(2);
+
+    return { arcLines, sCurveLines, tallArcLines };
+  }
+
+  // ── Part A: ARC ───────────────────────────────────────────────────────────
+
+  it('ARC — diagonal-1 has non-zero length', () => {
+    const { arcLines } = runStage24();
+    expect(isNonDegenerate(arcLines[0])).toBe(true);
+  });
+
+  it('ARC — diagonal-2 has non-zero length', () => {
+    const { arcLines } = runStage24();
+    expect(isNonDegenerate(arcLines[1])).toBe(true);
+  });
+
+  // ── Part B: S_CURVE ───────────────────────────────────────────────────────
+
+  it('S_CURVE — diagonal-1 has non-zero length', () => {
+    const { sCurveLines } = runStage24();
+    expect(isNonDegenerate(sCurveLines[0])).toBe(true);
+  });
+
+  it('S_CURVE — diagonal-2 has non-zero length', () => {
+    const { sCurveLines } = runStage24();
+    expect(isNonDegenerate(sCurveLines[1])).toBe(true);
+  });
+
+  // ── Part C: TALL_ARC ──────────────────────────────────────────────────────
+
+  it('TALL_ARC — diagonal-1 has non-zero length', () => {
+    const { tallArcLines } = runStage24();
+    expect(isNonDegenerate(tallArcLines[0])).toBe(true);
+  });
+
+  it('TALL_ARC — diagonal-2 has non-zero length', () => {
+    const { tallArcLines } = runStage24();
+    expect(isNonDegenerate(tallArcLines[1])).toBe(true);
+  });
+});
