@@ -684,3 +684,132 @@ describe('@smoke S-CURVE — Stage 6: HATCH_CURVED X-lines span flat-blank footp
     expect(output.content).toContain(String(farY));
   });
 });
+
+// ============================================================
+// @smoke S-CURVE — Stage 7: HATCH_CURVED absent for straight
+//   panel on the same sheet
+//
+// A straight panel (no curve fields, no isCurved flag) placed on
+// the same nesting sheet as the S_CURVE panel must NOT receive
+// HATCH_CURVED X-lines in the DXF output.  Only placements where
+// isCurved=true trigger the diagonal hatch in buildDxfSheets.ts.
+//
+// Verification strategy:
+//   - Run nesting with 1 curved row + 1 straight row → same sheet
+//   - Count LINE entities per layer in the ENTITIES section
+//   - PARTS_CURVED  → exactly 4  (curved panel rectangle only)
+//   - PARTS         → exactly 4  (straight panel rectangle only)
+//   - HATCH_CURVED  → exactly 2  (2 diagonals for curved panel,
+//                                  0 extra lines for straight panel)
+// ============================================================
+
+/** Straight (non-curved) panel row — no curve fields whatsoever */
+const STRAIGHT_ROW: CutListRow = {
+  partId: 'SMOKE_STRAIGHT_SHELF',
+  cabinetId: 'CAB_SMOKE',
+  materialId: MATERIAL_ID,
+  finishW: 300,
+  finishH: 400,
+  edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+  premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+  cutW: 300,
+  cutH: 400,
+  qty: 1,
+  // No developedLength / projectedDepth / kerfCount / curvedEdge
+};
+
+describe('@smoke S-CURVE — Stage 7: HATCH_CURVED absent for straight panel on same sheet', () => {
+  function runStage7() {
+    const { row: curvedRow, kerfCount } = buildSCurveRow();
+
+    // Place both rows; both fit on a single 1220×2440 sheet
+    const { sheets, unplacedParts } = runNesting([curvedRow, STRAIGHT_ROW]);
+
+    const planned: PlannedSheet = {
+      index1: 1,
+      sheetId: 'SHEET_001',
+      materialId: MATERIAL_ID,
+    };
+
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const sheet0Placements = sheets[0].placements;
+    const curvedPlacement  = sheet0Placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const straightPlacement = sheet0Placements.find((p) => p.partId === 'SMOKE_STRAIGHT_SHELF')!;
+
+    // Isolate ENTITIES section (layer names in TABLES do not count)
+    const entitiesStart = output.content.indexOf('ENTITIES');
+    const entities = output.content.slice(entitiesStart);
+
+    /**
+     * Count LINE entities whose layer attribute is exactly `layer`.
+     *
+     * DXF R12 LINE encoding (after DxfBuilder.addLine):
+     *   …\nLINE\n8\n<LAYER>\n10\n…
+     *
+     * Splitting by 'LINE' yields segments where the very first group-code
+     * pair is `\n8\n<LAYER>\n`.  We match `\n8\n${layer}\n` (newline on
+     * both sides) so `PARTS` does NOT accidentally match `PARTS_CURVED`.
+     */
+    const countLayer = (layer: string): number =>
+      entities
+        .split('LINE')
+        .slice(1) // skip any text before the first LINE entity
+        .filter((seg) => seg.includes(`\n8\n${layer}\n`))
+        .length;
+
+    return {
+      output, entities,
+      curvedPlacement, straightPlacement,
+      kerfCount, unplacedParts, sheets,
+      countLayer,
+    };
+  }
+
+  it('both panels are placed on sheets[0] with no unplaced parts', () => {
+    const { unplacedParts, sheets } = runStage7();
+    expect(unplacedParts).toHaveLength(0);
+    expect(sheets[0].placements.some((p) => p.partId === 'SMOKE_SCURVE_DOOR')).toBe(true);
+    expect(sheets[0].placements.some((p) => p.partId === 'SMOKE_STRAIGHT_SHELF')).toBe(true);
+  });
+
+  it('straight panel placement has isCurved falsy (no curve correction applied)', () => {
+    const { straightPlacement } = runStage7();
+    expect(straightPlacement).toBeDefined();
+    expect(straightPlacement.isCurved).toBeFalsy();
+  });
+
+  it('ENTITIES has exactly 4 PARTS_CURVED lines (curved panel rect, no straight contribution)', () => {
+    const { countLayer } = runStage7();
+    // One rectangle = 4 LINE entities; only the curved panel uses PARTS_CURVED
+    expect(countLayer('PARTS_CURVED')).toBe(4);
+  });
+
+  it('ENTITIES has exactly 4 PARTS lines (straight panel rect, no curved contribution)', () => {
+    const { countLayer } = runStage7();
+    // One rectangle = 4 LINE entities; only the straight panel uses PARTS
+    expect(countLayer('PARTS')).toBe(4);
+  });
+
+  it('ENTITIES has exactly 2 HATCH_CURVED lines (2 diagonals for curved panel, 0 for straight)', () => {
+    const { countLayer } = runStage7();
+    // Two diagonal X-hatch lines for the single curved panel;
+    // the straight panel contributes exactly zero HATCH_CURVED lines.
+    expect(countLayer('HATCH_CURVED')).toBe(2);
+  });
+
+  it('DXF still contains (CURVED / N cuts) sub-label for the curved panel', () => {
+    const { entities, kerfCount } = runStage7();
+    expect(entities).toContain(`(CURVED / ${kerfCount} cuts)`);
+  });
+
+  it('both part labels are present in the DXF', () => {
+    const { output } = runStage7();
+    expect(output.content).toContain('SMOKE_SCURVE_DOOR');
+    expect(output.content).toContain('SMOKE_STRAIGHT_SHELF');
+  });
+});
