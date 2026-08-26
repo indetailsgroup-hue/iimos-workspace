@@ -334,3 +334,264 @@ describe('@smoke — Stage 5: DxfSheetOutput.bytes is a valid UTF-8 Uint8Array',
     expect(decoded).toContain(`(CURVED / ${kerfCount} cuts)`);
   });
 });
+
+// ============================================================
+// S_CURVE fixture — r1=200 mm / sweep1=30° / r2=150 mm / sweep2=45°, MDF 18 mm
+//   developedLength ≈ 200×(30π/180) + 150×(45π/180)
+//                   ≈ 104.720 + 117.810 = 222.529 mm
+//   projectedDepth  ≈ 200×(1−cos30°) + 150×(1−cos45°)
+//                   ≈ 26.795 + 43.934  = 70.729 mm
+//   correction      ≈ 151.800 mm  → isCurved = true
+//   chord1+chord2   ≈ 103.528 + 114.805 = 218.333 mm ≤ 500 mm (fits edge ✓)
+// ============================================================
+
+const S_CURVE_PANEL_STUB = {
+  finishWidth: 500,
+  finishHeight: 900,
+  profile: {
+    kind: 'S_CURVE',
+    edge: 'TOP',
+    r1: 200,
+    sweepDeg1: 30,
+    r2: 150,
+    sweepDeg2: 45,
+  },
+  computed: { realThickness: 18 },
+} as unknown as CabinetPanel;
+
+/**
+ * Build a CutListRow from live S_CURVE computeCurveFields() output so
+ * kerfCount is always consistent with the actual kerf algorithm.
+ */
+function buildSCurveRow(): { row: CutListRow; kerfCount: number } {
+  const fields = computeCurveFields(S_CURVE_PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+
+  const row: CutListRow = {
+    partId: 'SMOKE_SCURVE_DOOR',
+    cabinetId: 'CAB_SMOKE',
+    materialId: MATERIAL_ID,
+    finishW: S_CURVE_PANEL_STUB.finishWidth,
+    finishH: S_CURVE_PANEL_STUB.finishHeight,
+    edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+    premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+    cutW: S_CURVE_PANEL_STUB.finishWidth,
+    cutH: S_CURVE_PANEL_STUB.finishHeight,
+    qty: 1,
+    developedLength: fields.developedLength,
+    projectedDepth:  fields.projectedDepth,
+    kerfCount:       fields.kerfCount,
+    curvedEdge:      fields.curvedEdge ?? undefined,
+  };
+
+  return { row, kerfCount: fields.kerfCount };
+}
+
+// ============================================================
+// @smoke S-CURVE — Stage 1: computeCurveFields
+// ============================================================
+
+describe('@smoke S-CURVE — Stage 1: computeCurveFields produces curve data', () => {
+  it('returns non-null CurveFields for S_CURVE panel', () => {
+    const fields = computeCurveFields(S_CURVE_PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF');
+    expect(fields).not.toBeNull();
+  });
+
+  it('developedLength ≈ 222.529 mm (r1×sweep1Rad + r2×sweep2Rad)', () => {
+    const fields = computeCurveFields(S_CURVE_PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    expect(fields.developedLength).toBeCloseTo(222.529, 1);
+  });
+
+  it('kerfCount >= 1', () => {
+    const fields = computeCurveFields(S_CURVE_PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    expect(fields.kerfCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it('projectedDepth > 0', () => {
+    const fields = computeCurveFields(S_CURVE_PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    expect(fields.projectedDepth).toBeGreaterThan(0);
+  });
+
+  it('curvedEdge === "TOP" (matches S_CURVE profile edge)', () => {
+    const fields = computeCurveFields(S_CURVE_PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    expect(fields.curvedEdge).toBe('TOP');
+  });
+});
+
+// ============================================================
+// @smoke S-CURVE — Stage 2: CutListRow assembly
+// ============================================================
+
+describe('@smoke S-CURVE — Stage 2: CutListRow assembly', () => {
+  it('row carries developedLength, kerfCount, projectedDepth, curvedEdge', () => {
+    const { row } = buildSCurveRow();
+    expect(row.developedLength).toBeDefined();
+    expect(row.kerfCount).toBeDefined();
+    expect(row.projectedDepth).toBeDefined();
+    expect(row.curvedEdge).toBe('TOP');
+  });
+
+  it('correction = developedLength − projectedDepth > 0 (flat blank larger than finish)', () => {
+    const { row } = buildSCurveRow();
+    const correction = row.developedLength! - row.projectedDepth!;
+    expect(correction).toBeGreaterThan(0);
+  });
+});
+
+// ============================================================
+// @smoke S-CURVE — Stage 3: runNesting() propagates isCurved + kerfCount
+// ============================================================
+
+describe('@smoke S-CURVE — Stage 3: runNesting() propagates isCurved + kerfCount', () => {
+  it('produces at least one NestingSheet with no unplaced parts', () => {
+    const { row } = buildSCurveRow();
+    const { sheets, unplacedParts } = runNesting([row]);
+    expect(unplacedParts).toHaveLength(0);
+    expect(sheets.length).toBeGreaterThan(0);
+  });
+
+  it('placement has isCurved=true', () => {
+    const { row } = buildSCurveRow();
+    const { sheets } = runNesting([row]);
+    const p = sheets
+      .flatMap((s) => s.placements)
+      .find((pl) => pl.partId === 'SMOKE_SCURVE_DOOR');
+    expect(p).toBeDefined();
+    expect(p!.isCurved).toBe(true);
+  });
+
+  it('placement kerfCount matches computeCurveFields output', () => {
+    const { row, kerfCount } = buildSCurveRow();
+    const { sheets } = runNesting([row]);
+    const p = sheets
+      .flatMap((s) => s.placements)
+      .find((pl) => pl.partId === 'SMOKE_SCURVE_DOOR');
+    expect(p!.kerfCount).toBe(kerfCount);
+  });
+
+  it('sheetH accommodates flat blank (>= finishH + correction)', () => {
+    const { row } = buildSCurveRow();
+    const { sheets } = runNesting([row]);
+    const s = sheets[0];
+    const fields = computeCurveFields(S_CURVE_PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const correction = fields.developedLength - fields.projectedDepth;
+    const expectedFlatH = row.cutH + correction;
+    expect(s.sheetH).toBeGreaterThanOrEqual(expectedFlatH);
+  });
+});
+
+// ============================================================
+// @smoke S-CURVE — Stage 4: buildDxfSheet() renders curved DXF
+// ============================================================
+
+describe('@smoke S-CURVE — Stage 4: buildDxfSheet() renders curved DXF', () => {
+  function runSCurvePipeline() {
+    const { row, kerfCount } = buildSCurveRow();
+    const { sheets } = runNesting([row]);
+
+    const planned: PlannedSheet = {
+      index1: 1,
+      sheetId: 'SHEET_001',
+      materialId: MATERIAL_ID,
+    };
+
+    return {
+      dxf: buildDxfSheet({
+        planned,
+        nesting: sheets[0],
+        profile: getFactoryProfile('DEFAULT'),
+      }).content,
+      kerfCount,
+    };
+  }
+
+  it('DXF contains PARTS_CURVED layer', () => {
+    const { dxf } = runSCurvePipeline();
+    expect(dxf).toContain('PARTS_CURVED');
+  });
+
+  it('DXF contains HATCH_CURVED layer', () => {
+    const { dxf } = runSCurvePipeline();
+    expect(dxf).toContain('HATCH_CURVED');
+  });
+
+  it('DXF contains "(CURVED / N cuts)" sub-label with live kerfCount', () => {
+    const { dxf, kerfCount } = runSCurvePipeline();
+    expect(dxf).toContain(`(CURVED / ${kerfCount} cuts)`);
+  });
+
+  it('part label "SMOKE_SCURVE_DOOR" is present in the DXF', () => {
+    const { dxf } = runSCurvePipeline();
+    expect(dxf).toContain('SMOKE_SCURVE_DOOR');
+  });
+});
+
+// ============================================================
+// @smoke S-CURVE — Stage 5: DxfSheetOutput.bytes is a valid UTF-8 Uint8Array
+// ============================================================
+
+describe('@smoke S-CURVE — Stage 5: DxfSheetOutput.bytes is a valid UTF-8 Uint8Array', () => {
+  function runSCurvePipelineFull() {
+    const { row, kerfCount } = buildSCurveRow();
+    const { sheets } = runNesting([row]);
+
+    const planned: PlannedSheet = {
+      index1: 1,
+      sheetId: 'SHEET_001',
+      materialId: MATERIAL_ID,
+    };
+
+    return {
+      output: buildDxfSheet({
+        planned,
+        nesting: sheets[0],
+        profile: getFactoryProfile('DEFAULT'),
+      }),
+      kerfCount,
+    };
+  }
+
+  it('bytes is a Uint8Array', () => {
+    const { output } = runSCurvePipelineFull();
+    expect(output.bytes).toBeInstanceOf(Uint8Array);
+  });
+
+  it('bytes is non-empty', () => {
+    const { output } = runSCurvePipelineFull();
+    expect(output.bytes.byteLength).toBeGreaterThan(0);
+  });
+
+  it('bytes decodes to the same string as content (UTF-8 round-trip)', () => {
+    const { output } = runSCurvePipelineFull();
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(output.bytes);
+    expect(decoded).toBe(output.content);
+  });
+
+  it('byte length equals the UTF-8 encoded length of content', () => {
+    const { output } = runSCurvePipelineFull();
+    const reEncoded = new TextEncoder().encode(output.content);
+    expect(output.bytes.byteLength).toBe(reEncoded.byteLength);
+  });
+
+  it('bytes is valid UTF-8 (TextDecoder with fatal=true does not throw)', () => {
+    const { output } = runSCurvePipelineFull();
+    expect(() =>
+      new TextDecoder('utf-8', { fatal: true }).decode(output.bytes)
+    ).not.toThrow();
+  });
+
+  it('content string is exactly reproducible from bytes (no BOM, no extra bytes)', () => {
+    const { output } = runSCurvePipelineFull();
+    const allAscii = [...output.content].every((ch) => ch.codePointAt(0)! < 128);
+    if (allAscii) {
+      expect(output.bytes.byteLength).toBe(output.content.length);
+    }
+    const decoded = new TextDecoder('utf-8').decode(output.bytes);
+    expect(decoded).toBe(output.content);
+  });
+
+  it('bytes still contains the "(CURVED / N cuts)" sub-label when decoded', () => {
+    const { output, kerfCount } = runSCurvePipelineFull();
+    const decoded = new TextDecoder('utf-8').decode(output.bytes);
+    expect(decoded).toContain(`(CURVED / ${kerfCount} cuts)`);
+  });
+});
