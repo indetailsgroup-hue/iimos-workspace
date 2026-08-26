@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.1] - 2026-08-26
+
+### 🧪 Smoke Suite — Endpoint Precision Invariant (Stage 22)
+
+Patch release introducing coordinate-rounding in `buildDxfSheets.addLine()`
+and a new smoke stage that asserts all `HATCH_CURVED` line endpoints are
+multiples of 0.01 mm, preventing irrational arc-length floats from leaking
+into CNC DXF output.
+
+**Total smoke test delta: 151 → 157 (+6 tests)**
+
+---
+
+#### `buildDxfSheets.addLine()` — round all four endpoint coordinates to 0.01 mm (`7d7b2aae`, 2026-08-26)
+
+Added `const r = (v: number): number => Math.round(v * 100) / 100;` inside
+`addLine()` so every `LINE` entity written to DXF R12 text carries coordinates
+that are exact multiples of 0.01 mm.
+
+Maximum rounding delta per coordinate: **0.005 mm**, well within CNC
+kerf-width tolerance (R\_min MDF 18 mm = 144 mm; kerf = 3.5 mm).
+
+---
+
+#### Stage 22 — HATCH\_CURVED endpoint coords rounded to 0.01 mm precision (`7d7b2aae`, 2026-08-26)
+
+Asserts that every HATCH\_CURVED diagonal endpoint satisfies:
+
+```
+Math.abs(v * 100 − Math.round(v * 100)) < 1e-6
+```
+
+for all four fields `{ x1, y1, x2, y2 }` of both diagonals, across all
+three panel types (ARC, S\_CURVE, TALL\_ARC).
+
+Precision helper: `isRounded(v: number): boolean`
+
+Panel set: same three-panel sheet as Stages 19–21
+(SMOKE\_DOOR + SMOKE\_SCURVE\_DOOR + SMOKE\_TALL\_ARC).
+
+**6 assertions added. Smoke total: 151 → 157.**
+
+---
+
+#### Stage 15 — diagonal-length precision relaxed to `toBeCloseTo(x, 1)` (`7d7b2aae`, 2026-08-26)
+
+Coordinate rounding in `addLine()` shifts diagonal lengths by up to
+`sqrt(2) × 0.01 ≈ 0.014 mm`, exceeding the previous `toBeCloseTo(x, 3)`
+tolerance of ±0.0005 mm. Precision relaxed to `toBeCloseTo(x, 1)` (±0.05 mm)
+— Stage 22 now owns the sub-millimetre precision contract.
+
+*(No change to assertion count.)*
+
+---
+
+#### Stage 6 — far-corner x-coordinate verbatim check updated (`7d7b2aae`, 2026-08-26)
+
+`String(farX)` → `String(Math.round(farX * 100) / 100)`:
+the DXF `LINE` entity now stores the rounded value, so the verbatim check
+must compare against the rounded string.
+
+*(No change to assertion count.)*
+
+---
+
+
 ## [2.3.0] - 2026-08-26
 
 ### 🧪 Smoke Suite — Geometric Invariant Suite (Stages 14–21)
