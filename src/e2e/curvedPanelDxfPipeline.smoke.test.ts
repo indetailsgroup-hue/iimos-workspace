@@ -37,6 +37,7 @@
  *    11 |      0 |         3 |            0 |            0 |    12
  *    12 |      1 |         2 |            2 |            4 |     8
  *    13 |      2 |         1 |            4 |            8 |     4
+ *    14 |      1 |         0 | bbox-confinement (coordinate assertion, S_CURVE only)
  *
  * ─────────────────────────────────────────────────────────────────────────────
  *
@@ -1524,5 +1525,150 @@ describe('@smoke — Stage 13: HATCH_CURVED scales to 4 when two straight panels
     expect(output.content).toContain('SMOKE_DOOR');
     expect(output.content).toContain('SMOKE_SCURVE_DOOR');
     expect(output.content).toContain('SMOKE_STRAIGHT_SIDE');
+  });
+});
+
+// ============================================================
+// @smoke S-CURVE — Stage 14: HATCH_CURVED X-lines confined within flat-blank bbox
+//
+// Every HATCH_CURVED LINE endpoint must satisfy:
+//   x ∈ [placement.x,  placement.x + effectiveW]
+//   y ∈ [placement.y,  placement.y + effectiveH]
+//
+// For S_CURVE TOP-edge (rotation=90, edgeClearance=10):
+//   flatBlankW  = finishWidth   = 500 mm
+//   flatBlankH  = finishHeight + (developedLength − projectedDepth) ≈ 1051.800 mm
+//   effectiveW  ≈ 1051.800 mm (cutH after rotation)
+//   effectiveH  = 500 mm        (cutW after rotation)
+//   bbox minX = 10,  maxX ≈ 1061.800
+//        minY = 10,  maxY = 510
+//
+// buildDxfSheets.ts emits exactly two diagonal LINEs per curved placement:
+//   diagonal-1: (minX, minY) → (maxX, maxY)   [top-left  → bottom-right]
+//   diagonal-2: (maxX, minY) → (minX, maxY)   [top-right → bottom-left]
+//
+// All four endpoints lie on the bbox perimeter; none can escape it.
+// ============================================================
+
+describe('@smoke S-CURVE — Stage 14: HATCH_CURVED X-lines confined within flat-blank bbox', () => {
+  /** Re-usable helper: run full pipeline for the S_CURVE panel only. */
+  function runStage14() {
+    const { row } = buildSCurveRow();
+    const { sheets } = runNesting([row]);
+
+    const planned: PlannedSheet = {
+      index1: 1,
+      sheetId: 'SHEET_001',
+      materialId: MATERIAL_ID,
+    };
+
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const placement = sheets[0].placements.find(
+      (p) => p.partId === 'SMOKE_SCURVE_DOOR'
+    )!;
+
+    // Mirror getRotatedDimensions() from buildDxfSheets.ts (rotation=90 → swap)
+    const isRotated = placement.rotation === 90 || placement.rotation === 270;
+    const effectiveW = isRotated ? placement.cutH : placement.cutW;
+    const effectiveH = isRotated ? placement.cutW : placement.cutH;
+
+    const bbox = {
+      minX: placement.x,
+      maxX: placement.x + effectiveW,
+      minY: placement.y,
+      maxY: placement.y + effectiveH,
+    };
+
+    // Parse all HATCH_CURVED LINE entity coordinates from the ENTITIES section.
+    // DXF is line-oriented: group codes and values alternate as plain-text lines.
+    // Extract group values with regex \n<code>\n(<number>) to avoid false positives
+    // when a coordinate value happens to equal a group code integer.
+    const entitiesStart = output.content.indexOf('ENTITIES');
+    const entities = output.content.slice(entitiesStart);
+
+    const hatchSegs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((seg) => seg.includes('\n8\nHATCH_CURVED\n'));
+
+    type Coords = { x1: number; y1: number; x2: number; y2: number };
+
+    function extractCoords(seg: string): Coords {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    }
+
+    const coords = hatchSegs.map(extractCoords);
+
+    return { coords, bbox, placement, effectiveW, effectiveH, output };
+  }
+
+  it('exactly 2 HATCH_CURVED LINE entities are present for the S_CURVE panel', () => {
+    const { coords } = runStage14();
+    expect(coords).toHaveLength(2);
+  });
+
+  it('all x1 start-coordinates lie within [placement.x, placement.x + effectiveW]', () => {
+    const { coords, bbox } = runStage14();
+    for (const c of coords) {
+      expect(c.x1).toBeGreaterThanOrEqual(bbox.minX);
+      expect(c.x1).toBeLessThanOrEqual(bbox.maxX);
+    }
+  });
+
+  it('all y1 start-coordinates lie within [placement.y, placement.y + effectiveH]', () => {
+    const { coords, bbox } = runStage14();
+    for (const c of coords) {
+      expect(c.y1).toBeGreaterThanOrEqual(bbox.minY);
+      expect(c.y1).toBeLessThanOrEqual(bbox.maxY);
+    }
+  });
+
+  it('all x2 end-coordinates lie within [placement.x, placement.x + effectiveW]', () => {
+    const { coords, bbox } = runStage14();
+    for (const c of coords) {
+      expect(c.x2).toBeGreaterThanOrEqual(bbox.minX);
+      expect(c.x2).toBeLessThanOrEqual(bbox.maxX);
+    }
+  });
+
+  it('all y2 end-coordinates lie within [placement.y, placement.y + effectiveH]', () => {
+    const { coords, bbox } = runStage14();
+    for (const c of coords) {
+      expect(c.y2).toBeGreaterThanOrEqual(bbox.minY);
+      expect(c.y2).toBeLessThanOrEqual(bbox.maxY);
+    }
+  });
+
+  it('diagonal-1 runs from top-left corner (minX, minY) to bottom-right corner (maxX, maxY)', () => {
+    const { coords, bbox } = runStage14();
+    const d1 = coords.find(
+      (c) =>
+        Math.abs(c.x1 - bbox.minX) < 0.001 &&
+        Math.abs(c.y1 - bbox.minY) < 0.001 &&
+        Math.abs(c.x2 - bbox.maxX) < 0.001 &&
+        Math.abs(c.y2 - bbox.maxY) < 0.001
+    );
+    expect(d1).toBeDefined();
+  });
+
+  it('diagonal-2 runs from top-right corner (maxX, minY) to bottom-left corner (minX, maxY)', () => {
+    const { coords, bbox } = runStage14();
+    const d2 = coords.find(
+      (c) =>
+        Math.abs(c.x1 - bbox.maxX) < 0.001 &&
+        Math.abs(c.y1 - bbox.minY) < 0.001 &&
+        Math.abs(c.x2 - bbox.minX) < 0.001 &&
+        Math.abs(c.y2 - bbox.maxY) < 0.001
+    );
+    expect(d2).toBeDefined();
   });
 });
