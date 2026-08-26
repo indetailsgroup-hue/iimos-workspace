@@ -2831,3 +2831,202 @@ describe('@smoke Stage 22 — HATCH_CURVED endpoint coords rounded to 0.01 mm pr
     expect(isRounded(d.y2)).toBe(true);
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Stage 23 — Rounding does not violate bbox-confinement invariant
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe('@smoke Stage 23 — rounded HATCH_CURVED endpoints remain within flat-blank bbox', () => {
+  /**
+   * Stage 14 established the bbox-confinement invariant for S_CURVE only,
+   * using unrounded coordinates.  Stage 22 introduced 0.01 mm rounding in
+   * addLine().  Stage 23 asserts that rounding does NOT push any endpoint
+   * outside the flat-blank placement bounding box.
+   *
+   * Tolerance: ε = 0.01 mm  (2× max rounding delta of 0.005 mm per coord).
+   * Panel set: same three-panel sheet as Stages 19–22
+   *            (ARC SMOKE_DOOR + S_CURVE SMOKE_SCURVE_DOOR + TALL_ARC).
+   *
+   * Invariant (per diagonal d, per panel p):
+   *   d.x1 ∈ [bbox.minX − ε, bbox.maxX + ε]
+   *   d.y1 ∈ [bbox.minY − ε, bbox.maxY + ε]
+   *   d.x2 ∈ [bbox.minX − ε, bbox.maxX + ε]
+   *   d.y2 ∈ [bbox.minY − ε, bbox.maxY + ε]
+   *   where ε = 0.01 mm
+   */
+
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+  type Bbox   = { minX: number; maxX: number; minY: number; maxY: number };
+
+  // ── helpers (self-contained) ──────────────────────────────────────────────
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function bboxForPlacement(p: { x: number; y: number; cutW: number; cutH: number; rotation: number }): Bbox {
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const ew = isRotated ? p.cutH : p.cutW;
+    const eh = isRotated ? p.cutW : p.cutH;
+    return { minX: p.x, maxX: p.x + ew, minY: p.y, maxY: p.y + eh };
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  function runStage23() {
+    const { row: arcRow }     = buildCurvedRow();
+    const { row: sCurveRow }  = buildSCurveRow();
+    const { row: tallArcRow } = buildTallArcRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow, tallArcRow]);
+    expect(sheets).toHaveLength(1);
+
+    const arcP     = sheets[0].placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP  = sheets[0].placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const tallArcP = sheets[0].placements.find((p) => p.partId === 'SMOKE_TALL_ARC')!;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const allCoords    = parseHatchCoords(output.content);
+    const arcLines     = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines  = linesForPlacement(allCoords, sCurveP.y);
+    const tallArcLines = linesForPlacement(allCoords, tallArcP.y);
+
+    expect(arcLines).toHaveLength(2);
+    expect(sCurveLines).toHaveLength(2);
+    expect(tallArcLines).toHaveLength(2);
+
+    return {
+      arcLines,    arcBbox:    bboxForPlacement(arcP),
+      sCurveLines, sCurveBbox: bboxForPlacement(sCurveP),
+      tallArcLines, tallBbox:  bboxForPlacement(tallArcP),
+    };
+  }
+
+  const ε = 0.01; // 2× max rounding delta (0.005 mm per coord)
+
+  // ── Part A: ARC ───────────────────────────────────────────────────────────
+
+  it('ARC — diagonal-1 all four endpoint coords remain within flat-blank bbox ± 0.01 mm', () => {
+    const { arcLines, arcBbox: b } = runStage23();
+    const d = arcLines[0];
+    expect(d.x1).toBeGreaterThanOrEqual(b.minX - ε);
+    expect(d.x1).toBeLessThanOrEqual(b.maxX + ε);
+    expect(d.y1).toBeGreaterThanOrEqual(b.minY - ε);
+    expect(d.y1).toBeLessThanOrEqual(b.maxY + ε);
+    expect(d.x2).toBeGreaterThanOrEqual(b.minX - ε);
+    expect(d.x2).toBeLessThanOrEqual(b.maxX + ε);
+    expect(d.y2).toBeGreaterThanOrEqual(b.minY - ε);
+    expect(d.y2).toBeLessThanOrEqual(b.maxY + ε);
+  });
+
+  it('ARC — diagonal-2 all four endpoint coords remain within flat-blank bbox ± 0.01 mm', () => {
+    const { arcLines, arcBbox: b } = runStage23();
+    const d = arcLines[1];
+    expect(d.x1).toBeGreaterThanOrEqual(b.minX - ε);
+    expect(d.x1).toBeLessThanOrEqual(b.maxX + ε);
+    expect(d.y1).toBeGreaterThanOrEqual(b.minY - ε);
+    expect(d.y1).toBeLessThanOrEqual(b.maxY + ε);
+    expect(d.x2).toBeGreaterThanOrEqual(b.minX - ε);
+    expect(d.x2).toBeLessThanOrEqual(b.maxX + ε);
+    expect(d.y2).toBeGreaterThanOrEqual(b.minY - ε);
+    expect(d.y2).toBeLessThanOrEqual(b.maxY + ε);
+  });
+
+  // ── Part B: S_CURVE ───────────────────────────────────────────────────────
+
+  it('S_CURVE — diagonal-1 all four endpoint coords remain within flat-blank bbox ± 0.01 mm', () => {
+    const { sCurveLines, sCurveBbox: b } = runStage23();
+    const d = sCurveLines[0];
+    expect(d.x1).toBeGreaterThanOrEqual(b.minX - ε);
+    expect(d.x1).toBeLessThanOrEqual(b.maxX + ε);
+    expect(d.y1).toBeGreaterThanOrEqual(b.minY - ε);
+    expect(d.y1).toBeLessThanOrEqual(b.maxY + ε);
+    expect(d.x2).toBeGreaterThanOrEqual(b.minX - ε);
+    expect(d.x2).toBeLessThanOrEqual(b.maxX + ε);
+    expect(d.y2).toBeGreaterThanOrEqual(b.minY - ε);
+    expect(d.y2).toBeLessThanOrEqual(b.maxY + ε);
+  });
+
+  it('S_CURVE — diagonal-2 all four endpoint coords remain within flat-blank bbox ± 0.01 mm', () => {
+    const { sCurveLines, sCurveBbox: b } = runStage23();
+    const d = sCurveLines[1];
+    expect(d.x1).toBeGreaterThanOrEqual(b.minX - ε);
+    expect(d.x1).toBeLessThanOrEqual(b.maxX + ε);
+    expect(d.y1).toBeGreaterThanOrEqual(b.minY - ε);
+    expect(d.y1).toBeLessThanOrEqual(b.maxY + ε);
+    expect(d.x2).toBeGreaterThanOrEqual(b.minX - ε);
+    expect(d.x2).toBeLessThanOrEqual(b.maxX + ε);
+    expect(d.y2).toBeGreaterThanOrEqual(b.minY - ε);
+    expect(d.y2).toBeLessThanOrEqual(b.maxY + ε);
+  });
+
+  // ── Part C: TALL_ARC ──────────────────────────────────────────────────────
+
+  it('TALL_ARC — diagonal-1 all four endpoint coords remain within flat-blank bbox ± 0.01 mm', () => {
+    const { tallArcLines, tallBbox: b } = runStage23();
+    const d = tallArcLines[0];
+    expect(d.x1).toBeGreaterThanOrEqual(b.minX - ε);
+    expect(d.x1).toBeLessThanOrEqual(b.maxX + ε);
+    expect(d.y1).toBeGreaterThanOrEqual(b.minY - ε);
+    expect(d.y1).toBeLessThanOrEqual(b.maxY + ε);
+    expect(d.x2).toBeGreaterThanOrEqual(b.minX - ε);
+    expect(d.x2).toBeLessThanOrEqual(b.maxX + ε);
+    expect(d.y2).toBeGreaterThanOrEqual(b.minY - ε);
+    expect(d.y2).toBeLessThanOrEqual(b.maxY + ε);
+  });
+
+  it('TALL_ARC — diagonal-2 all four endpoint coords remain within flat-blank bbox ± 0.01 mm', () => {
+    const { tallArcLines, tallBbox: b } = runStage23();
+    const d = tallArcLines[1];
+    expect(d.x1).toBeGreaterThanOrEqual(b.minX - ε);
+    expect(d.x1).toBeLessThanOrEqual(b.maxX + ε);
+    expect(d.y1).toBeGreaterThanOrEqual(b.minY - ε);
+    expect(d.y1).toBeLessThanOrEqual(b.maxY + ε);
+    expect(d.x2).toBeGreaterThanOrEqual(b.minX - ε);
+    expect(d.x2).toBeLessThanOrEqual(b.maxX + ε);
+    expect(d.y2).toBeGreaterThanOrEqual(b.minY - ε);
+    expect(d.y2).toBeLessThanOrEqual(b.maxY + ε);
+  });
+});
