@@ -3168,3 +3168,141 @@ describe('@smoke Stage 24 — all HATCH_CURVED diagonals have non-zero length', 
     expect(isNonDegenerate(tallArcLines[1])).toBe(true);
   });
 });
+
+// Stage 25 — Both HATCH_CURVED diagonals share the same midpoint
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe('@smoke Stage 25 — midpoint of diagonal-1 equals midpoint of diagonal-2', () => {
+  /**
+   * For a correct X-hatch the two diagonals of a placement bbox intersect at
+   * the centre of the bbox.  That centre is exactly the midpoint of each
+   * diagonal, so both midpoints must be equal:
+   *
+   *   (d1.x1 + d1.x2) / 2  ≈  (d2.x1 + d2.x2) / 2
+   *   (d1.y1 + d1.y2) / 2  ≈  (d2.y1 + d2.y2) / 2
+   *
+   * Tolerance: toBeCloseTo(x, 1)  →  ±0.05 mm.
+   * The 0.01 mm rounding introduced in Stage 22 can shift each midpoint by at
+   * most 0.005 mm, so the worst-case difference is 0.01 mm — well within the
+   * ±0.05 mm window.
+   *
+   * Panel set: same three-panel sheet as Stages 19–24
+   *            (ARC SMOKE_DOOR + S_CURVE SMOKE_SCURVE_DOOR + TALL_ARC).
+   */
+
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+
+  // ── helpers (self-contained) ──────────────────────────────────────────────
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  const midX = (d: Coords): number => (d.x1 + d.x2) / 2;
+  const midY = (d: Coords): number => (d.y1 + d.y2) / 2;
+
+  function runStage25() {
+    const { row: arcRow }     = buildCurvedRow();
+    const { row: sCurveRow }  = buildSCurveRow();
+    const { row: tallArcRow } = buildTallArcRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow, tallArcRow]);
+    expect(sheets).toHaveLength(1);
+
+    const arcP     = sheets[0].placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP  = sheets[0].placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const tallArcP = sheets[0].placements.find((p) => p.partId === 'SMOKE_TALL_ARC')!;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const allCoords    = parseHatchCoords(output.content);
+    const arcLines     = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines  = linesForPlacement(allCoords, sCurveP.y);
+    const tallArcLines = linesForPlacement(allCoords, tallArcP.y);
+
+    expect(arcLines).toHaveLength(2);
+    expect(sCurveLines).toHaveLength(2);
+    expect(tallArcLines).toHaveLength(2);
+
+    return { arcLines, sCurveLines, tallArcLines };
+  }
+
+  // ── Part A: ARC ───────────────────────────────────────────────────────────
+
+  it('ARC — midX of diagonal-1 equals midX of diagonal-2', () => {
+    const { arcLines } = runStage25();
+    expect(midX(arcLines[0])).toBeCloseTo(midX(arcLines[1]), 1);
+  });
+
+  it('ARC — midY of diagonal-1 equals midY of diagonal-2', () => {
+    const { arcLines } = runStage25();
+    expect(midY(arcLines[0])).toBeCloseTo(midY(arcLines[1]), 1);
+  });
+
+  // ── Part B: S_CURVE ───────────────────────────────────────────────────────
+
+  it('S_CURVE — midX of diagonal-1 equals midX of diagonal-2', () => {
+    const { sCurveLines } = runStage25();
+    expect(midX(sCurveLines[0])).toBeCloseTo(midX(sCurveLines[1]), 1);
+  });
+
+  it('S_CURVE — midY of diagonal-1 equals midY of diagonal-2', () => {
+    const { sCurveLines } = runStage25();
+    expect(midY(sCurveLines[0])).toBeCloseTo(midY(sCurveLines[1]), 1);
+  });
+
+  // ── Part C: TALL_ARC ──────────────────────────────────────────────────────
+
+  it('TALL_ARC — midX of diagonal-1 equals midX of diagonal-2', () => {
+    const { tallArcLines } = runStage25();
+    expect(midX(tallArcLines[0])).toBeCloseTo(midX(tallArcLines[1]), 1);
+  });
+
+  it('TALL_ARC — midY of diagonal-1 equals midY of diagonal-2', () => {
+    const { tallArcLines } = runStage25();
+    expect(midY(tallArcLines[0])).toBeCloseTo(midY(tallArcLines[1]), 1);
+  });
+});
