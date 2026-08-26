@@ -145,6 +145,8 @@ export interface NestingSheet {
     cutH: number;
     /** True when this part is a curved panel (kerf-bent blank) */
     isCurved?: boolean;
+    /** Number of kerf cuts required to achieve the bend (curved panels only) */
+    kerfCount?: number;
   }>;
 
   /** Utilization percentage */

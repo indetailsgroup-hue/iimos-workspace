@@ -228,11 +228,13 @@ export function runNesting(
 
   const parts = extractNestingParts(cutListRows);
 
-  // Build partId → isCurved lookup so placement mapper can carry the flag
-  // through the FFDH result (Placement type doesn't carry isCurved itself).
+  // Build partId → isCurved / kerfCount lookup so placement mapper can carry
+  // the flags through the FFDH result (Placement type doesn't carry them).
   const isCurvedMap = new Map<string, boolean>();
+  const kerfCountMap = new Map<string, number>();
   for (const p of parts) {
     if (p.isCurved) isCurvedMap.set(p.id, true);
+    if (p.kerfCount !== undefined) kerfCountMap.set(p.id, p.kerfCount);
   }
 
   const groups = groupByMaterial(parts);
@@ -277,6 +279,7 @@ export function runNesting(
           cutW: p.cutW,
           cutH: p.cutH,
           isCurved: isCurvedMap.get(p.partId) ?? undefined,
+          kerfCount: kerfCountMap.get(p.partId) ?? undefined,
         })),
         utilization: sr.utilization,
       });

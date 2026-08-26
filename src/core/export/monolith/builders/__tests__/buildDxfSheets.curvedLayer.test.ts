@@ -68,6 +68,7 @@ function makeCurvedNestingSheet(): NestingSheet {
         cutW: 400,
         cutH: 800,
         isCurved: true,
+        kerfCount: 12,
       },
     ],
   };
@@ -218,9 +219,19 @@ describe('buildDxfSheet — curved placement uses PARTS_CURVED + HATCH_CURVED', 
     expect(partsExact.length).toBe(0);
   });
 
-  it('curved part sub-label "(CURVED)" appears in output', () => {
-    const dxf = buildDxf(makeCurvedNestingSheet());
+  it('curved part sub-label includes kerfCount: "(CURVED / 12 cuts)"', () => {
+    const dxf = buildDxf(makeCurvedNestingSheet()); // has kerfCount: 12
+    expect(dxf).toContain('(CURVED / 12 cuts)');
+  });
+
+  it('curved part without kerfCount falls back to "(CURVED)"', () => {
+    const sheet: NestingSheet = {
+      ...makeCurvedNestingSheet(),
+      placements: [{ partId: 'X', x: 0, y: 0, rotation: 0, cutW: 200, cutH: 400, isCurved: true }],
+    };
+    const dxf = buildDxf(sheet);
     expect(dxf).toContain('(CURVED)');
+    expect(dxf).not.toContain('cuts)');
   });
 
   it('two hatch diagonal lines are emitted (X-pattern)', () => {
@@ -316,6 +327,20 @@ describe('runNesting() — isCurved propagates to placements', () => {
     const p = sheets[0].placements.find((pl) => pl.partId === 'CURVED');
     expect(p).toBeDefined();
     expect(p!.isCurved).toBe(true);
+  });
+
+  it('curved CutListRow propagates kerfCount to placement', () => {
+    const { sheets } = runNesting([curvedRow('CURVED_KC')]);
+    const p = sheets.flatMap((s) => s.placements).find((pl) => pl.partId === 'CURVED_KC');
+    expect(p).toBeDefined();
+    expect(p!.kerfCount).toBe(12);
+  });
+
+  it('flat CutListRow has kerfCount=undefined on placement', () => {
+    const { sheets } = runNesting([flatRow('FLAT_KC')]);
+    const p = sheets.flatMap((s) => s.placements).find((pl) => pl.partId === 'FLAT_KC');
+    expect(p).toBeDefined();
+    expect(p!.kerfCount).toBeUndefined();
   });
 
   it('mixed cut list: flat has isCurved=undefined, curved has isCurved=true', () => {

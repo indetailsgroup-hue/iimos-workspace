@@ -321,9 +321,12 @@ export function buildDxfSheet(input: DxfSheetInput): DxfSheetOutput {
       builder.addText(labelX, labelY - 28, `R${placement.rotation}`, 5, 'LABELS');
     }
 
-    // Curved sub-label: "(CURVED / N cuts)"
+    // Curved sub-label: "(CURVED / N cuts)" or "(CURVED)" when kerfCount absent
     if (placement.isCurved) {
-      builder.addText(labelX, labelY - 40, '(CURVED)', 5, 'LABELS');
+      const curveLbl = placement.kerfCount !== undefined
+        ? `(CURVED / ${placement.kerfCount} cuts)`
+        : '(CURVED)';
+      builder.addText(labelX, labelY - 40, curveLbl, 5, 'LABELS');
     }
   }
 
