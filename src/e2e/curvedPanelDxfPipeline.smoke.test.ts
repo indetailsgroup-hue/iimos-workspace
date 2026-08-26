@@ -2318,3 +2318,175 @@ describe('@smoke — Stage 19: diagonal intersection at bbox centre for ARC + S_
     expect(mid(sCurveLines[1]).my).toBeCloseTo(sCurveMinY + sCurveEffH / 2, 3);
   });
 });
+
+// ============================================================
+// Stage 20 — Perpendicularity of HATCH_CURVED diagonals when
+//            effectiveW equals effectiveH
+//
+// Diagonals are perpendicular iff dot(d1, d2) = 0, which
+// equals effectiveH² − effectiveW² (derivation: d1=(w,h),
+// d2=(-w,h) → dot = h² − w²).
+//
+// Three panels on one sheet:
+//   ARC        — effectiveW≈909 ≠ effectiveH=400  → dot ≠ 0
+//   S_CURVE    — effectiveW≈1052 ≠ effectiveH=500 → dot ≠ 0
+//   SQUARE_ARC — effectiveW=effectiveH≈509         → dot = 0
+//
+// SQUARE_ARC construction:
+//   correction = developedLength − projectedDepth  (from PANEL_STUB)
+//   finishWidth = 400 + correction  ← makes flatBlankW = flatBlankH
+// ============================================================
+
+describe('@smoke — Stage 20: perpendicularity of HATCH_CURVED diagonals', () => {
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function dotProduct(l1: Coords, l2: Coords): number {
+    const v1x = l1.x2 - l1.x1;
+    const v1y = l1.y2 - l1.y1;
+    const v2x = l2.x2 - l2.x1;
+    const v2y = l2.y2 - l2.y1;
+    return v1x * v2x + v1y * v2y;
+  }
+
+  function buildSquareArcRow(): { row: CutListRow; kerfCount: number } {
+    // Reuse PANEL_STUB geometry (radius=200, sweep=60°) to get the same
+    // correction value as the standard ARC row.  Set finishWidth = 400 + correction
+    // so that flatBlankW = cutW = 400+correction AND
+    //           flatBlankH = cutH + correction = 400 + correction → square.
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const correction = fields.developedLength - fields.projectedDepth;
+    const FINISH_H = 400;
+    const squareFinishW = FINISH_H + correction;   // ≈ 509.44 mm
+
+    const row: CutListRow = {
+      partId:    'SMOKE_SQUARE_ARC',
+      cabinetId: 'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:   squareFinishW,
+      finishH:   FINISH_H,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:      squareFinishW,
+      cutH:      FINISH_H,
+      qty:       1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+    };
+
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  function runStage20() {
+    const { row: arcRow }       = buildCurvedRow();
+    const { row: sCurveRow }    = buildSCurveRow();
+    const { row: squareArcRow } = buildSquareArcRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow, squareArcRow]);
+    expect(sheets).toHaveLength(1);
+
+    const arcP       = sheets[0].placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP    = sheets[0].placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const squareArcP = sheets[0].placements.find((p) => p.partId === 'SMOKE_SQUARE_ARC')!;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const allCoords      = parseHatchCoords(output.content);
+    const arcLines       = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines    = linesForPlacement(allCoords, sCurveP.y);
+    const squareArcLines = linesForPlacement(allCoords, squareArcP.y);
+
+    expect(arcLines).toHaveLength(2);
+    expect(sCurveLines).toHaveLength(2);
+    expect(squareArcLines).toHaveLength(2);
+
+    const arcEffW     = Math.max(...arcLines.flatMap((c) => [c.x1, c.x2]))
+                      - Math.min(...arcLines.flatMap((c) => [c.x1, c.x2]));
+    const arcEffH     = Math.max(...arcLines.flatMap((c) => [c.y1, c.y2]))
+                      - Math.min(...arcLines.flatMap((c) => [c.y1, c.y2]));
+    const sCurveEffW  = Math.max(...sCurveLines.flatMap((c) => [c.x1, c.x2]))
+                      - Math.min(...sCurveLines.flatMap((c) => [c.x1, c.x2]));
+    const sCurveEffH  = Math.max(...sCurveLines.flatMap((c) => [c.y1, c.y2]))
+                      - Math.min(...sCurveLines.flatMap((c) => [c.y1, c.y2]));
+    const sqEffW      = Math.max(...squareArcLines.flatMap((c) => [c.x1, c.x2]))
+                      - Math.min(...squareArcLines.flatMap((c) => [c.x1, c.x2]));
+    const sqEffH      = Math.max(...squareArcLines.flatMap((c) => [c.y1, c.y2]))
+                      - Math.min(...squareArcLines.flatMap((c) => [c.y1, c.y2]));
+
+    return {
+      arcLines, sCurveLines, squareArcLines,
+      arcEffW, arcEffH,
+      sCurveEffW, sCurveEffH,
+      sqEffW, sqEffH,
+    };
+  }
+
+  // ── Part A: ARC — non-perpendicular ────────────────────────────────────────
+
+  it('ARC — |dot(d1, d2)| > 100_000 (non-square bbox, strongly non-perpendicular)', () => {
+    const { arcLines } = runStage20();
+    expect(Math.abs(dotProduct(arcLines[0], arcLines[1]))).toBeGreaterThan(100_000);
+  });
+
+  it('ARC — dot(d1, d2) ≈ arcEffH² − arcEffW² (direction-vector dot-product identity)', () => {
+    const { arcLines, arcEffW, arcEffH } = runStage20();
+    const dot = dotProduct(arcLines[0], arcLines[1]);
+    expect(dot).toBeCloseTo(arcEffH ** 2 - arcEffW ** 2, 0);
+  });
+
+  // ── Part B: S_CURVE — non-perpendicular ────────────────────────────────────
+
+  it('S_CURVE — |dot(d1, d2)| > 100_000 (non-square bbox, strongly non-perpendicular)', () => {
+    const { sCurveLines } = runStage20();
+    expect(Math.abs(dotProduct(sCurveLines[0], sCurveLines[1]))).toBeGreaterThan(100_000);
+  });
+
+  it('S_CURVE — dot(d1, d2) ≈ sCurveEffH² − sCurveEffW² (direction-vector dot-product identity)', () => {
+    const { sCurveLines, sCurveEffW, sCurveEffH } = runStage20();
+    const dot = dotProduct(sCurveLines[0], sCurveLines[1]);
+    expect(dot).toBeCloseTo(sCurveEffH ** 2 - sCurveEffW ** 2, 0);
+  });
+
+  // ── Part C: SQUARE_ARC — perpendicular ────────────────────────────────────
+
+  it('SQUARE_ARC — effectiveW ≈ effectiveH (square flat blank, both dims equal)', () => {
+    const { sqEffW, sqEffH } = runStage20();
+    expect(sqEffW).toBeCloseTo(sqEffH, 1);
+  });
+
+  it('SQUARE_ARC — dot(d1, d2) ≈ 0 (perpendicular diagonals for square bbox)', () => {
+    const { squareArcLines } = runStage20();
+    expect(dotProduct(squareArcLines[0], squareArcLines[1])).toBeCloseTo(0, 0);
+  });
+
+  it('SQUARE_ARC — sqEffH² − sqEffW² ≈ 0 (confirms perpendicularity via dot-product identity)', () => {
+    const { sqEffW, sqEffH } = runStage20();
+    expect(sqEffH ** 2 - sqEffW ** 2).toBeCloseTo(0, 0);
+  });
+});
