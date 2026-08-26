@@ -813,3 +813,120 @@ describe('@smoke S-CURVE — Stage 7: HATCH_CURVED absent for straight panel on 
     expect(output.content).toContain('SMOKE_STRAIGHT_SHELF');
   });
 });
+
+// ============================================================
+// @smoke S-CURVE — Stage 8: HATCH_CURVED count stays exactly 2
+//   when TWO straight panels share the sheet with one curved panel
+//
+// Scaling from Stage 7 (1 straight + 1 curved) to 2 straight + 1 curved
+// must not produce extra HATCH_CURVED lines.  The invariant is:
+//
+//   HATCH_CURVED count  = 2  × (number of curved placements)
+//   PARTS_CURVED count  = 4  × (number of curved placements)
+//   PARTS count         = 4  × (number of straight placements)
+//
+// With 1 curved + 2 straight panels:
+//   HATCH_CURVED = 2   (unchanged — zero contribution from straight panels)
+//   PARTS_CURVED = 4
+//   PARTS        = 8
+// ============================================================
+
+/** Second straight panel — distinct partId and size from STRAIGHT_ROW */
+const STRAIGHT_ROW_2: CutListRow = {
+  partId: 'SMOKE_STRAIGHT_BACK',
+  cabinetId: 'CAB_SMOKE',
+  materialId: MATERIAL_ID,
+  finishW: 250,
+  finishH: 350,
+  edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+  premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+  cutW: 250,
+  cutH: 350,
+  qty: 1,
+};
+
+describe('@smoke S-CURVE — Stage 8: HATCH_CURVED count stays 2 with two straight panels on same sheet', () => {
+  function runStage8() {
+    const { row: curvedRow, kerfCount } = buildSCurveRow();
+
+    // All three rows land on a single 1220×2440 sheet
+    const { sheets, unplacedParts } = runNesting([curvedRow, STRAIGHT_ROW, STRAIGHT_ROW_2]);
+
+    const planned: PlannedSheet = {
+      index1: 1,
+      sheetId: 'SHEET_001',
+      materialId: MATERIAL_ID,
+    };
+
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const placements = sheets[0].placements;
+    const curvedP  = placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const straight1 = placements.find((p) => p.partId === 'SMOKE_STRAIGHT_SHELF')!;
+    const straight2 = placements.find((p) => p.partId === 'SMOKE_STRAIGHT_BACK')!;
+
+    // ENTITIES section only — TABLES layer definitions must not be counted
+    const entitiesStart = output.content.indexOf('ENTITIES');
+    const entities = output.content.slice(entitiesStart);
+
+    const countLayer = (layer: string): number =>
+      entities
+        .split('LINE')
+        .slice(1)
+        .filter((seg) => seg.includes(`\n8\n${layer}\n`))
+        .length;
+
+    return {
+      output, entities,
+      curvedP, straight1, straight2,
+      kerfCount, unplacedParts, sheets,
+      countLayer,
+    };
+  }
+
+  it('all three panels placed on sheets[0] — no unplaced parts', () => {
+    const { unplacedParts, sheets } = runStage8();
+    expect(unplacedParts).toHaveLength(0);
+    const ids = sheets[0].placements.map((p) => p.partId);
+    expect(ids).toContain('SMOKE_SCURVE_DOOR');
+    expect(ids).toContain('SMOKE_STRAIGHT_SHELF');
+    expect(ids).toContain('SMOKE_STRAIGHT_BACK');
+  });
+
+  it('both straight placements have isCurved falsy', () => {
+    const { straight1, straight2 } = runStage8();
+    expect(straight1.isCurved).toBeFalsy();
+    expect(straight2.isCurved).toBeFalsy();
+  });
+
+  it('HATCH_CURVED count is exactly 2 — adding a second straight panel adds zero hatch lines', () => {
+    const { countLayer } = runStage8();
+    expect(countLayer('HATCH_CURVED')).toBe(2);
+  });
+
+  it('PARTS_CURVED count is exactly 4 (one curved rect)', () => {
+    const { countLayer } = runStage8();
+    expect(countLayer('PARTS_CURVED')).toBe(4);
+  });
+
+  it('PARTS count is exactly 8 (two straight rects × 4 lines each)', () => {
+    const { countLayer } = runStage8();
+    expect(countLayer('PARTS')).toBe(8);
+  });
+
+  it('DXF still contains (CURVED / N cuts) sub-label for the curved panel', () => {
+    const { entities, kerfCount } = runStage8();
+    expect(entities).toContain(`(CURVED / ${kerfCount} cuts)`);
+  });
+
+  it('all three part labels are present in the DXF', () => {
+    const { output } = runStage8();
+    expect(output.content).toContain('SMOKE_SCURVE_DOOR');
+    expect(output.content).toContain('SMOKE_STRAIGHT_SHELF');
+    expect(output.content).toContain('SMOKE_STRAIGHT_BACK');
+  });
+});
