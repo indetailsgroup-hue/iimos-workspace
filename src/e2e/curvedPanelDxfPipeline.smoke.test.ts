@@ -3579,3 +3579,177 @@ describe('@smoke Stage 27 — diagonal-1 and diagonal-2 have equal length', () =
     expect(diagLen(tallArcLines[0])).toBeCloseTo(diagLen(tallArcLines[1]), 1);
   });
 });
+
+describe('@smoke Stage 28 — diagonal length = sqrt(W²+H²) and endpoints are distinct corner pairs', () => {
+  /**
+   * Stage 28 splits into two parts:
+   *
+   * Part A — Each HATCH_CURVED diagonal length equals the bbox diagonal
+   *           sqrt(effectiveW² + effectiveH²)
+   *
+   *   diagLen(d) = sqrt((d.x2−d.x1)² + (d.y2−d.y1)²)
+   *             ≈ sqrt((maxX−minX)² + (maxY−minY)²)
+   *
+   *   Tolerance: toBeCloseTo(x, 1) → ±0.05 mm.
+   *   Rounding shifts each coord by at most 0.005 mm, giving a worst-case
+   *   diagonal length error of sqrt(2)×0.01 ≈ 0.014 mm — within ±0.05 mm.
+   *
+   * Part B — The four diagonal endpoints form two distinct corner pairs
+   *           (no two endpoints are identical after 0.01 mm rounding):
+   *
+   *   new Set([ "x1,y1", "x2,y2", "x1',y1'", "x2',y2'" ]).size === 4
+   *
+   * Panel set: same three-panel sheet as Stages 19–27
+   *            (ARC SMOKE_DOOR + S_CURVE SMOKE_SCURVE_DOOR + TALL_ARC).
+   */
+
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+  type Bbox   = { minX: number; maxX: number; minY: number; maxY: number };
+
+  // ── helpers (self-contained) ──────────────────────────────────────────────
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function bboxForPlacement(p: { x: number; y: number; cutW: number; cutH: number; rotation: number }): Bbox {
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const ew = isRotated ? p.cutH : p.cutW;
+    const eh = isRotated ? p.cutW : p.cutH;
+    return { minX: p.x, maxX: p.x + ew, minY: p.y, maxY: p.y + eh };
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  const diagLen      = (d: Coords): number =>
+    Math.sqrt((d.x2 - d.x1) ** 2 + (d.y2 - d.y1) ** 2);
+
+  const expectedDiag = (b: Bbox): number =>
+    Math.sqrt((b.maxX - b.minX) ** 2 + (b.maxY - b.minY) ** 2);
+
+  function runStage28() {
+    const { row: arcRow }     = buildCurvedRow();
+    const { row: sCurveRow }  = buildSCurveRow();
+    const { row: tallArcRow } = buildTallArcRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow, tallArcRow]);
+    expect(sheets).toHaveLength(1);
+
+    const arcP     = sheets[0].placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP  = sheets[0].placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const tallArcP = sheets[0].placements.find((p) => p.partId === 'SMOKE_TALL_ARC')!;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const allCoords    = parseHatchCoords(output.content);
+    const arcLines     = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines  = linesForPlacement(allCoords, sCurveP.y);
+    const tallArcLines = linesForPlacement(allCoords, tallArcP.y);
+
+    expect(arcLines).toHaveLength(2);
+    expect(sCurveLines).toHaveLength(2);
+    expect(tallArcLines).toHaveLength(2);
+
+    return {
+      arcLines,    arcBbox:    bboxForPlacement(arcP),
+      sCurveLines, sCurveBbox: bboxForPlacement(sCurveP),
+      tallArcLines, tallBbox:  bboxForPlacement(tallArcP),
+    };
+  }
+
+  // ── Part A: diagonal length = sqrt(effectiveW² + effectiveH²) ─────────────
+
+  it('ARC — diagonal-1 length equals sqrt(effectiveW² + effectiveH²)', () => {
+    const { arcLines, arcBbox: b } = runStage28();
+    expect(diagLen(arcLines[0])).toBeCloseTo(expectedDiag(b), 1);
+  });
+
+  it('ARC — diagonal-2 length equals sqrt(effectiveW² + effectiveH²)', () => {
+    const { arcLines, arcBbox: b } = runStage28();
+    expect(diagLen(arcLines[1])).toBeCloseTo(expectedDiag(b), 1);
+  });
+
+  it('S_CURVE — diagonal-1 length equals sqrt(effectiveW² + effectiveH²)', () => {
+    const { sCurveLines, sCurveBbox: b } = runStage28();
+    expect(diagLen(sCurveLines[0])).toBeCloseTo(expectedDiag(b), 1);
+  });
+
+  it('S_CURVE — diagonal-2 length equals sqrt(effectiveW² + effectiveH²)', () => {
+    const { sCurveLines, sCurveBbox: b } = runStage28();
+    expect(diagLen(sCurveLines[1])).toBeCloseTo(expectedDiag(b), 1);
+  });
+
+  it('TALL_ARC — diagonal-1 length equals sqrt(effectiveW² + effectiveH²)', () => {
+    const { tallArcLines, tallBbox: b } = runStage28();
+    expect(diagLen(tallArcLines[0])).toBeCloseTo(expectedDiag(b), 1);
+  });
+
+  it('TALL_ARC — diagonal-2 length equals sqrt(effectiveW² + effectiveH²)', () => {
+    const { tallArcLines, tallBbox: b } = runStage28();
+    expect(diagLen(tallArcLines[1])).toBeCloseTo(expectedDiag(b), 1);
+  });
+
+  // ── Part B: four endpoints are two distinct corner pairs ──────────────────
+
+  it('ARC — four diagonal endpoints are two distinct corner pairs (no endpoint repeats)', () => {
+    const { arcLines } = runStage28();
+    const [d1, d2] = arcLines;
+    const pts = [`${d1.x1},${d1.y1}`, `${d1.x2},${d1.y2}`, `${d2.x1},${d2.y1}`, `${d2.x2},${d2.y2}`];
+    expect(new Set(pts).size).toBe(4);
+  });
+
+  it('S_CURVE — four diagonal endpoints are two distinct corner pairs (no endpoint repeats)', () => {
+    const { sCurveLines } = runStage28();
+    const [d1, d2] = sCurveLines;
+    const pts = [`${d1.x1},${d1.y1}`, `${d1.x2},${d1.y2}`, `${d2.x1},${d2.y1}`, `${d2.x2},${d2.y2}`];
+    expect(new Set(pts).size).toBe(4);
+  });
+
+  it('TALL_ARC — four diagonal endpoints are two distinct corner pairs (no endpoint repeats)', () => {
+    const { tallArcLines } = runStage28();
+    const [d1, d2] = tallArcLines;
+    const pts = [`${d1.x1},${d1.y1}`, `${d1.x2},${d1.y2}`, `${d2.x1},${d2.y1}`, `${d2.x2},${d2.y2}`];
+    expect(new Set(pts).size).toBe(4);
+  });
+});
