@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [8.1.0] – 2026-08-27
+
+### Minor Release — Multi-Panel Scale and Determinism Milestone (Stages 84–86)
+
+#### Added
+
+- **Stage 84 — qty=20 one-sheet scale** (`@smoke`):
+  Asserts that 20 curved panels (cutW=100, cutH=100, correction=10, qty=20) are all
+  placed on a single FFDH sheet across 2 shelves; PARTS_CURVED LINE count = 80; all
+  C(20,2)=190 bounding-box pairs are mutually non-overlapping.
+
+- **Stage 85 — determinism guard for multi-panel batches** (`@smoke`):
+  Re-runs `runNesting` twice with identical qty=10 curved-panel input and asserts that
+  every placement's `x` and `y` coordinate is bitwise-identical across both runs,
+  confirming the nesting optimizer is fully deterministic for multi-panel batches.
+
+- **Stage 86 — overflow to two sheets** (`@smoke`):
+  Asserts that qty=56 curved panels (cutW=200, cutH=200, correction=10) overflow a
+  single 1220×2440 sheet: 55 placements on sheet-1 (11 FFDH shelves × 5 panels) and
+  1 placement on sheet-2; `sheets.length === 2`; total PARTS_CURVED LINE count across
+  both sheets = 4 × 56 = 224.
+
+#### Test Suite
+
+- 339 smoke tests passing (was 336 after Stage 83).
+- JSDoc header in `curvedPanelDxfPipeline.smoke.test.ts` updated: `Stages 22 – 83` → `Stages 22 – 86`; table rows added for Stages 84–86.
+- `buildDxfSheets.ts` cross-reference updated: `(Stages 7 – 83)` → `(Stages 7 – 86)`.
+
+---
+
 ## [8.0.0] – 2026-08-27
 
 ### Major Release — kerfCount Null-Guard Completion + Multi-Panel Scale Testing Series (Stages 82–83)

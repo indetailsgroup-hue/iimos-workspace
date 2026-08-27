@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 83: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, and multi-panel scale validation
+ * Stages 22 – 86: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, multi-panel scale validation, determinism guard, and overflow two-sheet placement
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -293,6 +293,18 @@
  *       |                          |   PARTS_CURVED LINE count=40;
  *       |                          |   rects.length=10; all C(10,2)=45 pairs
  *       |                          |   mutually non-overlapping; 1 it() block.
+ *    84 | qty=20 curved panels     | all 20 fit on one sheet (2 FFDH shelves);
+ *       |                          |   PARTS_CURVED LINE count=80;
+ *       |                          |   rects.length=20; all C(20,2)=190 pairs
+ *       |                          |   mutually non-overlapping; 1 it() block.
+ *    85 | qty=10 determinism       | two independent runNesting calls with
+ *       |                          |   identical qty=10 input produce exactly
+ *       |                          |   the same placement x/y coordinates;
+ *       |                          |   1 it() block.
+ *    86 | qty=56 overflow          | 55 panels on sheet-1, 1 on sheet-2;
+ *       |                          |   sheets.length===2;
+ *       |                          |   PARTS_CURVED LINE count=4×56=224
+ *       |                          |   across both sheets; 1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -10117,6 +10129,309 @@ describe(
             expect(noOverlapX || noOverlapY).toBe(true);
           }
         }
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 84 – Twenty curved panels on one sheet: PARTS_CURVED count=80,
+//            all twenty per-panel bboxes mutually non-overlapping.
+//
+// Fixture: same as Stage 83 (cutW=100, cutH=100, correction=10) but qty=20.
+//   flatBlankW=100, flatBlankH=110. FFDH orientation: h=100, w=110 (rotation=90).
+//
+// FFDH packing analysis (sheet=1220×2440, kerf=3.5, edge=10):
+//   usableW=1200, usableH=2420.
+//   Panels per shelf: 10 (1131.5 mm < usableW=1200 mm — same as Stage 83).
+//   Shelf-1 y=10,    height=100 → panels 1–10
+//   Shelf-2 y=113.5, height=100 → panels 11–20
+//   Total height used: 113.5+100=213.5 mm ≪ 2440 mm → all 20 on one sheet ✓
+//
+// Non-overlapping check:
+//   Same-shelf pairs (X-separated by 3.5 mm kerf) — same logic as Stage 83.
+//   Cross-shelf pairs: shelf-1 bbox maxY=110, shelf-2 bbox minY=113.5;
+//     noOverlapY = 110 <= 113.5+EPS ✓.
+//   All C(20,2)=190 pairs verified.
+//
+// Assertions:
+//   • result.sheets.length === 1
+//   • result.sheets[0].placements.length === 20
+//   • all 20 placements have isCurved=true
+//   • PARTS_CURVED LINE count === 80   (20 × 4 edges)
+//   • rects.length === 20
+//   • all 190 pairs mutually non-overlapping
+//
+// 1 it() block.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 84 — twenty curved panels on same sheet: PARTS_CURVED count=80, all twenty bboxes mutually non-overlapping',
+  () => {
+
+    const EPS = 0.015;
+
+    function countPARTSCURVEDLines84(content: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(seg => seg.startsWith('8\nPARTS_CURVED\n'))
+        .length;
+    }
+
+    function parsePARTSCURVEDRectList84(
+      content: string,
+    ): Array<{ minX: number; maxX: number; minY: number; maxY: number }> {
+      const segs = content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(s => s.startsWith('8\nPARTS_CURVED\n'));
+
+      const result: Array<{ minX: number; maxX: number; minY: number; maxY: number }> = [];
+      for (let i = 0; i < segs.length; i += 4) {
+        const chunk = segs.slice(i, i + 4);
+        const xs: number[] = [];
+        const ys: number[] = [];
+        for (const seg of chunk) {
+          const num = (code: string): number => {
+            const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+            return m ? parseFloat(m[1]) : NaN;
+          };
+          xs.push(num('10'), num('11'));
+          ys.push(num('20'), num('21'));
+        }
+        result.push({
+          minX: Math.min(...xs),
+          maxX: Math.max(...xs),
+          minY: Math.min(...ys),
+          maxY: Math.max(...ys),
+        });
+      }
+      return result;
+    }
+
+    it(
+      '20 curved panels (qty=20, same 100×100 fixture): PARTS_CURVED=80, all 20 bboxes mutually non-overlapping',
+      () => {
+        const stage84Row: CutListRow = {
+          partId:          'SMOKE_TWENTY_CURVED_S84',
+          cabinetId:       'CAB_SMOKE_84',
+          materialId:      MATERIAL_ID,
+          finishW:         100,
+          finishH:         100,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            100,
+          cutH:            100,
+          qty:             20,
+          developedLength: 110,
+          projectedDepth:  100,
+          curvedEdge:      'TOP',
+          label:           'Twenty Curved Panel',
+        };
+
+        const result84 = runNesting([stage84Row]);
+
+        // All 20 fit on exactly one sheet (two shelves of 10 each)
+        expect(result84.sheets).toHaveLength(1);
+
+        const sheet84 = result84.sheets[0];
+        expect(sheet84.placements).toHaveLength(20);
+
+        for (const p of sheet84.placements) {
+          expect(p.isCurved).toBe(true);
+        }
+
+        const output84 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE84', materialId: MATERIAL_ID },
+          nesting: sheet84,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        // 20 curved panels × 4 edges = 80 PARTS_CURVED LINE entities
+        expect(countPARTSCURVEDLines84(output84.content)).toBe(80);
+
+        // Per-panel bboxes
+        const rects84 = parsePARTSCURVEDRectList84(output84.content);
+        expect(rects84).toHaveLength(20);
+
+        // All C(20,2)=190 pairs mutually non-overlapping
+        for (let i = 0; i < rects84.length; i++) {
+          for (let j = i + 1; j < rects84.length; j++) {
+            const a = rects84[i];
+            const b = rects84[j];
+            const noOverlapX = a.maxX <= b.minX + EPS || b.maxX <= a.minX + EPS;
+            const noOverlapY = a.maxY <= b.minY + EPS || b.maxY <= a.minY + EPS;
+            expect(noOverlapX || noOverlapY).toBe(true);
+          }
+        }
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 85 – runNesting determinism for multi-panel batches:
+//            running runNesting twice with the same qty=10 curved row
+//            produces identical placement x/y coordinates on both calls.
+//
+// Guards against non-deterministic sort or ID collisions in FFDH that could
+// produce different layout orderings across runs.
+//
+// Fixture: same 100×100 small curved panel with qty=10 (same as Stage 83).
+//   Both runs use a fresh copy of the same row to exclude object aliasing.
+//
+// Assertions per run pair:
+//   • sheets.length identical
+//   • placements.length identical for each sheet
+//   • every placement x and y matches to floating-point equality
+//
+// 1 it() block.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 85 — multi-panel determinism: runNesting with qty=10 twice produces identical placement coordinates',
+  () => {
+    it(
+      'two runNesting calls with identical qty=10 curved row → same placement x/y coordinates on all panels',
+      () => {
+        const makeRow85 = (): CutListRow => ({
+          partId:          'SMOKE_TEN_DET_S85',
+          cabinetId:       'CAB_SMOKE_85',
+          materialId:      MATERIAL_ID,
+          finishW:         100,
+          finishH:         100,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            100,
+          cutH:            100,
+          qty:             10,
+          developedLength: 110,
+          projectedDepth:  100,
+          curvedEdge:      'TOP',
+          label:           'Ten Curved Det Panel',
+        });
+
+        const run1 = runNesting([makeRow85()]);
+        const run2 = runNesting([makeRow85()]);
+
+        // Same number of sheets
+        expect(run1.sheets).toHaveLength(run2.sheets.length);
+
+        for (let s = 0; s < run1.sheets.length; s++) {
+          const ps1 = run1.sheets[s].placements;
+          const ps2 = run2.sheets[s].placements;
+
+          // Same placement count per sheet
+          expect(ps1).toHaveLength(ps2.length);
+
+          // Every x and y coordinate must match exactly
+          for (let p = 0; p < ps1.length; p++) {
+            expect(ps1[p].x).toBe(ps2[p].x);
+            expect(ps1[p].y).toBe(ps2[p].y);
+          }
+        }
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 86 – Overflow to two sheets: PARTS_CURVED = 4 × total placements
+//            across both sheets.
+//
+// Fixture design (qty=56 exceeds single-sheet capacity):
+//   cutW=200, cutH=200, developedLength=210, projectedDepth=200,
+//   curvedEdge='TOP', kerfCount=undefined → correction=10 > 0 → isCurved=true.
+//   flatBlankW=200, flatBlankH=210. grainDirection='NONE' → FFDH may rotate.
+//
+// FFDH packing analysis (sheet=1220×2440, kerf=3.5, edge=10):
+//   usableW=1200, usableH=2420.
+//   Best orientation: h=200, w=210 (rotation=90, smaller h wins new-shelf).
+//   Panels per shelf: 5   (5×210 + 4×3.5 = 1064 ≤ 1200; 6×210 + 5×3.5 = 1277.5 > 1200).
+//   Shelves per sheet: 11 (shelf-11 y=2045; 2045+200=2245 ≤ 2430 ✓;
+//                          shelf-12 y=2248.5; 2248.5+200=2448.5 > 2430 ✗).
+//   Sheet-1 capacity: 11 × 5 = 55 panels.
+//   qty=56 → sheet-1=55, sheet-2=1. Total placements=56.
+//
+// Assertions:
+//   • result.sheets.length === 2
+//   • sheet-1 placements.length === 55
+//   • sheet-2 placements.length === 1
+//   • all placements (both sheets) have isCurved=true
+//   • PARTS_CURVED total across both DXF outputs === 4 × totalPlacements
+//     (verified dynamically: 4 × 56 = 224)
+//
+// 1 it() block.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 86 — overflow to two sheets: PARTS_CURVED = 4 × total placements across both sheets',
+  () => {
+
+    function countPARTSCURVEDLines86(content: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(seg => seg.startsWith('8\nPARTS_CURVED\n'))
+        .length;
+    }
+
+    it(
+      'qty=56 medium curved panels → 2 sheets (55 + 1); PARTS_CURVED total = 4 × 56 = 224',
+      () => {
+        const stage86Row: CutListRow = {
+          partId:          'SMOKE_OVERFLOW_S86',
+          cabinetId:       'CAB_SMOKE_86',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             56,    // 55 fit on sheet-1; 56th overflows to sheet-2
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Overflow Curved Panel',
+        };
+
+        const result86 = runNesting([stage86Row]);
+
+        // Exactly two sheets
+        expect(result86.sheets).toHaveLength(2);
+
+        const [sheet86a, sheet86b] = result86.sheets;
+
+        // Sheet-1 holds 55 panels; sheet-2 holds the 1 overflow panel
+        expect(sheet86a.placements).toHaveLength(55);
+        expect(sheet86b.placements).toHaveLength(1);
+
+        // All placements on both sheets must be isCurved=true
+        for (const s of result86.sheets) {
+          for (const p of s.placements) {
+            expect(p.isCurved).toBe(true);
+          }
+        }
+
+        // Build DXF for each sheet and sum PARTS_CURVED LINE counts
+        const output86a = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE86A', materialId: MATERIAL_ID },
+          nesting: sheet86a,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+        const output86b = buildDxfSheet({
+          planned: { index1: 2, sheetId: 'SHEET_STAGE86B', materialId: MATERIAL_ID },
+          nesting: sheet86b,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        const totalPlacements =
+          sheet86a.placements.length + sheet86b.placements.length;          // 56
+        const totalPARTSCURVED =
+          countPARTSCURVEDLines86(output86a.content) +
+          countPARTSCURVEDLines86(output86b.content);
+
+        // 56 curved panels × 4 edges each = 224 PARTS_CURVED LINE entities
+        expect(totalPARTSCURVED).toBe(4 * totalPlacements);
       },
     );
   },
