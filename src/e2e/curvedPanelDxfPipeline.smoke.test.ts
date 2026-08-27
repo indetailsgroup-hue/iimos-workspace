@@ -57,6 +57,25 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
+ * Stages 22 – 28: precision and structural integrity invariants
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Stage | Panels                   | Assertion
+ * ------|--------------------------|-------------------------------------------
+ *    22 | ARC + S_CURVE + TALL_ARC | all 4 HATCH_CURVED endpoints rounded to
+ *       |                          |   0.01 mm (Math.round(v×100)/100)
+ *    23 | ARC + S_CURVE + TALL_ARC | rounded endpoints lie within flat-blank
+ *       |                          |   bbox (ε = 0.01 mm)
+ *    24 | ARC + S_CURVE + TALL_ARC | each diagonal non-degenerate:
+ *       |                          |   |x1−x2| + |y1−y2| > 1e-6
+ *    25 | ARC + S_CURVE + TALL_ARC | midpoint(d1) = midpoint(d2) (±0.05 mm)
+ *    26 | ARC + S_CURVE + TALL_ARC | shared midpoint = bbox centre
+ *       |                          |   (minX + W/2, minY + H/2), ±0.05 mm
+ *    27 | ARC + S_CURVE + TALL_ARC | diagLen(d1) ≈ diagLen(d2) (±0.05 mm)
+ *   28A | ARC + S_CURVE + TALL_ARC | diagLen ≈ sqrt(effectiveW²+effectiveH²)
+ *       |                          |   (±0.05 mm) for both d1 and d2
+ *   28B | ARC + S_CURVE + TALL_ARC | 4 endpoints are distinct corner pairs:
+ *       |                          |   new Set([…]).size === 4
+ *
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -3751,5 +3770,153 @@ describe('@smoke Stage 28 — diagonal length = sqrt(W²+H²) and endpoints are 
     const [d1, d2] = tallArcLines;
     const pts = [`${d1.x1},${d1.y1}`, `${d1.x2},${d1.y2}`, `${d2.x1},${d2.y1}`, `${d2.x2},${d2.y2}`];
     expect(new Set(pts).size).toBe(4);
+  });
+});
+
+describe('@smoke Stage 29 — HATCH_CURVED diagonal endpoints match exact flat-blank bbox corners', () => {
+  /**
+   * Stage 29 verifies that the four HATCH_CURVED line endpoints are exactly
+   * the four corners of the flat-blank placement bbox after 0.01 mm rounding:
+   *
+   *   diagonal-1: (minX, minY) → (maxX, maxY)   [top-left  → bottom-right]
+   *   diagonal-2: (maxX, minY) → (minX, maxY)   [top-right → bottom-left]
+   *
+   * The test collects all four endpoints and the four expected corners as
+   * "x,y" strings (with rounding matching addLine()), then asserts
+   * Set(endpoints) equals Set(corners).
+   *
+   * Rounding helper mirrors buildDxfSheets.ts addLine():
+   *   round(v) = Math.round(v * 100) / 100
+   *
+   * Panel set: same three-panel sheet as Stages 19–28
+   *            (ARC SMOKE_DOOR + S_CURVE SMOKE_SCURVE_DOOR + TALL_ARC).
+   */
+
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+  type Bbox   = { minX: number; maxX: number; minY: number; maxY: number };
+
+  // ── helpers (self-contained) ──────────────────────────────────────────────
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function bboxForPlacement(p: { x: number; y: number; cutW: number; cutH: number; rotation: number }): Bbox {
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const ew = isRotated ? p.cutH : p.cutW;
+    const eh = isRotated ? p.cutW : p.cutH;
+    return { minX: p.x, maxX: p.x + ew, minY: p.y, maxY: p.y + eh };
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  /** Mirror of addLine() rounding in buildDxfSheets.ts */
+  const r   = (v: number): number => Math.round(v * 100) / 100;
+  const pt  = (x: number, y: number): string => `${r(x)},${r(y)}`;
+
+  const cornersForBbox = (b: Bbox): Set<string> =>
+    new Set([pt(b.minX, b.minY), pt(b.maxX, b.maxY), pt(b.maxX, b.minY), pt(b.minX, b.maxY)]);
+
+  function runStage29() {
+    const { row: arcRow }     = buildCurvedRow();
+    const { row: sCurveRow }  = buildSCurveRow();
+    const { row: tallArcRow } = buildTallArcRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow, tallArcRow]);
+    expect(sheets).toHaveLength(1);
+
+    const arcP     = sheets[0].placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP  = sheets[0].placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const tallArcP = sheets[0].placements.find((p) => p.partId === 'SMOKE_TALL_ARC')!;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const allCoords    = parseHatchCoords(output.content);
+    const arcLines     = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines  = linesForPlacement(allCoords, sCurveP.y);
+    const tallArcLines = linesForPlacement(allCoords, tallArcP.y);
+
+    expect(arcLines).toHaveLength(2);
+    expect(sCurveLines).toHaveLength(2);
+    expect(tallArcLines).toHaveLength(2);
+
+    return {
+      arcLines,    arcBbox:    bboxForPlacement(arcP),
+      sCurveLines, sCurveBbox: bboxForPlacement(sCurveP),
+      tallArcLines, tallBbox:  bboxForPlacement(tallArcP),
+    };
+  }
+
+  // ── assertions ────────────────────────────────────────────────────────────
+
+  it('ARC — four diagonal endpoints equal the four flat-blank bbox corners', () => {
+    const { arcLines, arcBbox: b } = runStage29();
+    const [d1, d2] = arcLines;
+    const endpoints = new Set([
+      `${d1.x1},${d1.y1}`, `${d1.x2},${d1.y2}`,
+      `${d2.x1},${d2.y1}`, `${d2.x2},${d2.y2}`,
+    ]);
+    expect(endpoints).toEqual(cornersForBbox(b));
+  });
+
+  it('S_CURVE — four diagonal endpoints equal the four flat-blank bbox corners', () => {
+    const { sCurveLines, sCurveBbox: b } = runStage29();
+    const [d1, d2] = sCurveLines;
+    const endpoints = new Set([
+      `${d1.x1},${d1.y1}`, `${d1.x2},${d1.y2}`,
+      `${d2.x1},${d2.y1}`, `${d2.x2},${d2.y2}`,
+    ]);
+    expect(endpoints).toEqual(cornersForBbox(b));
+  });
+
+  it('TALL_ARC — four diagonal endpoints equal the four flat-blank bbox corners', () => {
+    const { tallArcLines, tallBbox: b } = runStage29();
+    const [d1, d2] = tallArcLines;
+    const endpoints = new Set([
+      `${d1.x1},${d1.y1}`, `${d1.x2},${d1.y2}`,
+      `${d2.x1},${d2.y1}`, `${d2.x2},${d2.y2}`,
+    ]);
+    expect(endpoints).toEqual(cornersForBbox(b));
   });
 });
