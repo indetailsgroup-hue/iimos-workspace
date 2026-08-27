@@ -7,6 +7,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.2.0] - 2026-08-27
+
+### Overview
+
+Minor release completing the **bounding-rect validation milestone** (Stages 45–46).
+Together with the label-position and PARTS_CURVED exclusivity work from [3.1.0]
+(Stages 43–44), this release closes the full Stages 43–46 arc: every DXF
+rectangle — curved and straight alike — is now geometrically verified end-to-end
+through the smoke suite.
+
+### Added
+
+#### Stage 45 — PARTS_CURVED bounding-rect matches flat-blank placement dimensions
+
+- **Helper `parsePARTSCURVEDRects(content)`** (Stage 45 describe scope):
+  splits DXF on `'\n0\nLINE\n'`, filters segments starting with
+  `'8\nPARTS_CURVED\n'`, collects all `x1/y1/x2/y2` endpoints, and returns
+  `{ minX, minY, maxX, maxY }`.
+- **3 `it()` blocks** (ARC, S_CURVE, TALL_ARC) each assert:
+  - `minX ≈ r(p.x)`, `minY ≈ r(p.y)`
+  - `maxX ≈ r(p.x + ew)`, `maxY ≈ r(p.y + eh)`
+  where `ew/eh` come from `getRotatedDimensions(cutW, cutH, rotation)`:
+  `rotation=90|270 → ew=cutH, eh=cutW`; `rotation=0|180 → ew=cutW, eh=cutH`.
+- Tolerance: ε < 0.015 mm (consistent with Stages 31–44).
+- Verifies that `addRectangle()` on `PARTS_CURVED` faithfully reflects the
+  flat-blank footprint after nesting optimizer correction and FFDH placement.
+
+#### Stage 46 — PARTS layer bounding-rect matches cutW × cutH (no flat-blank correction)
+
+- **Helper `parsePARTSRect(content)`** (Stage 46 describe scope):
+  same splitting logic as Stage 45 but filters `'8\nPARTS\n'` segments.
+- **3 `it()` blocks**:
+  - **(a) single STRAIGHT_ROW** (`cutW=300, cutH=400`): asserts
+    `placement.cutW === 300` and `placement.cutH === 400` (no flat-blank offset
+    applied), then verifies `maxX − minX ≈ ew`, `maxY − minY ≈ eh` where `ew/eh`
+    derive from placement rotation.
+  - **(b) narrower row** (`cutW=280, cutH=380`): same assertion pattern,
+    verifying `placement.cutW === 280`, `placement.cutH === 380`.
+  - **(c) mixed sheet** (1 curved ARC + 1 straight): locates the sheet
+    containing the straight placement via `!pl.isCurved`, asserts its
+    `cutW/H` unmodified, and confirms PARTS rect spans `ew × eh` from
+    straight panel dims only.
+- Tolerance: ε < 0.015 mm.
+- Confirms that straight panels receive **no** `projectedDepth` flat-blank
+  correction — `placement.cutW/H` equals `CutListRow.cutW/H` verbatim, and
+  the PARTS rectangle accurately reflects those raw dimensions after any FFDH
+  rotation.
+
+### Changed
+
+- **JSDoc updated** in `curvedPanelDxfPipeline.smoke.test.ts`:
+  - Section heading changed from *"Stages 22–44"* to
+    *"Stages 22–46: precision, structural integrity, label, and bounding-rect invariants"*.
+  - Stage 45 and Stage 46 entries added to the reference table.
+- **JSDoc updated** in `buildDxfSheets.ts`:
+  - Section heading changed from *"Stages 22–44"* to *"Stages 22–46"*.
+  - Stage 45 and Stage 46 entries added to the reference table.
+  - Footer reference updated from *(Stages 7–44)* to *(Stages 7–46)*.
+
+### Test Results
+
+- **286 smoke tests passing** (3 new Stage 45 + 3 new Stage 46 on top of 280).
+- Full suite: all tests passing; 0 TypeScript errors; ESLint 1,199 warnings.
+
+### Notes
+
+- Stage 46 accounts for FFDH rotation of straight panels: FFDH may place a
+  straight piece at `rotation=90`, making `effectiveW = cutH` and
+  `effectiveH = cutW`. The "no flat-blank correction" invariant is therefore
+  expressed as `placement.cutW/H == CutListRow.cutW/H`, not as a fixed
+  `width × height` equality, to remain correct regardless of rotation.
+- Stages 43–46 together form the complete **label-position and bounding-rect
+  validation milestone**: label Y (43), PARTS_CURVED exclusivity (44),
+  PARTS_CURVED rect geometry (45), PARTS rect geometry (46).
+
+---
+
 ## [3.1.0] - 2026-08-27
 
 ### Overview

@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 44: precision, structural integrity, and label invariants
+ * Stages 22 – 46: precision, structural integrity, label, and bounding-rect invariants
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -131,6 +131,16 @@
  *       |                          |   PARTS_CURVED = 0 for three straight panels;
  *       |                          |   PARTS_CURVED = 4 for mixed sheet (1 curved + 1 straight)
  *       |                          |   confirming curved-only emission; 3 it() blocks total.
+ *    45 | ARC + S_CURVE + TALL_ARC | PARTS_CURVED bounding rect (minX, minY, maxX, maxY)
+ *       |                          |   matches flat-blank placement: minX=r(p.x), minY=r(p.y),
+ *       |                          |   maxX=r(p.x+ew), maxY=r(p.y+eh) where ew/eh from
+ *       |                          |   getRotatedDimensions(cutW, cutH, rotation);
+ *       |                          |   ε < 0.015 mm; one it() per panel type (3 it() blocks).
+ *    46 | STRAIGHT (3 variants)    | PARTS layer bounding rect spans ew × eh derived purely
+ *       |                          |   from cutW/cutH + FFDH rotation (no flat-blank correction);
+ *       |                          |   placement.cutW/H == CutListRow.cutW/H (unmodified);
+ *       |                          |   mixed sheet: straight placement unaffected by curved;
+ *       |                          |   ε < 0.015 mm; 3 it() blocks (single, narrow, mixed).
  *
  * ─────────────────────────────────────────────────────────────────────────────
  *
@@ -6038,5 +6048,306 @@ describe('@smoke Stage 44 — straight-only sheet has zero PARTS_CURVED LINE ent
     // Curved panel → 4 PARTS_CURVED lines (one bounding rect)
     // Straight panel → 0 PARTS_CURVED lines
     expect(parsePARTSCURVEDLineCount(output.content)).toBe(4);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 45 — PARTS_CURVED bounding-rect matches flat-blank placement dimensions
+//
+// For each curved panel type (ARC, S_CURVE, TALL_ARC), addRectangle() emits
+// 4 LINE entities on PARTS_CURVED.  Collecting all unique endpoints yields the
+// bounding rect (minX, minY, maxX, maxY).  After flat-blank correction and
+// FFDH placement the rect must equal:
+//
+//   minX = r(placement.x)
+//   minY = r(placement.y)
+//   maxX = r(placement.x + effectiveW)
+//   maxY = r(placement.y + effectiveH)
+//
+//   where effectiveW/H come from getRotatedDimensions:
+//     rotation = 90|270  → effectiveW = cutH, effectiveH = cutW
+//     rotation = 0|180   → effectiveW = cutW, effectiveH = cutH
+//
+// Tolerance: ±0.015 mm (consistent with Stages 31–44).
+//
+// Three it() blocks: ARC, S_CURVE, TALL_ARC.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('@smoke Stage 45 — PARTS_CURVED bounding-rect matches flat-blank placement dimensions', () => {
+
+  const EPS = 0.015;
+  const r   = (v: number): number => Math.round(v * 100) / 100;
+
+  /**
+   * Parse all PARTS_CURVED LINE entities and return the bounding rect
+   * (minX, minY, maxX, maxY) derived from all endpoints.
+   * After splitting on '\n0\nLINE\n' each segment starts with '8\n{layer}\n'.
+   */
+  function parsePARTSCURVEDRects(
+    content: string,
+  ): { minX: number; maxX: number; minY: number; maxY: number } {
+    const segs = content.split('\n0\nLINE\n').slice(1)
+      .filter((s) => s.startsWith('8\nPARTS_CURVED\n'));
+
+    const xs: number[] = [];
+    const ys: number[] = [];
+
+    for (const seg of segs) {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      xs.push(num('10'), num('11'));
+      ys.push(num('20'), num('21'));
+    }
+
+    return {
+      minX: Math.min(...xs),
+      maxX: Math.max(...xs),
+      minY: Math.min(...ys),
+      maxY: Math.max(...ys),
+    };
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:          'SMOKE_TALL_ARC',
+      cabinetId:       'CAB_SMOKE',
+      materialId:      MATERIAL_ID,
+      finishW:         PANEL_STUB.finishWidth,
+      finishH:         PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:            PANEL_STUB.finishWidth,
+      cutH:            PANEL_STUB.finishHeight,
+      qty:             1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  // ── ARC ───────────────────────────────────────────────────────────────────
+
+  it('ARC — PARTS_CURVED rect minX/minY/maxX/maxY match flat-blank placement (ε < 0.015 mm)', () => {
+    const { row: arcRow } = buildCurvedRow();
+    const { sheets } = runNesting([arcRow]);
+    const p = sheets[0].placements[0];
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const ew = isRotated ? p.cutH : p.cutW;
+    const eh = isRotated ? p.cutW : p.cutH;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_ARC_R45', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const bbox = parsePARTSCURVEDRects(output.content);
+
+    expect(Math.abs(bbox.minX - r(p.x))).toBeLessThan(EPS);
+    expect(Math.abs(bbox.minY - r(p.y))).toBeLessThan(EPS);
+    expect(Math.abs(bbox.maxX - r(p.x + ew))).toBeLessThan(EPS);
+    expect(Math.abs(bbox.maxY - r(p.y + eh))).toBeLessThan(EPS);
+  });
+
+  // ── S_CURVE ───────────────────────────────────────────────────────────────
+
+  it('S_CURVE — PARTS_CURVED rect minX/minY/maxX/maxY match flat-blank placement (ε < 0.015 mm)', () => {
+    const { row: sCurveRow } = buildSCurveRow();
+    const { sheets } = runNesting([sCurveRow]);
+    const p = sheets[0].placements[0];
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const ew = isRotated ? p.cutH : p.cutW;
+    const eh = isRotated ? p.cutW : p.cutH;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_SCURVE_R45', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const bbox = parsePARTSCURVEDRects(output.content);
+
+    expect(Math.abs(bbox.minX - r(p.x))).toBeLessThan(EPS);
+    expect(Math.abs(bbox.minY - r(p.y))).toBeLessThan(EPS);
+    expect(Math.abs(bbox.maxX - r(p.x + ew))).toBeLessThan(EPS);
+    expect(Math.abs(bbox.maxY - r(p.y + eh))).toBeLessThan(EPS);
+  });
+
+  // ── TALL_ARC ──────────────────────────────────────────────────────────────
+
+  it('TALL_ARC — PARTS_CURVED rect minX/minY/maxX/maxY match flat-blank placement (ε < 0.015 mm)', () => {
+    const { row: tallArcRow } = buildTallArcRow();
+    const { sheets } = runNesting([tallArcRow]);
+    const p = sheets[0].placements[0];
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const ew = isRotated ? p.cutH : p.cutW;
+    const eh = isRotated ? p.cutW : p.cutH;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_TALLARC_R45', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const bbox = parsePARTSCURVEDRects(output.content);
+
+    expect(Math.abs(bbox.minX - r(p.x))).toBeLessThan(EPS);
+    expect(Math.abs(bbox.minY - r(p.y))).toBeLessThan(EPS);
+    expect(Math.abs(bbox.maxX - r(p.x + ew))).toBeLessThan(EPS);
+    expect(Math.abs(bbox.maxY - r(p.y + eh))).toBeLessThan(EPS);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 46 — PARTS layer bounding-rect matches cutW × cutH for straight panels
+//            (no flat-blank correction applied)
+//
+// Straight panels use `addRectangle(placement.x, placement.y, w, h, 'PARTS')`.
+// isCurved = false so no flat-blank offset is applied.  FFDH may rotate the
+// piece (rotation = 90 is valid for straight panels), so effectiveW/H are
+// derived from getRotatedDimensions: rotation=90|270 → ew=cutH, eh=cutW.
+//
+// The key invariant is:
+//   placement.cutW  == CutListRow.cutW   (no projectedDepth offset)
+//   placement.cutH  == CutListRow.cutH   (no projectedDepth offset)
+//   PARTS rect span == ew × eh  where ew/eh come purely from cutW/cutH + rotation
+//
+// For STRAIGHT_ROW: cutW = 300, cutH = 400.
+//
+// Three it() blocks:
+//   (a) single STRAIGHT_ROW:              placement.cutW/H unmodified; rect = ew × eh
+//   (b) narrower row (cutW=280, cutH=380): placement.cutW/H unmodified; rect = ew × eh
+//   (c) mixed sheet (1 curved + 1 straight): straight placement.cutW/H unmodified
+//
+// Tolerance: ±0.015 mm.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('@smoke Stage 46 — PARTS layer bounding-rect matches cutW × cutH (no flat-blank correction)', () => {
+
+  const EPS = 0.015;
+
+  /**
+   * Parse all PARTS LINE entities and return the bounding rect
+   * (minX, minY, maxX, maxY) derived from all endpoints.
+   */
+  function parsePARTSRect(
+    content: string,
+  ): { minX: number; maxX: number; minY: number; maxY: number } {
+    const segs = content.split('\n0\nLINE\n').slice(1)
+      .filter((s) => s.startsWith('8\nPARTS\n'));
+
+    const xs: number[] = [];
+    const ys: number[] = [];
+
+    for (const seg of segs) {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      xs.push(num('10'), num('11'));
+      ys.push(num('20'), num('21'));
+    }
+
+    return {
+      minX: Math.min(...xs),
+      maxX: Math.max(...xs),
+      minY: Math.min(...ys),
+      maxY: Math.max(...ys),
+    };
+  }
+
+  // ── (a) single STRAIGHT_ROW ───────────────────────────────────────────────
+
+  it('single STRAIGHT_ROW: placement.cutW/H unmodified; PARTS rect spans ew × eh (ε < 0.015 mm)', () => {
+    const { sheets } = runNesting([STRAIGHT_ROW]);
+    const p = sheets[0].placements[0];
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const ew = isRotated ? p.cutH : p.cutW;
+    const eh = isRotated ? p.cutW : p.cutH;
+
+    // No flat-blank correction: placement retains original cut dims
+    expect(p.cutW).toBe(STRAIGHT_ROW.cutW);
+    expect(p.cutH).toBe(STRAIGHT_ROW.cutH);
+
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_STR_R46_A', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const bbox = parsePARTSRect(output.content);
+    expect(Math.abs((bbox.maxX - bbox.minX) - ew)).toBeLessThan(EPS);
+    expect(Math.abs((bbox.maxY - bbox.minY) - eh)).toBeLessThan(EPS);
+  });
+
+  // ── (b) narrower straight panel ───────────────────────────────────────────
+
+  it('straight panel cutW=280 cutH=380: placement.cutW/H unmodified; PARTS rect spans ew × eh (ε < 0.015 mm)', () => {
+    const narrowRow: CutListRow = {
+      ...STRAIGHT_ROW,
+      partId:  'SMOKE_STR_46_B',
+      cutW:    280,
+      finishW: 280,
+      cutH:    380,
+      finishH: 380,
+    };
+    const { sheets } = runNesting([narrowRow]);
+    const p = sheets[0].placements[0];
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const ew = isRotated ? p.cutH : p.cutW;
+    const eh = isRotated ? p.cutW : p.cutH;
+
+    // No flat-blank correction
+    expect(p.cutW).toBe(280);
+    expect(p.cutH).toBe(380);
+
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_STR_R46_B', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const bbox = parsePARTSRect(output.content);
+    expect(Math.abs((bbox.maxX - bbox.minX) - ew)).toBeLessThan(EPS);
+    expect(Math.abs((bbox.maxY - bbox.minY) - eh)).toBeLessThan(EPS);
+  });
+
+  // ── (c) mixed sheet — PARTS rect for the straight placement only ──────────
+
+  it('mixed sheet (1 curved + 1 straight): straight placement.cutW/H unmodified; PARTS rect spans ew × eh (ε < 0.015 mm)', () => {
+    const { row: arcRow } = buildCurvedRow();
+    const { sheets } = runNesting([arcRow, STRAIGHT_ROW]);
+    // Locate the sheet that contains at least one straight placement
+    const sheetWithStraight = sheets.find((sh) =>
+      sh.placements.some((pl) => !pl.isCurved),
+    )!;
+    const sp = sheetWithStraight.placements.find((pl) => !pl.isCurved)!;
+    const isRotated = sp.rotation === 90 || sp.rotation === 270;
+    const ew = isRotated ? sp.cutH : sp.cutW;
+    const eh = isRotated ? sp.cutW : sp.cutH;
+
+    // No flat-blank correction on the straight placement
+    expect(sp.cutW).toBe(STRAIGHT_ROW.cutW);
+    expect(sp.cutH).toBe(STRAIGHT_ROW.cutH);
+
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_MIX_R46_C', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheetWithStraight,
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const bbox = parsePARTSRect(output.content);
+    expect(Math.abs((bbox.maxX - bbox.minX) - ew)).toBeLessThan(EPS);
+    expect(Math.abs((bbox.maxY - bbox.minY) - eh)).toBeLessThan(EPS);
   });
 });

@@ -260,7 +260,7 @@ class DxfBuilder {
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * Precision, Structural Integrity, and Label Invariants  (Stages 22 – 44)
+ * Precision, Structural Integrity, Label, and Bounding-Rect Invariants  (Stages 22 – 46)
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Endpoint rounding (Stage 22): addLine() applies Math.round(v × 100) / 100
@@ -344,9 +344,19 @@ class DxfBuilder {
  *       |                          |   parsePARTSCURVEDLineCount = 4 for mixed sheet
  *       |                          |   (1 curved + 1 straight) confirming curved-only emission.
  *       |                          |   3 it() blocks total.
+ *    45 | ARC + S_CURVE + TALL_ARC | PARTS_CURVED bounding rect (minX, minY, maxX, maxY)
+ *       |                          |   matches flat-blank placement: minX=r(p.x), minY=r(p.y),
+ *       |                          |   maxX=r(p.x+ew), maxY=r(p.y+eh) where ew/eh from
+ *       |                          |   getRotatedDimensions(cutW, cutH, rotation);
+ *       |                          |   ε < 0.015 mm; 3 it() blocks (one per panel type).
+ *    46 | STRAIGHT (3 variants)    | PARTS layer bounding rect spans ew × eh derived purely
+ *       |                          |   from cutW/cutH + FFDH rotation (no flat-blank correction);
+ *       |                          |   placement.cutW/H == CutListRow.cutW/H (unmodified);
+ *       |                          |   mixed sheet: straight placement unaffected by curved;
+ *       |                          |   ε < 0.015 mm; 3 it() blocks (single, narrow, mixed).
  *
  * All invariants are verified end-to-end in:
- *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 44)
+ *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 46)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 const NESTING_LAYERS = [
