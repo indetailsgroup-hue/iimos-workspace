@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.4.1] - 2026-08-27
+
+### Fixed / Verified
+
+- **Stage 29 — exact bbox corner-matching** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Three new `it()` blocks (one per panel type: ARC, S_CURVE, TALL_ARC) assert that the
+  Set of four HATCH_CURVED diagonal endpoints equals the Set of four rounded flat-blank
+  bbox corners `{(minX,minY),(maxX,maxY),(maxX,minY),(minX,maxY)}`.  This makes the
+  Stage 28B distinct-corners assertion strictly stronger by pinning each endpoint to
+  a specific bbox corner (order-agnostic union).
+
+- **Stage 30 — exact diagonal direction** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Nine new `it()` blocks (3 per panel type) assert the directional assignment of each
+  HATCH_CURVED diagonal:
+
+  | diagonal | start       | end         | X sense         |
+  |----------|-------------|-------------|-----------------|
+  | d1       | (minX,minY) | (maxX,maxY) | left → right    |
+  | d2       | (maxX,minY) | (minX,maxY) | right → left    |
+
+  Per panel: (1) d1 start/end within ±0.015 mm, (2) d2 start/end within ±0.015 mm,
+  (3) orientation sense (`d1.x1 < d1.x2`, `d2.x1 > d2.x2`).
+
+- **JSDoc invariant table** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Stage 29 row added to Section 3 (Stages 22–28B), completing the table through
+  Stage 29.
+
+- **JSDoc in `buildDxfSheets.ts`**:
+  Added a new "Stages 22–29 Precision and Structural Integrity Invariants" section
+  documenting all eight precision/structural stages alongside the existing
+  Stages 14–21 geometric invariants and Stages 7–13 count invariants.  Reference
+  updated from `(Stages 7 – 21)` to `(Stages 7 – 29)`.
+
+**Test delta:** 196 → 205 (+9 tests, all passing)
+
+---
+
 ## [2.4.0] - 2026-08-27
 
 ### Added
