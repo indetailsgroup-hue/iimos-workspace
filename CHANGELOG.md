@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.4.0] - 2026-08-27
+
+### Added
+
+#### Smoke Test — Stage 68: rotation=0 and rotation=180 HATCH_CURVED endpoints are point-reflections through the sheet centre
+- Symmetric counterpart of Stage 67, which verified the rotation=90–270 axis.
+- Two separate `NestingSheet`s constructed with `sheetW=2440`, `sheetH=1220`
+  (centre `cx=1220`, `cy=610`).
+- Placement 1 (rotation=0) placed at `(10, 10)`; Placement 2 (rotation=180)
+  placed at `(2·cx−P_X−w, 2·cy−P_Y−h)` so that the two bboxes are
+  symmetric about the sheet centre.
+- Both rotations use `w=cutW`, `h=cutH` (identical effective dimensions, as
+  `getRotatedDimensions` returns `{w:cutW, h:cutH}` for both 0° and 180°).
+- Asserts: for every endpoint `(ex, ey)` from the rotation=0 HATCH_CURVED lines,
+  the reflected point `(round(2·cx−ex), round(2·cy−ey))` equals one of the
+  rotation=180 endpoints (ε < 0.02 mm).
+- 1 `it()` block.
+
+#### Smoke Test — Stage 69: panel with correction=0.001 (barely positive) gets isCurved=true and emits exactly 2 HATCH_CURVED lines
+- Boundary test: the smallest representable positive correction must trigger the
+  curved pipeline.
+- Constructs a `CutListRow` with `developedLength=200.001`, `projectedDepth=200`,
+  `curvedEdge='TOP'` — giving `correction = 0.001 mm > 0`.
+- Confirms `isCurved=true` in the produced `NestingSheet` placement via
+  `runNesting`.
+- Asserts `HATCH_CURVED` LINE count equals exactly 2 (diagonal `d1` + `d2`) in
+  the DXF output via `buildDxfSheet`.
+- 1 `it()` block.
+
+#### JSDoc
+- Smoke test file header updated from `Stages 22 – 67` to `Stages 22 – 69`; table
+  entries added for Stages 68 and 69.
+- `buildDxfSheets.ts` cross-reference updated from `(Stages 7 – 67)` to `(Stages 7 – 69)`.
+
+### Milestone
+- **Negative-correction exclusion and reflection-symmetry milestone** (Stages 66–67):
+  negative-correction `isCurved=false` exclusion (Stage 66) and rotation=90/270
+  point-reflection symmetry (Stage 67) — grouped here for milestone traceability.
+- Total smoke-test coverage: **322 tests** across 69 stages.
+
 ## [4.3.0] - 2026-08-27
 
 ### Added
