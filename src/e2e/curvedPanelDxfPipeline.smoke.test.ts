@@ -78,6 +78,9 @@
  *    29 | ARC + S_CURVE + TALL_ARC | endpoints = Set of 4 rounded bbox corners:
  *       |                          |   Set({x,y}) === {(minX,minY),(maxX,maxY),
  *       |                          |   (maxX,minY),(minX,maxY)}
+ *    30 | ARC + S_CURVE + TALL_ARC | d1: (minX,minY)→(maxX,maxY) (left→right);
+ *       |                          |   d2: (maxX,minY)→(minX,maxY) (right→left);
+ *       |                          |   d1.x1 < d1.x2; d2.x1 > d2.x2  (ε < 0.015 mm)
  *
  * ─────────────────────────────────────────────────────────────────────────────
  *
@@ -4119,5 +4122,137 @@ describe('@smoke Stage 30 — diagonal-1 runs (minX,minY)→(maxX,maxY); diagona
     const [d1, d2] = tallArcLines;
     expect(d1.x1).toBeLessThan(d1.x2);
     expect(d2.x1).toBeGreaterThan(d2.x2);
+  });
+});
+
+describe('@smoke Stage 31 — d1.y1 and d2.y1 are both ≈ minY (shared bottom start)', () => {
+  /**
+   * Stage 31 cross-asserts a consequence of the Stage 30 direction invariant:
+   * because diagonal-1 starts at (minX, minY) and diagonal-2 starts at (maxX, minY),
+   * both start Y coordinates must equal minY.
+   *
+   *   d1.y1 ≈ r(minY)   (bottom of the flat-blank placement)
+   *   d2.y1 ≈ r(minY)
+   *
+   * This confirms that the DXF hatch convention always grounds both diagonals at
+   * the same horizontal level — the bottom edge of the flat-blank bbox — regardless
+   * of panel type, FFDH rotation, or grain-lock.
+   *
+   * Tolerance: ±0.015 mm.  Verified for ARC, S_CURVE, and TALL_ARC.
+   */
+
+  const EPS = 0.015;
+  const r   = (v: number): number => Math.round(v * 100) / 100;
+
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+  type Bbox   = { minX: number; maxX: number; minY: number; maxY: number };
+
+  // ── helpers (self-contained) ──────────────────────────────────────────────
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function bboxForPlacement(p: { x: number; y: number; cutW: number; cutH: number; rotation: number }): Bbox {
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const ew = isRotated ? p.cutH : p.cutW;
+    const eh = isRotated ? p.cutW : p.cutH;
+    return { minX: p.x, maxX: p.x + ew, minY: p.y, maxY: p.y + eh };
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  function runStage31() {
+    const { row: arcRow }     = buildCurvedRow();
+    const { row: sCurveRow }  = buildSCurveRow();
+    const { row: tallArcRow } = buildTallArcRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow, tallArcRow]);
+    expect(sheets).toHaveLength(1);
+
+    const arcP     = sheets[0].placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP  = sheets[0].placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const tallArcP = sheets[0].placements.find((p) => p.partId === 'SMOKE_TALL_ARC')!;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const allCoords    = parseHatchCoords(output.content);
+    const arcLines     = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines  = linesForPlacement(allCoords, sCurveP.y);
+    const tallArcLines = linesForPlacement(allCoords, tallArcP.y);
+
+    expect(arcLines).toHaveLength(2);
+    expect(sCurveLines).toHaveLength(2);
+    expect(tallArcLines).toHaveLength(2);
+
+    return {
+      arcLines,    arcBbox:    bboxForPlacement(arcP),
+      sCurveLines, sCurveBbox: bboxForPlacement(sCurveP),
+      tallArcLines, tallBbox:  bboxForPlacement(tallArcP),
+    };
+  }
+
+  // ── assertions ────────────────────────────────────────────────────────────
+
+  it('ARC — d1.y1 and d2.y1 are both ≈ minY', () => {
+    const { arcLines, arcBbox: b } = runStage31();
+    const [d1, d2] = arcLines;
+    expect(Math.abs(d1.y1 - r(b.minY))).toBeLessThan(EPS);
+    expect(Math.abs(d2.y1 - r(b.minY))).toBeLessThan(EPS);
+  });
+
+  it('S_CURVE — d1.y1 and d2.y1 are both ≈ minY', () => {
+    const { sCurveLines, sCurveBbox: b } = runStage31();
+    const [d1, d2] = sCurveLines;
+    expect(Math.abs(d1.y1 - r(b.minY))).toBeLessThan(EPS);
+    expect(Math.abs(d2.y1 - r(b.minY))).toBeLessThan(EPS);
+  });
+
+  it('TALL_ARC — d1.y1 and d2.y1 are both ≈ minY', () => {
+    const { tallArcLines, tallBbox: b } = runStage31();
+    const [d1, d2] = tallArcLines;
+    expect(Math.abs(d1.y1 - r(b.minY))).toBeLessThan(EPS);
+    expect(Math.abs(d2.y1 - r(b.minY))).toBeLessThan(EPS);
   });
 });
