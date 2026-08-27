@@ -4,6 +4,38 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [10.3.0] - 2026-08-27
+
+### Added
+
+#### Stage 98 — Six-sheet overflow (qty=277)
+- Smoke test asserting that `qty=277` curved panels produce exactly **6 sheets**
+  (distribution: 5 × 55 + 2 = 277).
+- `sheets[5]` (0-indexed, 6th physical sheet) holds exactly **2** curved
+  placements; all placements across all sheets have `isCurved=true`.
+- DXF built for sheet-6 asserts `PARTS_CURVED=8` (2 × 4 rect sides) and
+  `HATCH_CURVED=4` (2 × 2 diagonal lines).
+
+#### Stage 99 — Mixed-500 determinism guard
+- Regression guard: re-running `runNesting` twice with the Stage 97 mixed
+  fixture (curved qty=300, straight qty=200) always produces identical
+  `sheets[5].placements[0]` — `partId`, `x`, `y`, and `rotation` are
+  bit-for-bit equal across both runs.
+- Mirrors Stage 85 (qty=10), Stage 90 (two-sheet mixed), Stage 95
+  (three-sheet) and Stage 99 (six-sheet mixed batch).
+
+#### JSDoc — Shelf-y lookup table (k = 1..11)
+- FFDH Constants section extended with a full shelf-y lookup table listing
+  `y_k` and `y_k + placed_h` for every shelf k from 1 to 11:
+  `y_1=10`, `y_2=213.5`, `y_3=417`, ..., `y_11=2045`.
+- Stage table rows 98–99 added to the `Stages 22 – 99` header block.
+- `buildDxfSheets.ts` JSDoc cross-reference updated from `(Stages 7–97)` to
+  `(Stages 7–99)`.
+
+### Tests
+- Smoke test: **352 tests** (up from 350); all passing.
+
+
 ## [10.2.0] - 2026-08-27
 
 ### Added
