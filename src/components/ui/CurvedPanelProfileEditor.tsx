@@ -18,6 +18,7 @@ import React, { useMemo, useCallback } from 'react';
 import { useCabinet, useCabinetStore } from '../../core/store/useCabinetStore';
 import type { PanelProfile, PanelEdge } from '../../core/types/Cabinet';
 import { computeCurveProfile } from '../../core/manufacturing/curve/curveProfile';
+import type { ArcSegment } from '../../core/manufacturing/curve/curveProfile';
 import {
   computeCurveFields,
   resolveMaterial,
@@ -184,6 +185,82 @@ function PreviewCard({ kerfCount, developedLength, projectedDepth, errors, valid
 }
 
 // ============================================
+// SUB-COMPONENT — SVG arc preview
+// ============================================
+
+const ARC_SVG_W = 120;
+const ARC_SVG_H = 80;
+const ARC_MARGIN = 6;
+
+interface ArcPreviewSvgProps {
+  arcSegments: ArcSegment[];
+  panelW: number;
+  panelH: number;
+}
+function ArcPreviewSvg({ arcSegments, panelW, panelH }: ArcPreviewSvgProps) {
+  const scale = Math.min(
+    (ARC_SVG_W - 2 * ARC_MARGIN) / Math.max(panelW, 1),
+    (ARC_SVG_H - 2 * ARC_MARGIN) / Math.max(panelH, 1),
+  );
+
+  const pw = panelW * scale;
+  const ph = panelH * scale;
+
+  // Panel world → SVG pixel (Y-flip: world Y-up, SVG Y-down)
+  const sx = (wx: number) => ARC_MARGIN + wx * scale;
+  const sy = (wy: number) => ARC_MARGIN + (panelH - wy) * scale;
+
+  return (
+    <div className="rounded-lg border border-teal-500/20 bg-teal-500/5 p-1.5">
+      <span className="text-[9px] text-teal-400 block mb-1">Arc Preview</span>
+      <svg
+        width={ARC_SVG_W}
+        height={ARC_SVG_H}
+        viewBox={`0 0 ${ARC_SVG_W} ${ARC_SVG_H}`}
+        className="w-full"
+        data-testid="arc-preview-svg"
+      >
+        {/* Panel outline */}
+        <rect
+          x={ARC_MARGIN} y={ARC_MARGIN}
+          width={pw} height={ph}
+          fill="none"
+          stroke="#334155"
+          strokeWidth="0.5"
+          strokeDasharray="2 2"
+        />
+        {/* Arc segments */}
+        {arcSegments.map((seg, i) => {
+          const { cx, cy, radius, startAngle, sweepAngle } = seg;
+          const r = radius * scale;
+          const endAngle = startAngle + sweepAngle;
+
+          const x1 = sx(cx + radius * Math.cos(startAngle));
+          const y1 = sy(cy + radius * Math.sin(startAngle));
+          const x2 = sx(cx + radius * Math.cos(endAngle));
+          const y2 = sy(cy + radius * Math.sin(endAngle));
+
+          // After Y-flip: positive sweep (CCW in math) becomes CW in SVG → sweepFlag=1
+          const sweepFlag  = sweepAngle > 0 ? 1 : 0;
+          const largeArcFlag = Math.abs(sweepAngle) > Math.PI ? 1 : 0;
+
+          return (
+            <path
+              key={i}
+              d={`M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r.toFixed(2)} ${r.toFixed(2)} 0 ${largeArcFlag} ${sweepFlag} ${x2.toFixed(2)} ${y2.toFixed(2)}`}
+              fill="none"
+              stroke="#0d9488"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 
@@ -227,7 +304,7 @@ export function CurvedPanelProfileEditor() {
   // ── Live preview (useMemo = no extra render) ───────────────────
   const preview = useMemo(() => {
     if (!panel || profile.kind === 'RECT') {
-      return { valid: true, errors: [], kerfCount: 0, developedLength: 0, projectedDepth: 0 };
+      return { valid: true, errors: [], kerfCount: 0, developedLength: 0, projectedDepth: 0, arcSegments: [] as ArcSegment[] };
     }
 
     const curveResult = computeCurveProfile(profile, panel.finishWidth, panel.finishHeight);
@@ -238,6 +315,7 @@ export function CurvedPanelProfileEditor() {
         kerfCount: 0,
         developedLength: 0,
         projectedDepth: 0,
+        arcSegments: [] as ArcSegment[],
       };
     }
 
@@ -251,6 +329,7 @@ export function CurvedPanelProfileEditor() {
       kerfCount:       fields?.kerfCount       ?? 0,
       developedLength: fields?.developedLength ?? 0,
       projectedDepth:  fields?.projectedDepth  ?? 0,
+      arcSegments:     curveResult.arcSegments ?? [],
     };
   }, [panel, profile]);
 
@@ -366,6 +445,15 @@ export function CurvedPanelProfileEditor() {
           projectedDepth={preview.projectedDepth}
           errors={preview.errors}
           valid={preview.valid}
+        />
+      )}
+
+      {/* ── SVG arc preview ── */}
+      {preview.arcSegments.length > 0 && (
+        <ArcPreviewSvg
+          arcSegments={preview.arcSegments}
+          panelW={panel.finishWidth}
+          panelH={panel.finishHeight}
         />
       )}
 

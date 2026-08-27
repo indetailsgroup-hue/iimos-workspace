@@ -30,6 +30,8 @@ import { ActivityTimeline } from "../components/activity/ActivityTimeline";
 import { CncGeneratePanel, GcodePreviewPanel } from "../components/cnc";
 import type { GcodeBundle } from "../../cnc/post/types";
 import { ExportOptionsDialog } from "../../components/ui/ExportOptionsDialog";
+import { buildCutListXlsx } from "../../core/export/monolith/builders/buildCutListXlsx";
+import { NestingSheetReport } from "../components/nesting/NestingSheetReport";
 
 export interface JobDetailProps {
   jobId: string;
@@ -69,6 +71,12 @@ export function JobDetail({ jobId, onBack }: JobDetailProps): React.ReactElement
 
   // ExportOptionsDialog overlay state
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+
+  // Feature 2: XLSX cut-list download state
+  const [xlsxDownloading, setXlsxDownloading] = useState(false);
+
+  // Feature 3: Nesting sheet report visibility
+  const [nestingReportOpen, setNestingReportOpen] = useState(false);
 
   // D2.2: CNC G-code generation state
   const [gcodeBundle, setGcodeBundle] = useState<GcodeBundle | null>(null);
@@ -148,6 +156,27 @@ export function JobDetail({ jobId, onBack }: JobDetailProps): React.ReactElement
       window.open(exportResult.downloadUrl, "_blank");
     }
   }, [exportResult]);
+
+  // Feature 2: XLSX cut-list download
+  const handleXlsxDownload = useCallback(async () => {
+    const cutList = verifiedPacketEntry?.packet?.cutList;
+    if (!cutList) return;
+    setXlsxDownloading(true);
+    try {
+      const buffer = await buildCutListXlsx({ cutList, jobId });
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `cutlist_${jobId}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setXlsxDownloading(false);
+    }
+  }, [verifiedPacketEntry, jobId]);
 
   if (selectedJobLoading || !selectedJob) {
     return <LoadingState />;
@@ -247,6 +276,11 @@ export function JobDetail({ jobId, onBack }: JobDetailProps): React.ReactElement
             gatedExportState={gatedExportState}
             onGatedExport={handleGatedExport}
             onOpenExportDialog={() => setExportDialogOpen(true)}
+            packet={verifiedPacketEntry?.packet}
+            xlsxDownloading={xlsxDownloading}
+            onXlsxDownload={handleXlsxDownload}
+            nestingReportOpen={nestingReportOpen}
+            onToggleNestingReport={() => setNestingReportOpen((v) => !v)}
           />
         )}
 
@@ -592,6 +626,16 @@ interface ExportTabProps {
   onGatedExport: () => void;
   /** Opens the ExportOptionsDialog overlay (Phase 6.2) */
   onOpenExportDialog: () => void;
+  /** Verified FactoryPacket — provides cutList for XLSX export (Feature 2) */
+  packet?: import("../packet/types").FactoryPacket | null;
+  /** XLSX download in-progress flag */
+  xlsxDownloading: boolean;
+  /** Trigger XLSX cut-list download */
+  onXlsxDownload: () => void;
+  /** Whether the nesting sheet report panel is visible */
+  nestingReportOpen: boolean;
+  /** Toggle nesting sheet report panel */
+  onToggleNestingReport: () => void;
 }
 
 function ExportTab({
@@ -618,6 +662,11 @@ function ExportTab({
   gatedExportState,
   onGatedExport,
   onOpenExportDialog,
+  packet,
+  xlsxDownloading,
+  onXlsxDownload,
+  nestingReportOpen,
+  onToggleNestingReport,
 }: ExportTabProps): React.ReactElement {
   // Use gated export mode
   const useGatedExport = true;
@@ -748,6 +797,72 @@ function ExportTab({
               : undefined
           }
         />
+
+        {/* Feature 2: XLSX Cut-List Download */}
+        {packet?.cutList && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() => void onXlsxDownload()}
+              disabled={xlsxDownloading}
+              data-testid="xlsx-download-button"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "8px 16px",
+                backgroundColor: xlsxDownloading ? "#1e293b" : "#0d9488",
+                border: "1px solid #0f766e",
+                borderRadius: 8,
+                color: xlsxDownloading ? "#94a3b8" : "#fff",
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: xlsxDownloading ? "not-allowed" : "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              {xlsxDownloading ? "⟳ Generating…" : "⬇ Download Cut List (.xlsx)"}
+            </button>
+
+            {/* Feature 3: Nesting Sheet Report toggle */}
+            <button
+              onClick={onToggleNestingReport}
+              data-testid="nesting-report-toggle"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "8px 16px",
+                backgroundColor: nestingReportOpen ? "#0d9488" : "transparent",
+                border: "1px solid #0d9488",
+                borderRadius: 8,
+                color: nestingReportOpen ? "#fff" : "#0d9488",
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              ⬚ Nesting Report
+            </button>
+          </div>
+        )}
+
+        {/* Feature 3: Nesting Sheet Report panel */}
+        {nestingReportOpen && (
+          <div
+            style={{
+              border: "1px solid #1e293b",
+              borderRadius: 12,
+              padding: 16,
+              backgroundColor: "#0f172a",
+            }}
+          >
+            <NestingSheetReport
+              sheets={[]}
+              jobId={jobId}
+            />
+          </div>
+        )}
       </div>
     );
   }

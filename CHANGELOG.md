@@ -4,6 +4,29 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [13.1.0] – 2026-08-27
+
+### Added
+- **Feature 2 — XLSX Cut-List Export** (`src/core/export/monolith/builders/buildCutListXlsx.ts`)
+  - 3-tab Excel workbook (Summary, Cut List, By Material) via `exceljs`
+  - `buildCutListXlsx({ cutList, jobId })` returns an `ArrayBuffer`-compatible `Buffer`
+  - 12 unit tests in `buildCutListXlsx.test.ts` — all passing
+  - Download button wired into `JobDetail` Export tab (`cutlist_{jobId}.xlsx`)
+- **SVG Arc Preview** in `CurvedPanelProfileEditor`
+  - `ArcPreviewSvg` sub-component (120×80 SVG) shows real-time curve shape from `arcSegments`
+  - Panel outline rect + arc paths with Y-flip for screen coordinates
+  - Renders below `<PreviewCard>` when `arcSegments.length > 0`
+- **Feature 3 — NestingSheetReport** (`src/factory/components/nesting/NestingSheetReport.tsx`)
+  - SVG nesting layout per sheet: flat panels `#334155`, curved panels `#0d9488` + diagonal hatch
+  - Curved panels show `{N}K` kerf label and CURVED badge
+  - `window.print()` support with Print button
+  - Empty state Thai text when `sheets=[]`
+  - 11 unit tests in `NestingSheetReport.test.tsx` — all passing
+  - Toggle button in `JobDetail` Export tab
+
+### Changed
+- `JobDetail.tsx` — added `xlsxDownloading` state, `handleXlsxDownload` handler, `nestingReportOpen` state, updated `ExportTabProps` interface with 5 new props
+
 ## [13.0.0] – 2026-08-27
 
 ### Added
