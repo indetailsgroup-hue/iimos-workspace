@@ -4,6 +4,27 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [12.5.0] – 2026-08-27
+
+### Added
+- **Stage 130** (`curvedPanelDxfPipeline.smoke.test.ts`): asserts that `qty=715` curved
+  panels (715 = 13 × 55) are packed into exactly 13 full sheets with no remainder;
+  every sheet holds exactly 55 placements with `isCurved=true`; a DXF loop across all
+  13 sheets asserts `PARTS_CURVED=220` (55 × 4) on each — continues the full-sheet
+  sequence …→ 124 → 126 → 128 → **130**.
+- **Stage 131** (`curvedPanelDxfPipeline.smoke.test.ts`): determinism guard for the
+  Stage 128 fixture (`qty=660`); two consecutive `runNesting` calls produce identical
+  `sheets[11].placements[0]` `partId`, `x`, `y`, and `rotation` — extends the
+  determinism series (85, 95, 99, 103, 107, 111, 114, 117, 119, 121, 123, 125, 127,
+  129, **131**).
+- Updated smoke-test JSDoc: range extended to `Stages 22 – 131`; table rows 130–131
+  added before the FFDH Constants separator.
+- Updated `buildDxfSheets.ts` cross-reference comment: `(Stages 7 – 131)`.
+
+### Tests
+- Smoke suite: **384 tests**, all passing.
+
+
 ## [12.4.0] - 2026-08-27
 
 ### Added
