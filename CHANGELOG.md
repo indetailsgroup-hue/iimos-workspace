@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.3.0] - 2026-08-27
+
+### Added
+
+#### Smoke Test — Stage 66: negative correction emits zero HATCH_CURVED lines
+- Constructs a `CutListRow` with `developedLength=50`, `projectedDepth=200` so
+  `correction = 50 − 200 = −150 < 0`.
+- Confirms `isCurved=false` in the produced `NestingSheet` placement (negative
+  correction does **not** satisfy `correction > 0`).
+- Asserts `HATCH_CURVED` LINE count equals zero in the DXF output.
+- Guards against accidental HATCH_CURVED emission for physically invalid (under-developed)
+  panel specifications that reach the nesting pipeline.
+- 1 `it()` block.
+
+#### Smoke Test — Stage 67: rotation=90 and rotation=270 HATCH_CURVED endpoints are point-reflections through the sheet centre
+- Two separate `NestingSheet`s are constructed with `sheetW=2440`, `sheetH=1220`
+  (centre `cx=1220`, `cy=610`).
+- Placement 1 (rotation=90) placed at `(10, 10)`; Placement 2 (rotation=270)
+  placed at `(2·cx−P_X−w, 2·cy−P_Y−h)` so that the two bboxes are
+  symmetric about the sheet centre.
+- Both rotations use `w=cutH`, `h=cutW` (identical effective dimensions).
+- Asserts: for every endpoint `(ex, ey)` from the rotation=90 HATCH_CURVED lines,
+  the reflected point `(round(2·cx−ex), round(2·cy−ey))` equals one of the
+  rotation=270 endpoints (ε < 0.02 mm).
+- 1 `it()` block.
+
+#### JSDoc
+- Smoke test file header updated from `Stages 22 – 65` to `Stages 22 – 67`; table
+  entries added for Stages 66 and 67.
+- `buildDxfSheets.ts` cross-reference updated from `(Stages 7 – 65)` to `(Stages 7 – 67)`.
+
+### Milestone
+- **Rotation-270 and zero-correction exclusion milestone** (Stages 64–65): rotation=270
+  diagonal correctness (Stage 64) and zero-correction `isCurved=false` exclusion
+  (Stage 65) — grouped here for milestone traceability.
+- Total smoke-test coverage: **320 tests** across 67 stages.
+
 ## [4.2.0] - 2026-08-27
 
 ### Added

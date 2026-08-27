@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 65: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation and zero-correction guards
+ * Stages 22 – 67: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, and reflection symmetry
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -206,6 +206,14 @@
  *    65 | ARC (projectedDepth=0)   | panel with correction=developedLength−projectedDepth=0
  *       |                          |   gets isCurved=false; nesting emits zero
  *       |                          |   HATCH_CURVED LINE entities; 1 it() block.
+ *    66 | ARC (negCorrection)      | panel with developedLength < projectedDepth
+ *       |                          |   → correction<0 → isCurved=false; DXF emits
+ *       |                          |   zero HATCH_CURVED LINE entities; 1 it() block.
+ *    67 | ARC (rot=90 vs rot=270)  | two NestingSheets, panels placed symmetrically
+ *       |                          |   about sheet centre (cx=1220, cy=610); each
+ *       |                          |   rotation=90 endpoint reflected through (cx,cy)
+ *       |                          |   equals a rotation=270 endpoint (ε < 0.02 mm);
+ *       |                          |   1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -8391,6 +8399,223 @@ describe(
 
         // Zero HATCH_CURVED lines — flat panel is not hatched
         expect(countHATCHCURVEDLines65(output.content)).toBe(0);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 66 – negative correction (developedLength < projectedDepth) emits zero
+// HATCH_CURVED lines and isCurved=false.
+//
+// Rationale:
+//   correction = developedLength − projectedDepth = 50 − 200 = −150 < 0
+//   isCurved   = hasCorrection && correction > 0 = true && false = false
+//   → no HATCH_CURVED, even though all three curve fields are present.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 66 – negative correction (developedLength < projectedDepth) emits zero HATCH_CURVED lines',
+  () => {
+    function countHATCHCURVEDLines66(content: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(s => s.startsWith('8\nHATCH_CURVED\n')).length;
+    }
+
+    it(
+      'panel with developedLength=50 < projectedDepth=200 — correction<0 → isCurved=false → zero HATCH_CURVED',
+      () => {
+        // correction = 50 − 200 = −150  (physically impossible bend, used as regression fixture)
+        // isCurved = hasCorrection && correction > 0 = true && (−150 > 0) = false
+        const negRow: CutListRow = {
+          partId:          'SMOKE_NEG_CORR_66',
+          materialId:      MATERIAL_ID,
+          label:           'Negative Correction Panel 66',
+          finishW:         400,
+          finishH:         800,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            400,
+          cutH:            800,
+          qty:             1,
+          developedLength: 50,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          kerfCount:       0,
+          grain:           undefined,
+        };
+
+        const { sheets } = runNesting([negRow]);
+        expect(sheets).toHaveLength(1);
+        expect(sheets[0].placements).toHaveLength(1);
+
+        // isCurved must be falsy — negative correction does not trigger curved pipeline
+        expect(sheets[0].placements[0].isCurved).toBeFalsy();
+
+        const output = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE66', materialId: MATERIAL_ID },
+          nesting: sheets[0],
+          profile: getFactoryProfile('DEFAULT'),
+        });
+
+        // Zero HATCH_CURVED lines — negative correction means no curved overlay
+        expect(countHATCHCURVEDLines66(output.content)).toBe(0);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 67 – rotation=90 and rotation=270 HATCH_CURVED endpoints are
+// point-reflections of each other through the sheet centre.
+//
+// Both rotations use the same effective dimensions:
+//   getRotatedDimensions(cutW, cutH, 90)  → { w: cutH, h: cutW }
+//   getRotatedDimensions(cutW, cutH, 270) → { w: cutH, h: cutW }
+//
+// Two separate NestingSheets are constructed on the same sheet size (2440×1220)
+// with placements positioned symmetrically about the sheet centre (cx=1220, cy=610):
+//   Placement 90:  (P_X,  P_Y)  = (10, 10)
+//   Placement 270: (Q_X,  Q_Y)  = (2*cx − P_X − w,  2*cy − P_Y − h)
+//
+// Assertion: for every endpoint (ex, ey) in the rotation=90 HATCH_CURVED lines,
+//   the reflected point  (round(2·cx − ex), round(2·cy − ey))
+//   equals one of the endpoints in the rotation=270 HATCH_CURVED lines (ε < 0.02 mm).
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 67 – rotation=90 and rotation=270 HATCH_CURVED endpoints are point-reflections through the sheet centre',
+  () => {
+    const r67  = (v: number): number => Math.round(v * 100) / 100;
+    const EPS67 = 0.02;
+
+    function parseHATCHCURVEDLines67(
+      content: string,
+    ): Array<{ x1: number; y1: number; x2: number; y2: number }> {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(s => s.startsWith('8\nHATCH_CURVED\n'))
+        .map(seg => {
+          const num = (code: string) => {
+            const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+            return m ? parseFloat(m[1]) : NaN;
+          };
+          return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+        });
+    }
+
+    it(
+      'ARC — every rotation=90 HATCH_CURVED endpoint, reflected through sheet centre, equals a rotation=270 endpoint (ε < 0.02 mm)',
+      () => {
+        const { row: arcRow, kerfCount } = buildCurvedRow();
+        const { sheets: refSheets }      = runNesting([arcRow]);
+        const ref                        = refSheets[0].placements[0];
+
+        // Flat-blank effective dimensions (same for rotation=90 and rotation=270)
+        const cutW = ref.cutW;
+        const cutH = ref.cutH;
+        const w    = cutH; // effective width  when rotated 90° or 270°
+        const h    = cutW; // effective height when rotated 90° or 270°
+
+        const SHEET_W = 2440;
+        const SHEET_H = 1220;
+        const cx      = SHEET_W / 2; // 1220
+        const cy      = SHEET_H / 2; //  610
+
+        // Placement for rotation=90
+        const P_X = 10;
+        const P_Y = 10;
+
+        // Symmetric placement for rotation=270:
+        //   The bbox (Q_X, Q_Y, Q_X+w, Q_Y+h) is the point-reflection of
+        //   (P_X, P_Y, P_X+w, P_Y+h) about (cx, cy).
+        const Q_X = 2 * cx - P_X - w;
+        const Q_Y = 2 * cy - P_Y - h;
+
+        const sheet90: NestingSheet = {
+          index1:         1,
+          materialId:     MATERIAL_ID,
+          sheetW:         SHEET_W,
+          sheetH:         SHEET_H,
+          sheetThickness: 18,
+          label:          'NEST_67_90',
+          placements: [
+            {
+              partId:   'SMOKE_ARC_ROT90_S67',
+              x:        P_X,
+              y:        P_Y,
+              rotation: 90,
+              cutW,
+              cutH,
+              isCurved: true,
+              kerfCount,
+            },
+          ],
+          utilization: 0,
+        };
+
+        const sheet270: NestingSheet = {
+          index1:         1,
+          materialId:     MATERIAL_ID,
+          sheetW:         SHEET_W,
+          sheetH:         SHEET_H,
+          sheetThickness: 18,
+          label:          'NEST_67_270',
+          placements: [
+            {
+              partId:   'SMOKE_ARC_ROT270_S67',
+              x:        Q_X,
+              y:        Q_Y,
+              rotation: 270,
+              cutW,
+              cutH,
+              isCurved: true,
+              kerfCount,
+            },
+          ],
+          utilization: 0,
+        };
+
+        const out90 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_S67_90', materialId: MATERIAL_ID },
+          nesting: sheet90,
+          profile: getFactoryProfile('DEFAULT'),
+        });
+        const out270 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_S67_270', materialId: MATERIAL_ID },
+          nesting: sheet270,
+          profile: getFactoryProfile('DEFAULT'),
+        });
+
+        const lines90  = parseHATCHCURVEDLines67(out90.content);
+        const lines270 = parseHATCHCURVEDLines67(out270.content);
+
+        expect(lines90).toHaveLength(2);
+        expect(lines270).toHaveLength(2);
+
+        // Collect all 4 endpoints from each sheet
+        const endpoints90 = lines90.flatMap(l => [
+          { x: l.x1, y: l.y1 },
+          { x: l.x2, y: l.y2 },
+        ]);
+        const endpoints270 = lines270.flatMap(l => [
+          { x: l.x1, y: l.y1 },
+          { x: l.x2, y: l.y2 },
+        ]);
+
+        // For each endpoint in rotation=90, its reflection through the sheet centre
+        // must equal one of the rotation=270 endpoints.
+        for (const ep90 of endpoints90) {
+          const reflX = r67(2 * cx - ep90.x);
+          const reflY = r67(2 * cy - ep90.y);
+          const match = endpoints270.find(
+            ep => Math.abs(ep.x - reflX) < EPS67 && Math.abs(ep.y - reflY) < EPS67,
+          );
+          expect(
+            match,
+            `reflection of (${ep90.x}, ${ep90.y}) → (${reflX}, ${reflY}) not found in rotation=270 endpoints`,
+          ).toBeDefined();
+        }
       },
     );
   },
