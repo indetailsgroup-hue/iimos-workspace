@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.4.0] - 2026-08-27
+
+### Added
+
+- **Stage 22 — HATCH_CURVED endpoint precision** (`curvedPanelDxfPipeline.smoke.test.ts`)
+  - `buildDxfSheets.ts`: `addLine()` now rounds all four coordinates to 0.01 mm via
+    `Math.round(v * 100) / 100`, eliminating irrational arc-length floats from CNC DXF output.
+  - 6 new `it()` blocks assert `isRounded(coord)` (abs residual < 1e-6) for both endpoints of
+    diagonal-1 and diagonal-2 across ARC, S_CURVE, and TALL_ARC panels.
+  - Companion fixes: Stage 15 precision relaxed to ±0.05 mm; Stage 6 verbatim byte check updated.
+- **Stage 23 — bbox confinement under rounding** (`curvedPanelDxfPipeline.smoke.test.ts`)
+  - 6 `it()` blocks assert every rounded endpoint lies within the flat-blank placement bbox
+    with ε = 0.01 mm tolerance.
+- **Stage 24 — non-degenerate diagonals** (`curvedPanelDxfPipeline.smoke.test.ts`)
+  - 6 `it()` blocks assert each HATCH_CURVED diagonal has non-zero length
+    (`|x1−x2| + |y1−y2| > 1e-6`).
+- **Stage 25 — shared midpoint** (`curvedPanelDxfPipeline.smoke.test.ts`)
+  - 6 `it()` blocks assert the midpoint of diagonal-1 equals the midpoint of diagonal-2
+    for each panel type (tolerance ±0.05 mm).
+- **Stage 26 — midpoint equals bbox centre** (`curvedPanelDxfPipeline.smoke.test.ts`)
+  - 6 `it()` blocks assert the shared diagonal midpoint equals the centre of the flat-blank
+    placement bbox `(minX + effectiveW/2, minY + effectiveH/2)` (tolerance ±0.05 mm).
+- **Stage 27 — equal diagonal length** (`curvedPanelDxfPipeline.smoke.test.ts`)
+  - 3 `it()` blocks assert diagonal-1 and diagonal-2 have equal length for each panel type
+    (tolerance ±0.05 mm, consistent with 0.01 mm rounding worst-case delta of ~0.014 mm).
+- **Stage 28 — sqrt(W²+H²) length and distinct corner pairs** (`curvedPanelDxfPipeline.smoke.test.ts`)
+  - Part A — 6 `it()` blocks assert each diagonal length equals `sqrt(effectiveW² + effectiveH²)`
+    derived from the flat-blank placement bbox (tolerance ±0.05 mm).
+  - Part B — 3 `it()` blocks assert the four diagonal endpoints form two distinct corner pairs
+    (`new Set(pts).size === 4`) after 0.01 mm rounding.
+
+### Summary
+
+Precision and structural integrity suite (Stages 22–28); test delta **151 → 193** (+42 tests).
+The `addLine()` rounding change (Stage 22) is the sole production-code modification; all other
+additions are test-only geometric invariant assertions covering DXF HATCH_CURVED output.
+
+Panel set verified across all seven stages: ARC (SMOKE_DOOR), S_CURVE (SMOKE_SCURVE_DOOR),
+TALL_ARC (SMOKE_TALL_ARC) on a single 1220 × 2440 mm nesting sheet.
+
 ## [2.3.6] - 2026-08-26
 
 ### 🧪 Smoke Suite — Equal Diagonal Length Invariant (Stage 27)
