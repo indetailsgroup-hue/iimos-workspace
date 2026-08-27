@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.6.0] - 2026-08-27
+
+### Added
+
+- **Orientation and Y-monotonicity group (Stages 33–34)** — two smoke stages
+  that complete the per-coordinate directional contract for HATCH_CURVED
+  diagonals, building on the Stage 30 directional assignment and Stages 31–32
+  shared-Y invariants:
+
+  | Stage | Assertion |
+  |-------|-----------|
+  | 33 | X-axis orientation sense: `d1.x1 < d1.x2` (diagonal-1 left→right); `d2.x1 > d2.x2` (diagonal-2 right→left). Strict inequality — no tolerance. |
+  | 34 | Y-axis monotonicity: `d1.y1 < d1.y2` and `d2.y1 < d2.y2` — both diagonals ascend in Y (bottom→top). Strict inequality — no tolerance. |
+
+  Together Stages 33–34 formally close the directional proof: every coordinate
+  pair of both diagonals is independently constrained by strict inequality,
+  leaving no ambiguity in the HATCH_CURVED hatch pattern across all three panel
+  types (ARC, S_CURVE, TALL_ARC).
+
+- **Stage 35 — diagonal end-X coordinates** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Six new `it()` blocks provide explicit per-coordinate verification of the end-X
+  values of both diagonals: `d1.x2 ≈ r(maxX)` and `d2.x2 ≈ r(minX)` (ε < 0.015 mm).
+
+- **JSDoc invariant tables** updated in both `curvedPanelDxfPipeline.smoke.test.ts`
+  and `buildDxfSheets.ts`: Stages 33–35 rows added; section headers and
+  reference ranges updated to "Stages 22 – 35" / "(Stages 7 – 35)".
+
+**Test delta (cumulative Stages 33–35):** 217 → 229 (+12 tests)
+
+---
+
 ## [2.4.4] - 2026-08-27
 
 ### Added
