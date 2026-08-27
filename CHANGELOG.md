@@ -7,6 +7,156 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.0] - 2026-08-27
+
+### Overview
+
+**Curved Panel System — Complete Geometric & Label Invariant Milestone**
+
+This major release marks the full end-to-end completion of the Curved Panel System
+introduced in v2.0.0. Every stage of the pipeline — from curve-field computation
+through FFDH nesting, DXF export, and label rendering — is now covered by 274
+automated smoke-test assertions across 42 stages. The `@smoke` suite verifies all
+geometric, structural, precision, layer-color, and label invariants for all three
+curved panel types (ARC, S_CURVE, TALL_ARC).
+
+### Added
+
+#### Smoke Stages 41–42 (label height and X-position invariants)
+
+- **Stage 41** (`@smoke Stage 41`): asserts the `(CURVED / N cuts)` TEXT entity on
+  the LABELS layer carries DXF group code 40 (text height) = exactly **5** for all
+  three panel types (ARC, S_CURVE, TALL_ARC). Verified by parsing TEXT entities
+  after splitting on `\n0\nTEXT\n` and filtering by `8\nLABELS\n` and the curved
+  sub-label regex. 3 `it()` blocks.
+
+- **Stage 42** (`@smoke Stage 42`): asserts the `(CURVED / N cuts)` TEXT entity X
+  position (DXF group code 10) equals `placement.x + w/2 − 20` where
+  `w = isRotated ? cutH : cutW` (flat-blank effective width in the rotated frame).
+  Anchored at bbox centre X minus 20 mm text indent. `addText()` stores coords
+  without rounding; tolerance ε < 0.015 mm. 3 `it()` blocks per panel type.
+
+#### JSDoc invariant tables updated to Stages 22–42
+
+- `curvedPanelDxfPipeline.smoke.test.ts`: Section 3 header and table updated to
+  cover Stages 22–42 including Stage 41 (height=5) and Stage 42 (X position formula).
+- `buildDxfSheets.ts`: "Precision, Structural Integrity, and Label Invariants"
+  section updated to Stages 22–42 with Stage 41 and Stage 42 rows and reference
+  updated to `(Stages 7–42)`.
+
+---
+
+### Full Curved Panel System — Phase 0 through Stage 42 (complete history)
+
+#### Phase 0 — Curved Panel domain model
+- `CurvedProfile` type (`radius`, `sweepDeg`, `edge`, `realThickness`)
+- `KerfBending.ts` — kerf-bend engineering constants for MDF/Plywood/Particle Board/HMR
+- `curveFieldsComputer.ts` — `computeCurveFields()` deriving `developedLength`,
+  `projectedDepth`, `kerfCount`, `curvedEdge`
+
+#### Phase 1 — CutListRow enrichment
+- `CutListRow` extended with `developedLength?`, `projectedDepth?`, `kerfCount?`,
+  `curvedEdge?`
+- `PacketCutList` builder updated to compute and carry curve fields per row
+
+#### Phase 2 — Nesting optimizer flat-blank correction
+- FFDH optimizer bins curved panels by flat-blank size (`cutH + correction` for
+  `TOP/BOTTOM` curved edge) instead of finish size
+- `isCurved` and `kerfCount` propagated from CutListRow through NestingSheet
+  placements
+
+#### Phase 3 — DXF layer definitions
+- `PARTS_CURVED` layer (ACI color 1, red) for curved panel bounding rectangles
+- `HATCH_CURVED` layer (ACI color 4, cyan) for diagonal cross-hatch lines
+
+#### Phase 4 — DXF ENTITIES rendering
+- `buildDxfSheets.ts` renders curved placements on `PARTS_CURVED` (not `PARTS`)
+- Two diagonal lines emitted per curved placement on `HATCH_CURVED`
+- `addLine()` rounds all coordinates via `Math.round(v × 100) / 100`
+
+#### Phase 5 — Curved sub-label
+- `(CURVED / N cuts)` TEXT entity on LABELS layer at height 5
+- Position: `labelX = placement.x + w/2 − 20` (centre X minus 20 mm text indent)
+- `addText()` stores X/Y coords as-is (no rounding)
+
+#### Phase 6 — S_CURVE support
+- `S_CURVE` profile type with dual-radius geometry (`r1`, `sweepDeg1`, `r2`, `sweepDeg2`)
+- `computeCurveFields()` handles S_CURVE with summed arc lengths
+
+#### Phase 7 — TALL_ARC (grain-locked) support
+- TALL_ARC: `grain='HORIZONTAL'` locks rotation, flat-blank remains portrait
+- All three panel types (ARC, S_CURVE, TALL_ARC) verified across all smoke stages
+
+#### Smoke Stages 1–6 — pipeline wiring
+- Stage 1: `computeCurveFields()` returns correct `developedLength`, `kerfCount`,
+  `projectedDepth`, `curvedEdge` for ARC and S_CURVE panels
+- Stage 2: `CutListRow` carries all curve fields from `computeCurveFields()`
+- Stage 3: `runNesting()` propagates `isCurved=true` and correct `kerfCount`
+  through NestingSheet placements; flat-blank `cutH` exceeds `finishH`
+- Stage 4: `buildDxfSheet()` renders `PARTS_CURVED`, `HATCH_CURVED`,
+  `(CURVED / N cuts)` sub-label, and part label in the DXF
+- Stage 5: `DxfSheetOutput.bytes` is a valid UTF-8 `Uint8Array`; round-trips
+  to the same string as `content`
+- Stage 6 (S_CURVE): HATCH_CURVED X-lines span the full flat-blank footprint
+
+#### Smoke Stages 7–13 — HATCH_CURVED count invariants
+- Verified: `HATCH_CURVED = 2 × curved_count`, `PARTS_CURVED = 4 × curved_count`,
+  `PARTS = 4 × straight_count` for mixed sheets of 0–3 curved/straight panels
+
+#### Smoke Stages 14–21 — geometric coordinate invariants
+- Stage 14: HATCH_CURVED lines confined within flat-blank bbox
+- Stage 15: diagonal length = `sqrt(effectiveW² + effectiveH²)` > finish diagonal
+- Stage 16: flat-blank diagonal > shorter finish side
+- Stage 17: HATCH_CURVED lines spatially partitioned between ARC and S_CURVE
+  placements on the same sheet (no cross-contamination)
+- Stage 18: diagonal-2 length equals endpoint-derived bbox diagonal
+- Stage 19: diagonal-1 and diagonal-2 intersect at placement bbox centre
+- Stage 20: `dot(d1,d2) ≈ 0` iff `effectiveW = effectiveH` (square bbox)
+- Stage 21: `dot(d1,d2) < 0` when `effectiveW > effectiveH`;
+  `dot(d1,d2) > 0` when `effectiveW < effectiveH` (TALL_ARC grain-locked)
+
+#### Smoke Stages 22–28 — endpoint precision and structural integrity
+- Stage 22: all 4 HATCH_CURVED endpoints rounded to 0.01 mm
+- Stage 23: rounded endpoints lie within flat-blank bbox (ε = 0.01 mm)
+- Stage 24: each diagonal is non-degenerate (`|x1−x2| + |y1−y2| > 1e-6`)
+- Stage 25: `midpoint(d1) = midpoint(d2)` (±0.05 mm)
+- Stage 26: shared midpoint = bbox centre (±0.05 mm)
+- Stage 27: `diagLen(d1) ≈ diagLen(d2)` (±0.05 mm)
+- Stage 28A: `diagLen ≈ sqrt(effectiveW² + effectiveH²)` (±0.05 mm)
+- Stage 28B: 4 endpoints form two distinct corner pairs (`Set.size === 4`)
+
+#### Smoke Stages 29–38 — corner-direction full synthesis
+- Stage 29: endpoints match exactly the Set of 4 rounded bbox corners
+- Stage 30: `d1: (minX,minY)→(maxX,maxY)`; `d2: (maxX,minY)→(minX,maxY)`
+- Stage 31: `d1.y1 ≈ d2.y1 ≈ r(minY)` — shared bottom Y (ε < 0.015 mm)
+- Stage 32: `d1.y2 ≈ d2.y2 ≈ r(maxY)` — shared top Y (ε < 0.015 mm)
+- Stage 33: orientation sense — `d1.x1 < d1.x2`; `d2.x1 > d2.x2` (strict)
+- Stage 34: Y-axis monotonicity — both diagonals ascend in Y (strict)
+- Stage 35: `d1.x2 ≈ r(maxX)`; `d2.x2 ≈ r(minX)` — end-X pinning (ε < 0.015 mm)
+- Stage 36: `d1.x1 ≈ r(minX)`; `d2.x1 ≈ r(maxX)` — start-X pinning (ε < 0.015 mm)
+- Stage 37: d1 all-four-coordinate synthesis (12 `it()` blocks; ε < 0.015 mm)
+- Stage 38: d2 all-four-coordinate synthesis (12 `it()` blocks; ε < 0.015 mm)
+
+#### Smoke Stages 39–42 — layer-color and label invariants
+- Stage 39: DXF TABLES layer colors — `HATCH_CURVED = ACI 4`; `PARTS_CURVED = ACI 1`
+- Stage 40: `(CURVED / N cuts)` label N = actual `kerfCount` from `computeCurveFields()`
+- Stage 41: `(CURVED / N cuts)` TEXT height (group code 40) = exactly **5**
+- Stage 42: `(CURVED / N cuts)` TEXT X (group code 10) = `placement.x + w/2 − 20`
+  (ε < 0.015 mm)
+
+### Changed
+- JSDoc invariant tables in `curvedPanelDxfPipeline.smoke.test.ts` and
+  `buildDxfSheets.ts` updated to cover Stages 22–42.
+
+### Test Coverage
+- **274 smoke tests** — 274 passing (0 failing)
+- Smoke suite covers all three panel types (ARC, S_CURVE, TALL_ARC) across every
+  invariant category: pipeline wiring, count invariants, geometric coordinates,
+  precision rounding, structural integrity, corner synthesis, layer colors, and
+  label text/height/position.
+
+---
+
 ## [2.9.0] - 2026-08-27
 
 ### Added

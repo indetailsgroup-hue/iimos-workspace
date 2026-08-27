@@ -260,7 +260,7 @@ class DxfBuilder {
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * Precision, Structural Integrity, and Label Invariants  (Stages 22 – 40)
+ * Precision, Structural Integrity, and Label Invariants  (Stages 22 – 42)
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Endpoint rounding (Stage 22): addLine() applies Math.round(v × 100) / 100
@@ -322,9 +322,19 @@ class DxfBuilder {
  *       |                          |   actual kerfCount from curveFieldsComputer. Verified by
  *       |                          |   parsing TEXT entities (group code 1) for each panel type.
  *       |                          |   3 it() blocks (one per panel type).
+ *    41 | ARC + S_CURVE + TALL_ARC | '(CURVED / N cuts)' TEXT entity height (DXF group code 40)
+ *       |                          |   is exactly 5 for all three panel types. Emitted by
+ *       |                          |   addText(labelX, labelY−40, curveLbl, 5, 'LABELS').
+ *       |                          |   3 it() blocks (one per panel type).
+ *    42 | ARC + S_CURVE + TALL_ARC | '(CURVED / N cuts)' TEXT X position (DXF group code 10)
+ *       |                          |   equals placement.x + w/2 − 20, where
+ *       |                          |   w = isRotated ? cutH : cutW (flat-blank effective width).
+ *       |                          |   Anchored at bbox centre X minus 20 mm text indent.
+ *       |                          |   addText() stores coords as-is (no rounding); ε < 0.015 mm.
+ *       |                          |   3 it() blocks (one per panel type).
  *
  * All invariants are verified end-to-end in:
- *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 40)
+ *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 42)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 const NESTING_LAYERS = [

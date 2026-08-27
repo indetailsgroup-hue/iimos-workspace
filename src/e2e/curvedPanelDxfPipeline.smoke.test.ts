@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 40: precision, structural integrity, and label invariants
+ * Stages 22 – 42: precision, structural integrity, and label invariants
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -113,6 +113,14 @@
  *    40 | ARC + S_CURVE + TALL_ARC | '(CURVED / N cuts)' TEXT entity on LABELS layer: N equals
  *       |                          |   actual kerfCount from curveFieldsComputer for that panel;
  *       |                          |   one it() per panel type (3 it() blocks total).
+ *    41 | ARC + S_CURVE + TALL_ARC | '(CURVED / N cuts)' TEXT entity height (DXF group code 40)
+ *       |                          |   is exactly 5 for all three panel types;
+ *       |                          |   one it() per panel type (3 it() blocks total).
+ *    42 | ARC + S_CURVE + TALL_ARC | '(CURVED / N cuts)' TEXT X position (DXF group code 10)
+ *       |                          |   equals placement.x + w/2 − 20 where
+ *       |                          |   w = isRotated ? cutH : cutW (flat-blank width);
+ *       |                          |   "anchored at bbox centre X minus 20 mm text indent";
+ *       |                          |   ε < 0.015 mm; one it() per panel type (3 it() blocks).
  *
  * ─────────────────────────────────────────────────────────────────────────────
  *
@@ -5582,5 +5590,236 @@ describe('@smoke Stage 40 — (CURVED / N cuts) label matches kerfCount', () => 
     const counts = parseCurvedLabelCounts(output.content);
     expect(counts).toHaveLength(1);
     expect(counts[0]).toBe(kerfCount);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 41 — LABELS TEXT height is exactly 5 for the curved sub-label
+//
+// Asserts that each '(CURVED / N cuts)' TEXT entity on the LABELS layer has
+// DXF group code 40 (text height) set to exactly 5 for all three panel types.
+//
+// buildDxfSheets emits: builder.addText(labelX, labelY - 40, curveLbl, 5, 'LABELS')
+// The 4th argument (5) is stored as group code 40 in the TEXT entity.
+//
+// One it() per panel type: ARC, S_CURVE, TALL_ARC (3 it() blocks total).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('@smoke Stage 41 — curved sub-label TEXT height is exactly 5', () => {
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+
+  /**
+   * Extract text-height values (DXF group code 40) from all '(CURVED / N cuts)'
+   * TEXT entities on the LABELS layer.
+   * Returns an array of floats in order of appearance.
+   */
+  function parseCurvedLabelHeights(content: string): number[] {
+    const heights: number[] = [];
+    const segs = content.split('\n0\nTEXT\n').slice(1);
+    for (const seg of segs) {
+      if (!seg.includes('8\nLABELS\n')) continue;
+      const textM = seg.match(/\n1\n\(CURVED \/ \d+ cuts\)/);
+      if (!textM) continue;
+      const heightM = seg.match(/\n40\n([^\n]+)/);
+      if (heightM) heights.push(parseFloat(heightM[1]));
+    }
+    return heights;
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  // ── ARC ───────────────────────────────────────────────────────────────────
+
+  it('ARC — curved sub-label TEXT height is exactly 5', () => {
+    const { row: arcRow } = buildCurvedRow();
+    const { sheets } = runNesting([arcRow]);
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_ARC', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const heights = parseCurvedLabelHeights(output.content);
+    expect(heights).toHaveLength(1);
+    expect(heights[0]).toBe(5);
+  });
+
+  // ── S_CURVE ───────────────────────────────────────────────────────────────
+
+  it('S_CURVE — curved sub-label TEXT height is exactly 5', () => {
+    const { row: sCurveRow } = buildSCurveRow();
+    const { sheets } = runNesting([sCurveRow]);
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_SCURVE', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const heights = parseCurvedLabelHeights(output.content);
+    expect(heights).toHaveLength(1);
+    expect(heights[0]).toBe(5);
+  });
+
+  // ── TALL_ARC ──────────────────────────────────────────────────────────────
+
+  it('TALL_ARC — curved sub-label TEXT height is exactly 5', () => {
+    const { row: tallArcRow } = buildTallArcRow();
+    const { sheets } = runNesting([tallArcRow]);
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_TALLARC', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const heights = parseCurvedLabelHeights(output.content);
+    expect(heights).toHaveLength(1);
+    expect(heights[0]).toBe(5);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 42 — curved sub-label X anchored at flat-blank placement centre X − 20 mm
+//
+// Asserts that the X coordinate (DXF group code 10) of each '(CURVED / N cuts)'
+// TEXT entity equals:
+//
+//   labelX = placement.x + w / 2 − 20
+//
+// where  w = (rotation===90||270) ? placement.cutH : placement.cutW
+//        (mirrors the private getRotatedDimensions logic in buildDxfSheets.ts)
+//
+// Note: addText() stores coords as-is (no rounding), so we compare floating-point
+// values with a tight tolerance of ε < 0.015 mm.
+//
+// One it() per panel type: ARC, S_CURVE, TALL_ARC (3 it() blocks total).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('@smoke Stage 42 — curved sub-label X = placement.x + w/2 − 20 (ε < 0.015 mm)', () => {
+
+  const EPS = 0.015;
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+
+  /**
+   * Extract X-position values (DXF group code 10) of all '(CURVED / N cuts)'
+   * TEXT entities on the LABELS layer.
+   * Returns an array of floats in order of appearance.
+   */
+  function parseCurvedLabelXPositions(content: string): number[] {
+    const xPositions: number[] = [];
+    const segs = content.split('\n0\nTEXT\n').slice(1);
+    for (const seg of segs) {
+      if (!seg.includes('8\nLABELS\n')) continue;
+      const textM = seg.match(/\n1\n\(CURVED \/ \d+ cuts\)/);
+      if (!textM) continue;
+      // Group code 10 = X position; it is the first numeric group after the layer code
+      const xM = seg.match(/\n10\n([^\n]+)/);
+      if (xM) xPositions.push(parseFloat(xM[1]));
+    }
+    return xPositions;
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  // ── ARC ───────────────────────────────────────────────────────────────────
+
+  it('ARC — curved sub-label X equals placement.x + flatBlankW/2 − 20 (ε < 0.015 mm)', () => {
+    const { row: arcRow } = buildCurvedRow();
+    const { sheets } = runNesting([arcRow]);
+    const p = sheets[0].placements[0];
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const w = isRotated ? p.cutH : p.cutW;
+    const expectedX = p.x + w / 2 - 20;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_ARC', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const xPositions = parseCurvedLabelXPositions(output.content);
+    expect(xPositions).toHaveLength(1);
+    expect(Math.abs(xPositions[0] - expectedX)).toBeLessThan(EPS);
+  });
+
+  // ── S_CURVE ───────────────────────────────────────────────────────────────
+
+  it('S_CURVE — curved sub-label X equals placement.x + flatBlankW/2 − 20 (ε < 0.015 mm)', () => {
+    const { row: sCurveRow } = buildSCurveRow();
+    const { sheets } = runNesting([sCurveRow]);
+    const p = sheets[0].placements[0];
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const w = isRotated ? p.cutH : p.cutW;
+    const expectedX = p.x + w / 2 - 20;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_SCURVE', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const xPositions = parseCurvedLabelXPositions(output.content);
+    expect(xPositions).toHaveLength(1);
+    expect(Math.abs(xPositions[0] - expectedX)).toBeLessThan(EPS);
+  });
+
+  // ── TALL_ARC ──────────────────────────────────────────────────────────────
+
+  it('TALL_ARC — curved sub-label X equals placement.x + flatBlankW/2 − 20 (ε < 0.015 mm)', () => {
+    const { row: tallArcRow } = buildTallArcRow();
+    const { sheets } = runNesting([tallArcRow]);
+    const p = sheets[0].placements[0];
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const w = isRotated ? p.cutH : p.cutW;
+    const expectedX = p.x + w / 2 - 20;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_TALLARC', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const xPositions = parseCurvedLabelXPositions(output.content);
+    expect(xPositions).toHaveLength(1);
+    expect(Math.abs(xPositions[0] - expectedX)).toBeLessThan(EPS);
   });
 });
