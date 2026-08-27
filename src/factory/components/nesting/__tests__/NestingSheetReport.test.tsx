@@ -240,3 +240,59 @@ describe('NestingSheetReport — Multi-Material Grouping', () => {
     expect(screen.queryByText(/วัสดุ/)).toBeNull();
   });
 });
+
+// ─── Heatmap Overlay Tests ────────────────────────────────────────────────────
+
+describe('NestingSheetReport — Heatmap Overlay', () => {
+  afterEach(() => cleanup());
+
+  const SHEET_HIGH_UTIL: NestingSheet = {
+    index1: 1, label: 'NEST_01', materialId: 'PB_WHITE_18',
+    sheetW: 1220, sheetH: 2440, sheetThickness: 18,
+    placements: [{ partId: 'A1', x: 10, y: 10, rotation: 0, cutW: 600, cutH: 800 }],
+    utilization: 92,
+  };
+  const SHEET_LOW_UTIL: NestingSheet = {
+    index1: 2, label: 'NEST_02', materialId: 'PB_WHITE_18',
+    sheetW: 1220, sheetH: 2440, sheetThickness: 18,
+    placements: [{ partId: 'B1', x: 10, y: 10, rotation: 0, cutW: 600, cutH: 800 }],
+    utilization: 25,
+  };
+
+  it('renders heatmap toggle button', () => {
+    render(<NestingSheetReport sheets={[SHEET_HIGH_UTIL]} />);
+    expect(screen.getByTestId('heatmap-toggle')).toBeTruthy();
+  });
+
+  it('no heatmap overlay visible by default', () => {
+    render(<NestingSheetReport sheets={[SHEET_HIGH_UTIL]} />);
+    expect(screen.queryByTestId('heatmap-overlay-1')).toBeNull();
+  });
+
+  it('clicking heatmap toggle shows overlay on all sheets', () => {
+    render(<NestingSheetReport sheets={[SHEET_HIGH_UTIL, SHEET_LOW_UTIL]} />);
+
+    fireEvent.click(screen.getByTestId('heatmap-toggle'));
+
+    expect(screen.getByTestId('heatmap-overlay-1')).toBeTruthy();
+    expect(screen.getByTestId('heatmap-overlay-2')).toBeTruthy();
+  });
+
+  it('heatmap overlay shows utilization percentage', () => {
+    render(<NestingSheetReport sheets={[SHEET_HIGH_UTIL]} />);
+    fireEvent.click(screen.getByTestId('heatmap-toggle'));
+
+    expect(screen.getByTestId('heatmap-percent-1').textContent).toContain('92');
+  });
+
+  it('toggling heatmap off hides overlay', () => {
+    render(<NestingSheetReport sheets={[SHEET_HIGH_UTIL]} />);
+
+    const toggle = screen.getByTestId('heatmap-toggle');
+    fireEvent.click(toggle); // on
+    expect(screen.getByTestId('heatmap-overlay-1')).toBeTruthy();
+
+    fireEvent.click(toggle); // off
+    expect(screen.queryByTestId('heatmap-overlay-1')).toBeNull();
+  });
+});

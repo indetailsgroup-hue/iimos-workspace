@@ -14,7 +14,7 @@
  * @module NestingSheetReport
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import type { NestingSheet } from '../../../core/export/monolith/monolithExportContext';
 
 // ============================================
@@ -28,6 +28,31 @@ const MARGIN = 8;
 // ============================================
 // SUB-COMPONENTS
 // ============================================
+
+// ─── Heatmap color utility ────────────────────────────────────────────────────
+
+/**
+ * Returns an RGBA color representing waste level.
+ * utilization 100% → green (good), 0% → red (bad).
+ * Interpolation: green(100%) → yellow(~60%) → red(0%)
+ */
+function getHeatmapColor(utilization: number): string {
+  const t = Math.max(0, Math.min(100, utilization)) / 100; // 0..1
+  // Red → Yellow → Green
+  const r = t < 0.5 ? 255 : Math.round(255 * (1 - t) * 2);
+  const g = t > 0.5 ? 255 : Math.round(255 * t * 2);
+  return `rgba(${r}, ${g}, 40, 0.25)`;
+}
+
+/**
+ * Returns a border/stroke color for the heatmap overlay (more opaque version).
+ */
+function getHeatmapBorderColor(utilization: number): string {
+  const t = Math.max(0, Math.min(100, utilization)) / 100;
+  const r = t < 0.5 ? 255 : Math.round(255 * (1 - t) * 2);
+  const g = t > 0.5 ? 255 : Math.round(255 * t * 2);
+  return `rgb(${r}, ${g}, 40)`;
+}
 
 interface HatchPatternProps {
   id: string;
@@ -52,8 +77,9 @@ function HatchPattern({ id }: HatchPatternProps) {
 
 interface SheetSvgProps {
   sheet: NestingSheet;
+  heatmapMode?: boolean;
 }
-function SheetSvg({ sheet }: SheetSvgProps) {
+function SheetSvg({ sheet, heatmapMode }: SheetSvgProps) {
   const { sheetW, sheetH, placements } = sheet;
 
   const scaleX = (SVG_W - 2 * MARGIN) / Math.max(sheetW, 1);
@@ -146,6 +172,36 @@ function SheetSvg({ sheet }: SheetSvgProps) {
           </g>
         );
       })}
+
+      {/* Heatmap overlay: full-sheet tint based on utilization */}
+      {heatmapMode && (
+        <rect
+          x={MARGIN}
+          y={MARGIN}
+          width={sheetW * scale}
+          height={sheetH * scale}
+          fill={getHeatmapColor(sheet.utilization)}
+          stroke={getHeatmapBorderColor(sheet.utilization)}
+          strokeWidth={2}
+          data-testid={`heatmap-overlay-${sheet.index1}`}
+          style={{ pointerEvents: 'none' }}
+        />
+      )}
+
+      {/* Heatmap legend badge */}
+      {heatmapMode && (
+        <text
+          x={SVG_W - MARGIN - 2}
+          y={SVG_H - 6}
+          textAnchor="end"
+          fontSize={9}
+          fontWeight="bold"
+          fill={getHeatmapBorderColor(sheet.utilization)}
+          data-testid={`heatmap-percent-${sheet.index1}`}
+        >
+          {sheet.utilization.toFixed(0)}% util
+        </text>
+      )}
     </svg>
   );
 }
@@ -237,6 +293,7 @@ function groupByMaterial(sheets: NestingSheet[]): MaterialGroup[] {
 
 export function NestingSheetReport({ sheets, jobId }: NestingSheetReportProps) {
   const handlePrint = () => window.print();
+  const [heatmapMode, setHeatmapMode] = useState(false);
 
   // ── Empty state ────────────────────────────────────────────────
   if (sheets.length === 0) {
@@ -276,8 +333,19 @@ export function NestingSheetReport({ sheets, jobId }: NestingSheetReportProps) {
           {isMultiMaterial && ` · ${groups.length} วัสดุ`}
         </span>
         <button
+          onClick={() => setHeatmapMode((v) => !v)}
+          className={`ml-auto px-3 py-1.5 rounded-lg text-[11px] font-medium transition-colors ${
+            heatmapMode
+              ? 'bg-amber-600 hover:bg-amber-500 text-white'
+              : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+          }`}
+          data-testid="heatmap-toggle"
+        >
+          🌡 Heatmap
+        </button>
+        <button
           onClick={handlePrint}
-          className="ml-auto px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-[11px] font-medium transition-colors"
+          className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-[11px] font-medium transition-colors"
           data-testid="print-button"
         >
           พิมพ์ / Print
@@ -354,7 +422,7 @@ export function NestingSheetReport({ sheets, jobId }: NestingSheetReportProps) {
                 {group.sheets.map((sheet) => (
                   <div key={sheet.index1} className="sheet-block">
                     <SheetHeader sheet={sheet} />
-                    <SheetSvg sheet={sheet} />
+                    <SheetSvg sheet={sheet} heatmapMode={heatmapMode} />
                   </div>
                 ))}
               </div>

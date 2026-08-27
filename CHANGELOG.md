@@ -4,6 +4,17 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [13.4.0] – 2026-08-27
+
+### Added
+- **E2E Export Flow test** (`JobDetail.exportFlow.test.tsx`): 6 tests covering full export flow — XLSX download triggers blob, Nesting Report toggle opens panel, PDF export calls pipeline, DXF batch calls ZIP export, loading states, gate-blocked scenario
+- **Utilization Heatmap overlay** in `NestingSheetReport`: Toggle button activates color-coded overlay (green=high util → red=low util) with utilization % badge; 5 new tests
+- **Drag-and-drop placement editing** in `DxfPreviewPanel`: Operators can reposition curved panels by dragging; emits `onPlacementsChanged` callback with updated coordinates; Reset button clears all overrides; "✱ Modified" indicator; clamped to sheet bounds; 4 new tests
+
+### Changed
+- `NestingSheetReport.tsx`: Added `useState` for heatmap toggle, `getHeatmapColor()`/`getHeatmapBorderColor()` utilities, heatmap overlay rect + percent badge in SheetSvg
+- `DxfPreviewPanel.tsx`: Rewritten with drag-and-drop support — `DragState` tracking, `onMouseDown/Move/Up` handlers, placement overrides in `Map`, Reset button, modified indicator, sheet-bound clamping
+
 ## [13.3.0] – 2026-08-27
 
 ### Added

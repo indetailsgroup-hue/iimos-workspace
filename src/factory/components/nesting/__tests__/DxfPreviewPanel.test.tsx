@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { DxfPreviewPanel } from '../DxfPreviewPanel';
 import type { NestingSheet } from '../../../../core/export/monolith/monolithExportContext';
@@ -135,5 +135,62 @@ describe('DxfPreviewPanel', () => {
   it('displays sheet count in header', () => {
     render(<DxfPreviewPanel sheets={[SHEET_WITH_CURVES, SHEET_NO_CURVES, SHEET_WITH_CURVES_2]} />);
     expect(screen.getByText(/2 sheet\(s\) with curves/)).toBeTruthy();
+  });
+
+  // ── Drag-and-Drop Tests ────────────────────────────────────────────────────
+
+  it('curved panels have cursor grab style (draggable indicator)', () => {
+    render(<DxfPreviewPanel sheets={[SHEET_WITH_CURVES]} />);
+    const curvedEl = screen.getByTestId('dxf-curved-CURVE_A');
+    expect(curvedEl.getAttribute('style')).toContain('grab');
+  });
+
+  it('shows Reset button after drag event triggers onPlacementsChanged', () => {
+    const onChanged = vi.fn();
+    render(<DxfPreviewPanel sheets={[SHEET_WITH_CURVES]} onPlacementsChanged={onChanged} />);
+
+    const svg = screen.getByTestId('dxf-preview-1');
+    const curvedEl = screen.getByTestId('dxf-curved-CURVE_A');
+
+    // Simulate drag: mousedown → mousemove → mouseup
+    fireEvent.mouseDown(curvedEl, { clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(svg, { clientX: 120, clientY: 110 });
+    fireEvent.mouseUp(svg);
+
+    // Reset button should appear
+    expect(screen.getByTestId('dxf-reset-button')).toBeTruthy();
+    // Modified indicator should show
+    expect(screen.getByTestId('dxf-modified-indicator')).toBeTruthy();
+    // Callback should have been called
+    expect(onChanged).toHaveBeenCalledTimes(1);
+    expect(onChanged.mock.calls[0][0]).toBe(1); // sheet index1
+    expect(onChanged.mock.calls[0][1]).toBeInstanceOf(Array);
+    expect(onChanged.mock.calls[0][1][0].partId).toBe('CURVE_A');
+  });
+
+  it('Reset button clears all overrides', () => {
+    render(<DxfPreviewPanel sheets={[SHEET_WITH_CURVES]} />);
+
+    const svg = screen.getByTestId('dxf-preview-1');
+    const curvedEl = screen.getByTestId('dxf-curved-CURVE_A');
+
+    // Create an override
+    fireEvent.mouseDown(curvedEl, { clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(svg, { clientX: 130, clientY: 100 });
+    fireEvent.mouseUp(svg);
+
+    expect(screen.getByTestId('dxf-reset-button')).toBeTruthy();
+
+    // Click reset
+    fireEvent.click(screen.getByTestId('dxf-reset-button'));
+
+    // Reset button should disappear
+    expect(screen.queryByTestId('dxf-reset-button')).toBeNull();
+    expect(screen.queryByTestId('dxf-modified-indicator')).toBeNull();
+  });
+
+  it('shows drag instructions text', () => {
+    render(<DxfPreviewPanel sheets={[SHEET_WITH_CURVES]} />);
+    expect(screen.getByText(/drag to reposition/)).toBeTruthy();
   });
 });
