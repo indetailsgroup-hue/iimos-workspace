@@ -7,6 +7,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [8.0.0] – 2026-08-27
+
+### Major Release — kerfCount Null-Guard Completion + Multi-Panel Scale Testing Series (Stages 82–83)
+
+This major release closes the last remaining falsy-value gap in the kerfCount
+guard series by asserting `kerfCount=null` behaviour, then opens a new milestone
+series: multi-panel scale validation, verifying that the nesting optimizer and
+DXF builder correctly handle double-digit curved-panel counts on a single sheet.
+
+#### Stage 82 – kerfCount=null Guard Completion
+
+`null` is the final untested falsy kerfCount value in JavaScript.
+The guard expression `(row.kerfCount === undefined || row.kerfCount > 0)` evaluates
+`null === undefined` → `false` and `null > 0` → `false` (null coerces to 0 at runtime),
+so the combined result is `false || false = false`, firing the guard and producing
+`isCurved=false` and zero HATCH_CURVED lines — identical to `kc=0`, `NaN`, and `-1`.
+
+Stage 82 locks this in with a fixture (`cutW=400, cutH=800, developedLength=250,
+projectedDepth=200, curvedEdge='TOP', kerfCount=null`) and asserts:
+- `placement.isCurved` is falsy
+- HATCH_CURVED LINE count in the DXF output is 0
+
+#### Complete kerfCount Falsy-Value Guard Series
+
+| kerfCount | JS comparison | Guard result | isCurved |
+|-----------|--------------|--------------|----------|
+| `0` | `0 === undefined` = false; `0 > 0` = false | fails | false |
+| `NaN` | `NaN === undefined` = false; `NaN > 0` = false | fails | false |
+| `-1` | `-1 === undefined` = false; `-1 > 0` = false | fails | false |
+| `null` | `null === undefined` = false; `null > 0` = false | fails | false |
+| `undefined` | `undefined === undefined` = true | passes | follows correction |
+| positive int | `kc > 0` = true | passes | follows correction |
+| `Infinity` | `Infinity > 0` = true | passes | follows correction |
+
+#### Stage 83 – Multi-Panel Scale: 10 Curved Panels, PARTS_CURVED=40
+
+Verifies that the FFDH optimizer correctly bins 10 identical curved panels onto a
+single 1220×2440 mm sheet and that `buildDxfSheets` emits exactly 40 `PARTS_CURVED`
+LINE entities (10 panels × 4 edges each), with all ten per-panel bounding rectangles
+mutually non-overlapping (all C(10,2)=45 pairs checked).
+
+Fixture: `cutW=100, cutH=100, developedLength=110, projectedDepth=100, curvedEdge='TOP',
+qty=10, kerfCount=undefined`. FFDH analysis:
+- `flatBlankW=100, flatBlankH=110`; `grainDirection='NONE'` → free rotation
+- Orientation chosen by FFDH: h=100, w=110 (rotation=90, smaller h wins new-shelf)
+- Shelf-1 at y=10: 10 panels × 113.5 mm each → 1131.5 mm ≤ usableW=1200 mm
+- Total height used: 110 mm ≪ 2440 mm → confirmed single-sheet placement
+
+#### Updated kerfCount Guard Truth Table (complete through Stage 82)
+
+| Stage | kerfCount value | correction | isCurved | DXF result |
+|-------|----------------|------------|----------|------------|
+| 72 | `0` (explicit) | `> 0` | `false` | 0 HATCH_CURVED |
+| 73 | `1 / 5 / 12` | `> 0` | `true` | sub-labels independent |
+| 74 | `0` (explicit) | `> 0` | `false` | PARTS_CURVED=0, PARTS=4 |
+| 75 | `undefined` | `> 0` | `true` | 2 HATCH_CURVED |
+| 76 | `undefined` | `= 0` | `false` | 0 HATCH_CURVED |
+| 77 | `0` vs `undefined` | `> 0` | `false` / `true` | mixed-sheet isolation |
+| 78 | `0`, `undef+0`, `undef+>0` | mixed | mixed | PARTS=8, PARTS_CURVED=4, HATCH_CURVED=2 |
+| 79 | `NaN` | `> 0` | `false` | 0 HATCH_CURVED (NaN > 0 = false) |
+| 80 | `Infinity` | `> 0` | `true` | 2 HATCH_CURVED (Infinity > 0 = true) |
+| 81 | `-1` | `> 0` | `false` | 0 HATCH_CURVED (−1 > 0 = false) |
+| 82 | `null` | `> 0` | `false` | 0 HATCH_CURVED (null > 0 = false) |
+
+#### Multi-Panel Scale Series
+
+| Stage | Panels | Assertion |
+|-------|--------|-----------|
+| 83 | qty=10 curved (single row) | PARTS_CURVED=40; all 10 bboxes non-overlapping |
+
+### Added
+- **Stage 82** (`@smoke`): `kerfCount=null` guard — null coerces to 0 at runtime, fails both arms of the guard expression, produces `isCurved=false` and 0 HATCH_CURVED lines (closing the full JS falsy-value series).
+- **Stage 83** (`@smoke`): Ten curved panels on one sheet — `PARTS_CURVED LINE count=40`, all C(10,2)=45 bounding-box pairs mutually non-overlapping; opens the multi-panel scale testing series.
+
+### Changed
+- `buildDxfSheets.ts` — JSDoc reference updated to `(Stages 7 – 83)`.
+- Smoke test module-scope JSDoc updated to `Stages 22 – 83`.
+
+---
+
 ## [7.0.0] – 2026-08-27
 
 ### Major Release — kerfCount-Invariance Milestone (Stages 72–81)

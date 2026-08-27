@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 81: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN kerfCount boundary, Infinity kerfCount passthrough, and negative kerfCount exclusion
+ * Stages 22 – 83: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, and multi-panel scale validation
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -283,6 +283,16 @@
  *       |                          |   isCurved=false; 0 HATCH_CURVED lines;
  *       |                          |   identical behaviour to kc=0 and NaN;
  *       |                          |   1 it() block.
+ *    82 | kerfCount=null           | null === undefined → false;
+ *       |                          |   null > 0 → false (null coerces to 0);
+ *       |                          |   guard = (false || false) = false;
+ *       |                          |   isCurved=false; 0 HATCH_CURVED lines;
+ *       |                          |   identical behaviour to kc=0, NaN, -1;
+ *       |                          |   1 it() block.
+ *    83 | qty=10 curved panels     | all 10 fit on one sheet (FFDH shelf-1);
+ *       |                          |   PARTS_CURVED LINE count=40;
+ *       |                          |   rects.length=10; all C(10,2)=45 pairs
+ *       |                          |   mutually non-overlapping; 1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -9879,6 +9889,234 @@ describe(
 
         // Zero HATCH_CURVED lines — kerfCount=-1 suppresses isCurved
         expect(countHATCHCURVEDLines81(output81.content)).toBe(0);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 82 – kerfCount=null is falsy, and:
+//              null === undefined  → false   (strict equality)
+//              null > 0           → false   (null coerces to 0; 0 > 0 = false)
+//            Guard expression:
+//              (row.kerfCount === undefined || row.kerfCount > 0)
+//              = (false || false)   ← both arms fail
+//              = false → isCurved=false → zero HATCH_CURVED lines.
+//
+//            Behaviour is identical to kerfCount=0, NaN, and -1.
+//            null is cast via `null as unknown as number` to satisfy the
+//            TypeScript `kerfCount?: number` type at compile time; the runtime
+//            coercion under test is real and matches production guard logic.
+//
+// Fixture: cutW=400, cutH=800, developedLength=250, projectedDepth=200,
+//   curvedEdge='TOP', kerfCount=null → correction=50 > 0 but guard fires.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 82 – kerfCount=null (falsy, fails guard): isCurved=false and zero HATCH_CURVED lines',
+  () => {
+    function countHATCHCURVEDLines82(content: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(seg => seg.startsWith('8\nHATCH_CURVED\n'))
+        .length;
+    }
+
+    it(
+      'kerfCount=null with correction=50 > 0 → guard fires (null > 0 = false) → isCurved=false → 0 HATCH_CURVED lines',
+      () => {
+        const stage82Row: CutListRow = {
+          partId:          'SMOKE_KCNULL_S82',
+          cabinetId:       'CAB_SMOKE_82',
+          materialId:      MATERIAL_ID,
+          finishW:         400,
+          finishH:         800,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            400,
+          cutH:            800,
+          qty:             1,
+          developedLength: 250,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          // null is not a valid number in TypeScript but is a realistic runtime
+          // coercion; cast to satisfy kerfCount?: number at compile time.
+          kerfCount:       null as unknown as number,
+          label:           'KC Null Panel',
+        };
+
+        const result82 = runNesting([stage82Row]);
+        expect(result82.sheets).toHaveLength(1);
+
+        const sheet82 = result82.sheets[0];
+        expect(sheet82.placements).toHaveLength(1);
+
+        // isCurved must be false — null fails both arms of the guard
+        const placement82 = sheet82.placements[0];
+        expect(placement82.isCurved).toBeFalsy();
+
+        const output82 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE82', materialId: MATERIAL_ID },
+          nesting: sheet82,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        // Zero HATCH_CURVED lines — kerfCount=null suppresses isCurved
+        expect(countHATCHCURVEDLines82(output82.content)).toBe(0);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 83 – Ten curved panels on one sheet: PARTS_CURVED count=40,
+//            all ten per-panel bboxes mutually non-overlapping.
+//
+// Fixture design (single row, qty=10):
+//   cutW=100, cutH=100, developedLength=110, projectedDepth=100,
+//   curvedEdge='TOP', kerfCount=undefined → correction=10 > 0 → isCurved=true.
+//   flatBlankW=100, flatBlankH=110.
+//   grainDirection='NONE' (no grain field) → FFDH may rotate freely.
+//
+// FFDH packing analysis (sheet=1220×2440, kerf=3.5, edge=10):
+//   usableW=1200, usableH=2420.
+//   Orientation options: {w:100,h:110} and {w:110,h:100}.
+//   New-shelf: picks smaller h → h=100, w=110 (rotation=90).
+//   Shelf-1 y=10, height=100:
+//     p1  x=10      p2  x=123.5   p3  x=237     p4  x=350.5   p5  x=464
+//     p6  x=577.5   p7  x=691     p8  x=804.5   p9  x=918     p10 x=1031.5
+//   Each takes 110 mm + 3.5 mm kerf → 10 panels consume 1131.5 mm < 1200 mm ✓
+//   Total height: 10 + 100 = 110 mm ≪ 2440 mm → all 10 on one sheet ✓
+//
+// Rotation=90 in placement → getRotatedDimensions(cutW=100,cutH=110,90)
+//   → effectiveW=110, effectiveH=100.
+//   PARTS_CURVED bbox per panel: (p.x, p.y, p.x+110, p.y+100).
+//   Since all panels share the same shelf row (y=10, h=100) and differ only
+//   in x (spaced 113.5 mm apart), every x-axis pair is non-overlapping.
+//
+// Assertions:
+//   • result.sheets.length === 1   (all 10 fit on one sheet)
+//   • result.sheets[0].placements.length === 10
+//   • all 10 placements have isCurved=true
+//   • PARTS_CURVED LINE count === 40   (10 curved panels × 4 edges each)
+//   • rects.length === 10
+//   • all C(10,2)=45 pairs are non-overlapping (separated on ≥ 1 axis)
+//
+// 1 it() block.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 83 — ten curved panels on same sheet: PARTS_CURVED count=40, all ten bboxes mutually non-overlapping',
+  () => {
+
+    const EPS = 0.015;
+
+    /** Count PARTS_CURVED LINE entities in the DXF content string. */
+    function countPARTSCURVEDLines83(content: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(seg => seg.startsWith('8\nPARTS_CURVED\n'))
+        .length;
+    }
+
+    /**
+     * Split PARTS_CURVED LINE segments into per-rectangle groups of 4 and
+     * return each group's bounding rect.
+     * addRectangle() always emits its 4 edges consecutively, so chunk index i
+     * corresponds to the i-th curved placement in order.
+     */
+    function parsePARTSCURVEDRectList83(
+      content: string,
+    ): Array<{ minX: number; maxX: number; minY: number; maxY: number }> {
+      const segs = content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(s => s.startsWith('8\nPARTS_CURVED\n'));
+
+      const result: Array<{ minX: number; maxX: number; minY: number; maxY: number }> = [];
+
+      for (let i = 0; i < segs.length; i += 4) {
+        const chunk = segs.slice(i, i + 4);
+        const xs: number[] = [];
+        const ys: number[] = [];
+        for (const seg of chunk) {
+          const num = (code: string): number => {
+            const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+            return m ? parseFloat(m[1]) : NaN;
+          };
+          xs.push(num('10'), num('11'));
+          ys.push(num('20'), num('21'));
+        }
+        result.push({
+          minX: Math.min(...xs),
+          maxX: Math.max(...xs),
+          minY: Math.min(...ys),
+          maxY: Math.max(...ys),
+        });
+      }
+      return result;
+    }
+
+    it(
+      '10 curved panels (qty=10, kc=undefined, correction=10): PARTS_CURVED=40, all 10 bboxes mutually non-overlapping',
+      () => {
+        // Single row with qty=10 — optimizer expands to 10 NestingParts
+        const stage83Row: CutListRow = {
+          partId:          'SMOKE_TEN_CURVED_S83',
+          cabinetId:       'CAB_SMOKE_83',
+          materialId:      MATERIAL_ID,
+          finishW:         100,
+          finishH:         100,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            100,
+          cutH:            100,
+          qty:             10,
+          developedLength: 110,
+          projectedDepth:  100,
+          curvedEdge:      'TOP',
+          // kerfCount: undefined — guard passes → isCurved follows correction > 0
+          label:           'Ten Curved Panel',
+        };
+
+        const result83 = runNesting([stage83Row]);
+
+        // All 10 panels must land on exactly one sheet
+        expect(result83.sheets).toHaveLength(1);
+
+        const sheet83 = result83.sheets[0];
+        expect(sheet83.placements).toHaveLength(10);
+
+        // Every placement must be isCurved=true (correction=10>0, kc=undefined passes)
+        for (const p of sheet83.placements) {
+          expect(p.isCurved).toBe(true);
+        }
+
+        const output83 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE83', materialId: MATERIAL_ID },
+          nesting: sheet83,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        // ── PARTS_CURVED count ────────────────────────────────────────────────
+        // 10 curved panels × 4 edges each = 40 PARTS_CURVED LINE entities
+        expect(countPARTSCURVEDLines83(output83.content)).toBe(40);
+
+        // ── Per-panel bboxes ──────────────────────────────────────────────────
+        const rects = parsePARTSCURVEDRectList83(output83.content);
+        expect(rects).toHaveLength(10);
+
+        // ── All C(10,2)=45 pairs mutually non-overlapping ─────────────────────
+        // Two axis-aligned rectangles are non-overlapping iff separated on ≥ 1 axis.
+        for (let i = 0; i < rects.length; i++) {
+          for (let j = i + 1; j < rects.length; j++) {
+            const a = rects[i];
+            const b = rects[j];
+            const noOverlapX = a.maxX <= b.minX + EPS || b.maxX <= a.minX + EPS;
+            const noOverlapY = a.maxY <= b.minY + EPS || b.maxY <= a.minY + EPS;
+            expect(noOverlapX || noOverlapY).toBe(true);
+          }
+        }
       },
     );
   },
