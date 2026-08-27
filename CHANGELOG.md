@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.6] - 2026-08-26
+
+### 🧪 Smoke Suite — Equal Diagonal Length Invariant (Stage 27)
+
+Patch release adding a smoke stage that asserts both `HATCH_CURVED` diagonals
+of every curved panel have equal length, confirming the X-hatch spans
+congruent diagonals as expected for an axis-aligned rectangle.
+
+**Total smoke test delta: 181 → 184 (+3 tests)**
+
+---
+
+#### Stage 27 — diagonal-1 and diagonal-2 have equal length (`e5650c3d`, 2026-08-26)
+
+Asserts that for each curved panel the two diagonals satisfy:
+
+```
+sqrt((d1.x2−d1.x1)² + (d1.y2−d1.y1)²)
+  ≈  sqrt((d2.x2−d2.x1)² + (d2.y2−d2.y1)²)
+```
+
+Tolerance: `toBeCloseTo(x, 1)` (±0.05 mm). Rounding shifts each coord by at
+most 0.005 mm, giving a worst-case per-diagonal length error of
+`sqrt(2)×0.01 ≈ 0.014 mm`, so the worst-case length difference between d1
+and d2 is ≤ 0.028 mm — well within ±0.05 mm.
+
+Helper: `diagLen(d: Coords): number`
+
+Panel set: same three-panel sheet as Stages 19–26
+(SMOKE\_DOOR + SMOKE\_SCURVE\_DOOR + SMOKE\_TALL\_ARC).
+
+**3 assertions added. Smoke total: 181 → 184.**
+
+---
+
 ## [2.3.5] - 2026-08-26
 
 ### 🧪 Smoke Suite — Bbox-Centred Midpoint Invariant (Stage 26)
