@@ -260,7 +260,7 @@ class DxfBuilder {
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * Precision and Structural Integrity Invariants  (Stages 22 – 30)
+ * Precision and Structural Integrity Invariants  (Stages 22 – 34)
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Endpoint rounding (Stage 22): addLine() applies Math.round(v × 100) / 100
@@ -289,9 +289,19 @@ class DxfBuilder {
  *    30 | ARC + S_CURVE + TALL_ARC | d1: (minX,minY)→(maxX,maxY) (left→right);
  *       |                          |   d2: (maxX,minY)→(minX,maxY) (right→left);
  *       |                          |   d1.x1 < d1.x2; d2.x1 > d2.x2  (ε < 0.015 mm)
+ *    31 | ARC + S_CURVE + TALL_ARC | shared bottom start-Y: d1.y1 ≈ d2.y1 ≈ r(minY)
+ *       |                          |   (consequence of Stage 30; ε < 0.015 mm)
+ *    32 | ARC + S_CURVE + TALL_ARC | shared top end-Y: d1.y2 ≈ d2.y2 ≈ r(maxY)
+ *       |                          |   (symmetric counterpart of Stage 31; ε < 0.015 mm)
+ *    33 | ARC + S_CURVE + TALL_ARC | orientation sense: d1.x1 < d1.x2 (left→right);
+ *       |                          |   d2.x1 > d2.x2 (right→left); strict inequality,
+ *       |                          |   no tolerance needed
+ *    34 | ARC + S_CURVE + TALL_ARC | Y-axis monotonicity: d1.y1 < d1.y2 and
+ *       |                          |   d2.y1 < d2.y2 — both diagonals ascend in Y;
+ *       |                          |   strict inequality, no tolerance needed
  *
  * All invariants are verified end-to-end in:
- *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 30)
+ *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 34)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 const NESTING_LAYERS = [
