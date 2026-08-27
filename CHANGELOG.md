@@ -4,6 +4,25 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [12.4.0] - 2026-08-27
+
+### Added
+- **Stage 128** — Twelve full sheets, no remainder (`qty=660 = 12×55`): asserts `sheets.length===12`,
+  every sheet holds exactly 55 placements (all `isCurved=true`), and a DXF loop verifies
+  `PARTS_CURVED=220` on all twelve sheets; continues the full-sheet sequence
+  … → 124 (10) → 126 (11) → 128 (12).
+- **Stage 129** — Eleven-full-sheet determinism guard (`qty=605`): runs `runNesting` twice with
+  the Stage 126 fixture and asserts `sheets[10].placements[0]` partId, x, y, rotation are
+  identical across both runs; extends the determinism series
+  (Stages 85, 95, 99, 103, 107, 111, 114, 117, 119, 121, 123, 125, 127, **129**).
+- Updated smoke-test JSDoc: stage-table rows 128–129; range line updated to `Stages 22–129`;
+  `buildDxfSheets.ts` cross-reference updated to `(Stages 7–129)`.
+
+### Tests
+- **382 tests passing** (was 380 after v12.3.0).
+
+---
+
 ## [12.3.0] - 2026-08-27
 
 ### Added

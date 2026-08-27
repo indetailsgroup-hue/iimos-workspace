@@ -374,7 +374,7 @@ class DxfBuilder {
  *       |                          |   two curved, mixed curved+straight).
  *
  * All invariants are verified end-to-end in:
- *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 127)
+ *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 129)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 const NESTING_LAYERS = [
