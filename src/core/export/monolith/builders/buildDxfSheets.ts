@@ -260,7 +260,7 @@ class DxfBuilder {
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * Precision, Structural Integrity, and Label Invariants  (Stages 22 – 42)
+ * Precision, Structural Integrity, and Label Invariants  (Stages 22 – 44)
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Endpoint rounding (Stage 22): addLine() applies Math.round(v × 100) / 100
@@ -332,9 +332,21 @@ class DxfBuilder {
  *       |                          |   Anchored at bbox centre X minus 20 mm text indent.
  *       |                          |   addText() stores coords as-is (no rounding); ε < 0.015 mm.
  *       |                          |   3 it() blocks (one per panel type).
+ *    43 | ARC + S_CURVE + TALL_ARC | '(CURVED / N cuts)' TEXT Y position (DXF group code 20)
+ *       |                          |   equals placement.y + h/2 − 40, where
+ *       |                          |   h = isRotated ? cutW : cutH (flat-blank effective height).
+ *       |                          |   Anchored at bbox centre Y minus 40 mm sub-label offset.
+ *       |                          |   addText() stores coords as-is (no rounding); ε < 0.015 mm.
+ *       |                          |   3 it() blocks (one per panel type).
+ *    44 | ARC (mixed) + STRAIGHT   | straight panels emit zero PARTS_CURVED LINE entities;
+ *       |                          |   parsePARTSCURVEDLineCount = 0 for single straight panel;
+ *       |                          |   parsePARTSCURVEDLineCount = 0 for three straight panels;
+ *       |                          |   parsePARTSCURVEDLineCount = 4 for mixed sheet
+ *       |                          |   (1 curved + 1 straight) confirming curved-only emission.
+ *       |                          |   3 it() blocks total.
  *
  * All invariants are verified end-to-end in:
- *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 42)
+ *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 44)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 const NESTING_LAYERS = [

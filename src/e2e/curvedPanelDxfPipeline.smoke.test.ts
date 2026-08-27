@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 42: precision, structural integrity, and label invariants
+ * Stages 22 – 44: precision, structural integrity, and label invariants
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -121,6 +121,16 @@
  *       |                          |   w = isRotated ? cutH : cutW (flat-blank width);
  *       |                          |   "anchored at bbox centre X minus 20 mm text indent";
  *       |                          |   ε < 0.015 mm; one it() per panel type (3 it() blocks).
+ *    43 | ARC + S_CURVE + TALL_ARC | '(CURVED / N cuts)' TEXT Y position (DXF group code 20)
+ *       |                          |   equals placement.y + h/2 − 40 where
+ *       |                          |   h = isRotated ? cutW : cutH (flat-blank height);
+ *       |                          |   "anchored at bbox centre Y minus 40 mm sub-label offset";
+ *       |                          |   ε < 0.015 mm; one it() per panel type (3 it() blocks).
+ *    44 | ARC (mixed) + STRAIGHT   | straight panels emit zero PARTS_CURVED LINE entities;
+ *       |                          |   PARTS_CURVED = 0 for single straight panel;
+ *       |                          |   PARTS_CURVED = 0 for three straight panels;
+ *       |                          |   PARTS_CURVED = 4 for mixed sheet (1 curved + 1 straight)
+ *       |                          |   confirming curved-only emission; 3 it() blocks total.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  *
@@ -5821,5 +5831,212 @@ describe('@smoke Stage 42 — curved sub-label X = placement.x + w/2 − 20 (ε 
     const xPositions = parseCurvedLabelXPositions(output.content);
     expect(xPositions).toHaveLength(1);
     expect(Math.abs(xPositions[0] - expectedX)).toBeLessThan(EPS);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 43 — curved sub-label Y anchored at flat-blank placement centre Y − 40 mm
+//
+// The curved sub-label '(CURVED / N cuts)' is placed at:
+//   labelY − 40 = placement.y + h/2 − 40
+//
+// where  h = (rotation===90||270) ? placement.cutW : placement.cutH
+//        (mirrors the private getRotatedDimensions logic in buildDxfSheets.ts)
+//
+// DXF group code 20 carries the Y coordinate of a TEXT entity.
+// addText() stores coords as-is (no rounding), so we compare with ε < 0.015 mm.
+//
+// One it() per panel type: ARC, S_CURVE, TALL_ARC (3 it() blocks total).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('@smoke Stage 43 — curved sub-label Y = placement.y + h/2 − 40 (ε < 0.015 mm)', () => {
+
+  const EPS = 0.015;
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+
+  /**
+   * Extract Y-position values (DXF group code 20) of all '(CURVED / N cuts)'
+   * TEXT entities on the LABELS layer.
+   * Returns an array of floats in order of appearance.
+   */
+  function parseCurvedLabelYPositions(content: string): number[] {
+    const yPositions: number[] = [];
+    const segs = content.split('\n0\nTEXT\n').slice(1);
+    for (const seg of segs) {
+      if (!seg.includes('8\nLABELS\n')) continue;
+      const textM = seg.match(/\n1\n\(CURVED \/ \d+ cuts\)/);
+      if (!textM) continue;
+      // Group code 20 = Y position
+      const yM = seg.match(/\n20\n([^\n]+)/);
+      if (yM) yPositions.push(parseFloat(yM[1]));
+    }
+    return yPositions;
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  // ── ARC ───────────────────────────────────────────────────────────────────
+
+  it('ARC — curved sub-label Y equals placement.y + flatBlankH/2 − 40 (ε < 0.015 mm)', () => {
+    const { row: arcRow } = buildCurvedRow();
+    const { sheets } = runNesting([arcRow]);
+    const p = sheets[0].placements[0];
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const h = isRotated ? p.cutW : p.cutH;
+    const expectedY = p.y + h / 2 - 40;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_ARC_Y43', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const yPositions = parseCurvedLabelYPositions(output.content);
+    expect(yPositions).toHaveLength(1);
+    expect(Math.abs(yPositions[0] - expectedY)).toBeLessThan(EPS);
+  });
+
+  // ── S_CURVE ───────────────────────────────────────────────────────────────
+
+  it('S_CURVE — curved sub-label Y equals placement.y + flatBlankH/2 − 40 (ε < 0.015 mm)', () => {
+    const { row: sCurveRow } = buildSCurveRow();
+    const { sheets } = runNesting([sCurveRow]);
+    const p = sheets[0].placements[0];
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const h = isRotated ? p.cutW : p.cutH;
+    const expectedY = p.y + h / 2 - 40;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_SCURVE_Y43', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const yPositions = parseCurvedLabelYPositions(output.content);
+    expect(yPositions).toHaveLength(1);
+    expect(Math.abs(yPositions[0] - expectedY)).toBeLessThan(EPS);
+  });
+
+  // ── TALL_ARC ──────────────────────────────────────────────────────────────
+
+  it('TALL_ARC — curved sub-label Y equals placement.y + flatBlankH/2 − 40 (ε < 0.015 mm)', () => {
+    const { row: tallArcRow } = buildTallArcRow();
+    const { sheets } = runNesting([tallArcRow]);
+    const p = sheets[0].placements[0];
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const h = isRotated ? p.cutW : p.cutH;
+    const expectedY = p.y + h / 2 - 40;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_TALLARC_Y43', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const yPositions = parseCurvedLabelYPositions(output.content);
+    expect(yPositions).toHaveLength(1);
+    expect(Math.abs(yPositions[0] - expectedY)).toBeLessThan(EPS);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 44 — straight panels emit zero PARTS_CURVED LINE entities
+//
+// `buildDxfSheets.ts` renders curved placements on PARTS_CURVED (red) and
+// flat placements on PARTS (green).  A straight panel must never produce a
+// PARTS_CURVED LINE entity, i.e. `parsePARTSCURVEDLineCount` must return 0.
+//
+// PARTS_CURVED rectangle = 4 addLine() calls per curved placement.
+// Straight placements must produce PARTS_CURVED = 0.
+//
+// Three it() blocks:
+//   (a) single straight panel: PARTS_CURVED = 0
+//   (b) three straight panels on the same sheet: PARTS_CURVED = 0
+//   (c) mixed sheet (1 curved + 1 straight): PARTS_CURVED = 4 (curved only)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('@smoke Stage 44 — straight-only sheet has zero PARTS_CURVED LINE entities', () => {
+
+  // ── helper ────────────────────────────────────────────────────────────────
+
+  /**
+   * Count LINE entities whose layer is PARTS_CURVED.
+   * After splitting on '\n0\nLINE\n' each segment starts with '8\n{layer}\n'.
+   */
+  function parsePARTSCURVEDLineCount(content: string): number {
+    const segs = content.split('\n0\nLINE\n').slice(1);
+    return segs.filter(s => s.startsWith('8\nPARTS_CURVED\n')).length;
+  }
+
+  // ── (a) single straight panel ─────────────────────────────────────────────
+
+  it('single straight panel: PARTS_CURVED line count is 0', () => {
+    const { sheets } = runNesting([STRAIGHT_ROW]);
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_STR_A44', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    expect(parsePARTSCURVEDLineCount(output.content)).toBe(0);
+  });
+
+  // ── (b) three straight panels ─────────────────────────────────────────────
+
+  it('three straight panels on the same sheet: PARTS_CURVED line count is 0', () => {
+    const rows: CutListRow[] = [
+      { ...STRAIGHT_ROW, partId: 'SMOKE_STR_44_1', qty: 1 },
+      { ...STRAIGHT_ROW, partId: 'SMOKE_STR_44_2', qty: 1, cutW: 280, finishW: 280, cutH: 380, finishH: 380 },
+      { ...STRAIGHT_ROW, partId: 'SMOKE_STR_44_3', qty: 1, cutW: 250, finishW: 250, cutH: 350, finishH: 350 },
+    ];
+    const { sheets } = runNesting(rows);
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_STR3_B44', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    expect(parsePARTSCURVEDLineCount(output.content)).toBe(0);
+  });
+
+  // ── (c) mixed sheet — curved contributes PARTS_CURVED, straight does not ──
+
+  it('mixed sheet (1 curved + 1 straight): PARTS_CURVED count is exactly 4 (curved only)', () => {
+    const { row: arcRow } = buildCurvedRow();
+    const { sheets } = runNesting([arcRow, STRAIGHT_ROW]);
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_MIX_C44', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    // Curved panel → 4 PARTS_CURVED lines (one bounding rect)
+    // Straight panel → 0 PARTS_CURVED lines
+    expect(parsePARTSCURVEDLineCount(output.content)).toBe(4);
   });
 });

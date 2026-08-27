@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.1.0] - 2026-08-27
+
+### Overview
+
+**Curved Panel System — DXF Label Y-Position & PARTS_CURVED Bounding-Rect Validation**
+
+This minor release extends the `@smoke` suite with two new stages that complete
+DXF label-position coverage and formally validate PARTS_CURVED bounding-rect
+emission exclusivity: curved sub-label Y coordinate is now pinned to
+`placement.y + h/2 − 40`, and straight panels are confirmed to produce zero
+PARTS_CURVED entities regardless of sheet composition.
+
+### Added
+
+#### Stage 43 — Curved sub-label Y position (DXF group code 20)
+
+- **`@smoke Stage 43`**: asserts the `(CURVED / N cuts)` TEXT entity Y position
+  (DXF group code 20) equals `placement.y + h/2 − 40` for all three panel
+  types (ARC, S_CURVE, TALL_ARC), where `h = isRotated ? cutW : cutH`
+  (flat-blank effective height in the rotated frame).
+- Sub-label is anchored at bbox centre Y minus 40 mm vertical sub-label offset.
+- `addText()` stores coords without rounding; tolerance ε < 0.015 mm.
+- Helper: `parseCurvedLabelYPositions(content)` — splits on `\n0\nTEXT\n`,
+  filters by `8\nLABELS\n` and curved-label regex, extracts `\n20\n([^\n]+)`.
+- 3 `it()` blocks (one per panel type).
+
+#### Stage 44 — Straight panels emit zero PARTS_CURVED LINE entities
+
+- **`@smoke Stage 44`**: validates that straight (non-curved) placements never
+  produce LINE entities on the PARTS_CURVED layer, formally separating curved
+  and flat rendering paths.
+- `parsePARTSCURVEDLineCount(content)` helper: splits on `\n0\nLINE\n`, filters
+  segments starting with `8\nPARTS_CURVED\n`.
+- Three `it()` blocks:
+  - **(a)** single straight panel → PARTS_CURVED = 0
+  - **(b)** three straight panels on same sheet → PARTS_CURVED = 0
+  - **(c)** mixed sheet (1 curved + 1 straight) → PARTS_CURVED = 4
+    (confirms curved-only emission; straight contributes nothing)
+
+#### JSDoc invariant tables updated to Stages 22–44
+
+- `curvedPanelDxfPipeline.smoke.test.ts`: Section 3 header updated to
+  `Stages 22 – 44`; Stage 43 row (Y position formula) and Stage 44 row
+  (PARTS_CURVED exclusivity) added.
+- `buildDxfSheets.ts`: "Precision, Structural Integrity, and Label Invariants"
+  section header updated to `Stages 22 – 44`; Stage 43 and Stage 44 rows added;
+  reference updated to `(Stages 7 – 44)`.
+
+### Test Coverage
+
+- **280 smoke tests** — 280 passing (0 failing)
+- Stage 43 adds 3 `it()` blocks (Y-position per panel type)
+- Stage 44 adds 3 `it()` blocks (PARTS_CURVED exclusivity: single/triple/mixed)
+
+---
+
 ## [3.0.0] - 2026-08-27
 
 ### Overview
