@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [5.1.0] – 2026-08-27
+
+### Minor Release — Sub-Label kerfCount Verification Milestone (Stages 70–73)
+
+This release completes the **sub-label kerfCount verification milestone**, adding Stages 70–71
+(sub-label correctness for kerfCount=1 and independent dual-panel sub-labels), Stage 72
+(kerfCount=0 override guard), and Stage 73 (triple-panel independent sub-label verification).
+
+#### Stage 70 — kerfCount=1 Sub-Label
+
+- Panel with `kerfCount=1` produces exactly 2 HATCH_CURVED lines and the DXF LABELS sub-label
+  reads `(CURVED / 1 cuts)` end-to-end through `runNesting → buildDxfSheets`.
+
+#### Stage 71 — Independent Dual-Panel Sub-Labels
+
+- Two curved panels with `kerfCount=3` and `kerfCount=7` on the same sheet each emit the
+  correct `(CURVED / N cuts)` sub-label independently, verified via LABELS TEXT isolation.
+
+#### Stage 72 — kerfCount=0 Override Guard
+
+- Added optimizer guard: `kerfCount=0` explicitly overrides `isCurved` to `false` even when
+  `correction > 0`, preventing phantom curved DXF output for panels with no kerf cuts.
+- Panel with `kerfCount=0`, `developedLength=250`, `projectedDepth=200` → `correction=50 > 0`
+  but `isCurved=false` → zero HATCH_CURVED lines in DXF.
+- Stage 69 fixture corrected: `kerfCount` field removed (boundary test targets correction
+  threshold only, not kerfCount behaviour).
+
+#### Stage 73 — Independent Triple-Panel Sub-Labels
+
+- Three curved panels with `kerfCount=1`, `kerfCount=5`, and `kerfCount=12` on the same sheet
+  each emit the correct `(CURVED / N cuts)` sub-label independently in the DXF LABELS layer.
+
+#### Test Suite
+
+- **326 smoke tests passing** (0 failures).
+
+---
+
 ## [5.0.0] – 2026-08-27
 
 ### Major Release — Rotation-Invariance Milestone & Sub-Label kerfCount Verification

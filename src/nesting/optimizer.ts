@@ -107,7 +107,12 @@ export function extractNestingParts(rows: CutListRow[]): NestingPart[] {
         ? row.cutH + correction
         : row.cutH;
 
-    const isCurved = hasCorrection && correction > 0;
+    // Guard: kerfCount=0 explicitly means no kerf cuts are needed;
+    // treat as non-curved in the DXF even if correction > 0.
+    const isCurved =
+      hasCorrection &&
+      correction > 0 &&
+      (row.kerfCount === undefined || row.kerfCount > 0);
 
     for (let i = 0; i < qty; i++) {
       const id = qty === 1 ? row.partId : `${row.partId}#${i + 1}`;

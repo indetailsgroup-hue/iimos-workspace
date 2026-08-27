@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 71: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, and barely-positive correction boundary
+ * Stages 22 – 73: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, and barely-positive correction boundary
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -237,6 +237,17 @@
  *       |                          |   partId=SMOKE_KC7_S71 kerfCount=7;
  *       |                          |   both sub-labels appear independently
  *       |                          |   in DXF LABELS TEXT; 1 it() block.
+ * ─────────────────────────────────────────────────────────────────────────────
+ *    72 | kerfCount=0 with        | kerfCount=0 explicitly on a panel with
+ *       | correction=50 > 0        |   correction=50 > 0; optimizer kerfCount=0
+ *       |                          |   guard overrides isCurved=false;
+ *       |                          |   DXF emits zero HATCH_CURVED lines;
+ *       |                          |   1 it() block.
+ * ─────────────────────────────────────────────────────────────────────────────
+ *    73 | three curved panels      | manual NestingSheet, kc=1, kc=5, kc=12;
+ *       | kc=1, kc=5, kc=12        |   all three "(CURVED / N cuts)" sub-labels
+ *       |                          |   appear independently in LABELS TEXT;
+ *       |                          |   1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -8844,10 +8855,10 @@ describe(
           cutH:            800,
           qty:             1,
           // Barely positive correction: triggers isCurved=true
+          // kerfCount left undefined so it does not override isCurved
           developedLength: 200.001,
           projectedDepth:  200,
           curvedEdge:      'TOP',
-          kerfCount:       0,
           grain:           undefined,
         };
 
@@ -9035,6 +9046,173 @@ describe(
         // Both kerfCounts appear — order may vary depending on placement order
         expect(counts).toContain(3);
         expect(counts).toContain(7);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 72 – kerfCount=0 on a curved panel (correction > 0) → isCurved=false,
+//            zero HATCH_CURVED lines emitted by buildDxfSheets.
+//
+// Rationale: kerfCount=0 means no kerf cuts are required for bending.
+// The optimizer's kerfCount=0 guard overrides isCurved to false even when
+// developedLength > projectedDepth. The DXF must therefore emit PARTS (not
+// PARTS_CURVED) and zero HATCH_CURVED lines.
+//
+// Fixture: developedLength=250, projectedDepth=200, curvedEdge='TOP',
+//   cutW=400, cutH=800, kerfCount=0 → correction=50 > 0 but
+//   isCurved=false; flat-blank H still = cutH+correction for nesting
+//   (the blank is cut, just not hatch-marked as curved in DXF).
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 72 – kerfCount=0 on curved-correction panel → isCurved=false and zero HATCH_CURVED lines',
+  () => {
+    function countHATCHCURVEDLines72(content: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(seg => /\n8\nHATCH_CURVED\n/.test(seg))
+        .length;
+    }
+
+    it(
+      'kerfCount=0 with correction=50 → isCurved=false → 0 HATCH_CURVED lines in DXF',
+      () => {
+        const stage72Row: CutListRow = {
+          partId:          'SMOKE_KC0_S72',
+          cabinetId:       'CAB_SMOKE_72',
+          materialId:      MATERIAL_ID,
+          finishW:         400,
+          finishH:         800,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            400,
+          cutH:            800,
+          qty:             1,
+          // correction = 250 − 200 = 50 > 0, but kerfCount=0 overrides isCurved
+          developedLength: 250,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          kerfCount:       0,
+          label:           'KC0 Curved Override Guard Panel',
+        };
+
+        const result72 = runNesting([stage72Row]);
+        expect(result72.sheets).toHaveLength(1);
+
+        const sheet72 = result72.sheets[0];
+        expect(sheet72.placements).toHaveLength(1);
+
+        // isCurved must be falsy — kerfCount=0 guard in optimizer overrides
+        const placement72 = sheet72.placements[0];
+        expect(placement72.isCurved).toBeFalsy();
+
+        // Build DXF and assert zero HATCH_CURVED lines
+        const output72 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE72', materialId: MATERIAL_ID },
+          nesting: sheet72,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        expect(countHATCHCURVEDLines72(output72.content)).toBe(0);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 73 – three curved panels with kerfCounts kc=1, kc=5, kc=12 on the
+//            same sheet each emit the correct '(CURVED / N cuts)' sub-label
+//            in the DXF LABELS TEXT layer independently.
+//
+// Fixture: manual NestingSheet with three non-overlapping placements:
+//   A: partId=SMOKE_KC1_S73, x=10,  y=10, cutW=300, cutH=700, kc=1
+//   B: partId=SMOKE_KC5_S73, x=400, y=10, cutW=400, cutH=600, kc=5
+//   C: partId=SMOKE_KC12_S73, x=900, y=10, cutW=350, cutH=550, kc=12
+//   A ends at x=310, B ends at x=800, C starts at x=900 → non-overlapping.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 73 – three curved panels kc=1,5,12 on same sheet each emit correct "(CURVED / N cuts)" sub-label',
+  () => {
+    function parseCurvedLabelCounts73(content: string): number[] {
+      const counts: number[] = [];
+      const segs = content.split('\n0\nTEXT\n').slice(1);
+      for (const seg of segs) {
+        if (!seg.includes('8\nLABELS\n')) continue;
+        const m = seg.match(/\n1\n\(CURVED \/ (\d+) cuts\)/);
+        if (m) counts.push(parseInt(m[1], 10));
+      }
+      return counts;
+    }
+
+    it(
+      'kc=1, kc=5, kc=12 on same sheet → all three "(CURVED / N cuts)" sub-labels present independently',
+      () => {
+        const SHEET_W73 = 2440;
+        const SHEET_H73 = 1220;
+
+        // Non-overlapping placement layout:
+        //   A: x=[10..310],   y=[10..710]
+        //   B: x=[400..800],  y=[10..610]
+        //   C: x=[900..1250], y=[10..560]
+        const sheet73: NestingSheet = {
+          index1:         1,
+          materialId:     MATERIAL_ID,
+          sheetW:         SHEET_W73,
+          sheetH:         SHEET_H73,
+          sheetThickness: 18,
+          label:          'NEST_73_THREE',
+          placements: [
+            {
+              partId:    'SMOKE_KC1_S73',
+              x:         10,
+              y:         10,
+              rotation:  0,
+              cutW:      300,
+              cutH:      700,
+              isCurved:  true,
+              kerfCount: 1,
+            },
+            {
+              partId:    'SMOKE_KC5_S73',
+              x:         400,
+              y:         10,
+              rotation:  0,
+              cutW:      400,
+              cutH:      600,
+              isCurved:  true,
+              kerfCount: 5,
+            },
+            {
+              partId:    'SMOKE_KC12_S73',
+              x:         900,
+              y:         10,
+              rotation:  0,
+              cutW:      350,
+              cutH:      550,
+              isCurved:  true,
+              kerfCount: 12,
+            },
+          ],
+          utilization: 0,
+        };
+
+        const output73 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE73', materialId: MATERIAL_ID },
+          nesting: sheet73,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        const counts73 = parseCurvedLabelCounts73(output73.content);
+
+        // Exactly 3 curved sub-labels
+        expect(counts73).toHaveLength(3);
+
+        // All three kerfCounts appear — order may vary
+        expect(counts73).toContain(1);
+        expect(counts73).toContain(5);
+        expect(counts73).toContain(12);
       },
     );
   },
