@@ -4256,3 +4256,136 @@ describe('@smoke Stage 31 — d1.y1 and d2.y1 are both ≈ minY (shared bottom s
     expect(Math.abs(d2.y1 - r(b.minY))).toBeLessThan(EPS);
   });
 });
+
+describe('@smoke Stage 32 — d1.y2 and d2.y2 are both ≈ maxY (shared top end-Y)', () => {
+  /**
+   * Stage 32 is the symmetric counterpart of Stage 31.
+   *
+   * Stage 31 asserted both diagonal start Y values equal minY (bottom edge).
+   * Stage 32 asserts both diagonal end Y values equal maxY (top edge):
+   *
+   *   d1.y2 ≈ r(maxY)   (diagonal-1 ends at the top of the flat-blank bbox)
+   *   d2.y2 ≈ r(maxY)   (diagonal-2 ends at the top of the flat-blank bbox)
+   *
+   * Together Stages 31 + 32 confirm that the two X-hatch diagonals span the
+   * full height of the flat-blank placement: every diagonal runs from the
+   * bottom edge to the top edge, regardless of panel type or orientation.
+   *
+   * Tolerance: ±0.015 mm.  Verified for ARC, S_CURVE, and TALL_ARC.
+   */
+
+  const EPS = 0.015;
+  const r   = (v: number): number => Math.round(v * 100) / 100;
+
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+  type Bbox   = { minX: number; maxX: number; minY: number; maxY: number };
+
+  // ── helpers (self-contained) ──────────────────────────────────────────────
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function bboxForPlacement(p: { x: number; y: number; cutW: number; cutH: number; rotation: number }): Bbox {
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const ew = isRotated ? p.cutH : p.cutW;
+    const eh = isRotated ? p.cutW : p.cutH;
+    return { minX: p.x, maxX: p.x + ew, minY: p.y, maxY: p.y + eh };
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  function runStage32() {
+    const { row: arcRow }     = buildCurvedRow();
+    const { row: sCurveRow }  = buildSCurveRow();
+    const { row: tallArcRow } = buildTallArcRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow, tallArcRow]);
+    expect(sheets).toHaveLength(1);
+
+    const arcP     = sheets[0].placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP  = sheets[0].placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const tallArcP = sheets[0].placements.find((p) => p.partId === 'SMOKE_TALL_ARC')!;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const allCoords    = parseHatchCoords(output.content);
+    const arcLines     = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines  = linesForPlacement(allCoords, sCurveP.y);
+    const tallArcLines = linesForPlacement(allCoords, tallArcP.y);
+
+    expect(arcLines).toHaveLength(2);
+    expect(sCurveLines).toHaveLength(2);
+    expect(tallArcLines).toHaveLength(2);
+
+    return {
+      arcLines,    arcBbox:    bboxForPlacement(arcP),
+      sCurveLines, sCurveBbox: bboxForPlacement(sCurveP),
+      tallArcLines, tallBbox:  bboxForPlacement(tallArcP),
+    };
+  }
+
+  // ── assertions ────────────────────────────────────────────────────────────
+
+  it('ARC — d1.y2 and d2.y2 are both ≈ maxY', () => {
+    const { arcLines, arcBbox: b } = runStage32();
+    const [d1, d2] = arcLines;
+    expect(Math.abs(d1.y2 - r(b.maxY))).toBeLessThan(EPS);
+    expect(Math.abs(d2.y2 - r(b.maxY))).toBeLessThan(EPS);
+  });
+
+  it('S_CURVE — d1.y2 and d2.y2 are both ≈ maxY', () => {
+    const { sCurveLines, sCurveBbox: b } = runStage32();
+    const [d1, d2] = sCurveLines;
+    expect(Math.abs(d1.y2 - r(b.maxY))).toBeLessThan(EPS);
+    expect(Math.abs(d2.y2 - r(b.maxY))).toBeLessThan(EPS);
+  });
+
+  it('TALL_ARC — d1.y2 and d2.y2 are both ≈ maxY', () => {
+    const { tallArcLines, tallBbox: b } = runStage32();
+    const [d1, d2] = tallArcLines;
+    expect(Math.abs(d1.y2 - r(b.maxY))).toBeLessThan(EPS);
+    expect(Math.abs(d2.y2 - r(b.maxY))).toBeLessThan(EPS);
+  });
+});

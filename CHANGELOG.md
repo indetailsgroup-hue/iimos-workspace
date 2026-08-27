@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.4.2] - 2026-08-27
+
+### Fixed / Verified
+
+- **Stage 31 — shared bottom start-Y invariant** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Three new `it()` blocks (one per panel type: ARC, S_CURVE, TALL_ARC) assert that both
+  HATCH_CURVED diagonal start Y coordinates equal `r(minY)` within ±0.015 mm.  Because
+  Stage 30 pinned `d1` to start at `(minX, minY)` and `d2` to start at `(maxX, minY)`,
+  Stage 31 provides a cross-check confirming both diagonals are grounded at the same
+  horizontal level — the bottom edge of the flat-blank placement — regardless of panel
+  type, FFDH rotation, or grain-lock.
+
+- **JSDoc invariant table** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Stage 30 row added to Section 3 documenting the directional assertions:
+  `d1: (minX,minY)→(maxX,maxY)` (left→right); `d2: (maxX,minY)→(minX,maxY)` (right→left);
+  orientation sense `d1.x1 < d1.x2` and `d2.x1 > d2.x2`.
+
+**Test delta:** 205 → 208 (+3 tests, all passing)
+
+---
+
 ## [2.4.1] - 2026-08-27
 
 ### Fixed / Verified
