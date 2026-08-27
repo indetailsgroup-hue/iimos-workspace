@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [6.1.0] – 2026-08-27
+
+### Minor Release — Triple-Guard Regression and NaN kerfCount Boundary (Stages 78–79)
+
+This minor release adds two complementary stages that stress-test the kerfCount
+guard system: a three-panel simultaneous regression (Stage 78) and a NaN
+boundary guard (Stage 79).
+
+#### @smoke Stages Added
+
+**Stage 78 — triple-guard regression: all three kerfCount guard paths on one sheet**
+- Panel A: `kerfCount=0`, `correction=50 > 0` → `kc=0` guard → `isCurved=false` → `PARTS` layer.
+- Panel B: `kerfCount=undefined`, `correction=0` → correction gate → `isCurved=false` → `PARTS` layer.
+- Panel C: `kerfCount=undefined`, `correction=50 > 0` → no guard fires → `isCurved=true` → `PARTS_CURVED` + `HATCH_CURVED`.
+- Asserts sheet-level totals: `PARTS=8`, `PARTS_CURVED=4`, `HATCH_CURVED=2`.
+- All three `isCurved` values asserted per placement by `partId`.
+- Regression guard: confirms all three guard boundaries remain correct in a
+  single nesting run (determinism for guard boundary interactions).
+
+**Stage 79 — kerfCount=NaN coerces to falsy: isCurved=false, zero HATCH_CURVED**
+- Panel: `kerfCount=NaN`, `correction=50 > 0`.
+- Guard expression: `(NaN === undefined || NaN > 0)` = `(false || false)` = `false`.
+- `NaN` behaves identically to `kerfCount=0` — optimizer sets `isCurved=false`.
+- DXF emits **zero** `HATCH_CURVED` LINE entities.
+
+#### JSDoc Updates
+- `curvedPanelDxfPipeline.smoke.test.ts`: range updated to `Stages 22 – 79`;
+  table entries 78–79 added.
+- `buildDxfSheets.ts`: reference updated to `(Stages 7 – 79)`.
+
+---
+
 ## [6.0.0] – 2026-08-27
 
 ### Major Release — kerfCount-Boundary Invariance Milestone (Stages 72–77)
