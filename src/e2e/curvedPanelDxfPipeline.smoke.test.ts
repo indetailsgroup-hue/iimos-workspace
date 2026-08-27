@@ -248,6 +248,12 @@
  *       | kc=1, kc=5, kc=12        |   all three "(CURVED / N cuts)" sub-labels
  *       |                          |   appear independently in LABELS TEXT;
  *       |                          |   1 it() block.
+ *    74 | kerfCount=0 curved panel | kerfCount=0 → isCurved=false → PARTS_CURVED
+ *       |                          |   LINE count=0, PARTS LINE count=4;
+ *       |                          |   1 it() block.
+ *    75 | kerfCount=undefined +    | kerfCount absent → guard does NOT fire;
+ *       | correction > 0           |   isCurved=true → 2 HATCH_CURVED lines;
+ *       |                          |   1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -9213,6 +9219,141 @@ describe(
         expect(counts73).toContain(1);
         expect(counts73).toContain(5);
         expect(counts73).toContain(12);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 74 – kerfCount=0 panels use the PARTS layer (not PARTS_CURVED) and
+//            emit zero PARTS_CURVED LINE entities.
+//
+// Rationale: because kerfCount=0 → isCurved=false (optimizer guard), the DXF
+// builder must route the part rectangle to the PARTS layer (green) instead of
+// PARTS_CURVED (red). No PARTS_CURVED LINE entities should be present.
+//
+// Fixture: same as Stage 72 —
+//   developedLength=250, projectedDepth=200, curvedEdge='TOP',
+//   cutW=400, cutH=800, kerfCount=0 → isCurved=false.
+// Assertions:
+//   (a) PARTS_CURVED LINE count = 0
+//   (b) PARTS LINE count = 4 (one rectangle, four edges)
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 74 – kerfCount=0 panel uses PARTS layer (not PARTS_CURVED) and emits zero PARTS_CURVED entities',
+  () => {
+    function countLayerLines74(content: string, layer: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(seg => seg.startsWith(`8\n${layer}\n`))
+        .length;
+    }
+
+    it(
+      'kerfCount=0 → PARTS_CURVED LINE count=0 and PARTS LINE count=4 (rectangle, four edges)',
+      () => {
+        const stage74Row: CutListRow = {
+          partId:          'SMOKE_KC0_S74',
+          cabinetId:       'CAB_SMOKE_74',
+          materialId:      MATERIAL_ID,
+          finishW:         400,
+          finishH:         800,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            400,
+          cutH:            800,
+          qty:             1,
+          developedLength: 250,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          kerfCount:       0,   // guard: isCurved=false despite correction > 0
+          label:           'KC0 Layer Guard Panel',
+        };
+
+        const result74 = runNesting([stage74Row]);
+        expect(result74.sheets).toHaveLength(1);
+
+        const sheet74 = result74.sheets[0];
+
+        const output74 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE74', materialId: MATERIAL_ID },
+          nesting: sheet74,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        // (a) Zero PARTS_CURVED lines — placement is not curved
+        expect(countLayerLines74(output74.content, 'PARTS_CURVED')).toBe(0);
+
+        // (b) Exactly 4 PARTS lines — one rectangle (top, bottom, left, right)
+        expect(countLayerLines74(output74.content, 'PARTS')).toBe(4);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 75 – a panel with kerfCount=undefined and correction > 0 still gets
+//            isCurved=true and emits exactly 2 HATCH_CURVED lines.
+//
+// Rationale: the kerfCount=0 guard in the optimizer only fires when kerfCount
+// is EXPLICITLY set to 0. When kerfCount is absent (undefined), the guard must
+// NOT override isCurved — correction > 0 alone determines isCurved=true.
+//
+// Fixture: developedLength=250, projectedDepth=200, curvedEdge='TOP',
+//   cutW=400, cutH=800, kerfCount NOT SET (undefined) → correction=50 > 0
+//   → isCurved=true → 2 HATCH_CURVED lines.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 75 – kerfCount=undefined with correction > 0 → isCurved=true and exactly 2 HATCH_CURVED lines',
+  () => {
+    function countHATCHCURVEDLines75(content: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(seg => seg.startsWith('8\nHATCH_CURVED\n'))
+        .length;
+    }
+
+    it(
+      'kerfCount=undefined with correction=50 → isCurved=true → 2 HATCH_CURVED lines in DXF',
+      () => {
+        const stage75Row: CutListRow = {
+          partId:          'SMOKE_KCUNDEF_S75',
+          cabinetId:       'CAB_SMOKE_75',
+          materialId:      MATERIAL_ID,
+          finishW:         400,
+          finishH:         800,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            400,
+          cutH:            800,
+          qty:             1,
+          developedLength: 250,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          // kerfCount intentionally omitted — guard must NOT override isCurved
+          label:           'KC Undefined Guard Panel',
+        };
+
+        const result75 = runNesting([stage75Row]);
+        expect(result75.sheets).toHaveLength(1);
+
+        const sheet75 = result75.sheets[0];
+        expect(sheet75.placements).toHaveLength(1);
+
+        // isCurved must be true — undefined kerfCount does not trigger the guard
+        const placement75 = sheet75.placements[0];
+        expect(placement75.isCurved).toBe(true);
+
+        const output75 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE75', materialId: MATERIAL_ID },
+          nesting: sheet75,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        // Exactly 2 HATCH_CURVED lines (d1 + d2)
+        expect(countHATCHCURVEDLines75(output75.content)).toBe(2);
       },
     );
   },

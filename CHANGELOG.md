@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [5.2.0] – 2026-08-27
+
+### Minor Release — kerfCount-Zero Guard and Triple-Panel Sub-Label Milestone (Stages 74–75)
+
+#### Smoke-Test Additions
+
+- **Stage 74** (`@smoke`): Asserts that a panel with `kerfCount=0` uses the `PARTS` layer
+  (not `PARTS_CURVED`) and emits zero `PARTS_CURVED` LINE entities. Verifies the optimizer
+  guard (introduced in v5.1.0) is correctly propagated through the DXF builder so that
+  `kerfCount=0` panels are visually indistinguishable from straight panels at the layer level.
+  Fixture: `cutW=400`, `cutH=800`, `developedLength=250`, `projectedDepth=200`,
+  `curvedEdge='TOP'`, `kerfCount=0` → `isCurved=false` → `PARTS` rectangle = 4 LINEs,
+  `PARTS_CURVED` = 0 LINEs.
+
+- **Stage 75** (`@smoke`): Asserts that a panel with `kerfCount=undefined` and `correction > 0`
+  still receives `isCurved=true` and emits exactly 2 `HATCH_CURVED` LINE entities. Verifies
+  that the `kerfCount=0` guard does not fire when `kerfCount` is absent (undefined) — only an
+  explicit `0` suppresses curved rendering. Fixture: `kerfCount` omitted, `correction=50 > 0`
+  → `isCurved=true` → 2 `HATCH_CURVED` lines.
+
+#### Bug Fixes
+
+- **`countLayerLines74` helper**: Fixed incorrect regex `\n8\n${layer}\n` that failed to
+  match layer codes at segment-start (after `split('\n0\nLINE\n')`). Replaced with
+  `seg.startsWith(\`8\n${layer}\n\`)` matching the correct DXF segment structure.
+
+- **`countHATCHCURVEDLines75` helper**: Same regex fix applied — replaced
+  `/\n8\nHATCH_CURVED\n/` regex test with `seg.startsWith('8\nHATCH_CURVED\n')`.
+
+#### Test Count
+
+328 smoke tests passing (Stages 1 – 75).
+
 ## [5.1.0] – 2026-08-27
 
 ### Minor Release — Sub-Label kerfCount Verification Milestone (Stages 70–73)
