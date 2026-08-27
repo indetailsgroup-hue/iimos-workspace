@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 38: precision and structural integrity invariants
+ * Stages 22 – 40: precision, structural integrity, and label invariants
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -106,6 +106,13 @@
  *       |                          |   d2.x2 ≈ r(minX), d2.y2 ≈ r(maxY);
  *       |                          |   12 it() blocks (4 coords × 3 panel types); ε < 0.015 mm
  *       |                          |   Completes d1+d2 all-coordinate synthesis (Stages 37–38).
+ *    39 | ARC + S_CURVE + TALL_ARC | DXF TABLES layer colors: HATCH_CURVED = ACI 4 (cyan);
+ *       |                          |   PARTS_CURVED = ACI 1 (red); verified once per panel type
+ *       |                          |   on a mixed sheet containing all three panels.
+ *       |                          |   6 it() blocks total.
+ *    40 | ARC + S_CURVE + TALL_ARC | '(CURVED / N cuts)' TEXT entity on LABELS layer: N equals
+ *       |                          |   actual kerfCount from curveFieldsComputer for that panel;
+ *       |                          |   one it() per panel type (3 it() blocks total).
  *
  * ─────────────────────────────────────────────────────────────────────────────
  *
@@ -5357,5 +5364,223 @@ describe('@smoke Stage 38 — HATCH_CURVED diagonal-2 all-coordinate synthesis',
   it('TALL_ARC — d2.y2 ≈ r(maxY)', () => {
     const { tallArcLines, tallBbox: b } = runStage38();
     expect(Math.abs(tallArcLines[1].y2 - r(b.maxY))).toBeLessThan(EPS);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 39 — HATCH_CURVED layer color = ACI 4 ; PARTS_CURVED layer color = ACI 1
+//
+// Asserts that the DXF TABLES section declares the correct ACI colors for the
+// two curved-panel layers defined in NESTING_LAYERS:
+//   HATCH_CURVED  →  ACI 4 (cyan)
+//   PARTS_CURVED  →  ACI 1 (red)
+//
+// Verified once per panel type (ARC, S_CURVE, TALL_ARC) on a single mixed
+// sheet containing all three panels, giving 6 it() blocks total.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('@smoke Stage 39 — DXF TABLES layer colors: HATCH_CURVED=4, PARTS_CURVED=1', () => {
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+
+  /** Extract layer-name → ACI-color map from the DXF TABLES section. */
+  /** Extract layer-name → ACI-color map from the DXF TABLES section. */
+  function parseLayerColors(content: string): Record<string, number> {
+    const result: Record<string, number> = {};
+    // Locate the TABLES section (comes after the HEADER ENDSEC)
+    const tablesStart = content.indexOf('\n2\nTABLES\n');
+    if (tablesStart === -1) return result;
+    const rest      = content.slice(tablesStart);
+    const tablesEnd = rest.indexOf('\n0\nENDSEC');
+    const tables    = tablesEnd === -1 ? rest : rest.slice(0, tablesEnd);
+    // Each LAYER entry starts after a lone "0\nLAYER" line
+    const segs = tables.split('\n0\nLAYER\n').slice(1);
+    for (const seg of segs) {
+      const nameM  = seg.match(/^2\n([^\n]+)/);
+      const colorM = seg.match(/\n62\n(\d+)/);
+      if (nameM && colorM) {
+        result[nameM[1].trim()] = parseInt(colorM[1], 10);
+      }
+    }
+    return result;
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  function runStage39() {
+    const { row: arcRow }     = buildCurvedRow();
+    const { row: sCurveRow }  = buildSCurveRow();
+    const { row: tallArcRow } = buildTallArcRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow, tallArcRow]);
+    expect(sheets).toHaveLength(1);
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    return { colors: parseLayerColors(output.content) };
+  }
+
+  // ── ARC sheet — layer colors ───────────────────────────────────────────
+
+  it('ARC sheet — HATCH_CURVED layer color is ACI 4 (cyan)', () => {
+    const { colors } = runStage39();
+    expect(colors['HATCH_CURVED']).toBe(4);
+  });
+
+  it('ARC sheet — PARTS_CURVED layer color is ACI 1 (red)', () => {
+    const { colors } = runStage39();
+    expect(colors['PARTS_CURVED']).toBe(1);
+  });
+
+  // ── S_CURVE sheet — layer colors ──────────────────────────────────────
+
+  it('S_CURVE sheet — HATCH_CURVED layer color is ACI 4 (cyan)', () => {
+    const { colors } = runStage39();
+    expect(colors['HATCH_CURVED']).toBe(4);
+  });
+
+  it('S_CURVE sheet — PARTS_CURVED layer color is ACI 1 (red)', () => {
+    const { colors } = runStage39();
+    expect(colors['PARTS_CURVED']).toBe(1);
+  });
+
+  // ── TALL_ARC sheet — layer colors ─────────────────────────────────────
+
+  it('TALL_ARC sheet — HATCH_CURVED layer color is ACI 4 (cyan)', () => {
+    const { colors } = runStage39();
+    expect(colors['HATCH_CURVED']).toBe(4);
+  });
+
+  it('TALL_ARC sheet — PARTS_CURVED layer color is ACI 1 (red)', () => {
+    const { colors } = runStage39();
+    expect(colors['PARTS_CURVED']).toBe(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 40 — '(CURVED / N cuts)' label text matches actual kerfCount
+//
+// Asserts that each curved panel's sub-label in the DXF ENTITIES section reads
+// '(CURVED / N cuts)' where N equals the kerfCount computed by curveFieldsComputer
+// for that specific panel/material combination.
+//
+// One it() per panel type: ARC, S_CURVE, TALL_ARC (3 it() blocks total).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('@smoke Stage 40 — (CURVED / N cuts) label matches kerfCount', () => {
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+
+  /**
+   * Extract all N values from "(CURVED / N cuts)" TEXT entities on the LABELS layer.
+   * Returns an array of integer kerf counts found in order of appearance.
+   */
+  function parseCurvedLabelCounts(content: string): number[] {
+    const counts: number[] = [];
+    // Split on each TEXT entity boundary
+    const segs = content.split('\n0\nTEXT\n').slice(1);
+    for (const seg of segs) {
+      // Must be on LABELS layer
+      if (!seg.includes('8\nLABELS\n')) continue;
+      // Extract the text value (group code 1)
+      const textM = seg.match(/\n1\n\(CURVED \/ (\d+) cuts\)/);
+      if (textM) {
+        counts.push(parseInt(textM[1], 10));
+      }
+    }
+    return counts;
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  // ── ARC ───────────────────────────────────────────────────────────────────
+
+  it('ARC — (CURVED / N cuts) label N matches actual kerfCount', () => {
+    const { row: arcRow, kerfCount } = buildCurvedRow();
+    const { sheets } = runNesting([arcRow]);
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_ARC', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const counts = parseCurvedLabelCounts(output.content);
+    expect(counts).toHaveLength(1);
+    expect(counts[0]).toBe(kerfCount);
+  });
+
+  // ── S_CURVE ───────────────────────────────────────────────────────────────
+
+  it('S_CURVE — (CURVED / N cuts) label N matches actual kerfCount', () => {
+    const { row: sCurveRow, kerfCount } = buildSCurveRow();
+    const { sheets } = runNesting([sCurveRow]);
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_SCURVE', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const counts = parseCurvedLabelCounts(output.content);
+    expect(counts).toHaveLength(1);
+    expect(counts[0]).toBe(kerfCount);
+  });
+
+  // ── TALL_ARC ──────────────────────────────────────────────────────────────
+
+  it('TALL_ARC — (CURVED / N cuts) label N matches actual kerfCount', () => {
+    const { row: tallArcRow, kerfCount } = buildTallArcRow();
+    const { sheets } = runNesting([tallArcRow]);
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_TALLARC', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const counts = parseCurvedLabelCounts(output.content);
+    expect(counts).toHaveLength(1);
+    expect(counts[0]).toBe(kerfCount);
   });
 });

@@ -260,7 +260,7 @@ class DxfBuilder {
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * Precision and Structural Integrity Invariants  (Stages 22 – 38)
+ * Precision, Structural Integrity, and Label Invariants  (Stages 22 – 40)
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Endpoint rounding (Stage 22): addLine() applies Math.round(v × 100) / 100
@@ -314,9 +314,17 @@ class DxfBuilder {
  *       |                          |   d2.x2 ≈ r(minX), d2.y2 ≈ r(maxY);
  *       |                          |   12 it() blocks (4 coords × 3 panel types); ε < 0.015 mm
  *       |                          |   Completes d1+d2 all-coordinate synthesis (Stages 37–38).
+ *    39 | ARC + S_CURVE + TALL_ARC | DXF TABLES layer colors: HATCH_CURVED = ACI 4 (cyan);
+ *       |                          |   PARTS_CURVED = ACI 1 (red). Verified by parsing the
+ *       |                          |   TABLES section (group code 62) on a mixed sheet.
+ *       |                          |   6 it() blocks (2 layers × 3 panel types).
+ *    40 | ARC + S_CURVE + TALL_ARC | '(CURVED / N cuts)' TEXT entity on LABELS layer: N equals
+ *       |                          |   actual kerfCount from curveFieldsComputer. Verified by
+ *       |                          |   parsing TEXT entities (group code 1) for each panel type.
+ *       |                          |   3 it() blocks (one per panel type).
  *
  * All invariants are verified end-to-end in:
- *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 38)
+ *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 40)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 const NESTING_LAYERS = [

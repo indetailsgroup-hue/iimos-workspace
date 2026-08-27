@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.9.0] - 2026-08-27
+
+### Added
+
+- **Smoke Stage 39 — DXF TABLES layer colors** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Asserts that the DXF TABLES section declares `HATCH_CURVED = ACI 4` (cyan) and
+  `PARTS_CURVED = ACI 1` (red) for all three panel types (ARC, S_CURVE, TALL_ARC) on a
+  mixed sheet. Implemented `parseLayerColors()` helper that correctly locates the TABLES
+  section via `\n2\nTABLES\n` rather than the first ENDSEC. 6 new it() blocks.
+
+- **Smoke Stage 40 — `(CURVED / N cuts)` label text matches kerfCount**
+  (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Asserts that each curved panel's sub-label TEXT entity on the LABELS layer contains
+  `(CURVED / N cuts)` where N exactly equals the `kerfCount` returned by
+  `computeCurveFields`. Implemented `parseCurvedLabelCounts()` helper that splits on
+  TEXT entity boundaries and filters by layer. 3 new it() blocks (one per panel type).
+
+- **JSDoc invariant table extended to Stage 40** — both
+  `curvedPanelDxfPipeline.smoke.test.ts` (Section 3) and `buildDxfSheets.ts`
+  (Precision / Label Invariants section) updated with Stage 39 and 40 rows;
+  section headers updated to "Stages 22 – 40" and reference updated to "(Stages 7 – 40)".
+
+### Milestone: d1+d2 All-Coordinate Synthesis (Stages 37–38)
+
+Stages 37 and 38 (shipped in v2.8.0) together completed full corner-pinning synthesis
+for both HATCH_CURVED diagonals:
+- **Stage 37**: verified all four coordinates of d1 jointly
+  (d1.x1≈r(minX), d1.y1≈r(minY), d1.x2≈r(maxX), d1.y2≈r(maxY)).
+- **Stage 38**: verified all four coordinates of d2 jointly
+  (d2.x1≈r(maxX), d2.y1≈r(minY), d2.x2≈r(minX), d2.y2≈r(maxY)).
+Both stages cover ARC, S_CURVE, and TALL_ARC panel types with 12 it() blocks each
+and ε < 0.015 mm tolerance, completing the geometric correctness contract for
+HATCH_CURVED diagonal emission.
+
+---
+
 ## [2.8.0] - 2026-08-27
 
 ### Added
