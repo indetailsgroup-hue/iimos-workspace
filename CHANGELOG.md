@@ -4,6 +4,35 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [11.6.0] - 2026-08-27
+
+### Added
+
+#### Stage 112 — Four full sheets (qty=220, no remainder)
+- Smoke test asserting that `qty=220` curved panels produce exactly **4 sheets** with no remainder
+  (220 = 4 × 55).
+- All four sheets hold exactly **55 placements** each, all `isCurved=true`.
+- DXF `PARTS_CURVED = 220` (55 × 4) asserted on **all four sheets** via loop.
+- Continues the full-sheet sequence: Stage 110 (n=3) → Stage 112 (n=4).
+
+#### Stage 113 — Three full sheets + 1 overflow (qty=166)
+- Smoke test asserting that `qty=166` curved panels produce exactly **4 sheets**
+  (166 = 3 × 55 + 1).
+- `sheets[0]`, `sheets[1]`, `sheets[2]` each hold 55 placements; `sheets[3]` holds exactly
+  **1 placement** at `x=10`, `y=10`, `rotation=90`.
+- All placements across all four sheets are `isCurved=true`.
+- Mirrors Stage 109 (2-sheet overflow boundary) at the 3-sheet boundary.
+
+#### JSDoc updates
+- Stage-table rows 112–113 added to smoke test file JSDoc.
+- JSDoc range line updated: `Stages 22–111` → `Stages 22–113`.
+- `buildDxfSheets.ts` cross-reference updated: `(Stages 7–111)` → `(Stages 7–113)`.
+
+### Changed
+- Smoke test suite now contains **366 tests** (Stages 1–113 + supporting helpers).
+
+---
+
 ## [11.5.0] - 2026-08-27
 
 ### Added
