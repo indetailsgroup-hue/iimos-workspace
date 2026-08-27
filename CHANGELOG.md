@@ -4,6 +4,35 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [11.2.0] - 2026-08-27
+
+### Added
+
+#### Stage 104 — Eight full sheets (qty=440, no remainder)
+- Smoke test asserting that `qty=440` curved panels (`cutW=200`, `cutH=200`,
+  `developedLength=210`, `projectedDepth=200`, `curvedEdge='TOP'`) produce exactly **8 sheets**
+  with **no remainder sheet** (440 = 8 × 55).
+- Every sheet is asserted to hold exactly **55 placements**, all `isCurved=true`.
+- DXF for `sheets[7]` asserted to contain **PARTS_CURVED = 220** (55 × 4 LINE entities).
+- Extends the full-sheet boundary sequence: Stage 100 (6 sheets) → Stage 102 (7) → Stage 104 (8).
+
+#### Stage 105 — FFDH boundary: qty=54 (one panel short of a full sheet)
+- Smoke test asserting that `qty=54` curved panels produce exactly **1 sheet** with **54 placements**.
+- Distribution: 10 full shelves (50 panels) + 4 panels on shelf-11 (all 54 fit, since shelf-11
+  `y = 2045`, `2045 + 200 = 2245 ≤ 2430 sheetBoundary`).
+- DXF for sheet-1 asserted to contain **PARTS_CURVED = 216** (54 × 4 LINE entities).
+- Validates the "one-short" boundary immediately before the 55 → full-sheet transition.
+
+#### JSDoc updates
+- Stage-table rows 104–105 added to smoke test file JSDoc.
+- JSDoc range line updated: `Stages 22–103` → `Stages 22–105`.
+- `buildDxfSheets.ts` cross-reference updated: `(Stages 7–103)` → `(Stages 7–105)`.
+
+### Changed
+- Smoke test suite now contains **358 tests** (Stages 1–105 + supporting helpers).
+
+---
+
 ## [11.1.0] - 2026-08-27
 
 ### Added
