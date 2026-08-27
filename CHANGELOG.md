@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.2.0] - 2026-08-27
+
+### Added
+
+#### Smoke Test — Stage 64: rotation=270 HATCH_CURVED diagonal correctness
+- Manually constructed `NestingSheet` with `rotation=270` for the ARC fixture.
+- Asserts `getRotatedDimensions(cutW, cutH, 270)` returns `{ w: cutH, h: cutW }` (same
+  branch as `rotation=90`), confirming the symmetric rotation guard.
+- Verifies d1 and d2 each span the correct flat-blank bbox corners (ε < 0.02 mm).
+- 1 `it()` block.
+
+#### Smoke Test — Stage 65: zero-correction panel emits zero HATCH_CURVED lines
+- Constructs a `CutListRow` with `developedLength=0`, `projectedDepth=0`,
+  `curvedEdge='TOP'` so `correction = developedLength − projectedDepth = 0`.
+- Confirms `isCurved=false` in the produced `NestingSheet` placement.
+- Asserts `HATCH_CURVED` LINE count equals zero in the DXF output.
+- Guards against false positives from the curved pipeline when a flat panel is
+  accidentally routed through it.
+- 1 `it()` block.
+
+#### JSDoc
+- Smoke test file header updated from `Stages 22 – 63` to `Stages 22 – 65`; table
+  entries added for Stages 64 and 65.
+- `buildDxfSheets.ts` cross-reference updated from `(Stages 7 – 63)` to `(Stages 7 – 65)`.
+
+### Milestone
+- **Rotation-guard and determinism milestone** (Stages 61–63): rotation=180 diagonal
+  correctness (Stage 61), non-zero diagonal length guard for all three panel types
+  (Stage 62), and HATCH_CURVED coordinate determinism across two `runNesting` runs
+  (Stage 63) — all fully covered as of v4.1.0; documented here for milestone traceability.
+- Total smoke-test coverage: **318 tests** across 65 stages.
+
 ## [4.1.0] - 2026-08-27
 
 ### Added

@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 63: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, and HATCH_CURVED count
+ * Stages 22 – 65: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation and zero-correction guards
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -199,6 +199,13 @@
  *    63 | ARC / S_CURVE            | regression guard: running runNesting twice with the
  *       |                          |   same CutListRow yields bit-for-bit identical
  *       |                          |   HATCH_CURVED coordinates; 2 it() blocks.
+ *    64 | ARC (rotation=270)       | manually constructed NestingSheet with rotation=270;
+ *       |                          |   getRotatedDimensions returns w=cutH, h=cutW (same
+ *       |                          |   branch as rotation=90); d1 and d2 span flat-blank
+ *       |                          |   bbox corners (ε < 0.02 mm); 1 it() block.
+ *    65 | ARC (projectedDepth=0)   | panel with correction=developedLength−projectedDepth=0
+ *       |                          |   gets isCurved=false; nesting emits zero
+ *       |                          |   HATCH_CURVED LINE entities; 1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -8216,6 +8223,174 @@ describe(
           expect(lines2[i].x2).toBe(lines1[i].x2);
           expect(lines2[i].y2).toBe(lines1[i].y2);
         }
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 64 – rotation=270 HATCH_CURVED diagonal correctness
+// Asserts that when a curved placement is assigned rotation=270, the HATCH_CURVED
+// diagonal lines use w=cutH / h=cutW (same as rotation=90) and still span the
+// correct flat-blank bbox corners.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 64 – rotation=270 HATCH_CURVED diagonal corners match flat-blank bbox (w=cutH, h=cutW)',
+  () => {
+    const r64  = (v: number): number => Math.round(v * 100) / 100;
+    const EPS64 = 0.02;
+
+    function parseHATCHCURVEDLines64(content: string): Array<{ x1: number; y1: number; x2: number; y2: number }> {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(s => s.startsWith('8\nHATCH_CURVED\n'))
+        .map(seg => {
+          const num = (code: string) => {
+            const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+            return m ? parseFloat(m[1]) : NaN;
+          };
+          return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+        });
+    }
+
+    it(
+      'ARC curved panel with rotation=270 — d1 and d2 span correct flat-blank bbox corners (w=cutH, h=cutW, ε < 0.02 mm)',
+      () => {
+        // Derive real flat-blank cutW / cutH from the nesting pipeline
+        const { row: arcRow, kerfCount } = buildCurvedRow();
+        const { sheets: refSheets }      = runNesting([arcRow]);
+        const refPlacement               = refSheets[0].placements[0];
+
+        // Manually construct a NestingSheet with rotation=270
+        // getRotatedDimensions(cutW, cutH, 270) → { w: cutH, h: cutW }  (same as 90)
+        const PLACE_X = 10;
+        const PLACE_Y = 10;
+        const manualSheet: NestingSheet = {
+          index1:         1,
+          materialId:     MATERIAL_ID,
+          sheetW:         2440,
+          sheetH:         1220,
+          sheetThickness: 18,
+          label:          'NEST_64',
+          placements: [
+            {
+              partId:   'SMOKE_ARC_ROT270',
+              x:        PLACE_X,
+              y:        PLACE_Y,
+              rotation: 270,
+              cutW:     refPlacement.cutW,
+              cutH:     refPlacement.cutH,
+              isCurved: true,
+              kerfCount,
+            },
+          ],
+          utilization: 0,
+        };
+
+        const output = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE64', materialId: MATERIAL_ID },
+          nesting: manualSheet,
+          profile: getFactoryProfile('DEFAULT'),
+        });
+
+        const lines = parseHATCHCURVEDLines64(output.content);
+        expect(lines).toHaveLength(2);
+
+        // For rotation=270: w = cutH  (effective width = flat-blank height)
+        //                   h = cutW  (effective height = flat-blank width)
+        const w = refPlacement.cutH;
+        const h = refPlacement.cutW;
+
+        const minX = r64(PLACE_X);
+        const maxX = r64(PLACE_X + w);
+        const minY = r64(PLACE_Y);
+        const maxY = r64(PLACE_Y + h);
+
+        // d1: bottom-left (minX, minY) → top-right (maxX, maxY)
+        const d1 = lines.find(
+          l =>
+            Math.abs(l.x1 - minX) < EPS64 &&
+            Math.abs(l.y1 - minY) < EPS64 &&
+            Math.abs(l.x2 - maxX) < EPS64 &&
+            Math.abs(l.y2 - maxY) < EPS64,
+        );
+        // d2: bottom-right (maxX, minY) → top-left (minX, maxY)
+        const d2 = lines.find(
+          l =>
+            Math.abs(l.x1 - maxX) < EPS64 &&
+            Math.abs(l.y1 - minY) < EPS64 &&
+            Math.abs(l.x2 - minX) < EPS64 &&
+            Math.abs(l.y2 - maxY) < EPS64,
+        );
+
+        expect(d1).toBeDefined();
+        expect(d2).toBeDefined();
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 65 – zero-correction panel emits zero HATCH_CURVED lines
+// A panel with developedLength=0 and projectedDepth=0 (curvedEdge still set)
+// produces correction=0 → isCurved=false → buildDxfSheet must emit zero
+// HATCH_CURVED LINE entities, even though curvedEdge is present.
+//
+// Rationale: isCurved = hasCorrection && correction > 0
+//   hasCorrection = (developedLength ≠ undefined) && (projectedDepth ≠ undefined)
+//                   && (curvedEdge ≠ undefined)          → true
+//   correction    = 0 − 0 = 0
+//   isCurved      = true && 0 > 0 = false
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 65 – zero-correction (projectedDepth=0) panel emits zero HATCH_CURVED lines',
+  () => {
+    function countHATCHCURVEDLines65(content: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(s => s.startsWith('8\nHATCH_CURVED\n')).length;
+    }
+
+    it(
+      'panel with developedLength=0, projectedDepth=0, curvedEdge=TOP — zero HATCH_CURVED lines in DXF',
+      () => {
+        const flatRow: CutListRow = {
+          partId:          'SMOKE_FLAT_65',
+          materialId:      MATERIAL_ID,
+          label:           'Degenerate Flat Panel 65',
+          finishW:         400,
+          finishH:         800,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            400,
+          cutH:            800,
+          qty:             1,
+          // All three curve fields present but correction is exactly zero:
+          //   correction = developedLength − projectedDepth = 0 − 0 = 0
+          //   → isCurved = false → no HATCH_CURVED
+          developedLength: 0,
+          projectedDepth:  0,
+          curvedEdge:      'TOP',
+          kerfCount:       0,
+          grain:           undefined,
+        };
+
+        const { sheets } = runNesting([flatRow]);
+        expect(sheets).toHaveLength(1);
+        expect(sheets[0].placements).toHaveLength(1);
+
+        // isCurved must not have propagated
+        expect(sheets[0].placements[0].isCurved).toBeFalsy();
+
+        const output = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE65', materialId: MATERIAL_ID },
+          nesting: sheets[0],
+          profile: getFactoryProfile('DEFAULT'),
+        });
+
+        // Zero HATCH_CURVED lines — flat panel is not hatched
+        expect(countHATCHCURVEDLines65(output.content)).toBe(0);
       },
     );
   },
