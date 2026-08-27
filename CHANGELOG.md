@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.0.0] - 2026-08-27
+
+### BREAKING CHANGE
+
+This major release marks the completion of the **HATCH_CURVED Geometric Verification Series**
+(Smoke Stages 52 – 60). All HATCH_CURVED diagonal geometry is now fully validated end-to-end
+against flat-blank placement coordinates. Any downstream test that previously relied on
+undocumented HATCH_CURVED line ordering must be updated to use bbox-proximity matching.
+
+### Added
+
+#### Smoke Stage 52 — HATCH_CURVED count invariant: single-panel sheets
+- `countHATCHCURVEDLines()` helper counts HATCH_CURVED LINE entities in DXF content.
+- 3 it() blocks (ARC, S_CURVE, TALL_ARC): each single-panel sheet emits exactly 2 HATCH_CURVED
+  lines (one d1 diagonal, one d2 diagonal).
+
+#### Smoke Stage 53 — HATCH_CURVED count invariant: two-panel sheet (ARC + S_CURVE)
+- 1 it() block: ARC + S_CURVE on the same sheet produces exactly 4 HATCH_CURVED lines
+  (2 × curved_count rule confirmed for multi-panel sheets).
+
+#### Smoke Stage 54 — HATCH_CURVED diagonal geometry: ARC fixture
+- `parseHATCHCURVEDLines()` helper parses HATCH_CURVED LINE segments from DXF content.
+- 1 it() block: both diagonal lines span the four flat-blank bbox corners
+  (ε < 0.015 mm): d1 from (minX,minY)→(maxX,maxY), d2 from (maxX,minY)→(minX,maxY).
+
+#### Smoke Stage 55 — HATCH_CURVED diagonal geometry: S_CURVE fixture (rotation=90)
+- 1 it() block: rotation-aware w/h (w=cutH, h=cutW for rotation=90); d1/d2 corners
+  verified at ε < 0.015 mm.
+
+#### Smoke Stage 56 — HATCH_CURVED diagonal geometry: TALL_ARC fixture (rotation=0)
+- 1 it() block: grain=HORIZONTAL forces rotation=0; cutW and cutH used directly;
+  d1/d2 corners verified at ε < 0.015 mm.
+
+#### Smoke Stage 57 — per-panel HATCH_CURVED isolation: ARC + S_CURVE two-panel sheet
+- `isD1()`/`isD2()` proximity helpers match HATCH_CURVED lines to a specific placement
+  bbox rather than relying on emission order.
+- 1 it() block: each placement owns exactly 1 d1 match and 1 d2 match from 4 total lines.
+
+#### Smoke Stage 58 — HATCH_CURVED diagonal intersection equals flat-blank bbox centre
+- 3 it() blocks (ARC, S_CURVE, TALL_ARC): intersection computed as midpoint of d1
+  `(intersectionX = (d1.x1+d1.x2)/2, intersectionY = (d1.y1+d1.y2)/2)` equals
+  expected bbox centre to within ε < 0.015 mm.
+
+#### Smoke Stage 59 — overlapping-Y HATCH_CURVED proximity isolation
+- Fixture: two ARC panels (finishWidth=400 and finishWidth=300) on a wide sheet
+  (sheetWidth=3000); FFDH places both at y_start=10 → Y ranges [10,410] and [10,310]
+  overlap.
+- 1 it() block: asserts `sheets.length===1`, `placements.length===2`,
+  `placements[0].y === placements[1].y` (same row confirmed), then uses
+  `isD1_59()`/`isD2_59()` proximity helpers to assert each placement still owns
+  exactly 1 d1 and 1 d2 from 4 total HATCH_CURVED lines.
+
+#### Smoke Stage 60 — diagonal intersection strictly inside flat-blank bbox
+- 3 it() blocks (ARC, S_CURVE, TALL_ARC): strict inequality assertions
+  `minX < intersectionX < maxX` and `minY < intersectionY < maxY` (no tolerance required
+  for centre-point containment; reuses same midpoint formula as Stage 58).
+
+### Changed
+
+- `buildDxfSheets.ts` JSDoc reference updated to `(Stages 7 – 60)`.
+- Smoke test module header updated to `Stages 22 – 60`; stage table extended with
+  entries for Stages 59 and 60.
+
 ## [3.8.0] - 2026-08-27
 
 ### Overview

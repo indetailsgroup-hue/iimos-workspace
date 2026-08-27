@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 58: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, and HATCH_CURVED count
+ * Stages 22 – 60: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, and HATCH_CURVED count
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -180,6 +180,15 @@
  *       |                          |   intersectionX = (d1.x1+d1.x2)/2,
  *       |                          |   intersectionY = (d1.y1+d1.y2)/2;
  *       |                          |   ε < 0.015 mm; 3 it() blocks (one per type).
+ *    59 | ARC × 2 (wide sheet)     | two ARC panels with overlapping Y ranges on same
+ *       |                          |   sheet (sheetWidth=3000); HATCH_CURVED lines
+ *       |                          |   isolated by bbox proximity, not emission order;
+ *       |                          |   each placement owns exactly 1 d1 + 1 d2; 1 it().
+ *    60 | ARC / S_CURVE / TALL_ARC | diagonal intersection (midpoint of d1) lies
+ *       |                          |   strictly inside flat-blank bbox:
+ *       |                          |   minX < intersectionX < maxX and
+ *       |                          |   minY < intersectionY < maxY;
+ *       |                          |   strict inequalities, no tolerance; 3 it() blocks.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -7614,6 +7623,292 @@ describe(
 
       expect(Math.abs(intersectionX - expectedCentreX)).toBeLessThan(EPS);
       expect(Math.abs(intersectionY - expectedCentreY)).toBeLessThan(EPS);
+    });
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 59 – overlapping-Y HATCH_CURVED isolation (two ARC panels, same sheet)
+// Asserts that HATCH_CURVED lines are isolated by bbox proximity even when the
+// two placements share the same y_start (i.e. their Y ranges overlap).
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 59 – overlapping-Y two-panel HATCH_CURVED proximity isolation',
+  () => {
+    function parseHATCHCURVEDLines59(content: string): Array<{ x1: number; y1: number; x2: number; y2: number }> {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(s => s.startsWith('8\nHATCH_CURVED\n'))
+        .map(seg => {
+          const num = (code: string) => {
+            const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+            return m ? parseFloat(m[1]) : NaN;
+          };
+          return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+        });
+    }
+
+    function isD1_59(
+      line: { x1: number; y1: number; x2: number; y2: number },
+      minX: number, minY: number, maxX: number, maxY: number,
+      eps: number,
+    ): boolean {
+      return (
+        Math.abs(line.x1 - minX) < eps &&
+        Math.abs(line.y1 - minY) < eps &&
+        Math.abs(line.x2 - maxX) < eps &&
+        Math.abs(line.y2 - maxY) < eps
+      );
+    }
+
+    function isD2_59(
+      line: { x1: number; y1: number; x2: number; y2: number },
+      minX: number, minY: number, maxX: number, maxY: number,
+      eps: number,
+    ): boolean {
+      return (
+        Math.abs(line.x1 - maxX) < eps &&
+        Math.abs(line.y1 - minY) < eps &&
+        Math.abs(line.x2 - minX) < eps &&
+        Math.abs(line.y2 - maxY) < eps
+      );
+    }
+
+    const r = (v: number): number => Math.round(v * 100) / 100;
+
+    it(
+      'two ARC panels on same wide sheet with overlapping Y ranges — each placement owns exactly 1 d1 and 1 d2',
+      () => {
+        const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+
+        // Panel A: finishWidth=400 → effectiveH=400 (FFDH sorts taller first)
+        const rowA: CutListRow = {
+          partId:          'SMOKE_ARC_59A',
+          materialId:      MATERIAL_ID,
+          label:           'ARC Panel A Stage59',
+          finishW:         400,
+          finishH:         PANEL_STUB.finishHeight,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            400,
+          cutH:            PANEL_STUB.finishHeight,
+          qty:             1,
+          developedLength: fields.developedLength,
+          projectedDepth:  fields.projectedDepth,
+          kerfCount:       fields.kerfCount,
+          curvedEdge:      fields.curvedEdge ?? undefined,
+          grain:           undefined,
+        };
+
+        // Panel B: finishWidth=300 → effectiveH=300 (shorter, placed second same row)
+        const rowB: CutListRow = {
+          partId:          'SMOKE_ARC_59B',
+          materialId:      MATERIAL_ID,
+          label:           'ARC Panel B Stage59',
+          finishW:         300,
+          finishH:         PANEL_STUB.finishHeight,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            300,
+          cutH:            PANEL_STUB.finishHeight,
+          qty:             1,
+          developedLength: fields.developedLength,
+          projectedDepth:  fields.projectedDepth,
+          kerfCount:       fields.kerfCount,
+          curvedEdge:      fields.curvedEdge ?? undefined,
+          grain:           undefined,
+        };
+
+        // Wide sheet so both fit in the same FFDH row
+        const { sheets } = runNesting([rowA, rowB], { sheetWidth: 3000 });
+
+        expect(sheets).toHaveLength(1);
+        expect(sheets[0].placements).toHaveLength(2);
+
+        // Both panels land at the same y_start → Y ranges overlap
+        expect(sheets[0].placements[0].y).toBe(sheets[0].placements[1].y);
+
+        const output = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE59', materialId: MATERIAL_ID },
+          nesting: sheets[0],
+          profile: getFactoryProfile('DEFAULT'),
+        });
+
+        const allLines = parseHATCHCURVEDLines59(output.content);
+        expect(allLines).toHaveLength(4); // 2 per curved panel × 2 panels
+
+        const EPS59 = 0.02;
+
+        for (const p of sheets[0].placements) {
+          const isRotated = p.rotation === 90 || p.rotation === 270;
+          const w = isRotated ? p.cutH : p.cutW;
+          const h = isRotated ? p.cutW : p.cutH;
+
+          const minX = r(p.x);
+          const minY = r(p.y);
+          const maxX = r(p.x + w);
+          const maxY = r(p.y + h);
+
+          const d1Matches = allLines.filter(l => isD1_59(l, minX, minY, maxX, maxY, EPS59));
+          const d2Matches = allLines.filter(l => isD2_59(l, minX, minY, maxX, maxY, EPS59));
+
+          expect(d1Matches).toHaveLength(1);
+          expect(d2Matches).toHaveLength(1);
+        }
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 60 – diagonal intersection strictly inside flat-blank bbox
+// Asserts that (d1.x1+d1.x2)/2, (d1.y1+d1.y2)/2 lies strictly inside the
+// flat-blank bounding rectangle: minX < intersectionX < maxX, etc.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 60 – HATCH_CURVED diagonal intersection strictly inside flat-blank bbox',
+  () => {
+    const r = (v: number): number => Math.round(v * 100) / 100;
+
+    function parseHATCHCURVEDLines60(content: string): Array<{ x1: number; y1: number; x2: number; y2: number }> {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(s => s.startsWith('8\nHATCH_CURVED\n'))
+        .map(seg => {
+          const num = (code: string) => {
+            const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+            return m ? parseFloat(m[1]) : NaN;
+          };
+          return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+        });
+    }
+
+    it('ARC — intersection strictly inside flat-blank bbox', () => {
+      const { row: arcRow } = buildCurvedRow();
+      const { sheets }      = runNesting([arcRow]);
+
+      expect(sheets).toHaveLength(1);
+
+      const p = sheets[0].placements[0];
+      const output = buildDxfSheet({
+        planned: { index1: 1, sheetId: 'SHEET_STAGE60_ARC', materialId: MATERIAL_ID },
+        nesting: sheets[0],
+        profile: getFactoryProfile('DEFAULT'),
+      });
+
+      const lines = parseHATCHCURVEDLines60(output.content);
+      expect(lines).toHaveLength(2);
+
+      const d1 = lines[0];
+      const intersectionX = (d1.x1 + d1.x2) / 2;
+      const intersectionY = (d1.y1 + d1.y2) / 2;
+
+      const isRotated = p.rotation === 90 || p.rotation === 270;
+      const w = isRotated ? p.cutH : p.cutW;
+      const h = isRotated ? p.cutW : p.cutH;
+
+      const minX = r(p.x);
+      const maxX = r(p.x + w);
+      const minY = r(p.y);
+      const maxY = r(p.y + h);
+
+      expect(intersectionX).toBeGreaterThan(minX);
+      expect(intersectionX).toBeLessThan(maxX);
+      expect(intersectionY).toBeGreaterThan(minY);
+      expect(intersectionY).toBeLessThan(maxY);
+    });
+
+    it('S_CURVE — intersection strictly inside flat-blank bbox', () => {
+      const { row: sCurveRow } = buildSCurveRow();
+      const { sheets }         = runNesting([sCurveRow]);
+
+      expect(sheets).toHaveLength(1);
+
+      const p = sheets[0].placements[0];
+      const output = buildDxfSheet({
+        planned: { index1: 1, sheetId: 'SHEET_STAGE60_SCURVE', materialId: MATERIAL_ID },
+        nesting: sheets[0],
+        profile: getFactoryProfile('DEFAULT'),
+      });
+
+      const lines = parseHATCHCURVEDLines60(output.content);
+      expect(lines).toHaveLength(2);
+
+      const d1 = lines[0];
+      const intersectionX = (d1.x1 + d1.x2) / 2;
+      const intersectionY = (d1.y1 + d1.y2) / 2;
+
+      const isRotated = p.rotation === 90 || p.rotation === 270;
+      const w = isRotated ? p.cutH : p.cutW;
+      const h = isRotated ? p.cutW : p.cutH;
+
+      const minX = r(p.x);
+      const maxX = r(p.x + w);
+      const minY = r(p.y);
+      const maxY = r(p.y + h);
+
+      expect(intersectionX).toBeGreaterThan(minX);
+      expect(intersectionX).toBeLessThan(maxX);
+      expect(intersectionY).toBeGreaterThan(minY);
+      expect(intersectionY).toBeLessThan(maxY);
+    });
+
+    it('TALL_ARC (rotation=0) — intersection strictly inside flat-blank bbox', () => {
+      function buildTallArcRow() {
+        const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+        const row: CutListRow = {
+          partId:          'SMOKE_TALL_ARC_60',
+          materialId:      MATERIAL_ID,
+          label:           'Tall Arc Door 60',
+          finishW:         PANEL_STUB.finishWidth,
+          finishH:         PANEL_STUB.finishHeight,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            PANEL_STUB.finishWidth,
+          cutH:            PANEL_STUB.finishHeight,
+          qty:             1,
+          developedLength: fields.developedLength,
+          projectedDepth:  fields.projectedDepth,
+          kerfCount:       fields.kerfCount,
+          curvedEdge:      fields.curvedEdge ?? undefined,
+          grain:           'HORIZONTAL',
+        };
+        return { row, kerfCount: fields.kerfCount };
+      }
+
+      const { row: tallArcRow } = buildTallArcRow();
+      const { sheets }          = runNesting([tallArcRow]);
+
+      expect(sheets).toHaveLength(1);
+
+      const p = sheets[0].placements[0];
+      expect(p.rotation).toBe(0);
+
+      const output = buildDxfSheet({
+        planned: { index1: 1, sheetId: 'SHEET_STAGE60_TALLARC', materialId: MATERIAL_ID },
+        nesting: sheets[0],
+        profile: getFactoryProfile('DEFAULT'),
+      });
+
+      const lines = parseHATCHCURVEDLines60(output.content);
+      expect(lines).toHaveLength(2);
+
+      const d1 = lines[0];
+      const intersectionX = (d1.x1 + d1.x2) / 2;
+      const intersectionY = (d1.y1 + d1.y2) / 2;
+
+      const isRotated = p.rotation === 90 || p.rotation === 270;
+      const w = isRotated ? p.cutH : p.cutW;
+      const h = isRotated ? p.cutW : p.cutH;
+
+      const minX = r(p.x);
+      const maxX = r(p.x + w);
+      const minY = r(p.y);
+      const maxY = r(p.y + h);
+
+      expect(intersectionX).toBeGreaterThan(minX);
+      expect(intersectionX).toBeLessThan(maxX);
+      expect(intersectionY).toBeGreaterThan(minY);
+      expect(intersectionY).toBeLessThan(maxY);
     });
   },
 );
