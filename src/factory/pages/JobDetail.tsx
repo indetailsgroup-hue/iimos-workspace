@@ -32,6 +32,7 @@ import type { GcodeBundle } from "../../cnc/post/types";
 import { ExportOptionsDialog } from "../../components/ui/ExportOptionsDialog";
 import { buildCutListXlsx } from "../../core/export/monolith/builders/buildCutListXlsx";
 import { NestingSheetReport } from "../components/nesting/NestingSheetReport";
+import { DxfPreviewPanel } from "../components/nesting/DxfPreviewPanel";
 import { exportNestingPdf } from "../components/nesting/exportNestingPdf";
 import { exportCurvedDxfBatch } from "../components/nesting/exportCurvedDxfBatch";
 
@@ -903,6 +904,13 @@ function ExportTab({
               sheets={packet?.nestingSheets ?? []}
               jobId={jobId}
             />
+            {/* DXF Preview Panel */}
+            {(packet?.nestingSheets?.length ?? 0) > 0 && (
+              <div style={{ marginTop: 12, padding: 12, borderRadius: 8, border: '1px solid #1e293b', background: '#020617' }}>
+                <DxfPreviewPanel sheets={packet?.nestingSheets ?? []} jobId={jobId} />
+              </div>
+            )}
+
             {/* PDF Export + DXF Batch buttons */}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <button

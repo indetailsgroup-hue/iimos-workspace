@@ -4,6 +4,18 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [13.3.0] – 2026-08-27
+
+### Added
+- **Integration test**: `nestingPipeline.integration.test.tsx` — 6 tests verifying full pipeline from `buildFactoryPacketFromStores` → `nestingSheets` → `NestingSheetReport` SVG rendering with curved badges and kerf labels
+- **DxfPreviewPanel component** (`DxfPreviewPanel.tsx`): Inline SVG DXF preview showing sheet boundary, curved panel outlines with kerf slot lines, tab navigation between curved sheets, legend; 11 tests passing
+- **Multi-material grouping** in `NestingSheetReport`: `groupByMaterial()` helper separates sheets by `materialId`, renders color-coded section headers and tab navigation links, shows material count in toolbar; 8 new tests (19 total)
+- Wired `DxfPreviewPanel` into `JobDetail.tsx` — renders between NestingSheetReport and export buttons when nesting data has curved panels
+- `DxfPreviewPanel.test.tsx`: 11 test cases covering empty state, curved filtering, tab navigation, kerf labels, sheet count
+
+### Changed
+- `NestingSheetReport.tsx`: Refactored to render sheets grouped by material with 8-color cycling palette; single-material jobs render without tabs (backward compatible)
+
 ## [13.2.0] – 2026-08-27
 
 ### Added

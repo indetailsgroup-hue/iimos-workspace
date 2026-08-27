@@ -191,6 +191,50 @@ export interface NestingSheetReportProps {
   jobId?: string;
 }
 
+// ─── Material color palette ──────────────────────────────────────────────────
+
+const MATERIAL_COLORS = [
+  { bg: '#0d9488', border: '#14b8a6', text: '#99f6e4' }, // teal
+  { bg: '#7c3aed', border: '#8b5cf6', text: '#c4b5fd' }, // violet
+  { bg: '#d97706', border: '#f59e0b', text: '#fde68a' }, // amber
+  { bg: '#dc2626', border: '#ef4444', text: '#fca5a5' }, // red
+  { bg: '#2563eb', border: '#3b82f6', text: '#93c5fd' }, // blue
+  { bg: '#059669', border: '#10b981', text: '#6ee7b7' }, // emerald
+  { bg: '#db2777', border: '#ec4899', text: '#f9a8d4' }, // pink
+  { bg: '#4f46e5', border: '#6366f1', text: '#a5b4fc' }, // indigo
+] as const;
+
+function getMaterialColor(index: number) {
+  return MATERIAL_COLORS[index % MATERIAL_COLORS.length];
+}
+
+// ─── Multi-material grouping helper ──────────────────────────────────────────
+
+interface MaterialGroup {
+  materialId: string;
+  sheets: NestingSheet[];
+  colorIdx: number;
+}
+
+function groupByMaterial(sheets: NestingSheet[]): MaterialGroup[] {
+  const map = new Map<string, NestingSheet[]>();
+  for (const sheet of sheets) {
+    const existing = map.get(sheet.materialId);
+    if (existing) {
+      existing.push(sheet);
+    } else {
+      map.set(sheet.materialId, [sheet]);
+    }
+  }
+  const groups: MaterialGroup[] = [];
+  let idx = 0;
+  for (const [materialId, groupSheets] of map) {
+    groups.push({ materialId, sheets: groupSheets, colorIdx: idx });
+    idx++;
+  }
+  return groups;
+}
+
 export function NestingSheetReport({ sheets, jobId }: NestingSheetReportProps) {
   const handlePrint = () => window.print();
 
@@ -206,6 +250,9 @@ export function NestingSheetReport({ sheets, jobId }: NestingSheetReportProps) {
       </div>
     );
   }
+
+  const groups = groupByMaterial(sheets);
+  const isMultiMaterial = groups.length > 1;
 
   return (
     <>
@@ -226,6 +273,7 @@ export function NestingSheetReport({ sheets, jobId }: NestingSheetReportProps) {
         </span>
         <span className="text-[11px] text-slate-500 ml-1">
           {sheets.length} แผ่น
+          {isMultiMaterial && ` · ${groups.length} วัสดุ`}
         </span>
         <button
           onClick={handlePrint}
@@ -236,14 +284,83 @@ export function NestingSheetReport({ sheets, jobId }: NestingSheetReportProps) {
         </button>
       </div>
 
-      {/* ── Sheet blocks ── */}
+      {/* ── Material tabs (only if multi-material) ── */}
+      {isMultiMaterial && (
+        <div className="flex gap-1.5 mb-4 flex-wrap no-print" data-testid="material-tabs">
+          {groups.map((g) => {
+            const color = getMaterialColor(g.colorIdx);
+            return (
+              <a
+                key={g.materialId}
+                href={`#material-section-${g.materialId}`}
+                data-testid={`material-tab-${g.materialId}`}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  border: `1px solid ${color.border}`,
+                  background: `${color.bg}20`,
+                  color: color.text,
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                  textDecoration: 'none',
+                  fontWeight: 500,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {g.materialId} ({g.sheets.length})
+              </a>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Sheet blocks — grouped by material ── */}
       <div id="nesting-report-container" className="space-y-6">
-        {sheets.map((sheet) => (
-          <div key={sheet.index1} className="sheet-block">
-            <SheetHeader sheet={sheet} />
-            <SheetSvg sheet={sheet} />
-          </div>
-        ))}
+        {groups.map((group) => {
+          const color = getMaterialColor(group.colorIdx);
+          return (
+            <div
+              key={group.materialId}
+              id={`material-section-${group.materialId}`}
+              data-testid={`material-section-${group.materialId}`}
+            >
+              {/* Material section header (only shown if multi-material) */}
+              {isMultiMaterial && (
+                <div
+                  className="flex items-center gap-2 mb-3 pb-2"
+                  style={{ borderBottom: `2px solid ${color.border}40` }}
+                  data-testid={`material-header-${group.materialId}`}
+                >
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 3,
+                      background: color.bg,
+                      display: 'inline-block',
+                    }}
+                  />
+                  <span className="text-xs font-bold text-white font-mono">
+                    {group.materialId}
+                  </span>
+                  <span className="text-[10px] text-slate-500">
+                    {group.sheets.length} แผ่น · {group.sheets.reduce((s, sh) => s + sh.placements.length, 0)} ชิ้น
+                  </span>
+                </div>
+              )}
+
+              {/* Sheets in this material group */}
+              <div className="space-y-4">
+                {group.sheets.map((sheet) => (
+                  <div key={sheet.index1} className="sheet-block">
+                    <SheetHeader sheet={sheet} />
+                    <SheetSvg sheet={sheet} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </>
   );
