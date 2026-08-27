@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 48: precision, structural integrity, label, bounding-rect, and layer-count invariants
+ * Stages 22 – 50: precision, structural integrity, label, bounding-rect, layer-count, and SHEET invariants
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -6552,5 +6552,198 @@ describe('@smoke Stage 48 — mixed-sheet: one PARTS_CURVED rect, one PARTS rect
       straightBbox.maxY <= curvedBbox.minY  + EPS;
 
     expect(noOverlapX || noOverlapY).toBe(true);
+  });
+});
+
+// =============================================================================
+// Stage 49 — two curved panels on the same sheet produce PARTS_CURVED count = 8
+//            and their individual bounding boxes are non-overlapping
+// =============================================================================
+//
+// Two separate curved panels each produce one closed rectangle (4 LINE entities)
+// on PARTS_CURVED.  When both land on the same nesting sheet the total count
+// must be 8 and the two per-panel bboxes must not intersect.
+//
+// Panel combination: ARC (SMOKE_DOOR) + S_CURVE (SMOKE_SCURVE_DOOR).
+// FFDH geometry (sheet 1220 × 2440, kerf 3.5, edge 10):
+//   S_CURVE effectiveW ≈ 1051.8, effectiveH = 500  → shelf-1, y = 10
+//   ARC     effectiveW ≈ 909.44, effectiveH = 400  → shelf-2, y ≈ 513.5
+//   (shelf-1 remaining width ≈ 148 mm < ARC effectiveW → distinct shelves)
+//   Both shelves fit within 2440 mm → same sheet.
+//
+// 1 it() block.
+// =============================================================================
+
+describe('@smoke Stage 49 — two curved panels: PARTS_CURVED count=8, bboxes non-overlapping', () => {
+
+  const EPS = 0.015;
+
+  /**
+   * Split PARTS_CURVED LINE segments into per-rectangle groups of 4 and
+   * return each group's bounding rect.
+   * addRectangle() always emits its 4 edges consecutively, so chunk index i
+   * corresponds to the i-th curved placement in order.
+   */
+  function parsePARTSCURVEDRectList(
+    content: string,
+  ): Array<{ minX: number; maxX: number; minY: number; maxY: number }> {
+    const segs = content
+      .split('\n0\nLINE\n')
+      .slice(1)
+      .filter((s) => s.startsWith('8\nPARTS_CURVED\n'));
+
+    const result: Array<{ minX: number; maxX: number; minY: number; maxY: number }> = [];
+
+    for (let i = 0; i < segs.length; i += 4) {
+      const chunk = segs.slice(i, i + 4);
+      const xs: number[] = [];
+      const ys: number[] = [];
+      for (const seg of chunk) {
+        const num = (code: string): number => {
+          const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+          return m ? parseFloat(m[1]) : NaN;
+        };
+        xs.push(num('10'), num('11'));
+        ys.push(num('20'), num('21'));
+      }
+      result.push({
+        minX: Math.min(...xs),
+        maxX: Math.max(...xs),
+        minY: Math.min(...ys),
+        maxY: Math.max(...ys),
+      });
+    }
+    return result;
+  }
+
+  // ── ARC + S_CURVE ─────────────────────────────────────────────────────────
+
+  it('ARC + S_CURVE on same sheet: PARTS_CURVED count=8, two rects non-overlapping', () => {
+    const { row: arcRow }    = buildCurvedRow();
+    const { row: sCurveRow } = buildSCurveRow();
+    const { sheets } = runNesting([arcRow, sCurveRow]);
+
+    // Both curved panels must land on the same sheet
+    const sharedSheet = sheets.find(
+      (sh) => sh.placements.filter((pl) => pl.isCurved).length >= 2,
+    )!;
+    expect(sharedSheet).toBeDefined();
+
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_2ARC_R49', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sharedSheet,
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const { content } = output;
+
+    // ── Total count ───────────────────────────────────────────────────────────
+    const allSegs = content
+      .split('\n0\nLINE\n')
+      .slice(1)
+      .filter((s) => s.startsWith('8\nPARTS_CURVED\n'));
+    expect(allSegs.length).toBe(8);
+
+    // ── Per-panel bbox non-overlap ─────────────────────────────────────────────
+    const rects = parsePARTSCURVEDRectList(content);
+    expect(rects.length).toBe(2);
+
+    const [a, b] = rects;
+    const noOverlapX = a.maxX <= b.minX + EPS || b.maxX <= a.minX + EPS;
+    const noOverlapY = a.maxY <= b.minY + EPS || b.maxY <= a.minY + EPS;
+    expect(noOverlapX || noOverlapY).toBe(true);
+  });
+});
+
+// =============================================================================
+// Stage 50 — SHEET layer always has exactly 4 LINE entities regardless of
+//            how many placements are on the sheet
+// =============================================================================
+//
+// buildDxfSheet() calls addRectangle(0, 0, sheetW, sheetH, 'SHEET') exactly
+// once per sheet, producing exactly 4 LINE entities on the SHEET layer.
+// This invariant must hold for any combination of placements.
+//
+// 3 it() blocks:
+//   (a) single curved panel (ARC)
+//   (b) two curved panels (ARC + S_CURVE)
+//   (c) mixed sheet (ARC curved + STRAIGHT_ROW straight)
+// =============================================================================
+
+describe('@smoke Stage 50 — SHEET layer LINE count is always exactly 4', () => {
+
+  /**
+   * Count LINE entities on the SHEET layer.
+   * The sheet boundary is drawn by a single addRectangle() call → always 4.
+   */
+  function countSHEETLines(content: string): number {
+    return content
+      .split('\n0\nLINE\n')
+      .slice(1)
+      .filter((s) => s.startsWith('8\nSHEET\n'))
+      .length;
+  }
+
+  // ── (a) single curved panel ───────────────────────────────────────────────
+
+  it('single curved panel (ARC): SHEET LINE count = 4', () => {
+    const { row: arcRow } = buildCurvedRow();
+    const { sheets } = runNesting([arcRow]);
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_1C_R50A', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    expect(countSHEETLines(output.content)).toBe(4);
+  });
+
+  // ── (b) two curved panels ─────────────────────────────────────────────────
+
+  it('two curved panels (ARC + S_CURVE) on same sheet: SHEET LINE count = 4', () => {
+    const { row: arcRow }    = buildCurvedRow();
+    const { row: sCurveRow } = buildSCurveRow();
+    const { sheets } = runNesting([arcRow, sCurveRow]);
+    const sharedSheet = sheets.find(
+      (sh) => sh.placements.filter((pl) => pl.isCurved).length >= 2,
+    )!;
+    expect(sharedSheet).toBeDefined();
+
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_2C_R50B', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sharedSheet,
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    expect(countSHEETLines(output.content)).toBe(4);
+  });
+
+  // ── (c) mixed sheet (curved + straight) ──────────────────────────────────
+
+  it('mixed sheet (ARC + STRAIGHT_ROW): SHEET LINE count = 4', () => {
+    const { row: arcRow } = buildCurvedRow();
+    const { sheets } = runNesting([arcRow, STRAIGHT_ROW]);
+    const mixedSheet = sheets.find(
+      (sh) =>
+        sh.placements.some((pl) => pl.isCurved) &&
+        sh.placements.some((pl) => !pl.isCurved),
+    )!;
+    expect(mixedSheet).toBeDefined();
+
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_MIX_R50C', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: mixedSheet,
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    expect(countSHEETLines(output.content)).toBe(4);
   });
 });

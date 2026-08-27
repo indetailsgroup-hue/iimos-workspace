@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.4.0] - 2026-08-27
+
+### Overview
+Minor release completing the **layer-count and non-overlap validation milestone**
+(Stages 47–50).  Stages 47–48 (per-panel PARTS_CURVED count and mixed-sheet
+non-overlap, shipped in v3.3.0) are joined here by two new stages that cover
+multi-curved-panel count invariants and the unconditional SHEET-boundary count.
+Together these four stages close the full layer-count arc for every DXF LINE
+entity emitted by `buildDxfSheet`.
+
+### Added
+
+#### Stage 49 — two curved panels on the same sheet: PARTS_CURVED count = 8, bboxes non-overlapping
+- **Helper `parsePARTSCURVEDRectList(content)`** (Stage 49 describe scope):
+  filters all `PARTS_CURVED` LINE segments, chunks them into groups of 4
+  (one group per `addRectangle()` call), and returns an array of
+  `{ minX, minY, maxX, maxY }` objects — one per curved placement.
+- **1 `it()` block** (ARC + S_CURVE):
+  - Nests both panels via `runNesting([arcRow, sCurveRow])` and locates the
+    sheet where `placements.filter(isCurved).length >= 2`.
+  - Asserts total `PARTS_CURVED` LINE count = **8**.
+  - Parses the two per-panel bboxes with `parsePARTSCURVEDRectList` and
+    asserts `rects.length === 2` plus `noOverlapX || noOverlapY` (ε < 0.015 mm).
+- Confirms the additive `4 × curved_count` invariant for multi-panel sheets
+  and that FFDH places the two curved panels in distinct, non-intersecting
+  shelf regions (S_CURVE shelf-1 y ≈ 10; ARC shelf-2 y ≈ 513.5 mm).
+
+#### Stage 50 — SHEET layer LINE count is always exactly 4
+- **Helper `countSHEETLines(content)`**: counts LINE entities whose segment
+  starts with `'8\nSHEET\n'`.
+- **3 `it()` blocks**:
+  - **(a) single curved panel (ARC)**: `SHEET` count = 4.
+  - **(b) two curved panels (ARC + S_CURVE)** on the same sheet:
+    `SHEET` count = 4.
+  - **(c) mixed sheet (ARC + STRAIGHT_ROW)**: `SHEET` count = 4.
+- Verifies that `addRectangle(0, 0, sheetW, sheetH, 'SHEET')` is called
+  exactly once per `buildDxfSheet()` invocation regardless of how many
+  or what type of placements the nesting sheet carries.
+
+### Changed
+- **JSDoc** in `buildDxfSheets.ts` extended to document Stages 49–50 in the
+  reference table; reference updated to `(Stages 7–50)`.
+- **JSDoc** header line in `curvedPanelDxfPipeline.smoke.test.ts` updated to
+  `Stages 22–50`.
+
 ## [3.3.0] - 2026-08-27
 
 ### Overview

@@ -363,9 +363,18 @@ class DxfBuilder {
  *       |                          |   bounding boxes are non-overlapping on at least one axis
  *       |                          |   (separated panels occupy distinct regions of the sheet);
  *       |                          |   ε < 0.015 mm; 1 it() block.
+ *    49 | ARC + S_CURVE (same sh.) | two curved panels produce PARTS_CURVED count = 8 (4 per
+ *       |                          |   rect); per-panel bboxes parsed by chunking LINE segs
+ *       |                          |   into groups of 4 (parsePARTSCURVEDRectList); the two
+ *       |                          |   rects are non-overlapping on at least one axis;
+ *       |                          |   ε < 0.015 mm; 1 it() block.
+ *    50 | ARC / ARC+S_CURVE / mix  | SHEET layer LINE count is always exactly 4 regardless
+ *       |                          |   of placement count; one addRectangle() call per sheet
+ *       |                          |   on the SHEET layer; 3 it() blocks (single curved,
+ *       |                          |   two curved, mixed curved+straight).
  *
  * All invariants are verified end-to-end in:
- *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 48)
+ *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 50)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 const NESTING_LAYERS = [
