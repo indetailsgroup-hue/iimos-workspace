@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.4.4] - 2026-08-27
+
+### Added
+
+- **Stage 34 — Y-axis monotonicity** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Six new `it()` blocks assert that both HATCH_CURVED diagonals strictly ascend
+  in Y (the Y-axis counterpart of the Stage 33 X-axis orientation sense):
+  - `d1.y1 < d1.y2` — diagonal-1 ascends (bottom→top; no tolerance; strict)
+  - `d2.y1 < d2.y2` — diagonal-2 ascends (bottom→top; no tolerance; strict)
+  Verified for ARC, S_CURVE, and TALL_ARC panel types.
+
+- **JSDoc invariant table** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Stage 34 row appended to Section 3; section header updated to
+  "Stages 22 – 34".
+
+- **JSDoc invariant table** (`buildDxfSheets.ts`):
+  Stage 34 row appended to the "Precision and Structural Integrity Invariants
+  (Stages 22 – 34)" section; reference updated to `(Stages 7 – 34)`.
+
+**Test delta:** 217 → 223 (+6 tests, all passing)
+
+---
+
 ## [2.5.0] - 2026-08-27
 
 ### Added
