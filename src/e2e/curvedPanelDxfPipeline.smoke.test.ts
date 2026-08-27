@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 91: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, multi-panel scale validation, determinism guard, overflow two-sheet placement, overflow diagonal geometry, mixed-overflow exclusivity, and mixed-overflow completeness / determinism / FFDH-order validation
+ * Stages 22 – 93: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, multi-panel scale validation, determinism guard, overflow two-sheet placement, overflow diagonal geometry, mixed-overflow exclusivity, mixed-overflow completeness / determinism / FFDH-order validation, three-sheet overflow count, and sheet-3 diagonal geometry
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -329,6 +329,14 @@
  *       |                          |   sheet-2[1]=SMOKE_STRAIGHT_S91
  *       |                          |   (isCurved=false, x≈23.5, y=10);
  *       |                          |   non-overlapping; 1 it() block.
+ *    92 | curved qty=111           | Three-sheet overflow: sheets=3
+ *       |                          |   (55+55+1); PARTS_CURVED total
+ *       |                          |   across all sheets = 4×111 = 444;
+ *       |                          |   1 it() block.
+ *    93 | curved qty=111           | Sheet-3 diagonal geometry:
+ *       |                          |   HATCH_CURVED d1=(10,10)→(220,210)
+ *       |                          |   d2=(220,10)→(10,210) ε<0.015 mm;
+ *       |                          |   1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -10964,6 +10972,193 @@ describe(
         const p91S = sheet91b.placements[1];
         const ewB91 = p91B.rotation === 90 ? p91B.cutH : p91B.cutW;
         expect(p91B.x + ewB91).toBeLessThan(p91S.x);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 92 — Three-sheet overflow: qty=111 curved panels produce 3 sheets and
+//   PARTS_CURVED LINE count = 4 × 111 = 444 across all three sheets
+//
+// Fixture:
+//   • qty=111, partId='SMOKE_CURVED_S92', cutW=200, cutH=200,
+//     developedLength=210, projectedDepth=200, curvedEdge='TOP'
+//     → correction=10, flatBlankW=200, flatBlankH=210; part(w=200, h=210)
+//
+// FFDH: rotation=90 wins (placed_w=210, placed_h=200); 5/shelf × 11 = 55/sheet
+// Distribution: sheet-1=55, sheet-2=55, sheet-3=1 (111 total)
+// PARTS_CURVED = 4 × 111 = 444 (summed across all three DXF outputs)
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 92 — three-sheet overflow: qty=111 → 3 sheets, PARTS_CURVED = 4 × 111 = 444',
+  () => {
+
+    function countLayer92(content: string, layer: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter((seg) => seg.startsWith(`8\n${layer}\n`))
+        .length;
+    }
+
+    it(
+      'qty=111 curved panels → sheets=3 (55+55+1); PARTS_CURVED total across all sheets = 444',
+      () => {
+        const curvedRow92: CutListRow = {
+          partId:          'SMOKE_CURVED_S92',
+          cabinetId:       'CAB_SMOKE_92',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             111,
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Curved Panel S92',
+        };
+
+        const result92 = runNesting([curvedRow92]);
+
+        // Three sheets
+        expect(result92.sheets).toHaveLength(3);
+        const [sheet92a, sheet92b, sheet92c] = result92.sheets;
+
+        // Distribution: 55 + 55 + 1
+        expect(sheet92a.placements).toHaveLength(55);
+        expect(sheet92b.placements).toHaveLength(55);
+        expect(sheet92c.placements).toHaveLength(1);
+
+        // All placements isCurved=true
+        for (const sheet of result92.sheets) {
+          for (const p of sheet.placements) {
+            expect(p.isCurved).toBe(true);
+          }
+        }
+
+        // Build DXF for all three sheets and sum PARTS_CURVED
+        const outputs = result92.sheets.map((nesting, idx) =>
+          buildDxfSheet({
+            planned: { index1: idx + 1, sheetId: `SHEET_STAGE92_${idx + 1}`, materialId: MATERIAL_ID },
+            nesting,
+            profile: getFactoryProfile('DEFAULT'),
+          }),
+        );
+
+        const totalPartsCurved = outputs.reduce(
+          (sum, o) => sum + countLayer92(o.content, 'PARTS_CURVED'),
+          0,
+        );
+        expect(totalPartsCurved).toBe(4 * 111);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 93 — Sheet-3 diagonal geometry: HATCH_CURVED diagonal pair for the
+//   single overflow panel on sheet-3 spans the correct flat-blank bbox corners
+//
+// Fixture: same as Stage 92 (qty=111, correction=10, curvedEdge='TOP')
+// Sheet-3 placement: x=10, y=10, rotation=90, cutW=200, cutH=210
+//   → ew = cutH = 210, eh = cutW = 200
+// Expected HATCH_CURVED (ε < 0.015 mm):
+//   d1: (10, 10) → (220, 210)   [minX,minY → maxX,maxY]
+//   d2: (220, 10) → (10, 210)   [maxX,minY → minX,maxY]
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 93 — sheet-3 overflow diagonal geometry: HATCH_CURVED spans flat-blank bbox corners',
+  () => {
+
+    const EPS93 = 0.015;
+
+    it(
+      'qty=111 → sheet-3 single panel: HATCH_CURVED d1=(10,10)→(220,210), d2=(220,10)→(10,210)',
+      () => {
+        const curvedRow93: CutListRow = {
+          partId:          'SMOKE_CURVED_S93',
+          cabinetId:       'CAB_SMOKE_93',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             111,
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Curved Panel S93',
+        };
+
+        const result93 = runNesting([curvedRow93]);
+        expect(result93.sheets).toHaveLength(3);
+
+        const sheet93c = result93.sheets[2];
+        expect(sheet93c.placements).toHaveLength(1);
+
+        const p93 = sheet93c.placements[0];
+        expect(p93.isCurved).toBe(true);
+
+        const output93c = buildDxfSheet({
+          planned: { index1: 3, sheetId: 'SHEET_STAGE93C', materialId: MATERIAL_ID },
+          nesting: sheet93c,
+          profile: getFactoryProfile('DEFAULT'),
+        });
+
+        const content93 = output93c.content;
+
+        // Parse all HATCH_CURVED LINE segments
+        const hatchSegs93 = content93
+          .split('\n0\nLINE\n')
+          .slice(1)
+          .filter((seg) => seg.startsWith('8\nHATCH_CURVED\n'));
+
+        expect(hatchSegs93).toHaveLength(2);
+
+        function parseCoords93(seg: string): { x1: number; y1: number; x2: number; y2: number } {
+          const val = (code: string) => {
+            const m = seg.match(new RegExp(`\\n${code}\\n([\\d.+\\-e]+)`));
+            return m ? parseFloat(m[1]) : NaN;
+          };
+          return { x1: val('10'), y1: val('20'), x2: val('11'), y2: val('21') };
+        }
+
+        const coords93 = hatchSegs93.map(parseCoords93);
+
+        // Effective placed dimensions for rotation=90: ew=cutH=210, eh=cutW=200
+        const isRotated93 = p93.rotation === 90;
+        const ew93 = isRotated93 ? p93.cutH : p93.cutW;
+        const eh93 = isRotated93 ? p93.cutW : p93.cutH;
+
+        const minX93 = p93.x;
+        const minY93 = p93.y;
+        const maxX93 = p93.x + ew93;
+        const maxY93 = p93.y + eh93;
+
+        // Identify d1 (starts near minX) and d2 (starts near maxX) by x1
+        const d193 = coords93.find((c) => Math.abs(c.x1 - minX93) < EPS93)!;
+        const d293 = coords93.find((c) => Math.abs(c.x1 - maxX93) < EPS93)!;
+
+        expect(d193).toBeDefined();
+        expect(d293).toBeDefined();
+
+        // d1: (minX,minY) → (maxX,maxY)
+        expect(Math.abs(d193.x1 - minX93)).toBeLessThan(EPS93);
+        expect(Math.abs(d193.y1 - minY93)).toBeLessThan(EPS93);
+        expect(Math.abs(d193.x2 - maxX93)).toBeLessThan(EPS93);
+        expect(Math.abs(d193.y2 - maxY93)).toBeLessThan(EPS93);
+
+        // d2: (maxX,minY) → (minX,maxY)
+        expect(Math.abs(d293.x1 - maxX93)).toBeLessThan(EPS93);
+        expect(Math.abs(d293.y1 - minY93)).toBeLessThan(EPS93);
+        expect(Math.abs(d293.x2 - minX93)).toBeLessThan(EPS93);
+        expect(Math.abs(d293.y2 - maxY93)).toBeLessThan(EPS93);
       },
     );
   },

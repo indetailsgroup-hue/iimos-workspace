@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [10.0.0] – 2026-08-27
+
+### Added
+- **Stage 92** (`@smoke`): Three-sheet overflow — `qty=111` curved panels produce
+  exactly 3 sheets (55 + 55 + 1); `PARTS_CURVED` total across all three DXF
+  outputs equals `4 × 111 = 444`; all placements carry `isCurved=true`.
+- **Stage 93** (`@smoke`): Sheet-3 diagonal geometry — the single overflow panel
+  on sheet-3 has its `HATCH_CURVED` pair spanning the correct flat-blank bbox
+  corners: `d1=(10,10)→(220,210)`, `d2=(220,10)→(10,210)` within ε < 0.015 mm;
+  anchored regex (`\n${code}\n`) prevents false match on `220\n20\n10` sequences.
+- JSDoc table rows 92–93 appended to `curvedPanelDxfPipeline.smoke.test.ts` file
+  header; stage range updated to `Stages 22 – 93`.
+- `buildDxfSheets.ts` JSDoc cross-reference updated to `(Stages 7 – 93)`.
+
+### Changed
+- Smoke test suite: **346 tests** (up from 344).
+
+### Notes
+- **v10.0.0 closes the complete multi-sheet scale and overflow validation series**
+  (Stages 83–93): 10-panel (83), 20-panel qty scale (84), determinism (85),
+  2-sheet overflow (86), sheet-2 diagonal geometry (87), mixed overflow
+  exclusivity (88–89), mixed determinism (90), FFDH order (91),
+  3-sheet count (92), sheet-3 diagonal geometry (93).
+
 ## [9.1.0] – 2026-08-27
 
 ### Added – Mixed-Overflow Completeness, Determinism, and FFDH Order Validation Milestone
