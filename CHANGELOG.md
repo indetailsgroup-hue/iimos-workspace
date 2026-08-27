@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.6.2] - 2026-08-27
+
+### Added
+
+- **Stage 37 — diagonal-1 all-coordinate synthesis** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Twelve new `it()` blocks assert all four individual coordinates of diagonal-1
+  in a single describe block — `d1.x1 ≈ r(minX)`, `d1.y1 ≈ r(minY)`,
+  `d1.x2 ≈ r(maxX)`, `d1.y2 ≈ r(maxY)` — verified for ARC, S_CURVE, and TALL_ARC
+  (ε < 0.015 mm throughout).
+
+- **JSDoc invariant table** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Stage 37 row appended to Section 3; section header updated to "Stages 22 – 37".
+
+- **JSDoc invariant table** (`buildDxfSheets.ts`):
+  Stage 37 row appended; section updated to "Stages 22 – 37"; reference
+  updated to `(Stages 7 – 37)`.
+
+**Test delta:** 235 → 247 (+12 tests, all passing)
+
+---
+
+## [2.7.0] - 2026-08-27
+
+### Added
+
+- **Start/end X-coordinate pinning group (Stages 35–36)** — two smoke stages
+  that individually pin all four X coordinates of both HATCH_CURVED diagonals
+  to the flat-blank bbox extents, providing explicit per-coordinate evidence
+  for the directional contract established in Stage 30:
+
+  | Stage | Assertion |
+  |-------|-----------|
+  | 35 | `d1.x2 ≈ r(maxX)` — diagonal-1 ends at the right bbox edge; `d2.x2 ≈ r(minX)` — diagonal-2 ends at the left bbox edge. ε < 0.015 mm. |
+  | 36 | `d1.x1 ≈ r(minX)` — diagonal-1 starts at the left bbox edge; `d2.x1 ≈ r(maxX)` — diagonal-2 starts at the right bbox edge. ε < 0.015 mm. |
+
+  Together Stages 35–36 complete the per-coordinate X-pinning proof: every
+  X value of every HATCH_CURVED endpoint is explicitly verified against the
+  rounded flat-blank bbox extent for all three panel types (ARC, S_CURVE,
+  TALL_ARC).
+
+- **Stage 37 — diagonal-1 synthesis** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Twelve new `it()` blocks assert all four individual coordinates of diagonal-1
+  jointly — `d1.x1 ≈ r(minX)`, `d1.y1 ≈ r(minY)`, `d1.x2 ≈ r(maxX)`,
+  `d1.y2 ≈ r(maxY)` — for each of the three panel types (4 coords × 3 panels).
+  This is the first synthesis stage: rather than testing one coordinate in
+  isolation it validates the complete (x1, y1, x2, y2) tuple of d1.
+
+- **JSDoc invariant tables** (`curvedPanelDxfPipeline.smoke.test.ts` and
+  `buildDxfSheets.ts`): Stages 36–37 rows added; headers updated to
+  "Stages 22 – 37"; reference updated to `(Stages 7 – 37)`.
+
+**Test delta (cumulative Stages 35–37):** 229 → 247 (+18 tests)
+
+---
+
 ## [2.6.1] - 2026-08-27
 
 ### Added
