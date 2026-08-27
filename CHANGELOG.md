@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.8.0] - 2026-08-27
+
+### Overview
+Completes the **full three-fixture HATCH_CURVED diagonal geometry milestone** (Stages 55–56) and
+adds two new stages (57–58) that extend diagonal assertions to multi-panel isolation and diagonal
+intersection-point geometry.  All three panel types (ARC, S_CURVE, TALL_ARC) are now fully
+verified for per-panel diagonal identity and bbox-centre intersection.
+
+### Added
+
+#### Stage 57 — Per-Panel Diagonal Isolation: ARC + S_CURVE Two-Panel Sheet
+- ARC + S_CURVE on the same sheet (1 `NestingSheet`, 2 placements, 4 `HATCH_CURVED` LINEs total).
+- **Helper functions** `isD1(line, minX, minY, maxX, maxY, eps)` and `isD2(...)` match each line
+  to a placement's bbox by corner proximity.
+- For **each** placement the test filters all 4 lines and asserts:
+  - `d1Matches.length === 1` — exactly one d1 diagonal belongs to this panel.
+  - `d2Matches.length === 1` — exactly one d2 diagonal belongs to this panel.
+- Approach is robust against FFDH ordering changes (proximity-based, not index-based).
+- 1 it() block.
+
+#### Stage 58 — HATCH_CURVED Diagonal Intersection Equals Flat-Blank Bbox Centre
+- For each of the three panel types (ARC, S_CURVE, TALL_ARC) on a single-panel sheet:
+  - Parses 2 `HATCH_CURVED` LINE entities.
+  - Computes intersection as midpoint of d1:
+    `intersectionX = (d1.x1 + d1.x2) / 2`, `intersectionY = (d1.y1 + d1.y2) / 2`.
+  - Expected centre: `expectedCentreX = (r(p.x) + r(p.x + w)) / 2`,
+    `expectedCentreY = (r(p.y) + r(p.y + h)) / 2`.
+  - Asserts `|intersectionX − expectedCentreX| < 0.015 mm` and same for Y.
+- TALL_ARC variant uses local `buildTallArcRow()` with `partId='SMOKE_TALL_ARC_58'` and
+  `materialId=MATERIAL_ID`; guards `placement.rotation === 0`.
+- 3 it() blocks (one per panel type).
+
+### Changed
+- `buildDxfSheets.ts` JSDoc reference updated from `(Stages 7 – 56)` → `(Stages 7 – 58)`.
+- Smoke test module JSDoc section header updated from `Stages 22 – 56` → `Stages 22 – 58`.
+- Smoke test JSDoc stage table extended with entries for Stages 57–58.
+
+### Tests
+- **306 smoke tests passing** (up from 302); 0 failures; 0 TypeScript errors.
+
+---
+
 ## [3.7.0] - 2026-08-27
 
 ### Overview
