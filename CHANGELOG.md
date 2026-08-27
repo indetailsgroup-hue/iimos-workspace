@@ -4,6 +4,34 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [13.2.0] – 2026-08-27
+
+### Added
+- **Wire real NestingSheet data** into `NestingSheetReport` from `FactoryPacket.nestingSheets`
+  - Added `nestingSheets?: NestingSheet[]` field to `FactoryPacket` interface
+  - `buildFactoryPacketFromStores` now reads from `useNestingStore` and attaches nesting data
+  - `JobDetail` passes `packet.nestingSheets` (real data) instead of `sheets={[]}`
+- **PDF Export** (`exportNestingPdf.ts`) — renders all SVG nesting sheets to a downloadable A4 landscape PDF via jsPDF
+  - SVG → Canvas → PNG → PDF pipeline
+  - Sheet footer with index + jobId
+  - 3 unit tests passing
+- **Feature 4 — DXF Batch Export** (`exportCurvedDxfBatch.ts`) — zips curved-panel DXF files and downloads
+  - Generates R12 DXF per nesting sheet (curved panels only, or all sheets as fallback)
+  - Includes kerf slot lines, kerf count labels, sheet boundary, material metadata
+  - `manifest.json` included in ZIP bundle
+  - Uses JSZip for compression + browser download
+  - 5 unit tests passing
+- **Export buttons** in `JobDetail` Export tab:
+  - 📄 Export PDF (purple) — disabled when no nesting data
+  - 📐 DXF Batch (ZIP) (green) — disabled when no nesting data
+- `ExportTabProps` extended with `pdfExporting`, `onPdfExport`, `dxfBatchExporting`, `onDxfBatchExport`
+
+### Changed
+- `NestingSheetReport.tsx` — added `id="nesting-report-container"` to SVG wrapper div
+
+### Dependencies
+- Added `jspdf ^4.2.1`
+
 ## [13.1.0] – 2026-08-27
 
 ### Added

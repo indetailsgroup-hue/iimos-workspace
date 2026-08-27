@@ -237,7 +237,7 @@ export function NestingSheetReport({ sheets, jobId }: NestingSheetReportProps) {
       </div>
 
       {/* ── Sheet blocks ── */}
-      <div className="space-y-6">
+      <div id="nesting-report-container" className="space-y-6">
         {sheets.map((sheet) => (
           <div key={sheet.index1} className="sheet-block">
             <SheetHeader sheet={sheet} />

@@ -316,6 +316,8 @@ export interface FactoryPacket {
   connectorOps?: import('./builders/buildConnectorOps').PacketConnectorOps;
   /** Phase 6: Curved Panel System — kerf slot patterns by panel */
   kerfPatterns?: import('../../cnc/mapping/mapKerfPatternToOps').KerfPatternsByPanelId;
+  /** Nesting optimization results (optional — present when nesting was run before export) */
+  nestingSheets?: import('../../core/export/monolith/monolithExportContext').NestingSheet[];
 }
 
 // ============================================

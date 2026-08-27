@@ -32,6 +32,8 @@ import type { GcodeBundle } from "../../cnc/post/types";
 import { ExportOptionsDialog } from "../../components/ui/ExportOptionsDialog";
 import { buildCutListXlsx } from "../../core/export/monolith/builders/buildCutListXlsx";
 import { NestingSheetReport } from "../components/nesting/NestingSheetReport";
+import { exportNestingPdf } from "../components/nesting/exportNestingPdf";
+import { exportCurvedDxfBatch } from "../components/nesting/exportCurvedDxfBatch";
 
 export interface JobDetailProps {
   jobId: string;
@@ -77,6 +79,12 @@ export function JobDetail({ jobId, onBack }: JobDetailProps): React.ReactElement
 
   // Feature 3: Nesting sheet report visibility
   const [nestingReportOpen, setNestingReportOpen] = useState(false);
+
+  // PDF export state
+  const [pdfExporting, setPdfExporting] = useState(false);
+
+  // Feature 4: DXF batch export state
+  const [dxfBatchExporting, setDxfBatchExporting] = useState(false);
 
   // D2.2: CNC G-code generation state
   const [gcodeBundle, setGcodeBundle] = useState<GcodeBundle | null>(null);
@@ -281,6 +289,28 @@ export function JobDetail({ jobId, onBack }: JobDetailProps): React.ReactElement
             onXlsxDownload={handleXlsxDownload}
             nestingReportOpen={nestingReportOpen}
             onToggleNestingReport={() => setNestingReportOpen((v) => !v)}
+            pdfExporting={pdfExporting}
+            onPdfExport={async () => {
+              setPdfExporting(true);
+              try {
+                const container = document.getElementById("nesting-report-container");
+                if (container) {
+                  await exportNestingPdf(container, jobId);
+                }
+              } finally {
+                setPdfExporting(false);
+              }
+            }}
+            dxfBatchExporting={dxfBatchExporting}
+            onDxfBatchExport={async () => {
+              setDxfBatchExporting(true);
+              try {
+                const sheets = verifiedPacketEntry?.packet?.nestingSheets ?? [];
+                await exportCurvedDxfBatch(sheets, jobId);
+              } finally {
+                setDxfBatchExporting(false);
+              }
+            }}
           />
         )}
 
@@ -636,6 +666,14 @@ interface ExportTabProps {
   nestingReportOpen: boolean;
   /** Toggle nesting sheet report panel */
   onToggleNestingReport: () => void;
+  /** PDF export in-progress flag */
+  pdfExporting: boolean;
+  /** Trigger PDF nesting export */
+  onPdfExport: () => void;
+  /** DXF batch export in-progress flag */
+  dxfBatchExporting: boolean;
+  /** Trigger DXF batch zip export */
+  onDxfBatchExport: () => void;
 }
 
 function ExportTab({
@@ -667,6 +705,10 @@ function ExportTab({
   onXlsxDownload,
   nestingReportOpen,
   onToggleNestingReport,
+  pdfExporting,
+  onPdfExport,
+  dxfBatchExporting,
+  onDxfBatchExport,
 }: ExportTabProps): React.ReactElement {
   // Use gated export mode
   const useGatedExport = true;
@@ -858,9 +900,45 @@ function ExportTab({
             }}
           >
             <NestingSheetReport
-              sheets={[]}
+              sheets={packet?.nestingSheets ?? []}
               jobId={jobId}
             />
+            {/* PDF Export + DXF Batch buttons */}
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button
+                data-testid="btn-pdf-nesting"
+                disabled={pdfExporting || !(packet?.nestingSheets?.length)}
+                onClick={onPdfExport}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 6,
+                  border: "1px solid #7c3aed",
+                  background: pdfExporting ? "#4c1d95" : "transparent",
+                  color: "#a78bfa",
+                  cursor: pdfExporting ? "wait" : "pointer",
+                  fontSize: 13,
+                }}
+              >
+                {pdfExporting ? "Exporting PDF…" : "📄 Export PDF"}
+              </button>
+
+              <button
+                data-testid="btn-dxf-batch"
+                disabled={dxfBatchExporting || !(packet?.nestingSheets?.length)}
+                onClick={onDxfBatchExport}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 6,
+                  border: "1px solid #059669",
+                  background: dxfBatchExporting ? "#064e3b" : "transparent",
+                  color: "#6ee7b7",
+                  cursor: dxfBatchExporting ? "wait" : "pointer",
+                  fontSize: 13,
+                }}
+              >
+                {dxfBatchExporting ? "Zipping DXF…" : "📐 DXF Batch (ZIP)"}
+              </button>
+            </div>
           </div>
         )}
       </div>
