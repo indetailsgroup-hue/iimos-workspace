@@ -259,8 +259,36 @@ class DxfBuilder {
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Precision and Structural Integrity Invariants  (Stages 22 – 29)
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Endpoint rounding (Stage 22): addLine() applies Math.round(v × 100) / 100
+ * to all four coordinates before writing to DXF, guaranteeing 0.01 mm
+ * grid-alignment across the full pipeline.
+ *
+ * Stage | Panels                   | Assertion
+ * ------|--------------------------|-------------------------------------------
+ *    22 | ARC + S_CURVE + TALL_ARC | all 4 HATCH_CURVED endpoints rounded to
+ *       |                          |   0.01 mm (Math.round(v×100)/100)
+ *    23 | ARC + S_CURVE + TALL_ARC | rounded endpoints lie within flat-blank
+ *       |                          |   bbox (ε = 0.01 mm)
+ *    24 | ARC + S_CURVE + TALL_ARC | each diagonal non-degenerate:
+ *       |                          |   |x1−x2| + |y1−y2| > 1e-6
+ *    25 | ARC + S_CURVE + TALL_ARC | midpoint(d1) = midpoint(d2) (±0.05 mm)
+ *    26 | ARC + S_CURVE + TALL_ARC | shared midpoint = bbox centre
+ *       |                          |   (minX + W/2, minY + H/2), ±0.05 mm
+ *    27 | ARC + S_CURVE + TALL_ARC | diagLen(d1) ≈ diagLen(d2) (±0.05 mm)
+ *   28A | ARC + S_CURVE + TALL_ARC | diagLen ≈ sqrt(effectiveW²+effectiveH²)
+ *       |                          |   (±0.05 mm) for both d1 and d2
+ *   28B | ARC + S_CURVE + TALL_ARC | 4 endpoints are distinct corner pairs:
+ *       |                          |   new Set([…]).size === 4
+ *    29 | ARC + S_CURVE + TALL_ARC | endpoints = Set of 4 rounded bbox corners:
+ *       |                          |   Set({x,y}) === {(minX,minY),(maxX,maxY),
+ *       |                          |   (maxX,minY),(minX,maxY)}
+ *
  * All invariants are verified end-to-end in:
- *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 21)
+ *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 29)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 const NESTING_LAYERS = [
