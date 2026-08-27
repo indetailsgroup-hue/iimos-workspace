@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 52: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, and HATCH_CURVED count
+ * Stages 22 – 54: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, and HATCH_CURVED count
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -142,6 +142,24 @@
  *       |                          |   mixed sheet: straight placement unaffected by curved;
  *       |                          |   ε < 0.015 mm; 3 it() blocks (single, narrow, mixed).
  *
+ *    47 | ARC / S_CURVE / TALL_ARC | PARTS_CURVED LINE count = 4 per curved panel;
+ *       |                          |   3 it() blocks (one per panel type).
+ *    48 | ARC + STRAIGHT (mixed)   | PARTS_CURVED = 4, PARTS = 4; bboxes non-overlapping;
+ *       |                          |   1 it() block.
+ *    49 | ARC + S_CURVE            | PARTS_CURVED LINE count = 8; two per-panel bboxes
+ *       |                          |   non-overlapping; 1 it() block.
+ *    50 | single / two / mixed     | SHEET LINE count = 4 for every sheet configuration;
+ *       |                          |   3 it() blocks.
+ *    51 | TALL_ARC + S_CURVE + ARC | PARTS_CURVED count = 12; all 3 per-panel bbox pairs
+ *       |                          |   mutually non-overlapping; 1 it() block.
+ *    52 | ARC / S_CURVE / TALL_ARC | HATCH_CURVED LINE count = 2 for single-panel sheets;
+ *       |                          |   3 it() blocks (one per panel type).
+ *    53 | ARC + S_CURVE            | HATCH_CURVED LINE count = 4 (2 × 2 curved panels)
+ *       |                          |   on a two-panel sheet; 1 it() block.
+ *    54 | ARC (single-panel)       | each HATCH_CURVED diagonal pair spans the four
+ *       |                          |   flat-blank bbox corners: d1 = (minX,minY)→(maxX,maxY),
+ *       |                          |   d2 = (maxX,minY)→(minX,maxY); ε < 0.015 mm;
+ *       |                          |   1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -6983,5 +7001,161 @@ describe('@smoke Stage 52 — HATCH_CURVED LINE count equals 2 per curved panel 
       profile: getFactoryProfile('DEFAULT'),
     });
     expect(countHATCHCURVEDLines(output.content)).toBe(2);
+  });
+});
+
+// =============================================================================
+// Stage 53 — HATCH_CURVED LINE count equals exactly 2 × curved_count for
+//            a two-curved-panel sheet (ARC + S_CURVE)
+// =============================================================================
+//
+// buildDxfSheets.ts emits exactly two addLine() calls on the HATCH_CURVED
+// layer per curved placement:
+//   d1: bottom-left → top-right diagonal
+//   d2: bottom-right → top-left diagonal
+// Therefore: HATCH_CURVED LINE count = 2 × (number of curved placements).
+//
+// For two curved panels (ARC + S_CURVE) on the same sheet:
+//   HATCH_CURVED count = 2 × 2 = 4.
+//
+// Both buildCurvedRow() and buildSCurveRow() use materialId=MATERIAL_ID,
+// so runNesting() places them on a single shared sheet.
+//
+// Assertions (1 it() block — ARC + S_CURVE on same sheet):
+//   • sheets.length === 1 (single shared sheet)
+//   • HATCH_CURVED LINE count === 4
+// =============================================================================
+
+describe('@smoke Stage 53 — HATCH_CURVED LINE count equals 2 × curved_count for two-panel sheet (ARC + S_CURVE)', () => {
+
+  /**
+   * Count LINE entities on the HATCH_CURVED layer.
+   * Two diagonal X-lines (d1, d2) are emitted per curved placement.
+   */
+  function countHATCHCURVEDLines(content: string): number {
+    return content
+      .split('\n0\nLINE\n')
+      .slice(1)
+      .filter((s) => s.startsWith('8\nHATCH_CURVED\n'))
+      .length;
+  }
+
+  it('ARC + S_CURVE on same sheet — HATCH_CURVED LINE count = 4 (2 × 2 curved panels)', () => {
+    const { row: arcRow }    = buildCurvedRow();
+    const { row: sCurveRow } = buildSCurveRow();
+
+    // Both rows carry materialId=MATERIAL_ID → placed on a single sheet
+    const { sheets } = runNesting([arcRow, sCurveRow]);
+    expect(sheets).toHaveLength(1);
+
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_ARC_SCURVE_R53', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    expect(countHATCHCURVEDLines(output.content)).toBe(4);
+  });
+});
+
+// =============================================================================
+// Stage 54 — Each HATCH_CURVED diagonal pair spans the correct flat-blank
+//            bbox corners for the ARC fixture
+// =============================================================================
+//
+// buildDxfSheets.ts (lines 505–515) emits two diagonal lines per curved
+// placement, using the placement's flat-blank effective dimensions (w × h)
+// derived from getRotatedDimensions(cutW, cutH, rotation):
+//
+//   d1: (p.x,     p.y    ) → (p.x + w, p.y + h)   // bottom-left → top-right
+//   d2: (p.x + w, p.y    ) → (p.x,     p.y + h)   // bottom-right → top-left
+//
+// All four coordinates are rounded via Math.round(v × 100) / 100 before
+// being written to the DXF.
+//
+// For the ARC fixture (buildCurvedRow, grain=NONE, rotation=90 by FFDH):
+//   w = cutH (flatBlankH ≈ 909.44 mm), h = cutW (flatBlankW = 400 mm)
+//   minX = r(p.x), minY = r(p.y)
+//   maxX = r(p.x + w), maxY = r(p.y + h)
+//
+// Expected diagonal endpoints:
+//   d1: (minX, minY) → (maxX, maxY)   [bottom-left → top-right]
+//   d2: (maxX, minY) → (minX, maxY)   [bottom-right → top-left]
+//
+// Assertions (1 it() block — ARC single-panel sheet):
+//   • exactly 2 HATCH_CURVED LINE entities
+//   • d1 endpoints match (minX, minY) and (maxX, maxY) (ε < 0.015 mm)
+//   • d2 endpoints match (maxX, minY) and (minX, maxY) (ε < 0.015 mm)
+// =============================================================================
+
+describe('@smoke Stage 54 — HATCH_CURVED diagonal pairs span correct flat-blank bbox corners (ARC)', () => {
+
+  const EPS = 0.015;
+  const r   = (v: number): number => Math.round(v * 100) / 100;
+
+  /**
+   * Parse all HATCH_CURVED LINE entities and return their endpoint coordinates
+   * in DXF emission order (first emitted = index 0).
+   */
+  function parseHATCHCURVEDLines(
+    content: string,
+  ): Array<{ x1: number; y1: number; x2: number; y2: number }> {
+    return content
+      .split('\n0\nLINE\n')
+      .slice(1)
+      .filter((s) => s.startsWith('8\nHATCH_CURVED\n'))
+      .map((seg) => {
+        const num = (code: string): number => {
+          const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+          return m ? parseFloat(m[1]) : NaN;
+        };
+        return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+      });
+  }
+
+  it('ARC — two HATCH_CURVED lines span all four flat-blank bbox corners (ε < 0.015 mm)', () => {
+    const { row: arcRow } = buildCurvedRow();
+    const { sheets }      = runNesting([arcRow]);
+    const p               = sheets[0].placements[0];
+
+    // Effective dimensions after FFDH rotation (rotation=90 → swap cutW/cutH)
+    const isRotated = p.rotation === 90 || p.rotation === 270;
+    const w = isRotated ? p.cutH : p.cutW;   // effectiveW = flatBlankH (rotated)
+    const h = isRotated ? p.cutW : p.cutH;   // effectiveH = flatBlankW (rotated)
+
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_ARC_R54', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const lines = parseHATCHCURVEDLines(output.content);
+    expect(lines).toHaveLength(2);
+
+    // Flat-blank bbox corners (rounded the same way addLine() rounds them)
+    const minX = r(p.x);
+    const minY = r(p.y);
+    const maxX = r(p.x + w);
+    const maxY = r(p.y + h);
+
+    // d1: bottom-left (minX, minY) → top-right (maxX, maxY)
+    const d1 = lines[0];
+    expect(Math.abs(d1.x1 - minX)).toBeLessThan(EPS);
+    expect(Math.abs(d1.y1 - minY)).toBeLessThan(EPS);
+    expect(Math.abs(d1.x2 - maxX)).toBeLessThan(EPS);
+    expect(Math.abs(d1.y2 - maxY)).toBeLessThan(EPS);
+
+    // d2: bottom-right (maxX, minY) → top-left (minX, maxY)
+    const d2 = lines[1];
+    expect(Math.abs(d2.x1 - maxX)).toBeLessThan(EPS);
+    expect(Math.abs(d2.y1 - minY)).toBeLessThan(EPS);
+    expect(Math.abs(d2.x2 - minX)).toBeLessThan(EPS);
+    expect(Math.abs(d2.y2 - maxY)).toBeLessThan(EPS);
   });
 });

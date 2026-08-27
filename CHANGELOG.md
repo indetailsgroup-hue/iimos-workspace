@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.6.0] - 2026-08-27
+
+### Overview
+Completes the **three-panel count and HATCH_CURVED invariant milestone** (Stages 51–52) and adds
+two new HATCH_CURVED count and geometry stages (53–54) that fully pin the cross-hatch diagonal
+structure to the flat-blank bbox for every curved panel configuration.
+
+### Added
+
+#### Stage 53 — Two-Panel Sheet: HATCH_CURVED LINE Count = 4 (2 × 2)
+- Nests ARC + S_CURVE onto a single sheet via `runNesting` (both rows carry `materialId=MATERIAL_ID`).
+- Asserts `sheets.length === 1` (single shared sheet).
+- Asserts total `HATCH_CURVED` LINE count = 4 (two diagonal X-lines per curved panel × 2 panels).
+- 1 it() block.
+
+#### Stage 54 — HATCH_CURVED Diagonal Pairs Span Correct Flat-Blank Bbox Corners (ARC)
+- ARC single-panel sheet; placement `p` retrieved from `runNesting` output.
+- Derives effective dimensions `w, h` from `getRotatedDimensions(p.cutW, p.cutH, p.rotation)`.
+- Asserts exactly 2 `HATCH_CURVED` LINE entities.
+- **d1** `(minX, minY) → (maxX, maxY)` (bottom-left → top-right): each coordinate checked `ε < 0.015 mm`.
+- **d2** `(maxX, minY) → (minX, maxY)` (bottom-right → top-left): each coordinate checked `ε < 0.015 mm`.
+- 1 it() block.
+
+### Changed
+- `buildDxfSheets.ts` JSDoc reference updated from `(Stages 7 – 52)` → `(Stages 7 – 54)`.
+- Smoke test module JSDoc section header updated from `Stages 22 – 52` → `Stages 22 – 54`.
+- Smoke test JSDoc stage table extended with entries for Stages 47–54.
+
+### Tests
+- **300 smoke tests passing** (up from 298); 0 failures; 0 TypeScript errors.
+
+---
+
 ## [3.5.0] - 2026-08-27
 
 ### Overview
