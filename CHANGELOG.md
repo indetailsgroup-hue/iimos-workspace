@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.7.0] - 2026-08-27
+
+### Overview
+Completes the **two-panel HATCH_CURVED count and diagonal geometry milestone** (Stages 53–54) and
+adds two new diagonal-geometry stages (55–56) that extend the bbox-corner assertions from the ARC
+fixture to the S_CURVE (rotation=90) and TALL_ARC (grain=HORIZONTAL, rotation=0) fixtures,
+fully covering all three panel types.
+
+### Added
+
+#### Stage 55 — S_CURVE: HATCH_CURVED Diagonal Pairs Span Correct Flat-Blank Bbox Corners
+- S_CURVE single-panel sheet; placement `p` retrieved from `runNesting` output.
+- FFDH rotates (rotation=90): `w = p.cutH` (flatBlankH ≈ 1051.8 mm), `h = p.cutW` (500 mm).
+- Asserts exactly 2 `HATCH_CURVED` LINE entities.
+- **d1** `(minX, minY) → (maxX, maxY)`: each coordinate checked ε < 0.015 mm.
+- **d2** `(maxX, minY) → (minX, maxY)`: each coordinate checked ε < 0.015 mm.
+- 1 it() block.
+
+#### Stage 56 — TALL_ARC (grain=HORIZONTAL, rotation=0): HATCH_CURVED Diagonal Pairs Span Correct Flat-Blank Bbox Corners
+- TALL_ARC single-panel sheet (`grain='HORIZONTAL'`, `materialId=MATERIAL_ID`, `partId='SMOKE_TALL_ARC_56'`).
+- `canRotate=false` → FFDH keeps rotation=0: `w = p.cutW` (400 mm), `h = p.cutH` (flatBlankH ≈ 909.44 mm).
+- **Additional guard**: asserts `placement.rotation === 0` before checking diagonals.
+- Asserts exactly 2 `HATCH_CURVED` LINE entities.
+- **d1** `(minX, minY) → (maxX, maxY)`: each coordinate checked ε < 0.015 mm.
+- **d2** `(maxX, minY) → (minX, maxY)`: each coordinate checked ε < 0.015 mm.
+- 1 it() block.
+
+### Changed
+- `buildDxfSheets.ts` JSDoc reference updated from `(Stages 7 – 54)` → `(Stages 7 – 56)`.
+- Smoke test module JSDoc section header updated from `Stages 22 – 54` → `Stages 22 – 56`.
+- Smoke test JSDoc stage table extended with entries for Stages 55–56.
+
+### Tests
+- **302 smoke tests passing** (up from 300); 0 failures; 0 TypeScript errors.
+
+---
+
 ## [3.6.0] - 2026-08-27
 
 ### Overview
