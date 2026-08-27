@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 69: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, and barely-positive correction boundary
+ * Stages 22 – 71: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, and barely-positive correction boundary
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -225,6 +225,18 @@
  *       |                          |   → isCurved=true; DXF emits exactly 2
  *       |                          |   HATCH_CURVED LINE entities (d1 + d2);
  *       |                          |   1 it() block.
+ *    70 | kerfCount=1 ARC panel     | developedLength=250, projectedDepth=200,
+ *       |                          |   curvedEdge=TOP, cutW=400, cutH=800;
+ *       |                          |   correction=50 > 0 → isCurved=true,
+ *       |                          |   kerfCount=1; DXF emits exactly 2
+ *       |                          |   HATCH_CURVED lines; LABELS sub-label
+ *       |                          |   reads "(CURVED / 1 cuts)"; 1 it().
+ * ─────────────────────────────────────────────────────────────────────────────
+ *    71 | two curved panels kc=3,7 | manual NestingSheet, two placements:
+ *       |                          |   partId=SMOKE_KC3_S71 kerfCount=3 and
+ *       |                          |   partId=SMOKE_KC7_S71 kerfCount=7;
+ *       |                          |   both sub-labels appear independently
+ *       |                          |   in DXF LABELS TEXT; 1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -8854,6 +8866,175 @@ describe(
 
         // Exactly 2 HATCH_CURVED lines (d1 + d2) for the single curved placement
         expect(countHATCHCURVEDLines69(output.content)).toBe(2);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 70 – a panel with kerfCount=1 emits exactly 2 HATCH_CURVED lines
+// and the DXF sub-label reads '(CURVED / 1 cuts)'.
+//
+// Motivation: Stage 40 verified that the live kerfCount (≥12 for the ARC
+// fixture) is embedded in the sub-label.  Stage 70 targets the lower boundary:
+// kerfCount=1 is the smallest meaningful non-zero value; it must propagate
+// through runNesting → buildDxfSheet unchanged, appearing in both the
+// HATCH_CURVED overlay (exactly 2 lines) and the LABELS TEXT entity.
+//
+// Rationale:
+//   kerfCount=1 is injected directly into CutListRow.
+//   correction = 250 − 200 = 50 mm  > 0  →  isCurved=true.
+//   flatBlankH = 800 + 50 = 850 mm  (fits on 2440×1220 sheet).
+//   DXF HATCH_CURVED: 2 lines (d1 + d2).
+//   DXF LABELS TEXT:  '(CURVED / 1 cuts)'.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 70 – kerfCount=1 emits exactly 2 HATCH_CURVED lines and sub-label reads \'(CURVED / 1 cuts)\'',
+  () => {
+    function countHATCHCURVEDLines70(content: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(s => s.startsWith('8\nHATCH_CURVED\n')).length;
+    }
+
+    it(
+      'kerfCount=1 → isCurved=true → 2 HATCH_CURVED lines and sub-label "(CURVED / 1 cuts)"',
+      () => {
+        // correction = 250 − 200 = 50 > 0  →  isCurved=true
+        // flatBlankH = cutH + correction = 800 + 50 = 850 mm
+        const stage70Row: CutListRow = {
+          partId:          'SMOKE_KERF1_70',
+          materialId:      MATERIAL_ID,
+          label:           'kerfCount=1 Panel Stage 70',
+          finishW:         400,
+          finishH:         800,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            400,
+          cutH:            800,
+          qty:             1,
+          developedLength: 250,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          kerfCount:       1,
+          grain:           undefined,
+        };
+
+        const { sheets } = runNesting([stage70Row]);
+        expect(sheets).toHaveLength(1);
+        expect(sheets[0].placements).toHaveLength(1);
+        expect(sheets[0].placements[0].isCurved).toBe(true);
+        expect(sheets[0].placements[0].kerfCount).toBe(1);
+
+        const output = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE70', materialId: MATERIAL_ID },
+          nesting: sheets[0],
+          profile: getFactoryProfile('DEFAULT'),
+        });
+
+        // Exactly 2 HATCH_CURVED lines (d1 + d2)
+        expect(countHATCHCURVEDLines70(output.content)).toBe(2);
+
+        // Sub-label on LABELS layer reads '(CURVED / 1 cuts)'
+        expect(output.content).toContain('(CURVED / 1 cuts)');
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 71 – two curved panels with distinct kerfCounts on the same sheet
+// each emit the correct '(CURVED / N cuts)' sub-label independently.
+//
+// Motivation: Stages 40 and 70 both tested single-panel sheets.  Stage 71
+// verifies that when two curved panels are nested together, the sub-label for
+// each placement carries its own kerfCount — not a shared value or the value
+// from the other panel.
+//
+// Approach:
+//   A NestingSheet is constructed manually with two curved placements:
+//     Placement A: kerfCount=3, cutW=400, cutH=850, placed at (10, 10)
+//     Placement B: kerfCount=7, cutW=300, cutH=600, placed at (500, 10)
+//   Both placements have isCurved=true.
+//   The bboxes do not overlap (A ends at x=410; B starts at x=500).
+//
+// Assertion:
+//   The DXF ENTITIES section contains exactly two TEXT entities on the LABELS
+//   layer matching '(CURVED / N cuts)': one with N=3 and one with N=7.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 71 – two curved panels with distinct kerfCounts on same sheet each emit correct \'(CURVED / N cuts)\' sub-label independently',
+  () => {
+    /**
+     * Extract all N values from '(CURVED / N cuts)' TEXT entities on the LABELS layer.
+     * Returns an array of integer kerf counts in order of appearance.
+     */
+    function parseCurvedLabelCounts71(content: string): number[] {
+      const counts: number[] = [];
+      const segs = content.split('\n0\nTEXT\n').slice(1);
+      for (const seg of segs) {
+        if (!seg.includes('8\nLABELS\n')) continue;
+        const m = seg.match(/\n1\n\(CURVED \/ (\d+) cuts\)/);
+        if (m) counts.push(parseInt(m[1], 10));
+      }
+      return counts;
+    }
+
+    it(
+      'kerfCount=3 and kerfCount=7 on same sheet → both "(CURVED / 3 cuts)" and "(CURVED / 7 cuts)" appear independently',
+      () => {
+        const SHEET_W71 = 2440;
+        const SHEET_H71 = 1220;
+
+        // Placement A: kerfCount=3, bbox [10, 10, 410, 860]
+        // Placement B: kerfCount=7, bbox [500, 10, 800, 610]
+        // Bboxes are non-overlapping (A.x2=410 < B.x1=500)
+        const sheet71: NestingSheet = {
+          index1:         1,
+          materialId:     MATERIAL_ID,
+          sheetW:         SHEET_W71,
+          sheetH:         SHEET_H71,
+          sheetThickness: 18,
+          label:          'NEST_71_TWO',
+          placements: [
+            {
+              partId:    'SMOKE_KC3_S71',
+              x:         10,
+              y:         10,
+              rotation:  0,
+              cutW:      400,
+              cutH:      850,
+              isCurved:  true,
+              kerfCount: 3,
+            },
+            {
+              partId:    'SMOKE_KC7_S71',
+              x:         500,
+              y:         10,
+              rotation:  0,
+              cutW:      300,
+              cutH:      600,
+              isCurved:  true,
+              kerfCount: 7,
+            },
+          ],
+          utilization: 0,
+        };
+
+        const output = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE71', materialId: MATERIAL_ID },
+          nesting: sheet71,
+          profile: getFactoryProfile('DEFAULT'),
+        });
+
+        const counts = parseCurvedLabelCounts71(output.content);
+
+        // Exactly 2 curved sub-labels present
+        expect(counts).toHaveLength(2);
+
+        // Both kerfCounts appear — order may vary depending on placement order
+        expect(counts).toContain(3);
+        expect(counts).toContain(7);
       },
     );
   },

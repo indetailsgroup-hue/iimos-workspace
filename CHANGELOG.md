@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [5.0.0] – 2026-08-27
+
+### Major Release — Rotation-Invariance Milestone & Sub-Label kerfCount Verification
+
+This major release completes the **rotation-invariance milestone** for the Curved Panel DXF
+pipeline, adding full rotation-symmetry verification for HATCH_CURVED diagonal geometry across
+all four rotation angles, boundary guard stages for zero/negative correction exclusion, a
+determinism regression guard, and a new sub-label kerfCount verification series (Stages 70–71).
+
+#### Rotation-Symmetry Series (Stages 61–68)
+
+- **Stage 61** — rotation=180 HATCH_CURVED diagonal corners match flat-blank bbox.
+- **Stage 62** — HATCH_CURVED diagonals have strictly non-zero length (|Δx|+|Δy| > 1.0 mm)
+  for ARC, S_CURVE, and TALL_ARC.
+- **Stage 63** — Determinism regression guard: re-running `runNesting` twice with the same
+  `CutListRow` produces identical HATCH_CURVED line coordinates for ARC and S_CURVE.
+- **Stage 64** — rotation=270 HATCH_CURVED diagonal corners match flat-blank bbox
+  (effective w=cutH, h=cutW, mirroring rotation=90 behaviour).
+- **Stage 65** — Panel with `projectedDepth=0` (flat panel forced into curved pipeline)
+  emits zero HATCH_CURVED lines and `isCurved=false`.
+- **Stage 66** — Panel with `developedLength < projectedDepth` (negative correction) also
+  emits zero HATCH_CURVED lines and `isCurved=false`.
+- **Stage 67** — rotation=90 and rotation=270 HATCH_CURVED endpoints are point-reflections
+  through the sheet centre.
+- **Stage 68** — rotation=0 and rotation=180 HATCH_CURVED endpoints are point-reflections
+  through the sheet centre (symmetric counterpart of Stage 67).
+
+#### Boundary Guard Series (Stages 65–69)
+
+- **Stage 65** — Zero-correction exclusion: `projectedDepth=0` → zero HATCH_CURVED lines.
+- **Stage 66** — Negative-correction exclusion: `developedLength < projectedDepth` →
+  zero HATCH_CURVED lines.
+- **Stage 69** — Boundary positive guard: `correction=0.001` (barely positive) →
+  `isCurved=true` and exactly 2 HATCH_CURVED lines emitted.
+
+#### Sub-Label kerfCount Verification Series (Stages 70–71)
+
+- **Stage 70** — Panel with `kerfCount=1` emits exactly 2 HATCH_CURVED lines and the DXF
+  LABELS sub-label reads `'(CURVED / 1 cuts)'` end-to-end through `runNesting →
+  buildDxfSheets`.
+- **Stage 71** — Two curved panels with distinct kerfCounts (kc=3, kc=7) on the same sheet
+  each emit the correct `'(CURVED / N cuts)'` sub-label independently, verified via
+  `parseCurvedLabelCounts` isolation on the LABELS TEXT layer.
+
+#### Test Suite
+
+- **324 smoke tests passing** (0 failures).
+
+---
+
 ## [4.4.0] - 2026-08-27
 
 ### Added
