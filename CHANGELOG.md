@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.5.0] - 2026-08-27
+
+### Overview
+Completes the **multi-panel count and SHEET boundary milestone** (Stages 49–50) and adds two new
+geometric invariant stages (51–52) that harden the smoke suite against panel-grouping regressions
+and HATCH_CURVED line-count drift.
+
+### Added
+
+#### Stage 49 — Two Curved Panels: PARTS_CURVED Count = 8 + Non-Overlapping Bboxes
+- Nests ARC + S_CURVE onto a single sheet via `runNesting`.
+- Asserts total `PARTS_CURVED` LINE count = 8 (4 per panel).
+- Parses per-panel bounding rectangles with `parsePARTSCURVEDRectList()` and asserts the two
+  bboxes are fully non-overlapping.
+
+#### Stage 50 — SHEET Layer Always Has Exactly 4 LINE Entities
+- Runs three distinct sheet configurations: single curved panel, two curved panels, mixed
+  curved + straight panel.
+- For each configuration asserts `SHEET` LINE count = 4 (one boundary rectangle per sheet,
+  constant regardless of placement count).
+
+#### Stage 51 — Three Curved Panels: PARTS_CURVED Count = 12 + Mutually Non-Overlapping Bboxes
+- Nests TALL_ARC (`grain=HORIZONTAL`, `materialId=MDF_18`) + S_CURVE + ARC onto a single sheet.
+- Asserts total `PARTS_CURVED` LINE count = 12 (4 per panel).
+- Parses all three per-panel bounding rectangles and asserts every pair (0-1, 0-2, 1-2) is
+  fully non-overlapping.
+- **Key fix**: `buildTallArcRow()` must carry `materialId: MATERIAL_ID` so `groupByMaterial`
+  places all three rows on the same sheet.
+
+#### Stage 52 — HATCH_CURVED LINE Count = 2 × curved_count (Single-Panel Sheets)
+- Three independent it() blocks: ARC, S_CURVE, TALL_ARC.
+- Asserts `HATCH_CURVED` LINE count = 2 for each single-panel sheet (two diagonal cross-hatch
+  lines per curved panel).
+
+### Changed
+- `buildDxfSheets.ts` JSDoc reference updated from `(Stages 7 – 50)` → `(Stages 7 – 52)`.
+- Smoke test JSDoc section header updated from `Stages 22 – 50` → `Stages 22 – 52`.
+
+### Tests
+- **298 smoke tests passing** (up from 294); 0 failures; 0 TypeScript errors.
+
+---
+
 ## [3.4.0] - 2026-08-27
 
 ### Overview

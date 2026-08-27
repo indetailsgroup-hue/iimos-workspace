@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 50: precision, structural integrity, label, bounding-rect, layer-count, and SHEET invariants
+ * Stages 22 – 52: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, and HATCH_CURVED count
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -6745,5 +6745,243 @@ describe('@smoke Stage 50 — SHEET layer LINE count is always exactly 4', () =>
       profile: getFactoryProfile('DEFAULT'),
     });
     expect(countSHEETLines(output.content)).toBe(4);
+  });
+});
+
+// =============================================================================
+// Stage 51 — three curved panels on same sheet: PARTS_CURVED count=12,
+//            all three per-panel bboxes are mutually non-overlapping
+// =============================================================================
+//
+// Fixture: TALL_ARC (grain=HORIZONTAL) + S_CURVE + ARC — FFDH analysis shows
+// all three fit on one 1220×2440 sheet:
+//   TALL_ARC  shelf-1  y=10     effectiveW=400   effectiveH≈909.44
+//   S_CURVE   shelf-2  y≈922.94 effectiveW≈1051.8 effectiveH=500
+//   ARC       shelf-3  y≈1426.44 effectiveW≈909.44 effectiveH=400
+//   total height used ≈ 1826.44 mm < 2440 mm → same sheet ✓
+//
+// Assertions:
+//   • 12 PARTS_CURVED LINE entities (3 curved panels × 4 edges each)
+//   • rects.length === 3
+//   • all three pairs (0,1) (0,2) (1,2) are non-overlapping
+//
+// 1 it() block.
+// =============================================================================
+
+describe('@smoke Stage 51 — three curved panels on same sheet: PARTS_CURVED count=12, all bboxes mutually non-overlapping', () => {
+
+  const EPS = 0.015;
+
+  /**
+   * Split PARTS_CURVED LINE segments into per-rectangle groups of 4 and
+   * return each group's bounding rect.
+   * addRectangle() always emits its 4 edges consecutively, so chunk index i
+   * corresponds to the i-th curved placement in order.
+   */
+  function parsePARTSCURVEDRectList(
+    content: string,
+  ): Array<{ minX: number; maxX: number; minY: number; maxY: number }> {
+    const segs = content
+      .split('\n0\nLINE\n')
+      .slice(1)
+      .filter((s) => s.startsWith('8\nPARTS_CURVED\n'));
+
+    const result: Array<{ minX: number; maxX: number; minY: number; maxY: number }> = [];
+
+    for (let i = 0; i < segs.length; i += 4) {
+      const chunk = segs.slice(i, i + 4);
+      const xs: number[] = [];
+      const ys: number[] = [];
+      for (const seg of chunk) {
+        const num = (code: string): number => {
+          const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+          return m ? parseFloat(m[1]) : NaN;
+        };
+        xs.push(num('10'), num('11'));
+        ys.push(num('20'), num('21'));
+      }
+      result.push({
+        minX: Math.min(...xs),
+        maxX: Math.max(...xs),
+        minY: Math.min(...ys),
+        maxY: Math.max(...ys),
+      });
+    }
+    return result;
+  }
+
+  /**
+   * TALL_ARC: same ARC stub with grain='HORIZONTAL' so FFDH keeps it
+   * portrait (effectiveW=400, effectiveH≈909.44) on its own shelf.
+   */
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:          'SMOKE_TALL_ARC_51',
+      cabinetId:       'CAB_SMOKE',
+      materialId:      MATERIAL_ID,
+      finishW:         PANEL_STUB.finishWidth,
+      finishH:         PANEL_STUB.finishHeight,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:            PANEL_STUB.finishWidth,
+      cutH:            PANEL_STUB.finishHeight,
+      qty:             1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  // ── ARC + S_CURVE + TALL_ARC ──────────────────────────────────────────────
+
+  it('ARC + S_CURVE + TALL_ARC on same sheet: PARTS_CURVED count=12, three rects mutually non-overlapping', () => {
+    const { row: arcRow }     = buildCurvedRow();
+    const { row: sCurveRow }  = buildSCurveRow();
+    const { row: tallArcRow } = buildTallArcRow();
+    const { sheets } = runNesting([tallArcRow, sCurveRow, arcRow]);
+
+    // All three curved panels must land on the same sheet
+    const sharedSheet = sheets.find(
+      (sh) => sh.placements.filter((pl) => pl.isCurved).length >= 3,
+    )!;
+    expect(sharedSheet).toBeDefined();
+
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_3ARC_R51', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sharedSheet,
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const { content } = output;
+
+    // ── Total count ──────────────────────────────────────────────────────────
+    const allSegs = content
+      .split('\n0\nLINE\n')
+      .slice(1)
+      .filter((s) => s.startsWith('8\nPARTS_CURVED\n'));
+    expect(allSegs.length).toBe(12);
+
+    // ── Per-panel bbox non-overlap ────────────────────────────────────────────
+    const rects = parsePARTSCURVEDRectList(content);
+    expect(rects.length).toBe(3);
+
+    // All three pairs must be non-overlapping
+    const pairs: [number, number][] = [[0, 1], [0, 2], [1, 2]];
+    for (const [i, j] of pairs) {
+      const a = rects[i];
+      const b = rects[j];
+      const noOverlapX = a.maxX <= b.minX + EPS || b.maxX <= a.minX + EPS;
+      const noOverlapY = a.maxY <= b.minY + EPS || b.maxY <= a.minY + EPS;
+      expect(noOverlapX || noOverlapY).toBe(true);
+    }
+  });
+});
+
+// =============================================================================
+// Stage 52 — HATCH_CURVED LINE count equals exactly 2 × curved_count for
+//            ARC, S_CURVE, and TALL_ARC single-panel sheets
+// =============================================================================
+//
+// buildDxfSheets.ts (lines 504–515) emits exactly two addLine() calls on the
+// HATCH_CURVED layer per curved placement:
+//   d1: bottom-left → top-right diagonal
+//   d2: bottom-right → top-left diagonal
+// Therefore: HATCH_CURVED LINE count = 2 × (number of curved placements).
+//
+// For a single curved panel on its own sheet: HATCH_CURVED count = 2.
+//
+// Assertions (3 it() blocks — ARC, S_CURVE, TALL_ARC):
+//   • HATCH_CURVED LINE count === 2
+// =============================================================================
+
+describe('@smoke Stage 52 — HATCH_CURVED LINE count equals 2 per curved panel on single-panel sheets', () => {
+
+  /**
+   * Count LINE entities on the HATCH_CURVED layer.
+   * Two diagonal X-lines are emitted per curved placement.
+   */
+  function countHATCHCURVEDLines(content: string): number {
+    return content
+      .split('\n0\nLINE\n')
+      .slice(1)
+      .filter((s) => s.startsWith('8\nHATCH_CURVED\n'))
+      .length;
+  }
+
+  /**
+   * TALL_ARC: same ARC stub with grain='HORIZONTAL' to lock portrait
+   * orientation (effectiveW=400, effectiveH≈909.44).
+   */
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:          'SMOKE_TALL_ARC_52',
+      cabinetId:       'CAB_SMOKE',
+      finishW:         PANEL_STUB.finishWidth,
+      finishH:         PANEL_STUB.finishHeight,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:            PANEL_STUB.finishWidth,
+      cutH:            PANEL_STUB.finishHeight,
+      qty:             1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  // ── ARC ───────────────────────────────────────────────────────────────────
+
+  it('ARC — HATCH_CURVED LINE count = 2 (two diagonal X-lines)', () => {
+    const { row: arcRow } = buildCurvedRow();
+    const { sheets } = runNesting([arcRow]);
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_ARC_R52', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    expect(countHATCHCURVEDLines(output.content)).toBe(2);
+  });
+
+  // ── S_CURVE ───────────────────────────────────────────────────────────────
+
+  it('S_CURVE — HATCH_CURVED LINE count = 2 (two diagonal X-lines)', () => {
+    const { row: sCurveRow } = buildSCurveRow();
+    const { sheets } = runNesting([sCurveRow]);
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_SCURVE_R52', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    expect(countHATCHCURVEDLines(output.content)).toBe(2);
+  });
+
+  // ── TALL_ARC ──────────────────────────────────────────────────────────────
+
+  it('TALL_ARC — HATCH_CURVED LINE count = 2 (two diagonal X-lines)', () => {
+    const { row: tallArcRow } = buildTallArcRow();
+    const { sheets } = runNesting([tallArcRow]);
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_TALLARC_R52', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    expect(countHATCHCURVEDLines(output.content)).toBe(2);
   });
 });
