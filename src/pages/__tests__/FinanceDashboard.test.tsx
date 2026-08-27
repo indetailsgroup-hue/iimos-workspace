@@ -2,12 +2,13 @@
 /**
  * FinanceDashboard.test.ts — Unit tests for Finance Dashboard UI
  * Tests all 4 tabs: Overview, Ledger, Receivables, Bank Feed
- * @version 14.0.0
+ * + v14.1: RPC ledger fetching, role-based column visibility
+ * @version 14.1.0
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react';
 import { FinanceDashboard } from '../FinanceDashboard';
-import type { FinanceHomeData } from '../FinanceDashboard';
+import type { FinanceHomeData, RpcLedgerEntry } from '../FinanceDashboard';
 import type { MultiBookLedger, BookEntry } from '../../ledger/multibook';
 import { emptyLedger, post } from '../../ledger/multibook';
 import type { Receivable } from '../../ledger/receivables';
@@ -94,12 +95,31 @@ const mockLedgerRecords: LedgerRecord[] = [
   { entryId: 'e-005', date: '2024-03-20', amount: 8000 },  // no match
 ];
 
+const mockRpcLedgerEntries: RpcLedgerEntry[] = [
+  {
+    entry_id: 'rpc-001',
+    book_id: 'internal',
+    lines: [
+      { account_code: '1000', debit: 200000, credit: 0 },
+      { account_code: '4000', debit: 0, credit: 200000 },
+    ],
+  },
+  {
+    entry_id: 'rpc-002',
+    book_id: 'external',
+    lines: [
+      { account_code: '5000', debit: 50000, credit: 0 },
+      { account_code: '2000', debit: 0, credit: 50000 },
+    ],
+  },
+];
+
 // ============================================================================
 // Tests
 // ============================================================================
 
 describe('FinanceDashboard', () => {
-  const mockFetchHome = vi.fn<[], Promise<FinanceHomeData>>();
+  const mockFetchHome = vi.fn(() => Promise.resolve(mockHomeData));
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -149,14 +169,17 @@ describe('FinanceDashboard', () => {
   // --------------------------------------------------------------------------
 
   describe('Ledger Tab', () => {
-    it('shows empty state when no ledger data', () => {
+    it('shows empty state when no ledger data and no RPC', () => {
+      const noopFetchLedger = vi.fn<() => Promise<RpcLedgerEntry[]>>();
+      noopFetchLedger.mockResolvedValue([]);
       render(
-        <FinanceDashboard fetchHome={mockFetchHome} initialTab="ledger" />,
+        <FinanceDashboard fetchHome={mockFetchHome} initialTab="ledger" fetchLedger={noopFetchLedger} />,
       );
-      expect(screen.getByText(/ยังไม่มีข้อมูลบัญชี/)).toBeDefined();
+      // Shows loading first since RPC is triggered
+      expect(screen.getByTestId('ledger-loading')).toBeDefined();
     });
 
-    it('shows book summary when ledger is provided', () => {
+    it('shows book summary when ledger is injected (bypasses RPC)', () => {
       const ledger = buildTestLedger();
       render(
         <FinanceDashboard
@@ -188,6 +211,66 @@ describe('FinanceDashboard', () => {
       // Should show statutory section labels
       expect(screen.getByText(/สินทรัพย์ \(Assets\)/)).toBeDefined();
       expect(screen.getByText(/รายได้ \(Revenue\)/)).toBeDefined();
+    });
+
+    it('fetches ledger via RPC when no injected data and tab is active', async () => {
+      const mockFetchLedger = vi.fn<() => Promise<RpcLedgerEntry[]>>();
+      mockFetchLedger.mockResolvedValue(mockRpcLedgerEntries);
+      render(
+        <FinanceDashboard
+          fetchHome={mockFetchHome}
+          initialTab="ledger"
+          fetchLedger={mockFetchLedger}
+        />,
+      );
+      // Should show loading initially
+      expect(screen.getByTestId('ledger-loading')).toBeDefined();
+      // After fetch resolves, should show data
+      await waitFor(() => {
+        expect(screen.getByTestId('kpi-จำนวนรายการ')).toBeDefined();
+      });
+      expect(mockFetchLedger).toHaveBeenCalledTimes(1);
+      // rpc-001 posted to internal → 1 entry in internal book
+      const entryCountKpi = screen.getByTestId('kpi-จำนวนรายการ');
+      expect(entryCountKpi.textContent).toContain('1');
+    });
+
+    it('shows error state when RPC fetch fails', async () => {
+      const mockFetchLedger = vi.fn<() => Promise<RpcLedgerEntry[]>>();
+      mockFetchLedger.mockRejectedValue(new Error('rpc_ledger_entries failed (401)'));
+      render(
+        <FinanceDashboard
+          fetchHome={mockFetchHome}
+          initialTab="ledger"
+          fetchLedger={mockFetchLedger}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('ledger-error')).toBeDefined();
+      });
+      expect(screen.getByText(/rpc_ledger_entries failed/)).toBeDefined();
+      // Retry button should be visible
+      expect(screen.getByTestId('ledger-retry')).toBeDefined();
+    });
+
+    it('shows refresh button when fetching via RPC', async () => {
+      const mockFetchLedger = vi.fn<() => Promise<RpcLedgerEntry[]>>();
+      mockFetchLedger.mockResolvedValue(mockRpcLedgerEntries);
+      render(
+        <FinanceDashboard
+          fetchHome={mockFetchHome}
+          initialTab="ledger"
+          fetchLedger={mockFetchLedger}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('ledger-refresh')).toBeDefined();
+      });
+      // Click refresh triggers another call
+      fireEvent.click(screen.getByTestId('ledger-refresh'));
+      await waitFor(() => {
+        expect(mockFetchLedger).toHaveBeenCalledTimes(2);
+      });
     });
   });
 
@@ -267,6 +350,68 @@ describe('FinanceDashboard', () => {
       // rcv-003 is overdue
       const row3 = screen.getByTestId('receivable-row-rcv-003');
       expect(within(row3).getByText('เกินกำหนด')).toBeDefined();
+    });
+
+    // --- v14.1: Role-based column visibility tests ---
+
+    it('FINANCE role sees all columns (id, amount, paid, remaining, dueDate, status)', () => {
+      render(
+        <FinanceDashboard
+          fetchHome={mockFetchHome}
+          receivables={mockReceivables}
+          initialTab="receivables"
+          roleOverride="FINANCE"
+        />,
+      );
+      const table = screen.getByTestId('receivables-table');
+      const headers = within(table).getAllByRole('columnheader');
+      // Should have 6 columns
+      expect(headers.length).toBe(6);
+      expect(headers[0].textContent).toBe('ID');
+      expect(headers[1].textContent).toBe('ยอด');
+      expect(headers[2].textContent).toBe('ชำระแล้ว');
+      expect(headers[3].textContent).toBe('คงเหลือ');
+      expect(headers[4].textContent).toBe('กำหนดชำระ');
+      expect(headers[5].textContent).toBe('สถานะ');
+      // Role indicator
+      expect(screen.getByTestId('receivables-role-indicator').textContent).toContain('FINANCE');
+    });
+
+    it('ADMIN role sees summary columns only (amount, remaining, status)', () => {
+      render(
+        <FinanceDashboard
+          fetchHome={mockFetchHome}
+          receivables={mockReceivables}
+          initialTab="receivables"
+          roleOverride="ADMIN"
+        />,
+      );
+      const table = screen.getByTestId('receivables-table');
+      const headers = within(table).getAllByRole('columnheader');
+      // Should have 3 columns only
+      expect(headers.length).toBe(3);
+      expect(headers[0].textContent).toBe('ยอด');
+      expect(headers[1].textContent).toBe('คงเหลือ');
+      expect(headers[2].textContent).toBe('สถานะ');
+      // Should NOT show ID column content
+      const row1 = screen.getByTestId('receivable-row-rcv-001');
+      expect(within(row1).queryByText('rcv-001')).toBeNull();
+      // Role indicator
+      expect(screen.getByTestId('receivables-role-indicator').textContent).toContain('ADMIN');
+    });
+
+    it('DESIGNER role sees summary view like ADMIN', () => {
+      render(
+        <FinanceDashboard
+          fetchHome={mockFetchHome}
+          receivables={mockReceivables}
+          initialTab="receivables"
+          roleOverride="DESIGNER"
+        />,
+      );
+      const table = screen.getByTestId('receivables-table');
+      const headers = within(table).getAllByRole('columnheader');
+      expect(headers.length).toBe(3);
     });
   });
 

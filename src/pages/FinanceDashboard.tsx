@@ -4,24 +4,29 @@
  * Tabs:
  *   1. ภาพรวมวันนี้   — ยอดค้างรวม, รับแล้ววันนี้, งวดใกล้ถึง, ค้างนาน (จาก rpc_finance_home)
  *   2. บัญชีแยกประเภท — Statement จาก MultiBookLedger (DBD2554 / IFRS Format 3)
+ *      → v14.1: Real-time Supabase RPC fetching via rpc_ledger_entries
  *   3. ลูกหนี้การค้า   — Receivables ทั้งหมด + filter overdue + color coding
+ *      → v14.1: Role-based column visibility (FINANCE=full, ADMIN=summary)
  *   4. Bank Feed       — สถานะ reconciliation ของ BankTxn
  *
  * Data Sources:
  *   - Tab 1: rpc_finance_home (Field App session, ADR-058)
- *   - Tab 2-4: local ledger modules (multibook, receivables, bankfeed)
+ *   - Tab 2: rpc_ledger_entries (real-time) OR injected MultiBookLedger (tests)
+ *   - Tab 3-4: local ledger modules (receivables, bankfeed)
  *
  * Architecture: Follows existing MONOLITH patterns (Tailwind, explicit state, role-gated via RequireRole)
- * @version 14.0.0
+ * @version 14.1.0
  */
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { readFieldSession } from '../bridge/fieldBridge';
-import type { MultiBookLedger, StatutoryStatement, BookStatement, CoaTypeMap } from '../ledger/multibook';
-import { statement as bookStatement, statutoryStatement } from '../ledger/multibook';
+import type { MultiBookLedger, StatutoryStatement, BookStatement, BookEntry, CoaTypeMap } from '../ledger/multibook';
+import { statement as bookStatement, statutoryStatement, post, emptyLedger } from '../ledger/multibook';
 import type { Receivable } from '../ledger/receivables';
 import { isOverdue, findOverdue } from '../ledger/receivables';
 import type { BankTxn, LedgerRecord, MatchResult } from '../ledger/bankfeed';
 import { autoMatch } from '../ledger/bankfeed';
+import { getCurrentRole } from '../core/auth/roles';
+import type { Role } from '../core/auth/roles';
 
 // ============================================================================
 // Types
@@ -44,6 +49,13 @@ export interface FinanceHomeData {
   received_today: { count: number; total: number };
 }
 
+/** RPC response shape from rpc_ledger_entries */
+export interface RpcLedgerEntry {
+  entry_id: string;
+  book_id: string;
+  lines: { account_code: string; debit: number; credit: number }[];
+}
+
 export type TabId = 'overview' | 'ledger' | 'receivables' | 'bankfeed';
 
 export interface FinanceDashboardProps {
@@ -51,7 +63,7 @@ export interface FinanceDashboardProps {
   fetchHome?: () => Promise<FinanceHomeData>;
   /** ปลายทางลิงก์ "เปิด Field App" */
   fieldAppUrl?: string;
-  /** inject MultiBookLedger สำหรับเทส */
+  /** inject MultiBookLedger สำหรับเทส (bypasses RPC fetch) */
   ledger?: MultiBookLedger | null;
   /** Chart of Accounts type mapping — default: DAPH standard */
   coa?: CoaTypeMap;
@@ -63,6 +75,10 @@ export interface FinanceDashboardProps {
   ledgerRecords?: LedgerRecord[];
   /** initial tab */
   initialTab?: TabId;
+  /** override สำหรับเทส RPC ledger fetch */
+  fetchLedger?: () => Promise<RpcLedgerEntry[]>;
+  /** override role for testing role-based visibility */
+  roleOverride?: Role;
 }
 
 // ============================================================================
@@ -104,7 +120,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
 ];
 
 // ============================================================================
-// RPC Fetch (existing pattern — reuse Field App session)
+// RPC Fetch Functions
 // ============================================================================
 
 async function fetchHomeViaFieldSession(): Promise<FinanceHomeData> {
@@ -127,6 +143,50 @@ async function fetchHomeViaFieldSession(): Promise<FinanceHomeData> {
     throw new Error(err.message ?? `rpc_finance_home failed (${res.status})`);
   }
   return res.json();
+}
+
+/**
+ * Fetch ledger entries via Supabase RPC (rpc_ledger_entries)
+ * Returns raw BookEntry[] from the remote database
+ */
+async function fetchLedgerViaFieldSession(): Promise<RpcLedgerEntry[]> {
+  if (!SUPABASE_URL || !SUPABASE_ANON) {
+    throw new Error('ยังไม่ได้ตั้งค่า VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY');
+  }
+  const session = readFieldSession();
+  if (!session) throw new Error('ยังไม่มี session — เปิด Field App แล้วล็อกอินก่อน');
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/rpc_ledger_entries`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      apikey: SUPABASE_ANON,
+      authorization: `Bearer ${session.accessToken}`,
+    },
+    body: '{}',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message ?? `rpc_ledger_entries failed (${res.status})`);
+  }
+  return res.json();
+}
+
+/** Transform RPC response into MultiBookLedger */
+function rpcToLedger(entries: RpcLedgerEntry[]): MultiBookLedger {
+  let ledger = emptyLedger();
+  for (const e of entries) {
+    const entry: BookEntry = {
+      entryId: e.entry_id,
+      bookId: e.book_id,
+      lines: e.lines.map((l) => ({
+        account_code: l.account_code,
+        debit: l.debit,
+        credit: l.credit,
+      })),
+    };
+    ledger = post(ledger, entry);
+  }
+  return ledger;
 }
 
 // ============================================================================
@@ -204,10 +264,22 @@ function OverviewTab({
 }
 
 // ============================================================================
-// Tab 2: Ledger (Multi-Book Statement)
+// Tab 2: Ledger (Multi-Book Statement) — with real-time RPC fetch
 // ============================================================================
 
-function LedgerTab({ ledger, coa }: { ledger: MultiBookLedger | null; coa: CoaTypeMap }) {
+function LedgerTab({
+  ledger,
+  coa,
+  isLoading,
+  fetchError,
+  onRefresh,
+}: {
+  ledger: MultiBookLedger | null;
+  coa: CoaTypeMap;
+  isLoading: boolean;
+  fetchError: string;
+  onRefresh?: () => void;
+}) {
   const [selectedBook, setSelectedBook] = useState<string>('internal');
   const [format, setFormat] = useState<'DBD2554' | 'IFRS_Format3'>('DBD2554');
 
@@ -228,6 +300,36 @@ function LedgerTab({ ledger, coa }: { ledger: MultiBookLedger | null; coa: CoaTy
       return null;
     }
   }, [ledger, selectedBook]);
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="text-center py-8 opacity-70" data-testid="ledger-loading">
+        <div className="text-4xl mb-2 animate-pulse">📒</div>
+        <div>กำลังโหลดข้อมูลบัญชีจาก Supabase…</div>
+      </div>
+    );
+  }
+
+  // Fetch error
+  if (fetchError) {
+    return (
+      <div className="space-y-3" data-testid="ledger-error">
+        <div className="p-3 rounded-lg bg-red-900/20 border border-red-500/30 text-red-300 text-sm">
+          ⚠️ {fetchError}
+        </div>
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            className="px-3 py-1.5 rounded-md text-sm font-medium bg-surface-2 hover:bg-surface-3 border border-oi-border"
+            data-testid="ledger-retry"
+          >
+            ลองใหม่
+          </button>
+        )}
+      </div>
+    );
+  }
 
   if (!ledger) {
     return (
@@ -263,6 +365,17 @@ function LedgerTab({ ledger, coa }: { ledger: MultiBookLedger | null; coa: CoaTy
           <option value="DBD2554">DBD 2554 (กรมพัฒนาธุรกิจ)</option>
           <option value="IFRS_Format3">IFRS Format 3</option>
         </select>
+
+        {/* Refresh button */}
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            className="ml-auto px-3 py-1 rounded text-xs font-medium bg-blue-800/30 hover:bg-blue-800/50 border border-blue-500/30 text-blue-300"
+            data-testid="ledger-refresh"
+          >
+            🔄 รีเฟรช
+          </button>
+        )}
       </div>
 
       {/* Book Summary */}
@@ -305,12 +418,28 @@ function LedgerTab({ ledger, coa }: { ledger: MultiBookLedger | null; coa: CoaTy
 }
 
 // ============================================================================
-// Tab 3: Receivables
+// Tab 3: Receivables — with role-based column visibility
 // ============================================================================
 
-function ReceivablesTab({ receivables }: { receivables: Receivable[] }) {
+/** Columns visible per role */
+function getReceivableColumns(role: Role): string[] {
+  switch (role) {
+    case 'FINANCE':
+      return ['id', 'amount', 'paid', 'remaining', 'dueDate', 'status'];
+    case 'ADMIN':
+      // ADMIN sees summary only — no ID, paid, dueDate
+      return ['amount', 'remaining', 'status'];
+    default:
+      // DESIGNER, FACTORY, INSTALLER — minimal view
+      return ['amount', 'remaining', 'status'];
+  }
+}
+
+function ReceivablesTab({ receivables, role }: { receivables: Receivable[]; role: Role }) {
   const [showOverdueOnly, setShowOverdueOnly] = useState(false);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const visibleColumns = useMemo(() => getReceivableColumns(role), [role]);
 
   const displayed = useMemo(() => {
     if (showOverdueOnly) return findOverdue(receivables, today);
@@ -339,8 +468,15 @@ function ReceivablesTab({ receivables }: { receivables: Receivable[] }) {
     );
   }
 
+  const showCol = (col: string) => visibleColumns.includes(col);
+
   return (
     <div className="space-y-4">
+      {/* Role indicator */}
+      <div className="text-xs opacity-50" data-testid="receivables-role-indicator">
+        มุมมอง: {role === 'FINANCE' ? 'รายละเอียดเต็ม (FINANCE)' : `สรุป (${role})`}
+      </div>
+
       {/* KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <KpiCard label="ลูกหนี้ทั้งหมด" value={String(receivables.length)} sub="รายการ" />
@@ -368,12 +504,12 @@ function ReceivablesTab({ receivables }: { receivables: Receivable[] }) {
         <table className="w-full text-sm" data-testid="receivables-table">
           <thead className="bg-surface-2">
             <tr>
-              <th className="px-3 py-2 text-left">ID</th>
-              <th className="px-3 py-2 text-right">ยอด</th>
-              <th className="px-3 py-2 text-right">ชำระแล้ว</th>
-              <th className="px-3 py-2 text-right">คงเหลือ</th>
-              <th className="px-3 py-2 text-center">กำหนดชำระ</th>
-              <th className="px-3 py-2 text-center">สถานะ</th>
+              {showCol('id') && <th className="px-3 py-2 text-left">ID</th>}
+              {showCol('amount') && <th className="px-3 py-2 text-right">ยอด</th>}
+              {showCol('paid') && <th className="px-3 py-2 text-right">ชำระแล้ว</th>}
+              {showCol('remaining') && <th className="px-3 py-2 text-right">คงเหลือ</th>}
+              {showCol('dueDate') && <th className="px-3 py-2 text-center">กำหนดชำระ</th>}
+              {showCol('status') && <th className="px-3 py-2 text-center">สถานะ</th>}
             </tr>
           </thead>
           <tbody>
@@ -386,22 +522,26 @@ function ReceivablesTab({ receivables }: { receivables: Receivable[] }) {
                   className={`border-t border-oi-border ${overdue ? 'bg-red-900/10' : ''}`}
                   data-testid={`receivable-row-${r.id}`}
                 >
-                  <td className="px-3 py-2 font-mono text-xs">{r.id}</td>
-                  <td className="px-3 py-2 text-right">{THB(Number(r.amount))}</td>
-                  <td className="px-3 py-2 text-right">{THB(Number(r.paid))}</td>
-                  <td className="px-3 py-2 text-right font-medium">{THB(remaining)}</td>
-                  <td className="px-3 py-2 text-center text-xs">
-                    {new Date(r.dueDate).toLocaleDateString('th-TH')}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {remaining <= 0 ? (
-                      <span className="px-2 py-0.5 rounded text-xs bg-green-800/40 text-green-300">ชำระครบ</span>
-                    ) : overdue ? (
-                      <span className="px-2 py-0.5 rounded text-xs bg-red-800/40 text-red-300">เกินกำหนด</span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded text-xs bg-blue-800/40 text-blue-300">รอชำระ</span>
-                    )}
-                  </td>
+                  {showCol('id') && <td className="px-3 py-2 font-mono text-xs">{r.id}</td>}
+                  {showCol('amount') && <td className="px-3 py-2 text-right">{THB(Number(r.amount))}</td>}
+                  {showCol('paid') && <td className="px-3 py-2 text-right">{THB(Number(r.paid))}</td>}
+                  {showCol('remaining') && <td className="px-3 py-2 text-right font-medium">{THB(remaining)}</td>}
+                  {showCol('dueDate') && (
+                    <td className="px-3 py-2 text-center text-xs">
+                      {new Date(r.dueDate).toLocaleDateString('th-TH')}
+                    </td>
+                  )}
+                  {showCol('status') && (
+                    <td className="px-3 py-2 text-center">
+                      {remaining <= 0 ? (
+                        <span className="px-2 py-0.5 rounded text-xs bg-green-800/40 text-green-300">ชำระครบ</span>
+                      ) : overdue ? (
+                        <span className="px-2 py-0.5 rounded text-xs bg-red-800/40 text-red-300">เกินกำหนด</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-xs bg-blue-800/40 text-blue-300">รอชำระ</span>
+                      )}
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -554,11 +694,25 @@ export function FinanceDashboard({
   bankTxns = [],
   ledgerRecords = [],
   initialTab = 'overview',
+  fetchLedger,
+  roleOverride,
 }: FinanceDashboardProps) {
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [home, setHome] = useState<FinanceHomeData | null>(null);
   const [err, setErr] = useState('');
 
+  // ---- Real-time Ledger fetching state ----
+  const [rpcLedger, setRpcLedger] = useState<MultiBookLedger | null>(null);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerError, setLedgerError] = useState('');
+
+  // Effective role: test override > getCurrentRole() > fallback ADMIN
+  const effectiveRole: Role = roleOverride ?? (getCurrentRole() || 'ADMIN');
+
+  // Effective ledger: injected prop takes priority over RPC-fetched
+  const effectiveLedger = ledger ?? rpcLedger;
+
+  // ---- Fetch home data on mount ----
   useEffect(() => {
     let alive = true;
     fetchHome().then(
@@ -567,6 +721,28 @@ export function FinanceDashboard({
     );
     return () => { alive = false; };
   }, [fetchHome]);
+
+  // ---- Fetch ledger entries via RPC (only when no injected ledger and tab is active) ----
+  const doFetchLedger = useCallback(async () => {
+    const fetcher = fetchLedger ?? fetchLedgerViaFieldSession;
+    setLedgerLoading(true);
+    setLedgerError('');
+    try {
+      const entries = await fetcher();
+      setRpcLedger(rpcToLedger(entries));
+    } catch (e: unknown) {
+      setLedgerError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLedgerLoading(false);
+    }
+  }, [fetchLedger]);
+
+  // Auto-fetch when ledger tab is opened and no injected data
+  useEffect(() => {
+    if (activeTab === 'ledger' && !ledger && !rpcLedger && !ledgerLoading && !ledgerError) {
+      doFetchLedger();
+    }
+  }, [activeTab, ledger, rpcLedger, ledgerLoading, ledgerError, doFetchLedger]);
 
   return (
     <div className="p-4 space-y-4 text-sm text-textc-primary max-w-5xl" data-testid="finance-dashboard">
@@ -605,8 +781,16 @@ export function FinanceDashboard({
       {/* Tab Content */}
       <div className="pt-2">
         {activeTab === 'overview' && <OverviewTab home={home} fieldAppUrl={fieldAppUrl} />}
-        {activeTab === 'ledger' && <LedgerTab ledger={ledger} coa={coa} />}
-        {activeTab === 'receivables' && <ReceivablesTab receivables={receivables} />}
+        {activeTab === 'ledger' && (
+          <LedgerTab
+            ledger={effectiveLedger}
+            coa={coa}
+            isLoading={ledgerLoading}
+            fetchError={ledgerError}
+            onRefresh={!ledger ? doFetchLedger : undefined}
+          />
+        )}
+        {activeTab === 'receivables' && <ReceivablesTab receivables={receivables} role={effectiveRole} />}
         {activeTab === 'bankfeed' && <BankFeedTab bankTxns={bankTxns} ledgerRecords={ledgerRecords} />}
       </div>
     </div>
