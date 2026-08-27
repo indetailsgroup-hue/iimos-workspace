@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 95: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, multi-panel scale validation, determinism guard, overflow two-sheet placement, overflow diagonal geometry, mixed-overflow exclusivity, mixed-overflow completeness / determinism / FFDH-order validation, three-sheet overflow count, sheet-3 diagonal geometry, mixed three-sheet overflow layer counts, and three-sheet determinism
+ * Stages 22 – 97: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, multi-panel scale validation, determinism guard, overflow two-sheet placement, overflow diagonal geometry, mixed-overflow exclusivity, mixed-overflow completeness / determinism / FFDH-order validation, three-sheet overflow count, sheet-3 diagonal geometry, mixed three-sheet overflow layer counts, three-sheet determinism, five-sheet overflow (qty=222), and FFDH stress test (500 panels)
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -347,6 +347,50 @@
  *       |                          |   produce identical sheet-3
  *       |                          |   placements[0] partId, x, y, rotation;
  *       |                          |   1 it() block.
+ *    96 | curved qty=222           | Five-sheet overflow: sheets.length===5
+ *       |                          |   (4×55+2=222); sheets[4] holds exactly
+ *       |                          |   2 curved placements; DXF sheet-5:
+ *       |                          |   PARTS_CURVED=8 (2×4),
+ *       |                          |   HATCH_CURVED=4 (2×2);
+ *       |                          |   all placements isCurved=true;
+ *       |                          |   1 it() block.
+ *    97 | curved qty=300           | FFDH stress test: 500 panels total;
+ *       |   + straight qty=200     |   sheets.length >= 5; total
+ *       |                          |   PARTS_CURVED across all sheets
+ *       |                          |   = 4 × 300 = 1200; 1 it() block.
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * FFDH Constants (from DEFAULT_NESTING_CONFIG in src/nesting/types.ts):
+ * ─────────────────────────────────────────────────────────────────────────────
+ *   sheetWidth  = 1220 mm    sheetHeight  = 2440 mm
+ *   kerfWidth   =    3.5 mm  edgeClearance=   10 mm
+ *
+ *   usableW = sheetWidth  − 2 × edgeClearance = 1200 mm   (part-fit gate)
+ *   usableH = sheetHeight − 2 × edgeClearance = 2420 mm   (part-fit gate)
+ *   sheetBoundary = sheetHeight − edgeClearance = 2430 mm  (new-shelf gate)
+ *
+ *   Curved panel after rotation=90: placed_w=210 (developedLength), placed_h=200
+ *
+ *   panelsPerShelf = 5
+ *     (5 × 210 + 4 × 3.5 + 10 = 1074 ≤ 1200;  6th = 1287.5 > 1200)
+ *
+ *   shelvesPerSheet = 11
+ *     (max k s.t. 10 + k × 203.5 + 200 ≤ 2430  →  k ≤ 10.91)
+ *
+ *   panelsPerSheet = panelsPerShelf × shelvesPerSheet = 55
+ *
+ *   Shelf-y formula:
+ *     y_k         = 10 + (k − 1) × 203.5          (top-left Y of shelf k, 1-indexed)
+ *     y_after_n   = 10 + n × 203.5                 (Y after n complete shelves)
+ *     y_after_11  = 10 + 11 × 203.5 = 2248.5 mm
+ *
+ *   Remaining height after 11 shelves:
+ *     remainingH_after_11 = sheetBoundary − y_after_11 − 0 = 2430 − 2248.5 = 181.5 mm
+ *
+ *   Overflow threshold:
+ *     cutH ≥ 182 forces a panel to the next sheet
+ *     (2248.5 + 182 = 2430.5 > 2430 = sheetBoundary)
+ *     cutH ≤ 181 still fits on the current sheet (2248.5 + 181 = 2429.5 ≤ 2430)
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -11338,6 +11382,177 @@ describe(
         expect(p95b.x).toBe(p95a.x);
         expect(p95b.y).toBe(p95a.y);
         expect(p95b.rotation).toBe(p95a.rotation);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 96 — Five-sheet overflow: qty=222 curved panels → 5 sheets
+//   sheets[4] (5th sheet, 0-indexed) holds exactly 2 curved panels;
+//   PARTS_CURVED = 8 (2 × 4) and HATCH_CURVED = 4 (2 × 2)
+//
+// Fixture:
+//   • qty=222, partId='SMOKE_CURVED_S96', cutW=200, cutH=200,
+//     developedLength=210, projectedDepth=200, curvedEdge='TOP'
+//     → correction=10, rotation=90 → placed_w=210, placed_h=200
+//
+// FFDH: panelsPerShelf=5, shelvesPerSheet=11 → panelsPerSheet=55
+// Distribution: 222 = 4×55 + 2 → sheets 1–4 have 55 each; sheet-5 has 2
+// User note: "sheet-4" in request = 0-indexed sheets[4] (5th physical sheet)
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 96 — five-sheet overflow: qty=222 → 5 sheets; sheets[4] holds 2 curved panels; PARTS_CURVED=8, HATCH_CURVED=4',
+  () => {
+    it(
+      'qty=222 curved panels → sheets.length===5; sheets[4].placements.length===2; all isCurved; DXF sheet-5 PARTS_CURVED=8, HATCH_CURVED=4',
+      () => {
+        const curvedRow96: CutListRow = {
+          partId:          'SMOKE_CURVED_S96',
+          cabinetId:       'CAB_SMOKE_96',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             222,
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Curved Panel S96',
+        };
+
+        const result96 = runNesting([curvedRow96]);
+
+        // 222 = 4 × 55 + 2 → 5 sheets
+        expect(result96.sheets).toHaveLength(5);
+
+        // First four sheets must be full (55 each)
+        for (let i = 0; i < 4; i++) {
+          expect(result96.sheets[i].placements).toHaveLength(55);
+        }
+
+        // Fifth sheet (sheets[4]) must hold exactly 2 placements
+        const sheet96Last = result96.sheets[4];
+        expect(sheet96Last.placements).toHaveLength(2);
+
+        // All placements on every sheet must be isCurved=true
+        for (const sheet of result96.sheets) {
+          for (const p of sheet.placements) {
+            expect(p.isCurved).toBe(true);
+          }
+        }
+
+        // Build DXF for the last sheet only and verify layer counts
+        const dxf96 = buildDxfSheet({
+          planned: { index1: 5, sheetId: 'SHEET_STAGE96_5', materialId: MATERIAL_ID },
+          nesting: sheet96Last,
+          profile: getFactoryProfile('DEFAULT'),
+        });
+
+        const lineSegs96 = dxf96.content.split('\n0\nLINE\n').slice(1);
+
+        const partsCurvedCount96 = lineSegs96.filter((seg) =>
+          seg.startsWith('8\nPARTS_CURVED\n'),
+        ).length;
+        expect(partsCurvedCount96).toBe(8); // 2 panels × 4 rect sides
+
+        const hatchCurvedCount96 = lineSegs96.filter((seg) =>
+          seg.startsWith('8\nHATCH_CURVED\n'),
+        ).length;
+        expect(hatchCurvedCount96).toBe(4); // 2 panels × 2 diagonal lines
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 97 — FFDH stress test: 300 curved + 200 straight = 500 panels
+//   across multiple sheets; total PARTS_CURVED across all DXF outputs = 1200
+//
+// Fixture:
+//   • curvedRow97: qty=300, partId='SMOKE_CURVED_S97',
+//     cutW=200, cutH=200, developedLength=210, projectedDepth=200,
+//     curvedEdge='TOP' → correction=10 → isCurved=true
+//     → rotation=90, placed_w=210, placed_h=200
+//   • straightRow97: qty=200, partId='SMOKE_STRAIGHT_S97',
+//     cutW=200, cutH=200 (no curve fields → isCurved=false)
+//
+// FFDH sort order: equal placed_h=200; curved placed_w=210 > straight 200
+//   → curved rows bin first; straight rows follow on same/later shelves.
+//
+// Distribution (approximate — FFDH may intermix once curved rows exhaust):
+//   Sheets 1–5:  55 curved each  (275 curved placed)
+//   Sheet  6:    25 curved + fits of straight
+//   Sheets 7–10: straight panels fill remaining space
+//
+// Assert: sheets.length >= 5 (minimum-bound; actual ≈10 sheets)
+//         total PARTS_CURVED = 4 × 300 = 1200
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 97 — FFDH stress test: 300 curved + 200 straight → total PARTS_CURVED = 4×300 = 1200',
+  () => {
+    it(
+      '500 panels (300 curved + 200 straight) → sheets.length >= 5; sum PARTS_CURVED across all sheets === 1200',
+      () => {
+        const curvedRow97: CutListRow = {
+          partId:          'SMOKE_CURVED_S97',
+          cabinetId:       'CAB_SMOKE_97C',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             300,
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Curved Panel S97',
+        };
+
+        const straightRow97: CutListRow = {
+          partId:    'SMOKE_STRAIGHT_S97',
+          cabinetId: 'CAB_SMOKE_97S',
+          materialId: MATERIAL_ID,
+          finishW:   200,
+          finishH:   200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:      200,
+          cutH:      200,
+          qty:       200,
+          label:     'Straight Panel S97',
+        };
+
+        const result97 = runNesting([curvedRow97, straightRow97]);
+
+        // Minimum-bound: at least 5 sheets are required for 300+ curved panels
+        expect(result97.sheets.length).toBeGreaterThanOrEqual(5);
+
+        // Build DXF for every sheet and accumulate PARTS_CURVED
+        let totalPartsCurved97 = 0;
+        for (let idx = 0; idx < result97.sheets.length; idx++) {
+          const dxf97 = buildDxfSheet({
+            planned: {
+              index1:     idx + 1,
+              sheetId:    `SHEET_STAGE97_${idx + 1}`,
+              materialId: MATERIAL_ID,
+            },
+            nesting: result97.sheets[idx],
+            profile: getFactoryProfile('DEFAULT'),
+          });
+          const lineSegs97 = dxf97.content.split('\n0\nLINE\n').slice(1);
+          totalPartsCurved97 += lineSegs97.filter((seg) =>
+            seg.startsWith('8\nPARTS_CURVED\n'),
+          ).length;
+        }
+
+        // Every curved panel contributes exactly 4 PARTS_CURVED LINE entities
+        expect(totalPartsCurved97).toBe(4 * 300); // = 1200
       },
     );
   },

@@ -3,6 +3,43 @@
 All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+
+## [10.2.0] - 2026-08-27
+
+### Added
+
+#### Stage 96 — Five-sheet overflow (qty=222)
+- Smoke test asserting that `qty=222` curved panels (`cutW=200`, `cutH=200`,
+  `developedLength=210`, `projectedDepth=200`, `curvedEdge='TOP'`) produce
+  exactly **5 sheets** (distribution: 4 × 55 + 2).
+- `sheets[4]` (0-indexed, 5th physical sheet) holds exactly **2** curved
+  placements; all placements across all sheets have `isCurved=true`.
+- DXF built for sheet-5 asserts `PARTS_CURVED=8` (2 × 4 rect sides) and
+  `HATCH_CURVED=4` (2 × 2 diagonal lines).
+
+#### Stage 97 — FFDH stress test (500 panels)
+- Smoke test with **300 curved** (`qty=300`, same flat-blank as Stage 96) and
+  **200 straight** (`qty=200`, `cutW=200`, `cutH=200`) rows — 500 panels total.
+- Asserts `sheets.length >= 5` (FFDH produces ≈ 10 sheets).
+- Builds DXF for every sheet and sums `PARTS_CURVED` across all outputs;
+  asserts total = **4 × 300 = 1200** (exactly one bounding rect per curved panel).
+
+#### JSDoc — FFDH Constants summary table
+- New `FFDH Constants` section added to the smoke-test file-level JSDoc,
+  documenting all derived sizing values from `DEFAULT_NESTING_CONFIG`:
+  - `sheetWidth=1220`, `sheetHeight=2440`, `kerfWidth=3.5`, `edgeClearance=10`
+  - `usableW=1200`, `usableH=2420`, `sheetBoundary=2430`
+  - `panelsPerShelf=5`, `shelvesPerSheet=11`, `panelsPerSheet=55`
+  - Shelf-y formula: `y_k = 10 + (k−1) × 203.5`; `y_after_n = 10 + n × 203.5`
+  - `y_after_11 = 2248.5 mm`; `remainingH_after_11 = 181.5 mm`
+  - Overflow threshold: `cutH ≥ 182` forces panel to next sheet
+- Stage table rows 96–97 added to the `Stages 22 – 97` header block.
+- `buildDxfSheets.ts` JSDoc cross-reference updated from `(Stages 7–95)` to
+  `(Stages 7–97)`.
+
+### Tests
+- Smoke test: **350 tests** (up from 348); all passing.
+
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
