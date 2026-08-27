@@ -260,7 +260,7 @@ class DxfBuilder {
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * Precision and Structural Integrity Invariants  (Stages 22 – 35)
+ * Precision and Structural Integrity Invariants  (Stages 22 – 36)
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Endpoint rounding (Stage 22): addLine() applies Math.round(v × 100) / 100
@@ -302,9 +302,12 @@ class DxfBuilder {
  *    35 | ARC + S_CURVE + TALL_ARC | d1.x2 ≈ r(maxX) — diagonal-1 ends at right edge;
  *       |                          |   d2.x2 ≈ r(minX) — diagonal-2 ends at left edge;
  *       |                          |   ε < 0.015 mm
+ *    36 | ARC + S_CURVE + TALL_ARC | d1.x1 ≈ r(minX) — diagonal-1 starts at left edge;
+ *       |                          |   d2.x1 ≈ r(maxX) — diagonal-2 starts at right edge;
+ *       |                          |   ε < 0.015 mm
  *
  * All invariants are verified end-to-end in:
- *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 35)
+ *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 36)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 const NESTING_LAYERS = [

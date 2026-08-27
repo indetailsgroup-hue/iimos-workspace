@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.6.1] - 2026-08-27
+
+### Added
+
+- **Stage 36 — diagonal start-X coordinates** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Six new `it()` blocks assert the start-X values of both HATCH_CURVED diagonals
+  (the start-X counterpart of Stage 35's end-X checks):
+  - `d1.x1 ≈ r(minX)` — diagonal-1 starts at the left edge of the flat-blank bbox
+  - `d2.x1 ≈ r(maxX)` — diagonal-2 starts at the right edge
+  Tolerance: ε < 0.015 mm. Verified for ARC, S_CURVE, and TALL_ARC.
+
+  Together with Stage 35, all four X coordinates of both diagonals are now
+  individually pinned to the flat-blank bbox extents.
+
+- **JSDoc invariant table** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Stage 36 row appended to Section 3; section header updated to
+  "Stages 22 – 36".
+
+- **JSDoc invariant table** (`buildDxfSheets.ts`):
+  Stage 36 row appended; section updated to "Stages 22 – 36"; reference
+  updated to `(Stages 7 – 36)`.
+
+**Test delta:** 229 → 235 (+6 tests, all passing)
+
+---
+
 ## [2.6.0] - 2026-08-27
 
 ### Added
