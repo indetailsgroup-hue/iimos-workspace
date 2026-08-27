@@ -4,6 +4,21 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [13.0.0] – 2026-08-27
+
+### Added
+- **CurvedPanelProfileEditor** (`src/components/ui/CurvedPanelProfileEditor.tsx`)
+  — panel-level profile editor for curved cabinet panels wired into the Designer UI.
+  - Kind selector: RECT / ARC / S_CURVE / ROUNDED_CORNER
+  - Dynamic form fields: edge selector, radius, sweepDeg inputs per kind
+  - Live kerf preview: kerfCount, developedLength, projectedDepth (via `computeCurveFields`)
+  - G12 gate error / warning badges from `computeCurveProfile()`
+  - Reset-to-RECT button
+  - Writes to `useCabinetStore → updatePanelProfile()` on every change
+- **"Curves" tab** (`〜`) in `DesignerIntentPanel` — surfaces the editor when a panel is selected
+- **`TabId` extended** in `useIntentPanelStore` to include `'curves'`
+- **9 unit tests** in `src/components/ui/__tests__/CurvedPanelProfileEditor.test.tsx`
+
 ## [12.6.0] – 2026-08-27
 
 ### Added
