@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 46: precision, structural integrity, label, and bounding-rect invariants
+ * Stages 22 – 48: precision, structural integrity, label, bounding-rect, and layer-count invariants
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -6349,5 +6349,208 @@ describe('@smoke Stage 46 — PARTS layer bounding-rect matches cutW × cutH (no
     const bbox = parsePARTSRect(output.content);
     expect(Math.abs((bbox.maxX - bbox.minX) - ew)).toBeLessThan(EPS);
     expect(Math.abs((bbox.maxY - bbox.minY) - eh)).toBeLessThan(EPS);
+  });
+});
+
+// =============================================================================
+// Stage 47 — PARTS_CURVED LINE count equals exactly 4 per curved panel
+// =============================================================================
+//
+// addRectangle() emits exactly 4 LINE entities per call (bottom, right, top,
+// left edges).  A single curved panel must therefore produce exactly 4 LINE
+// entities on the PARTS_CURVED layer.  This invariant is verified for each
+// of the three canonical curved-panel fixtures.
+//
+// 3 it() blocks: ARC, S_CURVE, TALL_ARC.
+// =============================================================================
+
+describe('@smoke Stage 47 — PARTS_CURVED LINE count equals exactly 4 per curved panel', () => {
+
+  /**
+   * Count LINE entities on the PARTS_CURVED layer.
+   * Split on '\n0\nLINE\n'; each segment starts with '8\n{layer}\n'.
+   */
+  function countPARTSCURVEDLines(content: string): number {
+    return content
+      .split('\n0\nLINE\n')
+      .slice(1)
+      .filter((s) => s.startsWith('8\nPARTS_CURVED\n'))
+      .length;
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:          'SMOKE_TALL_ARC_47',
+      cabinetId:       'CAB_SMOKE',
+      finishW:         PANEL_STUB.finishWidth,
+      finishH:         PANEL_STUB.finishHeight,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:            PANEL_STUB.finishWidth,
+      cutH:            PANEL_STUB.finishHeight,
+      qty:             1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  // ── ARC ───────────────────────────────────────────────────────────────────
+
+  it('ARC — PARTS_CURVED LINE count = 4 (one rectangle, four edges)', () => {
+    const { row: arcRow } = buildCurvedRow();
+    const { sheets } = runNesting([arcRow]);
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_ARC_R47', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    expect(countPARTSCURVEDLines(output.content)).toBe(4);
+  });
+
+  // ── S_CURVE ───────────────────────────────────────────────────────────────
+
+  it('S_CURVE — PARTS_CURVED LINE count = 4 (one rectangle, four edges)', () => {
+    const { row: sCurveRow } = buildSCurveRow();
+    const { sheets } = runNesting([sCurveRow]);
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_SCURVE_R47', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    expect(countPARTSCURVEDLines(output.content)).toBe(4);
+  });
+
+  // ── TALL_ARC ──────────────────────────────────────────────────────────────
+
+  it('TALL_ARC — PARTS_CURVED LINE count = 4 (one rectangle, four edges)', () => {
+    const { row: tallArcRow } = buildTallArcRow();
+    const { sheets } = runNesting([tallArcRow]);
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_TALLARC_R47', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    expect(countPARTSCURVEDLines(output.content)).toBe(4);
+  });
+});
+
+// =============================================================================
+// Stage 48 — mixed-sheet DXF: exactly one PARTS_CURVED rect, one PARTS rect,
+//            bounding boxes non-overlapping
+// =============================================================================
+//
+// When one curved panel and one straight panel share a nesting sheet the DXF
+// must contain:
+//   • exactly 4 LINE entities on PARTS_CURVED  (one closed rectangle)
+//   • exactly 4 LINE entities on PARTS         (one closed rectangle)
+//   • the two bounding boxes must not overlap
+//     (panels occupy distinct regions of the sheet)
+//
+// 1 it() block: ARC (curved) + STRAIGHT_ROW (straight) mixed sheet.
+// =============================================================================
+
+describe('@smoke Stage 48 — mixed-sheet: one PARTS_CURVED rect, one PARTS rect, non-overlapping bboxes', () => {
+
+  const EPS = 0.015;
+
+  /**
+   * Count LINE entities on the given DXF layer.
+   */
+  function countLayerLines(content: string, layer: string): number {
+    return content
+      .split('\n0\nLINE\n')
+      .slice(1)
+      .filter((s) => s.startsWith(`8\n${layer}\n`))
+      .length;
+  }
+
+  /**
+   * Parse bounding rect (minX, minY, maxX, maxY) for LINE entities on a
+   * given DXF layer.  Group codes: 10=x1, 20=y1, 11=x2, 21=y2.
+   */
+  function parseLayerBbox(
+    content: string,
+    layer: string,
+  ): { minX: number; maxX: number; minY: number; maxY: number } {
+    const segs = content
+      .split('\n0\nLINE\n')
+      .slice(1)
+      .filter((s) => s.startsWith(`8\n${layer}\n`));
+
+    const xs: number[] = [];
+    const ys: number[] = [];
+
+    for (const seg of segs) {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      xs.push(num('10'), num('11'));
+      ys.push(num('20'), num('21'));
+    }
+
+    return {
+      minX: Math.min(...xs),
+      maxX: Math.max(...xs),
+      minY: Math.min(...ys),
+      maxY: Math.max(...ys),
+    };
+  }
+
+  // ── mixed sheet: ARC + STRAIGHT ───────────────────────────────────────────
+
+  it('mixed sheet (1 ARC + 1 straight): PARTS_CURVED=4 LINEs, PARTS=4 LINEs, bboxes non-overlapping', () => {
+    const { row: arcRow } = buildCurvedRow();
+    const { sheets } = runNesting([arcRow, STRAIGHT_ROW]);
+
+    // Locate the sheet that contains at least one curved AND one straight placement
+    const mixedSheet = sheets.find(
+      (sh) =>
+        sh.placements.some((pl) => pl.isCurved) &&
+        sh.placements.some((pl) => !pl.isCurved),
+    )!;
+    expect(mixedSheet).toBeDefined();
+
+    const planned: PlannedSheet = {
+      index1: 1, sheetId: 'SHEET_MIX_R48', materialId: MATERIAL_ID,
+    };
+    const output = buildDxfSheet({
+      planned,
+      nesting: mixedSheet,
+      profile: getFactoryProfile('DEFAULT'),
+    });
+    const { content } = output;
+
+    // ── Layer counts ─────────────────────────────────────────────────────────
+    expect(countLayerLines(content, 'PARTS_CURVED')).toBe(4);
+    expect(countLayerLines(content, 'PARTS')).toBe(4);
+
+    // ── Non-overlapping bboxes ───────────────────────────────────────────────
+    const curvedBbox   = parseLayerBbox(content, 'PARTS_CURVED');
+    const straightBbox = parseLayerBbox(content, 'PARTS');
+
+    // Two axis-aligned rectangles are non-overlapping iff they are separated on
+    // at least one axis.  Use EPS tolerance to absorb addLine() rounding.
+    const noOverlapX =
+      curvedBbox.maxX  <= straightBbox.minX + EPS ||
+      straightBbox.maxX <= curvedBbox.minX  + EPS;
+    const noOverlapY =
+      curvedBbox.maxY  <= straightBbox.minY + EPS ||
+      straightBbox.maxY <= curvedBbox.minY  + EPS;
+
+    expect(noOverlapX || noOverlapY).toBe(true);
   });
 });

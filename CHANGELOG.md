@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.3.0] - 2026-08-27
+
+### Overview
+Minor release completing the **bounding-rect validation milestone** (Stages 45–48).
+Stages 45–46 (bounding-rect coordinates for `PARTS_CURVED` and `PARTS`) were
+shipped in v3.2.0; this release adds the complementary **layer-count** and
+**non-overlap** invariants (Stages 47–48) that together close the full
+geometric verification arc for every DXF rectangle emitted by `buildDxfSheet`.
+
+### Added
+
+#### Stage 47 — PARTS_CURVED LINE count equals exactly 4 per curved panel
+- **Helper `countPARTSCURVEDLines(content)`** (Stage 47 describe scope):
+  splits DXF on `'\n0\nLINE\n'`, filters segments starting with
+  `'8\nPARTS_CURVED\n'`, returns count.
+- **3 `it()` blocks** (ARC, S_CURVE, TALL_ARC) each assert
+  `countPARTSCURVEDLines === 4`, confirming that `addRectangle()` always
+  emits exactly 4 LINE entities (bottom, right, top, left edges) per curved
+  panel placement.
+- Verifies the closed-rectangle invariant for the `PARTS_CURVED` layer across
+  all three canonical curved-panel fixture types.
+
+#### Stage 48 — mixed-sheet: one PARTS_CURVED rect, one PARTS rect, non-overlapping bboxes
+- **Helper `countLayerLines(content, layer)`**: generalized LINE counter for
+  any named DXF layer.
+- **Helper `parseLayerBbox(content, layer)`**: generalized bbox parser
+  returning `{ minX, minY, maxX, maxY }` for any layer; same group-code
+  extraction logic as Stage 45.
+- **1 `it()` block** (ARC + STRAIGHT_ROW mixed sheet):
+  - Locates the sheet where `placements` contains at least one `isCurved=true`
+    and at least one `isCurved=false` entry.
+  - Asserts `PARTS_CURVED` LINE count = 4 and `PARTS` LINE count = 4 (exactly
+    one closed rectangle per layer).
+  - Parses both bboxes and asserts non-overlap: the two axis-aligned rectangles
+    are separated on at least one axis (`noOverlapX || noOverlapY`), with EPS
+    tolerance of 0.015 mm to absorb `addLine()` rounding.
+- Confirms that two panels sharing a single nesting sheet occupy geometrically
+  distinct, non-intersecting footprints in the exported DXF.
+
+### Changed
+- **JSDoc** in `buildDxfSheets.ts` extended to document Stages 47–48 in the
+  reference table; reference updated to `(Stages 7–48)`.
+- **JSDoc** header line in `curvedPanelDxfPipeline.smoke.test.ts` updated to
+  `Stages 22–48`.
+
 ## [3.2.0] - 2026-08-27
 
 ### Overview

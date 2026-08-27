@@ -354,9 +354,18 @@ class DxfBuilder {
  *       |                          |   placement.cutW/H == CutListRow.cutW/H (unmodified);
  *       |                          |   mixed sheet: straight placement unaffected by curved;
  *       |                          |   ε < 0.015 mm; 3 it() blocks (single, narrow, mixed).
+ *    47 | ARC + S_CURVE + TALL_ARC | PARTS_CURVED LINE count equals exactly 4 per curved panel
+ *       |                          |   (addRectangle() always emits 4 LINE entities — bottom,
+ *       |                          |   right, top, left edges; one rect per curved placement);
+ *       |                          |   3 it() blocks (one per panel type).
+ *    48 | ARC (mixed) + STRAIGHT   | mixed-sheet DXF contains exactly 4 PARTS_CURVED LINEs
+ *       |                          |   and exactly 4 PARTS LINEs (one rect each); the two
+ *       |                          |   bounding boxes are non-overlapping on at least one axis
+ *       |                          |   (separated panels occupy distinct regions of the sheet);
+ *       |                          |   ε < 0.015 mm; 1 it() block.
  *
  * All invariants are verified end-to-end in:
- *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 46)
+ *   src/e2e/curvedPanelDxfPipeline.smoke.test.ts  (Stages 7 – 48)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 const NESTING_LAYERS = [
