@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 28: precision and structural integrity invariants
+ * Stages 22 – 33: precision and structural integrity invariants
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -81,6 +81,13 @@
  *    30 | ARC + S_CURVE + TALL_ARC | d1: (minX,minY)→(maxX,maxY) (left→right);
  *       |                          |   d2: (maxX,minY)→(minX,maxY) (right→left);
  *       |                          |   d1.x1 < d1.x2; d2.x1 > d2.x2  (ε < 0.015 mm)
+ *    31 | ARC + S_CURVE + TALL_ARC | shared bottom start-Y: d1.y1 ≈ d2.y1 ≈ r(minY)
+ *       |                          |   (consequence of Stage 30; ε < 0.015 mm)
+ *    32 | ARC + S_CURVE + TALL_ARC | shared top end-Y: d1.y2 ≈ d2.y2 ≈ r(maxY)
+ *       |                          |   (symmetric counterpart of Stage 31; ε < 0.015 mm)
+ *    33 | ARC + S_CURVE + TALL_ARC | orientation sense: d1.x1 < d1.x2 (left→right);
+ *       |                          |   d2.x1 > d2.x2 (right→left); strict inequality,
+ *       |                          |   no tolerance needed
  *
  * ─────────────────────────────────────────────────────────────────────────────
  *
@@ -4387,5 +4394,141 @@ describe('@smoke Stage 32 — d1.y2 and d2.y2 are both ≈ maxY (shared top end-
     const [d1, d2] = tallArcLines;
     expect(Math.abs(d1.y2 - r(b.maxY))).toBeLessThan(EPS);
     expect(Math.abs(d2.y2 - r(b.maxY))).toBeLessThan(EPS);
+  });
+});
+
+// ============================================================
+// @smoke Stage 33 — orientation sense: d1.x1 < d1.x2 and d2.x1 > d2.x2
+// ============================================================
+describe('@smoke Stage 33 — d1 runs left→right (d1.x1 < d1.x2) and d2 runs right→left (d2.x1 > d2.x2)', () => {
+  /**
+   * Stage 33 asserts the X-axis orientation sense of the two HATCH_CURVED
+   * diagonals for every panel type.
+   *
+   * From Stage 30 we know:
+   *   d1 starts at (minX, minY) and ends at (maxX, maxY)  → d1.x1 < d1.x2
+   *   d2 starts at (maxX, minY) and ends at (minX, maxY)  → d2.x1 > d2.x2
+   *
+   * Stage 33 asserts this strictly, checking the raw floating-point values
+   * (not rounded), so no tolerance is needed — the inequality must hold exactly.
+   *
+   * Panels tested: ARC (FFDH-rotated), S_CURVE (FFDH-rotated), TALL_ARC
+   * (grain-locked, no rotation).  In every case minX < maxX, so the sense is
+   * unambiguous.
+   */
+
+  type Coords = { x1: number; y1: number; x2: number; y2: number };
+
+  // ── helpers (self-contained) ──────────────────────────────────────────────
+
+  function parseHatchCoords(content: string): Coords[] {
+    const entitiesStart = content.indexOf('ENTITIES');
+    const entities = content.slice(entitiesStart);
+    const segs = entities
+      .split('LINE')
+      .slice(1)
+      .filter((s) => s.includes('\n8\nHATCH_CURVED\n'));
+    return segs.map((seg) => {
+      const num = (code: string): number => {
+        const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+    });
+  }
+
+  function linesForPlacement(coords: Coords[], placementY: number): Coords[] {
+    return coords.filter((c) => Math.abs(Math.min(c.y1, c.y2) - placementY) < 1.0);
+  }
+
+  function buildTallArcRow(): { row: CutListRow; kerfCount: number } {
+    const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+    const row: CutListRow = {
+      partId:     'SMOKE_TALL_ARC',
+      cabinetId:  'CAB_SMOKE',
+      materialId: MATERIAL_ID,
+      finishW:    PANEL_STUB.finishWidth,
+      finishH:    PANEL_STUB.finishHeight,
+      edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+      premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+      cutW:       PANEL_STUB.finishWidth,
+      cutH:       PANEL_STUB.finishHeight,
+      qty:        1,
+      developedLength: fields.developedLength,
+      projectedDepth:  fields.projectedDepth,
+      kerfCount:       fields.kerfCount,
+      curvedEdge:      fields.curvedEdge ?? undefined,
+      grain:           'HORIZONTAL',
+    };
+    return { row, kerfCount: fields.kerfCount };
+  }
+
+  function runStage33() {
+    const { row: arcRow }     = buildCurvedRow();
+    const { row: sCurveRow }  = buildSCurveRow();
+    const { row: tallArcRow } = buildTallArcRow();
+
+    const { sheets } = runNesting([arcRow, sCurveRow, tallArcRow]);
+    expect(sheets).toHaveLength(1);
+
+    const arcP     = sheets[0].placements.find((p) => p.partId === 'SMOKE_DOOR')!;
+    const sCurveP  = sheets[0].placements.find((p) => p.partId === 'SMOKE_SCURVE_DOOR')!;
+    const tallArcP = sheets[0].placements.find((p) => p.partId === 'SMOKE_TALL_ARC')!;
+
+    const planned: PlannedSheet = { index1: 1, sheetId: 'SHEET_001', materialId: MATERIAL_ID };
+    const output = buildDxfSheet({
+      planned,
+      nesting: sheets[0],
+      profile: getFactoryProfile('DEFAULT'),
+    });
+
+    const allCoords    = parseHatchCoords(output.content);
+    const arcLines     = linesForPlacement(allCoords, arcP.y);
+    const sCurveLines  = linesForPlacement(allCoords, sCurveP.y);
+    const tallArcLines = linesForPlacement(allCoords, tallArcP.y);
+
+    expect(arcLines).toHaveLength(2);
+    expect(sCurveLines).toHaveLength(2);
+    expect(tallArcLines).toHaveLength(2);
+
+    return { arcLines, sCurveLines, tallArcLines };
+  }
+
+  // ── assertions ────────────────────────────────────────────────────────────
+
+  it('ARC — d1.x1 < d1.x2 (left→right)', () => {
+    const { arcLines } = runStage33();
+    const [d1] = arcLines;
+    expect(d1.x1).toBeLessThan(d1.x2);
+  });
+
+  it('ARC — d2.x1 > d2.x2 (right→left)', () => {
+    const { arcLines } = runStage33();
+    const [, d2] = arcLines;
+    expect(d2.x1).toBeGreaterThan(d2.x2);
+  });
+
+  it('S_CURVE — d1.x1 < d1.x2 (left→right)', () => {
+    const { sCurveLines } = runStage33();
+    const [d1] = sCurveLines;
+    expect(d1.x1).toBeLessThan(d1.x2);
+  });
+
+  it('S_CURVE — d2.x1 > d2.x2 (right→left)', () => {
+    const { sCurveLines } = runStage33();
+    const [, d2] = sCurveLines;
+    expect(d2.x1).toBeGreaterThan(d2.x2);
+  });
+
+  it('TALL_ARC — d1.x1 < d1.x2 (left→right)', () => {
+    const { tallArcLines } = runStage33();
+    const [d1] = tallArcLines;
+    expect(d1.x1).toBeLessThan(d1.x2);
+  });
+
+  it('TALL_ARC — d2.x1 > d2.x2 (right→left)', () => {
+    const { tallArcLines } = runStage33();
+    const [, d2] = tallArcLines;
+    expect(d2.x1).toBeGreaterThan(d2.x2);
   });
 });

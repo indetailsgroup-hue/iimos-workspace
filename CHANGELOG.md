@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.5.0] - 2026-08-27
+
+### Added
+
+- **Corner-direction-Y structural integrity group (Stages 29–32)** — four smoke
+  stages that build exhaustively on the Stage 28 set-of-four-corners invariant
+  and lock in the complete directional contract for HATCH_CURVED diagonals:
+
+  | Stage | Assertion |
+  |-------|-----------|
+  | 29 | HATCH_CURVED endpoints form exactly the four rounded bbox corners `{(minX,minY),(maxX,maxY),(maxX,minY),(minX,maxY)}` — order-agnostic set equality |
+  | 30 | Directional assignment: `d1` runs `(minX,minY)→(maxX,maxY)` (left→right); `d2` runs `(maxX,minY)→(minX,maxY)` (right→left); both `d1.x1 < d1.x2` and `d2.x1 > d2.x2` within ε < 0.015 mm |
+  | 31 | Shared bottom start-Y: `d1.y1 ≈ d2.y1 ≈ r(minY)` — both diagonals grounded at the flat-blank bottom edge (ε < 0.015 mm) |
+  | 32 | Shared top end-Y: `d1.y2 ≈ d2.y2 ≈ r(maxY)` — symmetric counterpart of Stage 31 (ε < 0.015 mm) |
+
+  All six it() assertions per stage verified for ARC (FFDH-rotated),
+  S_CURVE (FFDH-rotated), and TALL_ARC (grain-locked, no rotation).
+
+- **JSDoc invariant table** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Stages 29–32 rows added to Section 3. Section header updated to
+  "Stages 22 – 28 → 22 – 32".
+
+**Test delta (cumulative Stages 29–32):** 196 → 217 (+21 tests)
+
+---
+
+## [2.4.3] - 2026-08-27
+
+### Added
+
+- **Stage 33 — X-axis orientation sense** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Six new `it()` blocks assert strict X-direction inequality for each diagonal:
+  - `d1.x1 < d1.x2` — diagonal-1 always runs left→right (no tolerance; strict)
+  - `d2.x1 > d2.x2` — diagonal-2 always runs right→left (no tolerance; strict)
+  Verified for ARC, S_CURVE, and TALL_ARC panel types.
+
+- **JSDoc invariant table** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Stage 33 row appended to Section 3; section header updated to
+  "Stages 22 – 33".
+
+**Test delta:** 211 → 217 (+6 tests, all passing)
+
+---
+
 ## [2.4.2] - 2026-08-27
 
 ### Fixed / Verified
