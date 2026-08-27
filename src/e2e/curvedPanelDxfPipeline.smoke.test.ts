@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 101: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, multi-panel scale validation, determinism guard, overflow two-sheet placement, overflow diagonal geometry, mixed-overflow exclusivity, mixed-overflow completeness / determinism / FFDH-order validation, three-sheet overflow count, sheet-3 diagonal geometry, mixed three-sheet overflow layer counts, three-sheet determinism, five-sheet overflow (qty=222), FFDH stress test (500 panels), six-sheet overflow (qty=277), mixed-500 determinism guard, six full sheets (qty=330), and shelf-y coordinate validation
+ * Stages 22 – 103: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, multi-panel scale validation, determinism guard, overflow two-sheet placement, overflow diagonal geometry, mixed-overflow exclusivity, mixed-overflow completeness / determinism / FFDH-order validation, three-sheet overflow count, sheet-3 diagonal geometry, mixed three-sheet overflow layer counts, three-sheet determinism, five-sheet overflow (qty=222), FFDH stress test (500 panels), six-sheet overflow (qty=277), mixed-500 determinism guard, six full sheets (qty=330), shelf-y coordinate validation, seven full sheets (qty=385), and six-full-sheet determinism guard
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -380,6 +380,19 @@
  *       |                          |   all x===10; placements[i].y ===
  *       |                          |   10 + i × 203.5 (y_1..y_11 from lookup
  *       |                          |   table); 1 it() block.
+ *   102 | curved qty=385           | Seven full sheets (no remainder): 385 =
+ *       |                          |   7 × 55; sheets.length===7; every sheet
+ *       |                          |   has exactly 55 placements; all
+ *       |                          |   isCurved=true; DXF for sheets[6]:
+ *       |                          |   PARTS_CURVED=220 (55×4); extends
+ *       |                          |   Stage 100 by one additional sheet;
+ *       |                          |   1 it() block.
+ *   103 | curved qty=330           | Six-full-sheet determinism: two
+ *       |                          |   independent runNesting calls with the
+ *       |                          |   Stage 100 fixture (qty=330) produce
+ *       |                          |   identical sheets[5].placements[0]
+ *       |                          |   partId, x, y, rotation; mirrors
+ *       |                          |   Stages 95 and 99; 1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * FFDH Constants (from DEFAULT_NESTING_CONFIG in src/nesting/types.ts):
@@ -11892,6 +11905,134 @@ describe(
         for (let i = 0; i < 11; i++) {
           expect(sortedPlacements[i].y).toBe(expectedY[i]);
         }
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 102 — Seven full sheets: qty=385 curved panels → 7 sheets,
+//   each holding exactly 55 panels (385 = 7 × 55);
+//   sheets[6] PARTS_CURVED = 55 × 4 = 220.
+//
+// Fixture:
+//   • qty=385, partId='SMOKE_CURVED_S102', cutW=200, cutH=200,
+//     developedLength=210, projectedDepth=200, curvedEdge='TOP'
+//     → correction=10, rotation=90 → placed_w=210, placed_h=200
+//
+// Distribution: 385 = 7 × 55 → all seven sheets are full (no remainder sheet)
+// Extends Stage 100 (6 full sheets) by one more sheet.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 102 — seven full sheets: qty=385 → sheets.length===7; every sheet has 55 panels; sheets[6] DXF PARTS_CURVED=220',
+  () => {
+    it(
+      'qty=385 curved panels → sheets.length===7; every sheet has 55 placements; all isCurved; sheets[6] PARTS_CURVED=220',
+      () => {
+        const curvedRow102: CutListRow = {
+          partId:          'SMOKE_CURVED_S102',
+          cabinetId:       'CAB_SMOKE_102',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             385,
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Curved Panel S102',
+        };
+
+        const result102 = runNesting([curvedRow102]);
+
+        // 385 = 7 × 55 → exactly 7 sheets, no remainder
+        expect(result102.sheets).toHaveLength(7);
+
+        // Every sheet must be full: 55 placements each
+        for (let i = 0; i < 7; i++) {
+          expect(result102.sheets[i].placements).toHaveLength(55);
+        }
+
+        // All placements on every sheet must be isCurved=true
+        for (const sheet of result102.sheets) {
+          for (const p of sheet.placements) {
+            expect(p.isCurved).toBe(true);
+          }
+        }
+
+        // Build DXF for the last sheet (sheets[6]) and assert PARTS_CURVED=220
+        const dxf102 = buildDxfSheet({
+          planned: { index1: 7, sheetId: 'SHEET_STAGE102_7', materialId: MATERIAL_ID },
+          nesting: result102.sheets[6],
+          profile: getFactoryProfile('DEFAULT'),
+        });
+
+        const lineSegs102 = dxf102.content.split('\n0\nLINE\n').slice(1);
+        const partsCurvedCount102 = lineSegs102.filter((seg) =>
+          seg.startsWith('8\nPARTS_CURVED\n'),
+        ).length;
+        expect(partsCurvedCount102).toBe(220); // 55 panels × 4 rect sides
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 103 — Regression guard for Stage 100 fixture: re-running runNesting
+//   twice with qty=330 curved panels produces identical sheets[5].placements[0]
+//   partId, x, y, and rotation.
+//
+// Fixture: same as Stage 100
+//   • qty=330, partId='SMOKE_CURVED_S103', cutW=200, cutH=200,
+//     developedLength=210, projectedDepth=200, curvedEdge='TOP'
+//
+// Distribution: 330 = 6 × 55 → 6 full sheets; sheets[5].placements[0] is the
+//   first panel placed on sheet-6 (x=10, y=10, rotation=90).
+//
+// Mirrors Stage 99 (mixed-500 determinism) and Stage 95 (three-sheet determinism)
+// for the clean six-full-sheet boundary case.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 103 — six-full-sheet determinism: two runNesting calls with qty=330 produce identical sheets[5] placements[0]',
+  () => {
+    it(
+      'runNesting called twice with qty=330 curved panels → sheets[5].placements[0] has identical partId, x, y, rotation',
+      () => {
+        const curvedRow103: CutListRow = {
+          partId:          'SMOKE_CURVED_S103',
+          cabinetId:       'CAB_SMOKE_103',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             330,
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Curved Panel S103',
+        };
+
+        const run103a = runNesting([curvedRow103]);
+        const run103b = runNesting([curvedRow103]);
+
+        // Both runs must produce exactly 6 sheets (330 = 6 × 55)
+        expect(run103a.sheets).toHaveLength(6);
+        expect(run103b.sheets).toHaveLength(6);
+
+        // sheets[5].placements[0] must be identical across both runs
+        const p103a = run103a.sheets[5].placements[0];
+        const p103b = run103b.sheets[5].placements[0];
+
+        expect(p103b.partId).toBe(p103a.partId);
+        expect(p103b.x).toBe(p103a.x);
+        expect(p103b.y).toBe(p103a.y);
+        expect(p103b.rotation).toBe(p103a.rotation);
       },
     );
   },

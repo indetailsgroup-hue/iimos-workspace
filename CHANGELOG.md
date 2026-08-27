@@ -4,6 +4,35 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [11.1.0] - 2026-08-27
+
+### Added
+
+#### Stage 102 — Seven full sheets (qty=385, no remainder)
+- Smoke test asserting that `qty=385` curved panels (`cutW=200`, `cutH=200`,
+  `developedLength=210`, `projectedDepth=200`, `curvedEdge='TOP'`) produce exactly **7 sheets**
+  with **no remainder sheet** (385 = 7 × 55).
+- Every sheet is asserted to hold exactly **55 placements**, all `isCurved=true`.
+- DXF for `sheets[6]` asserted to contain **PARTS_CURVED = 220** (55 × 4 LINE entities).
+- Extends Stage 100 (6 full sheets) by one additional sheet to confirm the n-full-sheet pattern
+  is not specific to 6 sheets.
+
+#### Stage 103 — Six-full-sheet determinism guard
+- Regression guard: `runNesting` called twice with the Stage 100 fixture (`qty=330` curved panels)
+  produces **identical** `sheets[5].placements[0]` `partId`, `x`, `y`, and `rotation`.
+- Validates determinism at the 6-full-sheet boundary (330 = 6 × 55), the clean counterpart to
+  the remainder-sheet determinism guards in Stages 95 and 99.
+
+#### JSDoc updates
+- Stage-table rows 102–103 added to smoke test file JSDoc.
+- JSDoc range line updated: `Stages 22–101` → `Stages 22–103`.
+- `buildDxfSheets.ts` cross-reference updated: `(Stages 7–101)` → `(Stages 7–103)`.
+
+### Changed
+- Smoke test suite now contains **356 tests** (Stages 1–103 + supporting helpers).
+
+---
+
 ## [11.0.0] - 2026-08-27
 
 ### Added
