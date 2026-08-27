@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 88: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, multi-panel scale validation, determinism guard, overflow two-sheet placement, overflow diagonal geometry, and mixed-overflow exclusivity
+ * Stages 22 – 91: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, multi-panel scale validation, determinism guard, overflow two-sheet placement, overflow diagonal geometry, mixed-overflow exclusivity, and mixed-overflow completeness / determinism / FFDH-order validation
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -313,6 +313,22 @@
  *       |   mixed overflow         |   (all isCurved=true); straight overflows to
  *       |                          |   sheet-2 with PARTS_CURVED=0,
  *       |                          |   HATCH_CURVED=0, PARTS=4; 1 it() block.
+ *    89 | 56 curved + 1 straight  | mixed sheet-2: overflow curved +
+ *       |   mixed overflow         |   straight; sheet-2 PARTS_CURVED=4,
+ *       |                          |   HATCH_CURVED=2, PARTS=4;
+ *       |                          |   curved/straight bboxes non-overlapping;
+ *       |                          |   1 it() block.
+ *    90 | 55 curved + 1 straight  | determinism regression guard:
+ *       |   determinism            |   two independent runNesting calls
+ *       |                          |   produce identical sheet-2
+ *       |                          |   placements[0] partId, x, y;
+ *       |                          |   1 it() block.
+ *    91 | curvedA×55 + curvedB×1  | FFDH order: sheet-1 holds all 55
+ *       |   + straight×1           |   S91A panels; sheet-2[0]=S91B
+ *       |                          |   (isCurved=true, x=10, y=10);
+ *       |                          |   sheet-2[1]=SMOKE_STRAIGHT_S91
+ *       |                          |   (isCurved=false, x≈23.5, y=10);
+ *       |                          |   non-overlapping; 1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -10663,6 +10679,291 @@ describe(
         expect(countLayer88(output88b.content, 'PARTS_CURVED')).toBe(0);
         expect(countLayer88(output88b.content, 'HATCH_CURVED')).toBe(0);
         expect(countLayer88(output88b.content, 'PARTS')).toBe(4);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 89 — Mixed sheet-2: curved + straight overflow panel; sheet-2 has
+//   PARTS_CURVED=4, HATCH_CURVED=2, PARTS=4 with non-overlapping bboxes
+//
+// Fixture:
+//   • curvedRow89  : qty=56, partId='SMOKE_CURVED_S89', cutW=200, cutH=200,
+//                    developedLength=210, projectedDepth=200, curvedEdge='TOP'
+//                    → correction=10, flatBlankW=200, flatBlankH=210; part(w=200,h=210)
+//   • straightRow89: qty=1, partId='SMOKE_STRAIGHT_S89', cutW=200, cutH=200
+//
+// FFDH sort: curved (h=210) before straight (h=200)
+// New-shelf orientation: rotation=90 (placed_w=210, placed_h=200); 5/shelf × 11 = 55
+// Sheet-1: 55 curved panels (all isCurved=true)
+// Sheet-2: [0]=SMOKE_CURVED_S89#? (lex last) at x=10,y=10 rotation=90 cutH=210
+//          [1]=SMOKE_STRAIGHT_S89 at x=223.5,y=10 rotation=0
+// Non-overlap: p89Curved.x + 210 = 220 < 223.5 = p89Straight.x
+// DXF(sheet-2): PARTS_CURVED=4, HATCH_CURVED=2, PARTS=4
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 89 — mixed sheet-2: curved + straight overflow; PARTS_CURVED=4, HATCH_CURVED=2, PARTS=4',
+  () => {
+
+    function countLayer89(content: string, layer: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter((seg) => seg.startsWith(`8\n${layer}\n`))
+        .length;
+    }
+
+    it(
+      'sheet-2 holds 1 curved + 1 straight: non-overlapping, PARTS_CURVED=4, HATCH_CURVED=2, PARTS=4',
+      () => {
+        const curvedRow89: CutListRow = {
+          partId:          'SMOKE_CURVED_S89',
+          cabinetId:       'CAB_SMOKE_89C',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             56,
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Curved Panel S89',
+        };
+
+        const straightRow89: CutListRow = {
+          partId:          'SMOKE_STRAIGHT_S89',
+          cabinetId:       'CAB_SMOKE_89S',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             1,
+          label:           'Straight Panel S89',
+        };
+
+        const result89 = runNesting([curvedRow89, straightRow89]);
+
+        // Two sheets
+        expect(result89.sheets).toHaveLength(2);
+        const [sheet89a, sheet89b] = result89.sheets;
+
+        // Sheet-1: exactly 55 curved panels, all isCurved=true
+        expect(sheet89a.placements).toHaveLength(55);
+        for (const p of sheet89a.placements) {
+          expect(p.isCurved).toBe(true);
+        }
+
+        // Sheet-2: exactly 2 placements
+        expect(sheet89b.placements).toHaveLength(2);
+
+        // First placement on sheet-2 is the overflow curved panel
+        const p89Curved = sheet89b.placements[0];
+        expect(p89Curved.partId).toMatch(/^SMOKE_CURVED_S89#/);
+        expect(p89Curved.isCurved).toBe(true);
+
+        // Second placement on sheet-2 is the straight panel
+        const p89Straight = sheet89b.placements[1];
+        expect(p89Straight.partId).toBe('SMOKE_STRAIGHT_S89');
+        expect(p89Straight.isCurved).toBeFalsy();
+
+        // Non-overlapping: curved right edge < straight left edge
+        const ewCurved89 = p89Curved.rotation === 90 ? p89Curved.cutH : p89Curved.cutW;
+        expect(p89Curved.x + ewCurved89).toBeLessThan(p89Straight.x);
+
+        // Build DXF for sheet-2 and verify layer counts
+        const output89b = buildDxfSheet({
+          planned: { index1: 2, sheetId: 'SHEET_STAGE89B', materialId: MATERIAL_ID },
+          nesting: sheet89b,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        expect(countLayer89(output89b.content, 'PARTS_CURVED')).toBe(4);
+        expect(countLayer89(output89b.content, 'HATCH_CURVED')).toBe(2);
+        expect(countLayer89(output89b.content, 'PARTS')).toBe(4);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 90 — Determinism regression guard: mixed overflow (55 curved + 1 straight)
+//   produces identical sheet-2 placement coordinates across two independent
+//   runNesting calls
+//
+// Fixture (factory makeDetRows90 — returns fresh objects each call):
+//   • curvedRow : qty=55, partId='SMOKE_DET_CURVED_S90', cutW=200, cutH=200,
+//                 developedLength=210, projectedDepth=200, curvedEdge='TOP'
+//   • straightRow: qty=1,  partId='SMOKE_DET_STRAIGHT_S90', cutW=200, cutH=200
+//
+// Sheet-1: exactly 55 curved (fills exactly; 5/shelf × 11 shelves)
+// Sheet-2: 1 straight at x=10, y=10 (rotation=0)
+// Invariant: two independent calls produce identical sheet-2.placements[0] partId, x, y
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 90 — determinism: mixed 55 curved + 1 straight produces identical sheet-2 coordinates across two runs',
+  () => {
+
+    function makeDetRows90(): CutListRow[] {
+      return [
+        {
+          partId:          'SMOKE_DET_CURVED_S90',
+          cabinetId:       'CAB_SMOKE_90C',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             55,
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Det Curved S90',
+        },
+        {
+          partId:          'SMOKE_DET_STRAIGHT_S90',
+          cabinetId:       'CAB_SMOKE_90S',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             1,
+          label:           'Det Straight S90',
+        },
+      ];
+    }
+
+    it(
+      're-running runNesting with 55 curved + 1 straight always produces identical sheet-2 partId, x, y',
+      () => {
+        const result90a = runNesting(makeDetRows90());
+        const result90b = runNesting(makeDetRows90());
+
+        expect(result90a.sheets).toHaveLength(2);
+        expect(result90b.sheets).toHaveLength(2);
+
+        const p90a = result90a.sheets[1].placements[0];
+        const p90b = result90b.sheets[1].placements[0];
+
+        expect(p90a.partId).toBe(p90b.partId);
+        expect(p90a.x).toBe(p90b.x);
+        expect(p90a.y).toBe(p90b.y);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 91 — FFDH order: three rows (curvedA qty=55, curvedB qty=1, straight qty=1)
+//   pack sheet-1 with all 55 curvedA panels, then sheet-2[0]=curvedB, sheet-2[1]=straight
+//
+// Fixture:
+//   • curvedRowA91 : qty=55, partId='SMOKE_CURVED_S91A', cutW=200, cutH=200,
+//                    developedLength=210, projectedDepth=200, curvedEdge='TOP'
+//   • curvedRowB91 : qty=1,  partId='SMOKE_CURVED_S91B', same curve params
+//   • straightRow91: qty=1,  partId='SMOKE_STRAIGHT_S91', cutW=200, cutH=200
+//
+// FFDH sort: all curved (h=210) before straight (h=200); within curved id ASC:
+//   'SMOKE_CURVED_S91A#...' < 'SMOKE_CURVED_S91B' (A < B)
+// Sheet-1: 55 S91A#k panels. Sheet-2: [0]=S91B (qty=1, no # suffix) isCurved=true
+//          at x=10,y=10; [1]=S91_STRAIGHT isCurved=false at x≈223.5,y=10
+// Non-overlap: S91B.x + 210 = 220 < 223.5 = straight.x
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 91 — FFDH order: curvedA×55 + curvedB×1 + straight×1 → correct sheet-2 partition',
+  () => {
+
+    it(
+      'three rows: sheet-1=55 S91A panels; sheet-2=[SMOKE_CURVED_S91B, SMOKE_STRAIGHT_S91]',
+      () => {
+        const curvedRowA91: CutListRow = {
+          partId:          'SMOKE_CURVED_S91A',
+          cabinetId:       'CAB_SMOKE_91A',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             55,
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Curved A S91',
+        };
+
+        const curvedRowB91: CutListRow = {
+          partId:          'SMOKE_CURVED_S91B',
+          cabinetId:       'CAB_SMOKE_91B',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             1,
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Curved B S91',
+        };
+
+        const straightRow91: CutListRow = {
+          partId:          'SMOKE_STRAIGHT_S91',
+          cabinetId:       'CAB_SMOKE_91S',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             1,
+          label:           'Straight S91',
+        };
+
+        const result91 = runNesting([curvedRowA91, curvedRowB91, straightRow91]);
+
+        // Two sheets
+        expect(result91.sheets).toHaveLength(2);
+        const [sheet91a, sheet91b] = result91.sheets;
+
+        // Sheet-1: exactly 55 placements, all SMOKE_CURVED_S91A#k, all isCurved=true
+        expect(sheet91a.placements).toHaveLength(55);
+        for (const p of sheet91a.placements) {
+          expect(p.partId).toMatch(/^SMOKE_CURVED_S91A#/);
+          expect(p.isCurved).toBe(true);
+        }
+
+        // Sheet-2: exactly 2 placements
+        expect(sheet91b.placements).toHaveLength(2);
+
+        // Sheet-2[0]: SMOKE_CURVED_S91B (qty=1 → no # suffix), isCurved=true
+        expect(sheet91b.placements[0].partId).toBe('SMOKE_CURVED_S91B');
+        expect(sheet91b.placements[0].isCurved).toBe(true);
+
+        // Sheet-2[1]: SMOKE_STRAIGHT_S91, isCurved falsy
+        expect(sheet91b.placements[1].partId).toBe('SMOKE_STRAIGHT_S91');
+        expect(sheet91b.placements[1].isCurved).toBeFalsy();
+
+        // Non-overlapping: S91B right edge < straight left edge
+        const p91B = sheet91b.placements[0];
+        const p91S = sheet91b.placements[1];
+        const ewB91 = p91B.rotation === 90 ? p91B.cutH : p91B.cutW;
+        expect(p91B.x + ewB91).toBeLessThan(p91S.x);
       },
     );
   },

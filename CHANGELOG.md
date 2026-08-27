@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [9.1.0] – 2026-08-27
+
+### Added – Mixed-Overflow Completeness, Determinism, and FFDH Order Validation Milestone
+
+#### Stage 89 — Mixed Sheet-2: Curved + Straight Overflow
+- `@smoke Stage 89` asserts that when `qty=56` curved panels (correction=10 mm, `curvedEdge='TOP'`) overflow to a second sheet together with one straight panel (both in the same `runNesting` call), sheet-2 holds exactly 2 placements: one curved (`isCurved=true`, matching `/^SMOKE_CURVED_S89#/`) and one straight (`isCurved` falsy, `partId='SMOKE_STRAIGHT_S89'`).
+- Non-overlapping guard: curved right edge (`p.x + (rotation===90 ? cutH : cutW)`) is strictly less than straight left edge.
+- DXF layer counts for sheet-2: `PARTS_CURVED=4`, `HATCH_CURVED=2`, `PARTS=4`.
+
+#### Stage 90 — Determinism Regression Guard (Mixed Overflow)
+- `@smoke Stage 90` re-runs `runNesting` twice with an identical factory-constructed fixture (55 curved `'SMOKE_DET_CURVED_S90'` + 1 straight `'SMOKE_DET_STRAIGHT_S90'`) and asserts that both runs produce bit-for-bit identical `sheet-2.placements[0].partId`, `.x`, and `.y` values.
+- Complements the single-type determinism guard (Stage 85) with a mixed-type overflow scenario.
+
+#### Stage 91 — FFDH Sort Order: Three-Row Partition
+- `@smoke Stage 91` runs three rows (`curvedA qty=55`, `curvedB qty=1`, `straight qty=1`) and asserts FFDH sort order produces the correct sheet partition:
+  - Sheet-1: exactly 55 placements all matching `/^SMOKE_CURVED_S91A#/` with `isCurved=true`.
+  - Sheet-2 index 0: `'SMOKE_CURVED_S91B'` (qty=1, no `#` suffix), `isCurved=true`, at `x≈10, y=10`.
+  - Sheet-2 index 1: `'SMOKE_STRAIGHT_S91'`, `isCurved` falsy, at `x≈223.5, y=10`.
+  - Non-overlapping guard on sheet-2.
+- Validates that FFDH sorts all `h=210` curved parts (S91A before S91B lexicographically) before `h=200` straight parts.
+
+### Updated
+- Smoke-test JSDoc header updated: `Stages 22 – 88` → `Stages 22 – 91`; table rows 89–91 added.
+- `buildDxfSheets.ts` JSDoc reference updated: `(Stages 7 – 88)` → `(Stages 7 – 91)`.
+
+---
+
 ## [9.0.0] – 2026-08-27
 
 ### Major Release — Overflow Geometry and Mixed-Overflow Exclusivity Milestone (Stages 87–88)
