@@ -4,6 +4,45 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [11.0.0] - 2026-08-27
+
+### Added
+
+#### 100-Stage Milestone — Major Release
+This release marks the completion of **101 smoke-test stages** covering the full Curved Panel
+System end-to-end pipeline, from `generateKerfPattern` through FFDH nesting and DXF export.
+
+#### Stage 100 — Six full sheets (qty=330, no remainder)
+- Smoke test asserting that `qty=330` curved panels (`cutW=200`, `cutH=200`,
+  `developedLength=210`, `projectedDepth=200`, `curvedEdge='TOP'`) produce exactly **6 sheets**
+  with **no remainder sheet** (330 = 6 × 55).
+- Every sheet is asserted to hold exactly **55 placements**, all `isCurved=true`.
+- DXF for `sheets[5]` asserted to contain **PARTS_CURVED = 220** (55 panels × 4 LINE entities).
+- Complements Stages 96/98 which tested remainder sheets; Stage 100 validates the clean
+  full-sheet boundary condition.
+
+#### Stage 101 — Shelf-y coordinate validation
+- Smoke test asserting that `qty=11` wide curved panels (`developedLength=1197`,
+  `projectedDepth=200`, `curvedEdge='TOP'`) — one panel per shelf — are placed with
+  `rotation=90` and `x=10` on sheet-1.
+- Placements sorted by y; each `placements[i].y` asserted to equal `10 + i × 203.5`,
+  matching the FFDH shelf-y lookup table `y_1 = 10` through `y_11 = 2045` (≈ ±0.001 mm).
+- Directly validates the `y_after_n = 10 + n × 203.5` formula documented in the JSDoc
+  FFDH Constants table.
+
+#### JSDoc — Stage table rows 100–101
+- Added rows 100 and 101 to the stage-description table in the smoke test file JSDoc.
+- Updated `buildDxfSheets.ts` cross-reference comment from `(Stages 7–99)` to `(Stages 7–101)`.
+
+### Changed
+- Smoke test suite now contains **354 tests** (Stages 1–101 + supporting helpers).
+
+### Breaking Changes
+- **Major version bump (10.x → 11.0.0)** marks the 100-stage milestone.  No public API changes;
+  version reflects project maturity and test-suite completeness rather than breaking API changes.
+
+---
+
 ## [10.3.0] - 2026-08-27
 
 ### Added
