@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 60: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, and HATCH_CURVED count
+ * Stages 22 – 63: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, and HATCH_CURVED count
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -189,6 +189,16 @@
  *       |                          |   minX < intersectionX < maxX and
  *       |                          |   minY < intersectionY < maxY;
  *       |                          |   strict inequalities, no tolerance; 3 it() blocks.
+ *    61 | ARC (rotation=180)       | manually constructed NestingSheet with rotation=180;
+ *       |                          |   getRotatedDimensions returns w=cutW, h=cutH (same as
+ *       |                          |   rotation=0); d1 and d2 span flat-blank bbox corners
+ *       |                          |   (ε < 0.02 mm); 1 it() block.
+ *    62 | ARC / S_CURVE / TALL_ARC | both HATCH_CURVED diagonal lines have Manhattan
+ *       |                          |   length |x2−x1|+|y2−y1| > 1.0 mm (non-degenerate
+ *       |                          |   guard); 3 it() blocks (one per fixture).
+ *    63 | ARC / S_CURVE            | regression guard: running runNesting twice with the
+ *       |                          |   same CutListRow yields bit-for-bit identical
+ *       |                          |   HATCH_CURVED coordinates; 2 it() blocks.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -206,7 +216,7 @@ import { buildDxfSheet } from '../core/export/monolith/builders/buildDxfSheets';
 import { getFactoryProfile } from '../core/export/factoryPackageProfiles';
 
 // Types
-import type { CutListRow } from '../core/export/monolith/monolithExportContext';
+import type { CutListRow, NestingSheet } from '../core/export/monolith/monolithExportContext';
 import type { CabinetPanel } from '../core/types/Cabinet';
 import type { PlannedSheet } from '../core/export/planFactoryPackage';
 
@@ -7910,5 +7920,303 @@ describe(
       expect(intersectionY).toBeGreaterThan(minY);
       expect(intersectionY).toBeLessThan(maxY);
     });
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 61 – rotation=180 HATCH_CURVED diagonal correctness
+// Asserts that when a curved placement is manually assigned rotation=180, the
+// HATCH_CURVED diagonal lines still span the correct flat-blank bbox corners.
+// (getRotatedDimensions returns w=cutW, h=cutH for rotation=0|180 identically.)
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 61 – rotation=180 HATCH_CURVED diagonal corners match flat-blank bbox',
+  () => {
+    const r61 = (v: number): number => Math.round(v * 100) / 100;
+    const EPS61 = 0.02;
+
+    function parseHATCHCURVEDLines61(content: string): Array<{ x1: number; y1: number; x2: number; y2: number }> {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(s => s.startsWith('8\nHATCH_CURVED\n'))
+        .map(seg => {
+          const num = (code: string) => {
+            const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+            return m ? parseFloat(m[1]) : NaN;
+          };
+          return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+        });
+    }
+
+    it(
+      'ARC curved panel with rotation=180 — d1 and d2 span correct flat-blank bbox corners (ε < 0.02 mm)',
+      () => {
+        // Step 1: derive real flat-blank cutW / cutH from the nesting pipeline
+        const { row: arcRow, kerfCount } = buildCurvedRow();
+        const { sheets: refSheets }      = runNesting([arcRow]);
+        const refPlacement               = refSheets[0].placements[0];
+
+        // Step 2: manually construct a NestingSheet with rotation=180
+        const PLACE_X = 10;
+        const PLACE_Y = 10;
+        const manualSheet: NestingSheet = {
+          index1:         1,
+          materialId:     MATERIAL_ID,
+          sheetW:         1220,
+          sheetH:         2440,
+          sheetThickness: 18,
+          placements: [
+            {
+              partId:   'SMOKE_ARC_ROT180',
+              x:        PLACE_X,
+              y:        PLACE_Y,
+              rotation: 180,
+              cutW:     refPlacement.cutW,
+              cutH:     refPlacement.cutH,
+              isCurved: true,
+              kerfCount,
+            },
+          ],
+          utilization: 0,
+          label:       'NEST_61',
+        };
+
+        const output = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE61', materialId: MATERIAL_ID },
+          nesting: manualSheet,
+          profile: getFactoryProfile('DEFAULT'),
+        });
+
+        const lines = parseHATCHCURVEDLines61(output.content);
+        expect(lines).toHaveLength(2);
+
+        // For rotation=180, getRotatedDimensions returns w=cutW, h=cutH (same as 0)
+        const w = refPlacement.cutW;
+        const h = refPlacement.cutH;
+
+        const minX = r61(PLACE_X);
+        const maxX = r61(PLACE_X + w);
+        const minY = r61(PLACE_Y);
+        const maxY = r61(PLACE_Y + h);
+
+        // d1: bottom-left → top-right
+        const d1 = lines.find(
+          l =>
+            Math.abs(l.x1 - minX) < EPS61 &&
+            Math.abs(l.y1 - minY) < EPS61 &&
+            Math.abs(l.x2 - maxX) < EPS61 &&
+            Math.abs(l.y2 - maxY) < EPS61,
+        );
+        // d2: bottom-right → top-left
+        const d2 = lines.find(
+          l =>
+            Math.abs(l.x1 - maxX) < EPS61 &&
+            Math.abs(l.y1 - minY) < EPS61 &&
+            Math.abs(l.x2 - minX) < EPS61 &&
+            Math.abs(l.y2 - maxY) < EPS61,
+        );
+
+        expect(d1).toBeDefined();
+        expect(d2).toBeDefined();
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 62 – HATCH_CURVED diagonal pairs have strictly non-zero length
+// Asserts |x2−x1| + |y2−y1| > 1.0 for every diagonal line on a single-panel
+// sheet, for all three fixture types (ARC, S_CURVE, TALL_ARC).
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 62 – HATCH_CURVED diagonals have strictly non-zero length (all fixtures)',
+  () => {
+    function parseHATCHCURVEDLines62(content: string): Array<{ x1: number; y1: number; x2: number; y2: number }> {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(s => s.startsWith('8\nHATCH_CURVED\n'))
+        .map(seg => {
+          const num = (code: string) => {
+            const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+            return m ? parseFloat(m[1]) : NaN;
+          };
+          return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+        });
+    }
+
+    it('ARC — both HATCH_CURVED diagonals have length > 1.0 mm', () => {
+      const { row: arcRow } = buildCurvedRow();
+      const { sheets }      = runNesting([arcRow]);
+
+      const output = buildDxfSheet({
+        planned: { index1: 1, sheetId: 'SHEET_STAGE62_ARC', materialId: MATERIAL_ID },
+        nesting: sheets[0],
+        profile: getFactoryProfile('DEFAULT'),
+      });
+
+      const lines = parseHATCHCURVEDLines62(output.content);
+      expect(lines).toHaveLength(2);
+
+      for (const l of lines) {
+        const length = Math.abs(l.x2 - l.x1) + Math.abs(l.y2 - l.y1);
+        expect(length).toBeGreaterThan(1.0);
+      }
+    });
+
+    it('S_CURVE — both HATCH_CURVED diagonals have length > 1.0 mm', () => {
+      const { row: sCurveRow } = buildSCurveRow();
+      const { sheets }         = runNesting([sCurveRow]);
+
+      const output = buildDxfSheet({
+        planned: { index1: 1, sheetId: 'SHEET_STAGE62_SCURVE', materialId: MATERIAL_ID },
+        nesting: sheets[0],
+        profile: getFactoryProfile('DEFAULT'),
+      });
+
+      const lines = parseHATCHCURVEDLines62(output.content);
+      expect(lines).toHaveLength(2);
+
+      for (const l of lines) {
+        const length = Math.abs(l.x2 - l.x1) + Math.abs(l.y2 - l.y1);
+        expect(length).toBeGreaterThan(1.0);
+      }
+    });
+
+    it('TALL_ARC (rotation=0) — both HATCH_CURVED diagonals have length > 1.0 mm', () => {
+      function buildTallArcRow() {
+        const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
+        const row: CutListRow = {
+          partId:          'SMOKE_TALL_ARC_62',
+          materialId:      MATERIAL_ID,
+          label:           'Tall Arc Door 62',
+          finishW:         PANEL_STUB.finishWidth,
+          finishH:         PANEL_STUB.finishHeight,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            PANEL_STUB.finishWidth,
+          cutH:            PANEL_STUB.finishHeight,
+          qty:             1,
+          developedLength: fields.developedLength,
+          projectedDepth:  fields.projectedDepth,
+          kerfCount:       fields.kerfCount,
+          curvedEdge:      fields.curvedEdge ?? undefined,
+          grain:           'HORIZONTAL',
+        };
+        return { row, kerfCount: fields.kerfCount };
+      }
+
+      const { row: tallArcRow } = buildTallArcRow();
+      const { sheets }          = runNesting([tallArcRow]);
+
+      expect(sheets[0].placements[0].rotation).toBe(0);
+
+      const output = buildDxfSheet({
+        planned: { index1: 1, sheetId: 'SHEET_STAGE62_TALLARC', materialId: MATERIAL_ID },
+        nesting: sheets[0],
+        profile: getFactoryProfile('DEFAULT'),
+      });
+
+      const lines = parseHATCHCURVEDLines62(output.content);
+      expect(lines).toHaveLength(2);
+
+      for (const l of lines) {
+        const length = Math.abs(l.x2 - l.x1) + Math.abs(l.y2 - l.y1);
+        expect(length).toBeGreaterThan(1.0);
+      }
+    });
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 63 – HATCH_CURVED coordinates are deterministic across repeated runs
+// Regression guard: running runNesting twice with the same CutListRow must
+// produce bit-for-bit identical HATCH_CURVED line coordinates.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 63 – HATCH_CURVED coordinates are deterministic across repeated runNesting calls',
+  () => {
+    function parseHATCHCURVEDLines63(content: string): Array<{ x1: number; y1: number; x2: number; y2: number }> {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(s => s.startsWith('8\nHATCH_CURVED\n'))
+        .map(seg => {
+          const num = (code: string) => {
+            const m = seg.match(new RegExp(`\n${code}\n([\\d.+\\-e]+)`));
+            return m ? parseFloat(m[1]) : NaN;
+          };
+          return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+        });
+    }
+
+    it(
+      'ARC — running runNesting twice with the same row yields identical HATCH_CURVED coordinates',
+      () => {
+        const { row: arcRow } = buildCurvedRow();
+
+        // First run
+        const { sheets: sheets1 } = runNesting([arcRow]);
+        const output1 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE63_RUN1', materialId: MATERIAL_ID },
+          nesting: sheets1[0],
+          profile: getFactoryProfile('DEFAULT'),
+        });
+        const lines1 = parseHATCHCURVEDLines63(output1.content);
+
+        // Second run — same input, fresh call
+        const { sheets: sheets2 } = runNesting([arcRow]);
+        const output2 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE63_RUN2', materialId: MATERIAL_ID },
+          nesting: sheets2[0],
+          profile: getFactoryProfile('DEFAULT'),
+        });
+        const lines2 = parseHATCHCURVEDLines63(output2.content);
+
+        expect(lines1).toHaveLength(2);
+        expect(lines2).toHaveLength(2);
+
+        // Coordinates must be bit-for-bit identical (no randomness)
+        for (let i = 0; i < lines1.length; i++) {
+          expect(lines2[i].x1).toBe(lines1[i].x1);
+          expect(lines2[i].y1).toBe(lines1[i].y1);
+          expect(lines2[i].x2).toBe(lines1[i].x2);
+          expect(lines2[i].y2).toBe(lines1[i].y2);
+        }
+      },
+    );
+
+    it(
+      'S_CURVE — running runNesting twice with the same row yields identical HATCH_CURVED coordinates',
+      () => {
+        const { row: sCurveRow } = buildSCurveRow();
+
+        const { sheets: sheets1 } = runNesting([sCurveRow]);
+        const output1 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE63_SCURVE_RUN1', materialId: MATERIAL_ID },
+          nesting: sheets1[0],
+          profile: getFactoryProfile('DEFAULT'),
+        });
+        const lines1 = parseHATCHCURVEDLines63(output1.content);
+
+        const { sheets: sheets2 } = runNesting([sCurveRow]);
+        const output2 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE63_SCURVE_RUN2', materialId: MATERIAL_ID },
+          nesting: sheets2[0],
+          profile: getFactoryProfile('DEFAULT'),
+        });
+        const lines2 = parseHATCHCURVEDLines63(output2.content);
+
+        expect(lines1).toHaveLength(2);
+        expect(lines2).toHaveLength(2);
+
+        for (let i = 0; i < lines1.length; i++) {
+          expect(lines2[i].x1).toBe(lines1[i].x1);
+          expect(lines2[i].y1).toBe(lines1[i].y1);
+          expect(lines2[i].x2).toBe(lines1[i].x2);
+          expect(lines2[i].y2).toBe(lines1[i].y2);
+        }
+      },
+    );
   },
 );

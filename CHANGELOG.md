@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.1.0] - 2026-08-27
+
+### Added
+
+#### Smoke Stage 61 — rotation=180 HATCH_CURVED diagonal correctness
+- Manually constructed `NestingSheet` with a curved placement assigned `rotation=180`.
+- `getRotatedDimensions` returns `{ w: cutW, h: cutH }` for `rotation=180` (identical to
+  `rotation=0`); asserts this behaviour propagates correctly through `buildDxfSheet`.
+- 1 it() block: d1 and d2 span the correct flat-blank bbox corners (ε < 0.02 mm).
+
+#### Smoke Stage 62 — HATCH_CURVED diagonals are non-degenerate (all fixtures)
+- 3 it() blocks (ARC, S_CURVE, TALL_ARC): for each HATCH_CURVED line on a single-panel
+  sheet, asserts Manhattan length `|x2−x1| + |y2−y1| > 1.0 mm`.
+- Guards against zero-length or collapsed diagonal emission for any realistic panel size.
+
+#### Smoke Stage 63 — HATCH_CURVED determinism regression guard
+- 2 it() blocks (ARC, S_CURVE): calls `runNesting` twice with the same `CutListRow`,
+  builds a DXF from each result, and asserts all four HATCH_CURVED coordinate values
+  (`x1`, `y1`, `x2`, `y2`) are **bit-for-bit identical** between runs.
+- Protects against any future introduction of non-determinism (random UUIDs, `Map` key
+  ordering, `Date.now()` seeds, etc.) in the nesting or DXF-building pipeline.
+
+### Changed
+
+- `buildDxfSheets.ts` JSDoc reference updated to `(Stages 7 – 63)`.
+- Smoke test module header updated to `Stages 22 – 63`; stage table extended with
+  entries for Stages 61, 62, and 63.
+- Added `NestingSheet` to the smoke test's import from `monolithExportContext` to
+  support manual fixture construction in Stage 61.
+
 ## [4.0.0] - 2026-08-27
 
 ### BREAKING CHANGE
