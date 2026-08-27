@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 73: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, and barely-positive correction boundary
+ * Stages 22 – 77: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, and kerfCount-boundary guards
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -254,6 +254,17 @@
  *    75 | kerfCount=undefined +    | kerfCount absent → guard does NOT fire;
  *       | correction > 0           |   isCurved=true → 2 HATCH_CURVED lines;
  *       |                          |   1 it() block.
+ *    76 | kerfCount=undefined +    | kerfCount absent AND correction=0
+ *       | correction = 0           |   (developedLength === projectedDepth);
+ *       |                          |   correction>0 guard is FALSE →
+ *       |                          |   isCurved=false; DXF emits 0
+ *       |                          |   HATCH_CURVED lines; 1 it() block.
+ *    77 | kc=0 (Panel A) +         | kc=0 → isCurved=false → PARTS=4,
+ *       | kc=undefined+correction  |   PARTS_CURVED=0 (Panel A);
+ *       | > 0 (Panel B)            |   kc=undefined+correction>0 →
+ *       |                          |   isCurved=true → PARTS_CURVED=4,
+ *       |                          |   HATCH_CURVED=2 (Panel B);
+ *       |                          |   both on same sheet; 1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -9354,6 +9365,181 @@ describe(
 
         // Exactly 2 HATCH_CURVED lines (d1 + d2)
         expect(countHATCHCURVEDLines75(output75.content)).toBe(2);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 76 – a panel with kerfCount=undefined and correction=0 gets
+//            isCurved=false and emits zero HATCH_CURVED lines.
+//
+// Rationale: correction=0 (developedLength === projectedDepth) means no flat-
+// blank expansion is needed. Even though kerfCount is undefined (guard does not
+// apply), correction>0 is FALSE, so isCurved must be false and no HATCH_CURVED
+// lines should appear in the DXF output.
+//
+// Fixture: developedLength=200, projectedDepth=200, curvedEdge='TOP',
+//   cutW=400, cutH=800, kerfCount NOT SET (undefined) → correction=0
+//   → isCurved=false → 0 HATCH_CURVED lines.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 76 – kerfCount=undefined with correction=0 → isCurved=false and zero HATCH_CURVED lines',
+  () => {
+    function countHATCHCURVEDLines76(content: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(seg => seg.startsWith('8\nHATCH_CURVED\n'))
+        .length;
+    }
+
+    it(
+      'kerfCount=undefined with correction=0 → isCurved=false → 0 HATCH_CURVED lines in DXF',
+      () => {
+        const stage76Row: CutListRow = {
+          partId:          'SMOKE_KC_UNDEF_CORR0_S76',
+          cabinetId:       'CAB_SMOKE_76',
+          materialId:      MATERIAL_ID,
+          finishW:         400,
+          finishH:         800,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            400,
+          cutH:            800,
+          qty:             1,
+          developedLength: 200,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          // kerfCount intentionally omitted; correction=0 → isCurved must be false
+          label:           'KC Undefined Zero Correction Panel',
+        };
+
+        const result76 = runNesting([stage76Row]);
+        expect(result76.sheets).toHaveLength(1);
+
+        const sheet76 = result76.sheets[0];
+        expect(sheet76.placements).toHaveLength(1);
+
+        // isCurved must be false — correction=0 overrides regardless of kerfCount
+        const placement76 = sheet76.placements[0];
+        expect(placement76.isCurved).toBeFalsy();
+
+        const output76 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE76', materialId: MATERIAL_ID },
+          nesting: sheet76,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        // Zero HATCH_CURVED lines — panel is not curved
+        expect(countHATCHCURVEDLines76(output76.content)).toBe(0);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 77 – two panels on the same sheet: kerfCount=0 (Panel A) produces
+//            PARTS_CURVED=0; kerfCount=undefined + correction>0 (Panel B)
+//            produces isCurved=true and exactly 2 HATCH_CURVED lines.
+//
+// Rationale: on a mixed sheet the kerfCount=0 guard must only suppress the
+// kc=0 panel (Panel A → PARTS layer, no PARTS_CURVED, no HATCH_CURVED), while
+// the kc=undefined panel (Panel B → PARTS_CURVED layer + 2 HATCH_CURVED lines)
+// behaves independently.
+//
+// Panel A: partId='SMOKE_KC0_S77A', kerfCount=0, cutW=300, cutH=400,
+//   developedLength=250, projectedDepth=200, curvedEdge='TOP'
+//   → correction=50 > 0 but kerfCount=0 → isCurved=false
+//
+// Panel B: partId='SMOKE_KCUNDEF_S77B', kerfCount omitted, same dims
+//   → correction=50 > 0 and kc=undefined → isCurved=true
+//
+// Sheet totals: PARTS=4 (from A), PARTS_CURVED=4 (from B), HATCH_CURVED=2 (from B).
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 77 – kerfCount=0 vs kerfCount=undefined+correction>0 on same sheet: PARTS=4, PARTS_CURVED=4, HATCH_CURVED=2',
+  () => {
+    function countLayerLines77(content: string, layer: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(seg => seg.startsWith(`8\n${layer}\n`))
+        .length;
+    }
+
+    it(
+      'kc=0 panel → PARTS=4; kc=undefined+correction>0 panel → PARTS_CURVED=4, HATCH_CURVED=2',
+      () => {
+        const rowA: CutListRow = {
+          partId:          'SMOKE_KC0_S77A',
+          cabinetId:       'CAB_SMOKE_77A',
+          materialId:      MATERIAL_ID,
+          finishW:         300,
+          finishH:         400,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            300,
+          cutH:            400,
+          qty:             1,
+          developedLength: 250,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          kerfCount:       0,           // explicit kc=0 → guard fires → isCurved=false
+          label:           'KC Zero Panel A',
+        };
+
+        const rowB: CutListRow = {
+          partId:          'SMOKE_KCUNDEF_S77B',
+          cabinetId:       'CAB_SMOKE_77B',
+          materialId:      MATERIAL_ID,
+          finishW:         300,
+          finishH:         400,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            300,
+          cutH:            400,
+          qty:             1,
+          developedLength: 250,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          // kerfCount intentionally omitted → guard does NOT fire → isCurved=true
+          label:           'KC Undefined Panel B',
+        };
+
+        const result77 = runNesting([rowA, rowB]);
+        // Both panels should fit on a single standard sheet
+        expect(result77.sheets).toHaveLength(1);
+
+        const sheet77 = result77.sheets[0];
+        expect(sheet77.placements).toHaveLength(2);
+
+        // Locate placements by partId
+        const pA = sheet77.placements.find(p => p.partId === 'SMOKE_KC0_S77A');
+        const pB = sheet77.placements.find(p => p.partId === 'SMOKE_KCUNDEF_S77B');
+        expect(pA).toBeDefined();
+        expect(pB).toBeDefined();
+
+        // (a) kerfCount=0 panel must NOT be curved
+        expect(pA!.isCurved).toBeFalsy();
+
+        // (b) kerfCount=undefined + correction>0 panel MUST be curved
+        expect(pB!.isCurved).toBe(true);
+
+        const output77 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE77', materialId: MATERIAL_ID },
+          nesting: sheet77,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        // (c) Panel A → PARTS layer, 4 lines (one rectangle)
+        expect(countLayerLines77(output77.content, 'PARTS')).toBe(4);
+
+        // (d) Panel B → PARTS_CURVED layer, 4 lines (one rectangle)
+        expect(countLayerLines77(output77.content, 'PARTS_CURVED')).toBe(4);
+
+        // (e) Panel B → HATCH_CURVED layer, 2 lines (d1 + d2)
+        expect(countLayerLines77(output77.content, 'HATCH_CURVED')).toBe(2);
       },
     );
   },

@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [6.0.0] – 2026-08-27
+
+### Major Release — kerfCount-Boundary Invariance Milestone (Stages 72–77)
+
+This major release completes the full kerfCount guard series, covering every
+boundary of the `kerfCount` field: explicit zero, undefined with positive
+correction, and undefined with zero correction. Together these stages guarantee
+that `isCurved` can only be `true` when both `correction > 0` and the kerfCount
+guard does not suppress it, ensuring robust DXF output across all curved-panel
+configurations.
+
+#### @smoke Stages Added
+
+**Stage 72 — kerfCount=0 explicit guard (HATCH_CURVED exclusion)**
+- Panel: `kerfCount=0`, `correction=50 > 0`.
+- Verifies the optimizer kerfCount=0 guard forces `isCurved=false`.
+- DXF output emits **zero** `HATCH_CURVED` LINE entities.
+
+**Stage 73 — three curved panels, distinct kerfCounts (kc=1, 5, 12)**
+- Manual `NestingSheet` with three placements (kc=1, kc=5, kc=12).
+- All three `'(CURVED / N cuts)'` sub-labels appear independently in the DXF
+  `LABELS` TEXT layer.
+
+**Stage 74 — kerfCount=0 → PARTS_CURVED=0, PARTS=4**
+- Panel: `kerfCount=0` with `correction > 0`.
+- Confirms `isCurved=false` → placed on `PARTS` layer (4 LINE entities).
+- `PARTS_CURVED` LINE count = 0.
+
+**Stage 75 — kerfCount=undefined + correction > 0 → isCurved=true, 2 HATCH_CURVED**
+- Panel: no `kerfCount` field, `developedLength=250`, `projectedDepth=200`.
+- Guard does **not** fire on `undefined`; `correction=50 > 0` → `isCurved=true`.
+- DXF output emits exactly **2** `HATCH_CURVED` LINE entities.
+
+**Stage 76 — kerfCount=undefined + correction=0 → isCurved=false, 0 HATCH_CURVED**
+- Panel: no `kerfCount` field, `developedLength=200`, `projectedDepth=200`.
+- `correction=0` → `correction > 0` guard is FALSE → `isCurved=false`.
+- DXF output emits **zero** `HATCH_CURVED` LINE entities.
+
+**Stage 77 — mixed sheet: kc=0 (Panel A) + kc=undefined+correction>0 (Panel B)**
+- Panel A (`kerfCount=0`) → `isCurved=false` → `PARTS=4`, `PARTS_CURVED=0`.
+- Panel B (no kerfCount, `correction=50 > 0`) → `isCurved=true` →
+  `PARTS_CURVED=4`, `HATCH_CURVED=2`.
+- Both panels placed on the same nesting sheet; guards fire independently.
+
+#### Breaking Changes
+- None. All changes are additive smoke-test assertions and JSDoc updates.
+
+#### JSDoc Updates
+- `curvedPanelDxfPipeline.smoke.test.ts`: range updated to `Stages 22 – 77`;
+  table entries 76–77 added with full panel/assertion descriptions.
+- `buildDxfSheets.ts`: reference updated to `(Stages 7 – 77)`.
+
+---
+
 ## [5.2.0] – 2026-08-27
 
 ### Minor Release — kerfCount-Zero Guard and Triple-Panel Sub-Label Milestone (Stages 74–75)
