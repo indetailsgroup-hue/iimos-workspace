@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 79: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, and NaN kerfCount boundary
+ * Stages 22 – 81: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN kerfCount boundary, Infinity kerfCount passthrough, and negative kerfCount exclusion
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -275,6 +275,14 @@
  *       |                          |   guard expression = (false || false) = false
  *       |                          |   → isCurved=false; 0 HATCH_CURVED lines;
  *       |                          |   identical behaviour to kc=0; 1 it() block.
+ *    80 | kerfCount=Infinity       | Infinity > 0 → true; guard does NOT fire;
+ *       |                          |   isCurved=true when correction > 0;
+ *       |                          |   emits exactly 2 HATCH_CURVED lines;
+ *       |                          |   1 it() block.
+ *    81 | kerfCount=-1             | −1 > 0 → false; guard fires;
+ *       |                          |   isCurved=false; 0 HATCH_CURVED lines;
+ *       |                          |   identical behaviour to kc=0 and NaN;
+ *       |                          |   1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -9736,6 +9744,141 @@ describe(
 
         // Zero HATCH_CURVED lines — kerfCount=NaN suppresses isCurved
         expect(countHATCHCURVEDLines79(output79.content)).toBe(0);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 80 – kerfCount=Infinity is truthy and passes > 0, so the guard does
+//            NOT fire → isCurved=true when correction > 0 → exactly 2
+//            HATCH_CURVED lines in the DXF output.
+//
+// Guard expression:
+//   (row.kerfCount === undefined || row.kerfCount > 0)
+//   = (false || true)   ← Infinity > 0 is true in JS
+//   = true  → guard passes → isCurved follows correction > 0 alone
+//
+// Fixture: cutW=400, cutH=800, developedLength=250, projectedDepth=200,
+//   curvedEdge='TOP', kerfCount=Infinity → correction=50 > 0 → isCurved=true.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 80 – kerfCount=Infinity passes guard (> 0 = true): isCurved=true and exactly 2 HATCH_CURVED lines',
+  () => {
+    function countHATCHCURVEDLines80(content: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(seg => seg.startsWith('8\nHATCH_CURVED\n'))
+        .length;
+    }
+
+    it(
+      'kerfCount=Infinity with correction=50 > 0 → guard does not fire → isCurved=true → 2 HATCH_CURVED lines',
+      () => {
+        const stage80Row: CutListRow = {
+          partId:          'SMOKE_KCINF_S80',
+          cabinetId:       'CAB_SMOKE_80',
+          materialId:      MATERIAL_ID,
+          finishW:         400,
+          finishH:         800,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            400,
+          cutH:            800,
+          qty:             1,
+          developedLength: 250,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          kerfCount:       Infinity,   // Infinity > 0 → guard passes → isCurved=true
+          label:           'KC Infinity Panel',
+        };
+
+        const result80 = runNesting([stage80Row]);
+        expect(result80.sheets).toHaveLength(1);
+
+        const sheet80 = result80.sheets[0];
+        expect(sheet80.placements).toHaveLength(1);
+
+        // isCurved must be true — Infinity passes the kerfCount guard
+        const placement80 = sheet80.placements[0];
+        expect(placement80.isCurved).toBe(true);
+
+        const output80 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE80', materialId: MATERIAL_ID },
+          nesting: sheet80,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        // Exactly 2 HATCH_CURVED lines (d1 + d2)
+        expect(countHATCHCURVEDLines80(output80.content)).toBe(2);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 81 – kerfCount=-1 is negative, therefore NOT > 0, and NOT === undefined.
+//            Guard expression:
+//              (row.kerfCount === undefined || row.kerfCount > 0)
+//              = (false || false)   ← -1 > 0 is false in JS
+//              = false → isCurved=false → zero HATCH_CURVED lines.
+//
+// Behaviour is identical to kerfCount=0 and kerfCount=NaN.
+//
+// Fixture: cutW=400, cutH=800, developedLength=250, projectedDepth=200,
+//   curvedEdge='TOP', kerfCount=-1 → correction=50 > 0 but guard fires.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 81 – kerfCount=-1 (negative, not > 0): isCurved=false and zero HATCH_CURVED lines',
+  () => {
+    function countHATCHCURVEDLines81(content: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter(seg => seg.startsWith('8\nHATCH_CURVED\n'))
+        .length;
+    }
+
+    it(
+      'kerfCount=-1 with correction=50 > 0 → guard fires → isCurved=false → 0 HATCH_CURVED lines',
+      () => {
+        const stage81Row: CutListRow = {
+          partId:          'SMOKE_KCNEG_S81',
+          cabinetId:       'CAB_SMOKE_81',
+          materialId:      MATERIAL_ID,
+          finishW:         400,
+          finishH:         800,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            400,
+          cutH:            800,
+          qty:             1,
+          developedLength: 250,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          kerfCount:       -1,   // negative → not > 0 → guard fires → isCurved=false
+          label:           'KC Negative Panel',
+        };
+
+        const result81 = runNesting([stage81Row]);
+        expect(result81.sheets).toHaveLength(1);
+
+        const sheet81 = result81.sheets[0];
+        expect(sheet81.placements).toHaveLength(1);
+
+        // isCurved must be false — kerfCount=-1 fails the > 0 test
+        const placement81 = sheet81.placements[0];
+        expect(placement81.isCurved).toBeFalsy();
+
+        const output81 = buildDxfSheet({
+          planned: { index1: 1, sheetId: 'SHEET_STAGE81', materialId: MATERIAL_ID },
+          nesting: sheet81,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        // Zero HATCH_CURVED lines — kerfCount=-1 suppresses isCurved
+        expect(countHATCHCURVEDLines81(output81.content)).toBe(0);
       },
     );
   },

@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [7.0.0] – 2026-08-27
+
+### Major Release — kerfCount-Invariance Milestone (Stages 72–81)
+
+This major release marks the completion of the full kerfCount guard series.
+Every numeric boundary of the `kerfCount` field has now been exercised and
+locked in by smoke-test assertions, guaranteeing that `isCurved` can only be
+`true` when BOTH `correction > 0` AND the kerfCount guard evaluates to `true`.
+
+#### Complete kerfCount Guard Series
+
+| Stage | kerfCount value | correction | isCurved | DXF result |
+|-------|----------------|------------|----------|------------|
+| 72 | `0` (explicit) | `> 0` | `false` | 0 HATCH_CURVED |
+| 73 | `1 / 5 / 12` | `> 0` | `true` | sub-labels independent |
+| 74 | `0` (explicit) | `> 0` | `false` | PARTS_CURVED=0, PARTS=4 |
+| 75 | `undefined` | `> 0` | `true` | 2 HATCH_CURVED |
+| 76 | `undefined` | `= 0` | `false` | 0 HATCH_CURVED |
+| 77 | `0` vs `undefined` | `> 0` | `false` / `true` | mixed-sheet isolation |
+| 78 | `0`, `undef+0`, `undef+>0` | mixed | mixed | PARTS=8, PARTS_CURVED=4, HATCH_CURVED=2 |
+| 79 | `NaN` | `> 0` | `false` | 0 HATCH_CURVED (NaN > 0 = false) |
+| 80 | `Infinity` | `> 0` | `true` | 2 HATCH_CURVED (Infinity > 0 = true) |
+| 81 | `-1` | `> 0` | `false` | 0 HATCH_CURVED (−1 > 0 = false) |
+
+#### Guard expression (optimizer.ts)
+```
+isCurved = hasCorrection && correction > 0
+        && (row.kerfCount === undefined || row.kerfCount > 0)
+```
+
+The full guard truth table is now verified:
+- `kerfCount=undefined` → passes guard (Stages 75–76)
+- `kerfCount > 0` (positive integer, `Infinity`) → passes guard (Stages 73, 80)
+- `kerfCount=0` → fails guard (Stages 72, 74, 77, 78)
+- `kerfCount=NaN` → fails guard — NaN is not > 0 (Stage 79)
+- `kerfCount < 0` → fails guard — negative is not > 0 (Stage 81)
+
+#### @smoke Stages Added in This Release
+
+**Stage 80 — kerfCount=Infinity passes guard: isCurved=true, 2 HATCH_CURVED**
+- `Infinity > 0` is `true` in JavaScript → guard does NOT fire.
+- `correction=50 > 0` → `isCurved=true` → DXF emits exactly **2** `HATCH_CURVED` lines.
+
+**Stage 81 — kerfCount=-1 fails guard: isCurved=false, 0 HATCH_CURVED**
+- `-1 > 0` is `false`; `-1 !== undefined` → guard fires.
+- Identical behaviour to `kerfCount=0` and `kerfCount=NaN`.
+- DXF emits **zero** `HATCH_CURVED` LINE entities.
+
+#### Breaking Changes
+- None. All changes are additive smoke-test assertions and JSDoc updates.
+
+#### JSDoc Updates
+- `curvedPanelDxfPipeline.smoke.test.ts`: range updated to `Stages 22 – 81`;
+  table entries 80–81 added.
+- `buildDxfSheets.ts`: reference updated to `(Stages 7 – 81)`.
+
+---
+
 ## [6.1.0] – 2026-08-27
 
 ### Minor Release — Triple-Guard Regression and NaN kerfCount Boundary (Stages 78–79)
