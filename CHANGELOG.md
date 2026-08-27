@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [10.1.0] – 2026-08-27
+
+### Added – Three-Sheet Overflow Mixed Partition and Determinism (Stages 94–95)
+
+#### Stage 94 — Three-Sheet Mixed Overflow: Sheet-3 Curved + Straight
+- `@smoke Stage 94` asserts that when `qty=111` curved panels (cutW=200, cutH=200,
+  `developedLength=210`, `projectedDepth=200`, `curvedEdge='TOP'`) are packed with one
+  straight panel (`cutW=200, cutH=182`), the nesting engine overflows to three sheets:
+  - Sheet-1: 55 curved placements; Sheet-2: 55 curved placements.
+  - Sheet-3: exactly **2 placements** — one curved (`isCurved=true`) and one straight
+    (`isCurved` falsy) — confirming that the straight panel cannot create a new shelf
+    on sheets 1 or 2 when remaining vertical space ≤ 181.5 mm.
+- Layer counts on sheet-3 DXF: `PARTS_CURVED=4`, `HATCH_CURVED=2`, `PARTS=4`.
+- Non-overlapping guard: curved right edge (`x=10 + placed_w=210 = 220`) < straight
+  left edge (`x=223.5`).
+- **Overflow threshold confirmed**: `cutH ≥ 182` forces the straight panel to sheet-3;
+  `cutH=150` would fit shelf-12 on sheet-1 (`2248.5 + 150 = 2398.5 ≤ 2430`).
+
+#### Stage 95 — Determinism Regression Guard (Three-Sheet Overflow)
+- `@smoke Stage 95` re-runs `runNesting` twice with the same `qty=111` curved fixture
+  and asserts bit-for-bit identical `sheet-3.placements[0]` values: `partId`, `x`, `y`,
+  and `rotation` — extending the determinism series (Stages 85, 90, 91) to three-sheet
+  batches.
+
+### Updated
+- Smoke-test JSDoc header: stage range updated to `Stages 22 – 95`; table rows 94–95
+  appended with `cutH=182` overflow-threshold annotation.
+- `buildDxfSheets.ts` JSDoc cross-reference updated to `(Stages 7 – 95)`.
+
+### Changed
+- Smoke test suite: **348 tests** (up from 346).
+
+### Notes
+- `cutH=182` is the minimum height that forces a straight panel from sheet-1/2 to
+  sheet-3 under the confirmed FFDH constants (usableH=2420, kerf=3.5, edge=10;
+  11 curved shelves per sheet leave exactly 181.5 mm of remaining height).
+
+---
+
 ## [10.0.0] – 2026-08-27
 
 ### Added

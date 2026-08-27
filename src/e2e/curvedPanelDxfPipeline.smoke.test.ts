@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 93: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, multi-panel scale validation, determinism guard, overflow two-sheet placement, overflow diagonal geometry, mixed-overflow exclusivity, mixed-overflow completeness / determinism / FFDH-order validation, three-sheet overflow count, and sheet-3 diagonal geometry
+ * Stages 22 – 95: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, multi-panel scale validation, determinism guard, overflow two-sheet placement, overflow diagonal geometry, mixed-overflow exclusivity, mixed-overflow completeness / determinism / FFDH-order validation, three-sheet overflow count, sheet-3 diagonal geometry, mixed three-sheet overflow layer counts, and three-sheet determinism
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -336,6 +336,16 @@
  *    93 | curved qty=111           | Sheet-3 diagonal geometry:
  *       |                          |   HATCH_CURVED d1=(10,10)→(220,210)
  *       |                          |   d2=(220,10)→(10,210) ε<0.015 mm;
+ *       |                          |   1 it() block.
+ *    94 | curved qty=111           | Mixed 3-sheet overflow: sheet-3 has
+ *       | + straight qty=1         |   1 curved + 1 straight (cutH=182);
+ *       | (cutH=182, overflow       |   PARTS_CURVED=4, PARTS=4,
+ *       |  threshold >181.5)       |   HATCH_CURVED=2; non-overlapping
+ *       |                          |   bboxes (curved x∈[10,220], straight
+ *       |                          |   x∈[223.5,423.5]); 1 it() block.
+ *    95 | curved qty=111           | Three-sheet determinism: two runs
+ *       |                          |   produce identical sheet-3
+ *       |                          |   placements[0] partId, x, y, rotation;
  *       |                          |   1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
@@ -11159,6 +11169,175 @@ describe(
         expect(Math.abs(d293.y1 - minY93)).toBeLessThan(EPS93);
         expect(Math.abs(d293.x2 - minX93)).toBeLessThan(EPS93);
         expect(Math.abs(d293.y2 - maxY93)).toBeLessThan(EPS93);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 94 — Mixed 3-sheet overflow: curved×111 + straight×1
+// → sheet-3 holds exactly 1 curved panel + 1 straight panel.
+// DXF layer counts: PARTS_CURVED=4, PARTS=4, HATCH_CURVED=2.
+// Bboxes of the two placements must not overlap.
+//
+// Fixture:
+//   curvedRow94  — partId='SMOKE_CURVED_S94',  cutW=200, cutH=200, qty=111,
+//                  developedLength=210, projectedDepth=200, curvedEdge='TOP'
+//   straightRow94 — partId='SMOKE_STRAIGHT_S94', cutW=200, cutH=182, qty=1
+//
+// FFDH threshold: after 11 curved shelves y_after=2248.5; remaining height=181.5.
+//   cutH=182 → 2248.5+182=2430.5 > 2430 → straight can NOT create a new shelf
+//   on sheet-1 or sheet-2, so it overflows to sheet-3.
+//
+// FFDH sort (height DESC): curved flatBlankH=210 > straight cutH=182
+//   → all 111 curved placed first (55 per sheet × 2 sheets = 110); 1 curved
+//     left for sheet-3.
+// Sheet-3 placement:
+//   curved  → rotation=90 (bestOrient h=200 < h=210) → placed_w=210, placed_h=200
+//             x=10, y=10
+//   straight→ fits same shelf (orient 0: w=200, h=182 ≤ shelf.h=200,
+//             remainingWidth=986.5 ≥ 200) → x=223.5, y=10, rotation=0
+// Non-overlap: curved x∈[10,220], straight x∈[223.5,423.5] → 223.5 > 220 ✓
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 94 — mixed 3-sheet overflow: sheet-3 PARTS_CURVED=4, PARTS=4, HATCH_CURVED=2, non-overlapping',
+  () => {
+    it(
+      'curved×111 + straight×1 (cutH=182) → 3 sheets; sheet-3 has PARTS_CURVED=4, PARTS=4, HATCH_CURVED=2, non-overlapping bboxes',
+      () => {
+        const curvedRow94: CutListRow = {
+          partId:          'SMOKE_CURVED_S94',
+          cabinetId:       'CAB_SMOKE_94',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             111,
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Curved Panel S94',
+        };
+
+        // cutH=182: 2248.5+182=2430.5 > 2430 → can't open new shelf on sheets 1 or 2;
+        // fits the curved panel's shelf on sheet-3 (shelf.h=200 ≥ 182).
+        const straightRow94: CutListRow = {
+          partId:    'SMOKE_STRAIGHT_S94',
+          cabinetId: 'CAB_SMOKE_94',
+          materialId: MATERIAL_ID,
+          finishW:   200,
+          finishH:   182,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:      200,
+          cutH:      182,
+          qty:       1,
+          label:     'Straight Panel S94',
+        };
+
+        const result94 = runNesting([curvedRow94, straightRow94]);
+        expect(result94.sheets).toHaveLength(3);
+
+        const sheet94c = result94.sheets[2];
+        expect(sheet94c.placements).toHaveLength(2);
+
+        const curved94 = sheet94c.placements.find((p) => p.isCurved === true)!;
+        const straight94 = sheet94c.placements.find((p) => !p.isCurved)!;
+        expect(curved94).toBeDefined();
+        expect(straight94).toBeDefined();
+
+        const output94 = buildDxfSheet({
+          planned: { index1: 3, sheetId: 'SHEET_STAGE94', materialId: MATERIAL_ID },
+          nesting: sheet94c,
+          profile: getFactoryProfile('DEFAULT'),
+        });
+
+        const content94 = output94.content;
+        const lineSegs94 = content94.split('\n0\nLINE\n').slice(1);
+
+        // PARTS_CURVED = 4 (1 curved panel × 4 rectangle sides)
+        const partsCurvedSegs94 = lineSegs94.filter((s) => s.startsWith('8\nPARTS_CURVED\n'));
+        expect(partsCurvedSegs94).toHaveLength(4);
+
+        // PARTS = 4 (1 straight panel × 4 rectangle sides)
+        const partsSegs94 = lineSegs94.filter((s) => s.startsWith('8\nPARTS\n'));
+        expect(partsSegs94).toHaveLength(4);
+
+        // HATCH_CURVED = 2 (1 curved panel × 2 diagonal lines)
+        const hatchCurvedSegs94 = lineSegs94.filter((s) => s.startsWith('8\nHATCH_CURVED\n'));
+        expect(hatchCurvedSegs94).toHaveLength(2);
+
+        // Non-overlapping bboxes
+        function bbox94(p: { x: number; y: number; rotation: number; cutW: number; cutH: number }): {
+          x1: number; y1: number; x2: number; y2: number;
+        } {
+          const isRot = p.rotation === 90 || p.rotation === 270;
+          const ew = isRot ? p.cutH : p.cutW;
+          const eh = isRot ? p.cutW : p.cutH;
+          return { x1: p.x, y1: p.y, x2: p.x + ew, y2: p.y + eh };
+        }
+
+        const boxC94 = bbox94(curved94);
+        const boxS94 = bbox94(straight94);
+
+        // Axis-aligned overlap: both axes must overlap for rectangles to intersect
+        const overlapsX94 = boxC94.x1 < boxS94.x2 && boxC94.x2 > boxS94.x1;
+        const overlapsY94 = boxC94.y1 < boxS94.y2 && boxC94.y2 > boxS94.y1;
+        expect(overlapsX94 && overlapsY94).toBe(false);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 95 — Three-sheet determinism: running runNesting twice with
+// curved qty=111 always produces identical sheet-3 placements[0]
+// partId, x, y, and rotation.
+//
+// Fixture: same as Stage 92 (curved qty=111, cutW=200, cutH=200,
+//          developedLength=210, projectedDepth=200, curvedEdge='TOP')
+//
+// Mirrors Stages 85 and 90 (two-sheet determinism) for three-sheet batches.
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 95 — three-sheet determinism: qty=111 sheet-3 placements[0] identical across two runs',
+  () => {
+    it(
+      'runNesting called twice with curved qty=111 → sheet-3.placements[0] has identical partId, x, y, rotation',
+      () => {
+        const curvedRow95: CutListRow = {
+          partId:          'SMOKE_CURVED_S95',
+          cabinetId:       'CAB_SMOKE_95',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             111,
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Curved Panel S95',
+        };
+
+        const run95a = runNesting([curvedRow95]);
+        const run95b = runNesting([curvedRow95]);
+
+        expect(run95a.sheets).toHaveLength(3);
+        expect(run95b.sheets).toHaveLength(3);
+
+        const p95a = run95a.sheets[2].placements[0];
+        const p95b = run95b.sheets[2].placements[0];
+
+        expect(p95b.partId).toBe(p95a.partId);
+        expect(p95b.x).toBe(p95a.x);
+        expect(p95b.y).toBe(p95a.y);
+        expect(p95b.rotation).toBe(p95a.rotation);
       },
     );
   },
