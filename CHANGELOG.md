@@ -4,6 +4,31 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [12.0.0] - 2026-08-27
+
+### Milestone
+**120-stage smoke-test suite** — the `curvedPanelDxfPipeline.smoke.test.ts` suite now covers
+120 stages of end-to-end pipeline validation for the Curved Panel System, from basic DXF
+structure through geometric invariants, FFDH packing, multi-sheet overflow, determinism
+guards, and a complete full-sheet scaling sequence (2 → 8 sheets × 55 panels).
+
+### Added
+- **Stage 120** — Eight full sheets, no remainder (`qty=440 = 8×55`): asserts `sheets.length===8`,
+  every sheet holds exactly 55 placements (all `isCurved=true`), and a DXF loop verifies
+  `PARTS_CURVED=220` on all eight sheets; completes the full-sheet sequence
+  108 (2) → 110 (3) → 112 (4) → 115 (5) → 116 (6) → 118 (7) → 120 (8).
+- **Stage 121** — Seven-full-sheet determinism guard (`qty=385`): runs `runNesting` twice with
+  the Stage 118 fixture and asserts `sheets[6].placements[0]` partId, x, y, rotation are
+  identical across both runs; extends the determinism series
+  (Stages 85, 95, 99, 103, 107, 111, 114, 117, 119, **121**).
+- Updated smoke-test JSDoc: stage-table rows 120–121; range line updated to `Stages 22–121`;
+  `buildDxfSheets.ts` cross-reference updated to `(Stages 7–121)`.
+
+### Tests
+- **374 tests passing** (was 372 after v11.9.0).
+
+---
+
 ## [11.9.0] - 2026-08-27
 
 ### Added
