@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.8.0] - 2026-08-27
+
+### Added
+
+- **d1+d2 all-coordinate synthesis group (Stages 37–38)** — two smoke stages
+  that jointly verify every individual coordinate of both HATCH_CURVED diagonals
+  against the flat-blank bbox corners, completing the full coordinate contract
+  established progressively from Stage 29 through Stage 36:
+
+  | Stage | Diagonal | Assertion |
+  |-------|----------|-----------|
+  | 37 | d1 | `d1.x1 ≈ r(minX)`, `d1.y1 ≈ r(minY)`, `d1.x2 ≈ r(maxX)`, `d1.y2 ≈ r(maxY)` — all four d1 coordinates in one describe block. 12 it() blocks (4 coords × 3 panel types). ε < 0.015 mm. |
+  | 38 | d2 | `d2.x1 ≈ r(maxX)`, `d2.y1 ≈ r(minY)`, `d2.x2 ≈ r(minX)`, `d2.y2 ≈ r(maxY)` — all four d2 coordinates in one describe block. 12 it() blocks (4 coords × 3 panel types). ε < 0.015 mm. |
+
+  Together Stages 37–38 provide the first complete synthesis of both diagonal
+  coordinate tuples, confirming that every HATCH_CURVED X-line endpoint precisely
+  maps to its expected flat-blank bbox corner for all three panel types
+  (ARC, S_CURVE, TALL_ARC).
+
+- **JSDoc invariant table** (`curvedPanelDxfPipeline.smoke.test.ts`):
+  Stage 38 row appended to Section 3; section header updated to "Stages 22 – 38".
+
+- **JSDoc invariant table** (`buildDxfSheets.ts`):
+  Stage 38 row appended; section updated to "Stages 22 – 38"; reference
+  updated to `(Stages 7 – 38)`.
+
+**Test delta:** 247 → 259 (+12 tests, all passing)
+
+---
+
 ## [2.6.2] - 2026-08-27
 
 ### Added
