@@ -4,6 +4,34 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [11.3.0] - 2026-08-27
+
+### Added
+
+#### Stage 106 — FFDH overflow boundary: qty=56 (one panel over a full sheet)
+- Smoke test asserting that `qty=56` curved panels produce exactly **2 sheets**: sheet-1 holds 55
+  placements (full), sheet-2 holds exactly **1 placement**.
+- The single overflow panel on sheet-2 is asserted at `x=10`, `y=10`, `rotation=90`.
+- All placements on both sheets are `isCurved=true`.
+- The "one-over" complement to Stage 105 (one-short boundary), together forming a tight
+  sandwich around the 55-panel full-sheet threshold.
+
+#### Stage 107 — Eight-full-sheet determinism guard
+- Regression guard: `runNesting` called twice with the Stage 104 fixture (`qty=440` curved panels)
+  produces **identical** `sheets[7].placements[0]` `partId`, `x`, `y`, and `rotation`.
+- Validates determinism at the 8-full-sheet boundary (440 = 8 × 55).
+- Extends the determinism series: Stages 85, 95, 99, 103, 107.
+
+#### JSDoc updates
+- Stage-table rows 106–107 added to smoke test file JSDoc.
+- JSDoc range line updated: `Stages 22–105` → `Stages 22–107`.
+- `buildDxfSheets.ts` cross-reference updated: `(Stages 7–105)` → `(Stages 7–107)`.
+
+### Changed
+- Smoke test suite now contains **360 tests** (Stages 1–107 + supporting helpers).
+
+---
+
 ## [11.2.0] - 2026-08-27
 
 ### Added
