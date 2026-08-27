@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [9.0.0] – 2026-08-27
+
+### Major Release — Overflow Geometry and Mixed-Overflow Exclusivity Milestone (Stages 87–88)
+
+This major release closes the overflow-geometry and mixed-overflow exclusivity
+series, completing end-to-end verification that the FFDH nesting engine and DXF
+export pipeline handle multi-sheet overflow correctly for both curved and straight
+panels.
+
+#### Added — @smoke Stage 87: Sheet-2 Overflow HATCH_CURVED Diagonal Geometry
+
+- Asserts that when `qty=56` overflows to two sheets, the single curved panel
+  on sheet-2 is placed at `(x=10, y=10, rotation=90)` by FFDH.
+- After `getRotatedDimensions(200, 210, 90)`: placed `w=210`, `h=200`.
+- Verifies `placement.isCurved === true` and `HATCH_CURVED count === 2`.
+- Asserts exact diagonal coordinates:
+  - `d1` (BL → TR): `(10, 10) → (220, 210)`
+  - `d2` (BR → TL): `(220, 10) → (10, 210)`
+- Tolerance: `toBeCloseTo(val, 1)` (±0.05 mm).
+- 1 `it()` block.
+
+#### Added — @smoke Stage 88: Mixed-Overflow Exclusivity
+
+- Fixture: 55 curved panels (`flatBlankH=210`) + 1 straight panel
+  (`flatBlankH=200`), all `materialId='MDF_18'`.
+- FFDH sort (height DESC) places all 55 curved panels first; they exactly fill
+  sheet-1 (11 shelves × 5 panels).
+- Straight panel cannot fit on sheet-1 (shelf-11 remaining width=136 mm < 200 mm;
+  next shelf at `y=2248.5` exceeds `usableH=2420`) → overflows to sheet-2.
+- Asserts:
+  - `sheets.length === 2`
+  - sheet-1: 55 placements, all `isCurved === true`
+  - sheet-2: 1 placement, `partId === 'SMOKE_STRAIGHT_S88'`, `isCurved` falsy
+  - DXF(sheet-2): `PARTS_CURVED === 0`, `HATCH_CURVED === 0`, `PARTS === 4`
+- Guarantees straight panels are never misrouted to `PARTS_CURVED` under
+  mixed-row overflow conditions.
+- 1 `it()` block.
+
+#### Updated — JSDoc
+
+- `curvedPanelDxfPipeline.smoke.test.ts` header updated to `Stages 22 – 88`
+  with new table rows for Stages 87 and 88.
+- `buildDxfSheets.ts` reference updated to `(Stages 7 – 88)`.
+
+#### Test count: 341 passing
+
+---
+
 ## [8.1.0] – 2026-08-27
 
 ### Minor Release — Multi-Panel Scale and Determinism Milestone (Stages 84–86)

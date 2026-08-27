@@ -57,7 +57,7 @@
  *    21 | ARC + S_CURVE       | dot(d1,d2) < 0 when effectiveW > effectiveH (FFDH rotates);
  *       |   + TALL_ARC        |   dot(d1,d2) > 0 when effectiveW < effectiveH (grain-locked)
  *
- * Stages 22 – 86: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, multi-panel scale validation, determinism guard, and overflow two-sheet placement
+ * Stages 22 – 88: precision, structural integrity, label, bounding-rect, layer-count, SHEET invariants, HATCH_CURVED count, rotation guards, zero/negative-correction exclusion, reflection symmetry, barely-positive correction boundary, kerfCount-boundary guards, triple-guard regression, NaN/null/negative kerfCount boundaries, Infinity kerfCount passthrough, multi-panel scale validation, determinism guard, overflow two-sheet placement, overflow diagonal geometry, and mixed-overflow exclusivity
  * ─────────────────────────────────────────────────────────────────────────────
  * Stage | Panels                   | Assertion
  * ------|--------------------------|-------------------------------------------
@@ -305,6 +305,14 @@
  *       |                          |   sheets.length===2;
  *       |                          |   PARTS_CURVED LINE count=4×56=224
  *       |                          |   across both sheets; 1 it() block.
+ *    87 | qty=56 overflow diagonal | sheet-2 single panel isCurved=true;
+ *       |                          |   HATCH_CURVED count=2; d1=(10,10)→(220,210)
+ *       |                          |   d2=(220,10)→(10,210); rotation=90 means
+ *       |                          |   placed w=210, h=200; 1 it() block.
+ *    88 | 55 curved + 1 straight   | mixed overflow: sheet-1 holds all 55 curved
+ *       |   mixed overflow         |   (all isCurved=true); straight overflows to
+ *       |                          |   sheet-2 with PARTS_CURVED=0,
+ *       |                          |   HATCH_CURVED=0, PARTS=4; 1 it() block.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Run:
@@ -10432,6 +10440,229 @@ describe(
 
         // 56 curved panels × 4 edges each = 224 PARTS_CURVED LINE entities
         expect(totalPARTSCURVED).toBe(4 * totalPlacements);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 87 – Sheet-2 overflow panel: HATCH_CURVED diagonal spans the correct
+//            flat-blank bbox corners.
+//
+// Fixture: same row geometry as Stage 86 (cutW=200, cutH=200,
+// developedLength=210, projectedDepth=200, curvedEdge='TOP') with qty=56.
+// Sheet-2 receives the single overflow panel.
+//
+// FFDH analysis (sheet-2, 1 curved panel):
+//   flatBlankW=200, flatBlankH=210; grainDirection='NONE' → rotation allowed.
+//   Orientation A (no rotation): w=200, h=210.
+//   Orientation B (rotation=90): w=210, h=200.  ← smaller h wins new-shelf.
+//   Placement: x=10, y=10, rotation=90.
+//   getRotatedDimensions(cutW=200, cutH=210, 90) → placed w=210, h=200.
+//
+// HATCH_CURVED diagonal coordinates:
+//   d1 (BL→TR): (x, y)       → (x+w, y+h) = (10, 10)  → (220, 210)
+//   d2 (BR→TL): (x+w, y)     → (x, y+h)   = (220, 10) → (10,  210)
+//
+// Assertions (1 it() block):
+//   • result.sheets.length === 2
+//   • result.sheets[1].placements.length === 1
+//   • placement.isCurved === true
+//   • HATCH_CURVED count in sheet-2 DXF === 2
+//   • d1: (10, 10) → (220, 210)
+//   • d2: (220, 10) → (10, 210)
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 87 — sheet-2 overflow placement: HATCH_CURVED diagonal spans flat-blank bbox corners',
+  () => {
+
+    type Coords87 = { x1: number; y1: number; x2: number; y2: number };
+
+    function parseHatchCoords87(content: string): Coords87[] {
+      const entitiesStart = content.indexOf('ENTITIES');
+      const entities = content.slice(entitiesStart);
+      return entities
+        .split('LINE')
+        .slice(1)
+        .filter((s) => s.includes('\n8\nHATCH_CURVED\n'))
+        .map((seg) => {
+          const num = (code: string): number => {
+            const m = seg.match(new RegExp(`\\n${code}\\n([\\d.+\\-e]+)`));
+            return m ? parseFloat(m[1]) : NaN;
+          };
+          return { x1: num('10'), y1: num('20'), x2: num('11'), y2: num('21') };
+        });
+    }
+
+    it(
+      'qty=56 → sheet-2 has 1 curved panel; HATCH_CURVED d1=(10,10)→(220,210), d2=(220,10)→(10,210)',
+      () => {
+        const stage87Row: CutListRow = {
+          partId:          'SMOKE_OVERFLOW_S87',
+          cabinetId:       'CAB_SMOKE_87',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             56,
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Overflow Curved Panel S87',
+        };
+
+        const result87 = runNesting([stage87Row]);
+
+        // Two sheets; sheet-2 holds the 1 overflow panel
+        expect(result87.sheets).toHaveLength(2);
+
+        const sheet87b = result87.sheets[1];
+        expect(sheet87b.placements).toHaveLength(1);
+        expect(sheet87b.placements[0].isCurved).toBe(true);
+
+        const output87b = buildDxfSheet({
+          planned: { index1: 2, sheetId: 'SHEET_STAGE87B', materialId: MATERIAL_ID },
+          nesting: sheet87b,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        const coords87 = parseHatchCoords87(output87b.content);
+        expect(coords87).toHaveLength(2);
+
+        // Sort by x1 ascending: d1 (BL→TR) has smaller x1=10; d2 (BR→TL) has x1=220
+        const [d1, d2] = [...coords87].sort((a, b) => a.x1 - b.x1);
+
+        // d1: BL → TR  (10, 10) → (220, 210)
+        expect(d1.x1).toBeCloseTo(10,  1);
+        expect(d1.y1).toBeCloseTo(10,  1);
+        expect(d1.x2).toBeCloseTo(220, 1);
+        expect(d1.y2).toBeCloseTo(210, 1);
+
+        // d2: BR → TL  (220, 10) → (10, 210)
+        expect(d2.x1).toBeCloseTo(220, 1);
+        expect(d2.y1).toBeCloseTo(10,  1);
+        expect(d2.x2).toBeCloseTo(10,  1);
+        expect(d2.y2).toBeCloseTo(210, 1);
+      },
+    );
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 88 – Mixed overflow: 55 curved + 1 straight.  Sheet-1 is filled by
+//            curved panels; straight panel overflows to sheet-2 and is never
+//            assigned to PARTS_CURVED.
+//
+// Fixture (two CutListRows, same materialId='MDF_18'):
+//   Row-A curved: partId='SMOKE_CURVED_S88', cutW=200, cutH=200, qty=55,
+//                 developedLength=210, projectedDepth=200, curvedEdge='TOP'.
+//                 flatBlankW=200, flatBlankH=210 → correction=10 → isCurved=true.
+//   Row-B straight: partId='SMOKE_STRAIGHT_S88', cutW=200, cutH=200, qty=1.
+//                   No curve fields → isCurved=false.
+//
+// FFDH sort (height DESC, width DESC, id ASC):
+//   Curved flatBlankH=210 > straight flatBlankH=200 → all 55 curved placed first.
+//
+// Sheet-1 packing (rotation=90 for curved, w=210, h=200):
+//   Panels per shelf: 5  (5×210 + 4×3.5 = 1064 ≤ 1200).
+//   Shelf count: 11       (shelf-11 y=2045; 2045+200=2245 ≤ 2430 ✓).
+//   Capacity: 55 panels → sheet-1 is exactly filled by the 55 curved panels.
+//
+// Straight panel on sheet-1 (after 55 curved):
+//   Shelf-11 remaining width = 1200 − 1064 = 136 mm < 200 mm → doesn't fit.
+//   New shelf at y=2045+200+3.5=2248.5; 2248.5+200=2448.5 > 2430 → overflow.
+//
+// Sheet-2: 1 straight panel at x=10, y=10, rotation=0.
+//   Not in isCurvedMap → isCurved is falsy (undefined).
+//   DXF layers: PARTS_CURVED=0, HATCH_CURVED=0, PARTS=4.
+//
+// Assertions (1 it() block):
+//   • result.sheets.length === 2
+//   • sheet-1 placements.length === 55, all isCurved === true
+//   • sheet-2 placements.length === 1
+//   • sheet-2 placement partId === 'SMOKE_STRAIGHT_S88'
+//   • sheet-2 placement isCurved is falsy
+//   • DXF(sheet-2): PARTS_CURVED === 0
+//   • DXF(sheet-2): HATCH_CURVED === 0
+//   • DXF(sheet-2): PARTS === 4
+// ─────────────────────────────────────────────────────────────────────────────
+describe(
+  '@smoke Stage 88 — mixed overflow: curved panels fill sheet-1; straight panel on sheet-2 has PARTS_CURVED=0',
+  () => {
+
+    function countLayer88(content: string, layer: string): number {
+      return content
+        .split('\n0\nLINE\n')
+        .slice(1)
+        .filter((seg) => seg.startsWith(`8\n${layer}\n`))
+        .length;
+    }
+
+    it(
+      '55 curved + 1 straight → sheets=2; sheet-2 straight: PARTS_CURVED=0, HATCH_CURVED=0, PARTS=4',
+      () => {
+        const curvedRow88: CutListRow = {
+          partId:          'SMOKE_CURVED_S88',
+          cabinetId:       'CAB_SMOKE_88C',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             55,
+          developedLength: 210,
+          projectedDepth:  200,
+          curvedEdge:      'TOP',
+          label:           'Curved Panel S88',
+        };
+
+        const straightRow88: CutListRow = {
+          partId:          'SMOKE_STRAIGHT_S88',
+          cabinetId:       'CAB_SMOKE_88S',
+          materialId:      MATERIAL_ID,
+          finishW:         200,
+          finishH:         200,
+          edgeL: 0, edgeR: 0, edgeT: 0, edgeB: 0,
+          premillL: 0, premillR: 0, premillT: 0, premillB: 0,
+          cutW:            200,
+          cutH:            200,
+          qty:             1,
+          label:           'Straight Panel S88',
+        };
+
+        const result88 = runNesting([curvedRow88, straightRow88]);
+
+        // Two sheets
+        expect(result88.sheets).toHaveLength(2);
+
+        const [sheet88a, sheet88b] = result88.sheets;
+
+        // Sheet-1: 55 curved panels, all isCurved=true
+        expect(sheet88a.placements).toHaveLength(55);
+        for (const p of sheet88a.placements) {
+          expect(p.isCurved).toBe(true);
+        }
+
+        // Sheet-2: 1 straight panel, isCurved falsy
+        expect(sheet88b.placements).toHaveLength(1);
+        expect(sheet88b.placements[0].partId).toBe('SMOKE_STRAIGHT_S88');
+        expect(sheet88b.placements[0].isCurved).toBeFalsy();
+
+        // Build DXF for sheet-2 and verify layer counts
+        const output88b = buildDxfSheet({
+          planned: { index1: 2, sheetId: 'SHEET_STAGE88B', materialId: MATERIAL_ID },
+          nesting: sheet88b,
+          profile:  getFactoryProfile('DEFAULT'),
+        });
+
+        expect(countLayer88(output88b.content, 'PARTS_CURVED')).toBe(0);
+        expect(countLayer88(output88b.content, 'HATCH_CURVED')).toBe(0);
+        expect(countLayer88(output88b.content, 'PARTS')).toBe(4);
       },
     );
   },
