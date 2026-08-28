@@ -6,6 +6,13 @@
  */
 
 import '@testing-library/jest-dom/vitest';
+import { afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
+
+// Ensure @testing-library/react unmounts components between every test.
+// jsdom environment does not provide a global `afterEach`, so the auto-cleanup
+// guard inside @testing-library/react never fires unless we register it here.
+afterEach(cleanup);
 
 // ── crypto.randomUUID stub ────────────────────────────────────────────────────
 // jsdom does not expose crypto.randomUUID; provide a deterministic v4-shaped id

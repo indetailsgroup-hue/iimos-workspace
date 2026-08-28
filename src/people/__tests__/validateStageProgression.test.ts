@@ -249,12 +249,13 @@ describe('getNextStage helper', () => {
 // Verifies that peopleStore propagates DB trigger errors correctly.
 // ─────────────────────────────────────────────────────────────
 
-// Minimal mock of the Supabase client chain
-const mockUpdate = vi.fn();
-const mockEq = vi.fn(() => ({ error: null }));
-const mockFrom = vi.fn(() => ({
-  update: mockUpdate.mockReturnValue({ eq: mockEq }),
-}));
+// Minimal chainable mock for Supabase query builder
+// Mirrors the real call: .from().update().eq(id).eq(orgId).select().single()
+const mockSingle = vi.fn();
+const mockSelectFn = vi.fn(() => ({ single: mockSingle }));
+const mockEq: ReturnType<typeof vi.fn> = vi.fn(() => ({ eq: mockEq, select: mockSelectFn }));
+const mockUpdate = vi.fn(() => ({ eq: mockEq }));
+const mockFrom = vi.fn(() => ({ update: mockUpdate }));
 
 vi.mock('../../core/supabase', () => ({
   supabase: { from: mockFrom },
@@ -267,7 +268,8 @@ describe('peopleStore — DB trigger error propagation', () => {
 
   it('propagates MONOLITH_STAGE_BACKWARD error from DB to store', async () => {
     // Simulate Supabase returning a PostgreSQL trigger exception
-    mockEq.mockResolvedValueOnce({
+    mockSingle.mockResolvedValueOnce({
+      data: null,
       error: {
         code: 'P0001',
         message: 'MONOLITH_STAGE_BACKWARD: Cannot change ai_stage from AI_PARTNER to AI_ASSISTED',
@@ -280,9 +282,9 @@ describe('peopleStore — DB trigger error propagation', () => {
 
     // The store's updateEmployee action should surface the error
     // (actual field name may vary; we assert the mock was called correctly)
-    const result = await store.updateEmployee('org-1', 'emp-1', {
+    const result = await store.updateEmployee('emp-1', {
       superEmployeeStage: 'AI_ASSISTED', // backward — DB will reject
-    });
+    }, 'org-1');
 
     // Store should return falsy / set error state on DB rejection
     expect(result).toBeFalsy();
@@ -290,14 +292,31 @@ describe('peopleStore — DB trigger error propagation', () => {
   });
 
   it('succeeds when DB accepts a forward stage transition', async () => {
-    mockEq.mockResolvedValueOnce({ error: null });
+    mockSingle.mockResolvedValueOnce({
+      data: {
+        id: 'emp-1',
+        org_id: 'org-1',
+        user_id: null,
+        name: 'Test Employee',
+        role: 'DESIGNER',
+        department: null,
+        hire_date: null,
+        avatar_url: null,
+        is_active: true,
+        super_employee_stage: 'AI_PARTNER',
+        notes: null,
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+      error: null,
+    });
 
     const { usePeopleStore } = await import('../../people/peopleStore');
     const store = usePeopleStore.getState();
 
-    const result = await store.updateEmployee('org-1', 'emp-1', {
+    const result = await store.updateEmployee('emp-1', {
       superEmployeeStage: 'AI_PARTNER', // forward — DB accepts
-    });
+    }, 'org-1');
 
     expect(result).toBeTruthy();
     expect(usePeopleStore.getState().error).toBeNull();

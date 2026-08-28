@@ -75,9 +75,9 @@ describe('SuperEmployeeProgressCard — stage rendering', () => {
     ({ stage, label, percentage }) => {
       render(<SuperEmployeeProgressCard employee={makeEmployee(stage)} />);
       // Stage label in header
-      expect(screen.getByText(label)).toBeTruthy();
+      expect(screen.getAllByText(label)[0]).toBeTruthy();
       // Percentage value
-      expect(screen.getByText(`${percentage}%`)).toBeTruthy();
+      expect(screen.getAllByText(`${percentage}%`)[0]).toBeTruthy();
     }
   );
 
@@ -120,11 +120,11 @@ describe('SuperEmployeeProgressCard — stage rendering', () => {
 
 describe('SuperEmployeeProgressCard — progress bar', () => {
   it.each([
-    { stage: 'AI_UNAWARE' as const,     expectedWidth: /width:\s*2%/ },   // Math.max(0, 2) = 2
-    { stage: 'AI_AWARE' as const,       expectedWidth: /width:\s*25%/ },
-    { stage: 'AI_ASSISTED' as const,    expectedWidth: /width:\s*50%/ },
-    { stage: 'AI_PARTNER' as const,     expectedWidth: /width:\s*75%/ },
-    { stage: 'SUPER_EMPLOYEE' as const, expectedWidth: /width:\s*100%/ },
+    { stage: 'AI_UNAWARE' as const,     expectedWidth: '2%' },   // Math.max(0, 2) = 2
+    { stage: 'AI_AWARE' as const,       expectedWidth: '25%' },
+    { stage: 'AI_ASSISTED' as const,    expectedWidth: '50%' },
+    { stage: 'AI_PARTNER' as const,     expectedWidth: '75%' },
+    { stage: 'SUPER_EMPLOYEE' as const, expectedWidth: '100%' },
   ])(
     'sets progress bar width to correct % for stage $stage',
     ({ stage, expectedWidth }) => {
@@ -146,8 +146,8 @@ describe('SuperEmployeeProgressCard — next-stage hint', () => {
     'shows next-stage hint "$nextLabel" when stage is $stage',
     ({ stage, nextLabel }) => {
       render(<SuperEmployeeProgressCard employee={makeEmployee(stage)} />);
-      expect(screen.getByText('ขั้นต่อไป:')).toBeTruthy();
-      expect(screen.getByText(new RegExp(nextLabel!))).toBeTruthy();
+      expect(screen.getAllByText('ขั้นต่อไป:')[0]).toBeTruthy();
+      expect(screen.getAllByText(new RegExp(nextLabel!))[0]).toBeTruthy();
     }
   );
 

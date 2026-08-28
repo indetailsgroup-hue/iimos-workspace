@@ -35,7 +35,7 @@ const { mockPeopleState } = vi.hoisted(() => {
   const mockPeopleState = {
     employees: [] as Employee[],
     skills: [] as Skill[],
-    filters: { ...DEFAULT_EMPLOYEE_FILTERS } as EmployeeFilters,
+    filters: { search: '', role: 'ALL', department: 'ALL', superEmployeeStage: 'ALL', isActive: true } as EmployeeFilters,
     loadingEmployees: false,
     loadingSkills: false,
     loadEmployees: vi.fn(),
@@ -158,63 +158,69 @@ describe('PeopleDirectory', () => {
     it('renders "ยังไม่รู้จัก AI" badge for AI_UNAWARE', () => {
       mockPeopleState.employees = [makeEmployee({ superEmployeeStage: 'AI_UNAWARE' })];
       renderDirectory();
-      expect(screen.getByText('ยังไม่รู้จัก AI')).toBeInTheDocument();
+      // Scope to employee button — the same label also appears as a dropdown option
+      const btn = screen.getByRole('button');
+      expect(within(btn).getByText('ยังไม่รู้จัก AI')).toBeInTheDocument();
     });
 
     it('renders "รู้จัก AI แล้ว" badge for AI_AWARE', () => {
       mockPeopleState.employees = [makeEmployee({ superEmployeeStage: 'AI_AWARE' })];
       renderDirectory();
-      expect(screen.getByText('รู้จัก AI แล้ว')).toBeInTheDocument();
+      const btn = screen.getByRole('button');
+      expect(within(btn).getByText('รู้จัก AI แล้ว')).toBeInTheDocument();
     });
 
     it('renders "ใช้ AI ช่วยงาน" badge for AI_ASSISTED', () => {
       mockPeopleState.employees = [makeEmployee({ superEmployeeStage: 'AI_ASSISTED' })];
       renderDirectory();
-      expect(screen.getByText('ใช้ AI ช่วยงาน')).toBeInTheDocument();
+      const btn = screen.getByRole('button');
+      expect(within(btn).getByText('ใช้ AI ช่วยงาน')).toBeInTheDocument();
     });
 
     it('renders "ทำงานร่วมกับ AI" badge for AI_PARTNER', () => {
       mockPeopleState.employees = [makeEmployee({ superEmployeeStage: 'AI_PARTNER' })];
       renderDirectory();
-      expect(screen.getByText('ทำงานร่วมกับ AI')).toBeInTheDocument();
+      const btn = screen.getByRole('button');
+      expect(within(btn).getByText('ทำงานร่วมกับ AI')).toBeInTheDocument();
     });
 
     it('renders "Super Employee" badge for SUPER_EMPLOYEE', () => {
       mockPeopleState.employees = [makeEmployee({ superEmployeeStage: 'SUPER_EMPLOYEE' })];
       renderDirectory();
-      expect(screen.getByText('Super Employee')).toBeInTheDocument();
+      const btn = screen.getByRole('button');
+      expect(btn.textContent).toContain('Super Employee');
     });
 
     it('renders ⭐ icon for SUPER_EMPLOYEE badge', () => {
       mockPeopleState.employees = [makeEmployee({ superEmployeeStage: 'SUPER_EMPLOYEE' })];
       renderDirectory();
-      // The ⭐ is inside the badge span next to "Super Employee"
-      const badge = screen.getByText('Super Employee').closest('span');
-      expect(badge?.textContent).toContain('⭐');
+      const btn = screen.getByRole('button');
+      expect(btn.querySelector('[aria-hidden="true"]')?.textContent).toBe('⭐');
     });
 
     it('does NOT render ⭐ icon for AI_PARTNER badge', () => {
       mockPeopleState.employees = [makeEmployee({ superEmployeeStage: 'AI_PARTNER' })];
       renderDirectory();
-      const badge = screen.getByText('ทำงานร่วมกับ AI').closest('span');
-      expect(badge?.textContent).not.toContain('⭐');
+      const btn = screen.getByRole('button');
+      expect(btn.querySelector('[aria-hidden="true"]')).toBeNull();
     });
 
     it('does NOT render ⭐ icon for AI_UNAWARE badge', () => {
       mockPeopleState.employees = [makeEmployee({ superEmployeeStage: 'AI_UNAWARE' })];
       renderDirectory();
-      const badge = screen.getByText('ยังไม่รู้จัก AI').closest('span');
-      expect(badge?.textContent).not.toContain('⭐');
+      const btn = screen.getByRole('button');
+      expect(btn.querySelector('[aria-hidden="true"]')).toBeNull();
     });
 
     it('renders all 5 stage badges for a mixed employee list', () => {
       mockPeopleState.employees = ALL_STAGE_EMPLOYEES;
       renderDirectory();
-      expect(screen.getByText('ยังไม่รู้จัก AI')).toBeInTheDocument();
-      expect(screen.getByText('รู้จัก AI แล้ว')).toBeInTheDocument();
-      expect(screen.getByText('ใช้ AI ช่วยงาน')).toBeInTheDocument();
-      expect(screen.getByText('ทำงานร่วมกับ AI')).toBeInTheDocument();
-      expect(screen.getByText('Super Employee')).toBeInTheDocument();
+      const btns = screen.getAllByRole('button');
+      expect(within(btns[0]).getByText('ยังไม่รู้จัก AI')).toBeInTheDocument();
+      expect(within(btns[1]).getByText('รู้จัก AI แล้ว')).toBeInTheDocument();
+      expect(within(btns[2]).getByText('ใช้ AI ช่วยงาน')).toBeInTheDocument();
+      expect(within(btns[3]).getByText('ทำงานร่วมกับ AI')).toBeInTheDocument();
+      expect(btns[4].textContent).toContain('Super Employee');
     });
   });
 
@@ -500,7 +506,7 @@ describe('PeopleDirectory', () => {
     it('does NOT show Super Employee count when none exist', () => {
       mockPeopleState.employees = [makeEmployee({ superEmployeeStage: 'AI_UNAWARE' })];
       renderDirectory();
-      expect(screen.queryByText(/Super Employee/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/⭐ \d+ Super Employee/)).not.toBeInTheDocument();
     });
 
     it('shows "ทีมงาน" as the page heading', () => {
