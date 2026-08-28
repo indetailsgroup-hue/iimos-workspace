@@ -14,7 +14,7 @@
  *   INSTALLER=40 ✗   VIEWER=10 ✗
  */
 import type { Meta, StoryObj } from '@storybook/react';
-import { within, userEvent, expect } from '@storybook/test';
+import { within, userEvent, expect, fn } from '@storybook/test';
 import { CultureDashboard } from './CultureDashboard';
 import { useCultureStore } from './cultureStore';
 import { useTenantStore } from '../tenant/tenantStore';
@@ -517,5 +517,235 @@ export const StatusFilter_Pending: Story = {
     await expect(
       canvas.queryByText(/อุณหภูมิในโรงงานปรับดีขึ้น/i)
     ).not.toBeInTheDocument();
+  },
+};
+
+// ─── actionFeedback spy stories ───────────────────────────────────────────────
+//
+// These stories use fn() from @storybook/test as a spy on the store's
+// actionFeedback action. Each story resets the spy via mockClear() in its
+// decorator, then asserts in the play function that the spy was called with
+// the correct (id, newStatus) arguments.
+//
+// Mechanism: FeedbackItem renders a <select> per item. Changing the value fires
+//   onChange → handleStatusChange(status) → onAction(feedback.id, status)
+//   → CultureDashboard's `actionFeedback` from useCultureStore.
+//
+// Target: the PENDING feedback item ("เครื่องจักรบางเครื่องยังไม่มีการล็อก")
+//   closest('.rounded-lg') container → combobox inside it.
+
+/** Module-level spy — reset per story via mockClear() in decorator */
+const mockActionFeedbackSpy = fn().mockResolvedValue(true);
+
+/**
+ * Extended withCultureStore decorator that wires the spy as actionFeedback.
+ * Resets the spy before each story render via mockClear().
+ */
+function withCultureStoreAndActionSpy(patch: {
+  psScores?: PsScore[];
+  anonymousFeedback?: AnonymousFeedback[];
+}) {
+  return (Story: React.ComponentType) => {
+    mockActionFeedbackSpy.mockClear();
+
+    const psScores = patch.psScores ?? [];
+    const anonymousFeedback = patch.anonymousFeedback ?? [];
+
+    useCultureStore.setState({
+      psScores,
+      anonymousFeedback,
+      loadingScores: false,
+      loadingFeedback: false,
+      loadingTemplates: false,
+      loadingActiveSurvey: false,
+      creatingTemplate: false,
+      updatingTemplate: false,
+      submittingResponse: false,
+      submittingFeedback: false,
+      computingScore: false,
+      actioningFeedback: false,
+      fetchPsScores: async () => {},
+      fetchAnonymousFeedback: async () => {},
+      // ── spy replaces no-op ──────────────────────────────────────────────
+      actionFeedback: mockActionFeedbackSpy,
+      // ── required selector stubs ─────────────────────────────────────────
+      selectScoresForChart: () => buildChartData(psScores),
+      selectIsAnyLoading: () => false,
+      selectPendingFeedback: () =>
+        anonymousFeedback.filter((f) => f.actionStatus === 'PENDING'),
+      selectCurrentPeriodLabel: () =>
+        psScores.length > 0 ? psScores[psScores.length - 1].periodLabel : '—',
+    } as any);
+
+    return <Story />;
+  };
+}
+
+/**
+ * INTERACTION TEST: Acknowledge
+ *
+ * Finds the PENDING feedback item by its content text, locates the
+ * action <select> inside that card, and changes it to "ACKNOWLEDGED".
+ * Asserts actionFeedback was called with (feedbackId='fb-001', 'ACKNOWLEDGED').
+ */
+export const ActionFeedback_Acknowledge: Story = {
+  name: 'Interaction — actionFeedback: PENDING → ACKNOWLEDGED',
+  decorators: [
+    withCultureStoreAndActionSpy({
+      psScores: [mockScoreAbove],
+      anonymousFeedback: allMockFeedback,
+    }),
+    withTenantStore(memberAdmin),
+  ],
+  parameters: {
+    docs: {
+      description: {
+        story: `
+Verifies the full \`actionFeedback\` flow:
+
+1. Locates the PENDING feedback item card by its Thai content text.
+2. Finds the \`<select>\` (combobox) **inside** that card.
+3. Changes the value to \`ACKNOWLEDGED\` via \`userEvent.selectOptions\`.
+4. Asserts \`actionFeedback\` spy was called with \`('fb-001', 'ACKNOWLEDGED')\`.
+
+The spy is reset via \`mockClear()\` before each story render.
+        `,
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+
+    // Locate the PENDING feedback item by its content text
+    const feedbackText = await canvas.findByText(
+      /เครื่องจักรบางเครื่องยังไม่มีการล็อก/i,
+    );
+
+    // Climb up to the rounded-lg card boundary
+    const feedbackCard = feedbackText.closest('.rounded-lg') as HTMLElement;
+    await expect(feedbackCard).not.toBeNull();
+
+    // Find the action status select INSIDE this specific card
+    const actionSelect = within(feedbackCard).getByRole('combobox');
+
+    // Change status to ACKNOWLEDGED
+    await userEvent.selectOptions(actionSelect, 'ACKNOWLEDGED');
+
+    // Assert spy was called with correct args
+    await expect(mockActionFeedbackSpy).toHaveBeenCalledOnce();
+    await expect(mockActionFeedbackSpy).toHaveBeenCalledWith('fb-001', 'ACKNOWLEDGED');
+  },
+};
+
+/**
+ * INTERACTION TEST: Resolve
+ *
+ * Changes an ACKNOWLEDGED feedback item to RESOLVED.
+ * Asserts actionFeedback called with (feedbackId='fb-002', 'RESOLVED').
+ */
+export const ActionFeedback_Resolve: Story = {
+  name: 'Interaction — actionFeedback: ACKNOWLEDGED → RESOLVED',
+  decorators: [
+    withCultureStoreAndActionSpy({
+      psScores: [mockScoreAbove],
+      anonymousFeedback: allMockFeedback,
+    }),
+    withTenantStore(memberAdmin),
+  ],
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Changes the ACKNOWLEDGED feedback item (fb-002) to RESOLVED and asserts the spy call.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+
+    // Locate the ACKNOWLEDGED feedback item (management feedback)
+    const feedbackText = await canvas.findByText(
+      /การสื่อสารระหว่างหัวหน้างานและพนักงาน/i,
+    );
+    const feedbackCard = feedbackText.closest('.rounded-lg') as HTMLElement;
+    await expect(feedbackCard).not.toBeNull();
+
+    const actionSelect = within(feedbackCard).getByRole('combobox');
+    await userEvent.selectOptions(actionSelect, 'RESOLVED');
+
+    await expect(mockActionFeedbackSpy).toHaveBeenCalledOnce();
+    await expect(mockActionFeedbackSpy).toHaveBeenCalledWith('fb-002', 'RESOLVED');
+  },
+};
+
+/**
+ * INTERACTION TEST: Dismiss
+ *
+ * Changes a PENDING feedback item to DISMISSED.
+ * Asserts actionFeedback called with (feedbackId='fb-001', 'DISMISSED').
+ */
+export const ActionFeedback_Dismiss: Story = {
+  name: 'Interaction — actionFeedback: PENDING → DISMISSED',
+  decorators: [
+    withCultureStoreAndActionSpy({
+      psScores: [mockScoreAbove],
+      anonymousFeedback: allMockFeedback,
+    }),
+    withTenantStore(memberAdmin),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+
+    const feedbackText = await canvas.findByText(
+      /เครื่องจักรบางเครื่องยังไม่มีการล็อก/i,
+    );
+    const feedbackCard = feedbackText.closest('.rounded-lg') as HTMLElement;
+    const actionSelect = within(feedbackCard).getByRole('combobox');
+
+    await userEvent.selectOptions(actionSelect, 'DISMISSED');
+
+    await expect(mockActionFeedbackSpy).toHaveBeenCalledOnce();
+    await expect(mockActionFeedbackSpy).toHaveBeenCalledWith('fb-001', 'DISMISSED');
+  },
+};
+
+/**
+ * INTERACTION TEST: Non-admin cannot trigger actionFeedback
+ *
+ * Verifies the entire feedback panel is absent for VIEWER role,
+ * so actionFeedback is never callable from the UI.
+ */
+export const ActionFeedback_NonAdminGate: Story = {
+  name: 'Interaction — VIEWER cannot access action controls (RBAC)',
+  decorators: [
+    withCultureStoreAndActionSpy({
+      psScores: [mockScoreAbove],
+      anonymousFeedback: allMockFeedback,
+    }),
+    withTenantStore(memberViewer),
+  ],
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'VIEWER role (hierarchy=10 < 80): the feedback panel is hidden, so actionFeedback spy must NOT be called. Amber notice visible.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+
+    // Amber admin gate notice must be visible
+    await expect(
+      canvas.getByText(/ความคิดเห็นนิรนามแสดงเฉพาะผู้ดูแลระบบ/i),
+    ).toBeVisible();
+
+    // No action selects should be rendered (feedback panel is hidden)
+    await expect(
+      canvas.queryByText(/เครื่องจักรบางเครื่องยังไม่มีการล็อก/i),
+    ).not.toBeInTheDocument();
+
+    // Spy must never have been called
+    await expect(mockActionFeedbackSpy).not.toHaveBeenCalled();
   },
 };
