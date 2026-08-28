@@ -17,7 +17,7 @@ As of 2026-08-28:
 - **All 4 SECDEF critical/high findings (R1–R4)** and **all 4 medium findings (M1–M4)** — fixed in migrations 0173–0176
 - **Issue #37 (P1, identity reconciliation)** — ✅ FIXED in migration 0180 (`fn_verify_org_claim` guard + 6 patched RPCs); issue closed
 - **REVOKE FROM PUBLIC sweep** — ✅ COMPLETE in migration 0181 (14 functions); systemic gap closed
-- **14 dependency vulnerabilities (issue #38):** fix plan generated, `server/package.json` patched with target versions — pending `npm install` execution and audit verification
+- **14 dependency vulnerabilities (issue #38):** `npm install` + `npm audit` completed — **2 moderate remain** (`uuid <11.1.1`, `bullmq` via bundled `uuid 11.1.0`); fix: `uuid ^11.1.1` + `bullmq ^5.81.4` + overrides in `server/package.json`
 - **1 open item remains:** issue #31 (P3, architecture tech debt — non-security)
 
 **Risk posture: fully hardened at database layer.** All critical-path database isolation vulnerabilities, privilege escalation risks, identity reconciliation gaps, and implicit PUBLIC EXECUTE grants have been closed. The only remaining open item (#31) is architecture tech debt with no security risk.
@@ -146,7 +146,7 @@ WHERE routine_schema = 'public'
 ## 5. Dependency Vulnerabilities (Issue #38)
 
 **Package:** `monolith-factory-server v0.13.2` (`server/`)  
-**Audit result:** 14 packages, 18 unique GHSA advisories — 1 critical, 5 high, 8 moderate
+**Audit result:** Initial audit: 14 packages, 18 unique GHSA advisories — 1 critical, 5 high, 8 moderate. After `npm install` (2026-08-28): **2 moderate remain** — `uuid <11.1.1` (GHSA-w5hq-g745-h8pq, CVSS 7.5) + `bullmq 5.66.1–5.76.1` (bundled `uuid 11.1.0 <11.1.1`); all critical/high resolved.
 
 ### Vulnerability Summary
 
@@ -154,8 +154,8 @@ WHERE routine_schema = 'public'
 |----------|---------|------|----|---------|---------------------|
 | **P0** | `vitest` | `^1.0.4` | `^3.0.0` | GHSA-5xrq-8626-4rwp (CRITICAL SSRF) + 8 transitive | No (devDep) |
 | P1 | `yauzl` | `^3.2.0` | `^3.3.0` | GHSA-gmq8-994r-jv83 (path traversal) | **YES** |
-| P1 | `uuid` | `^9.0.0` | `^10.0.0` | GHSA-w5hq-g745-h8pq | **YES** |
-| P1 | `bullmq` | `^5.10.0` | `^5.66.5` | GHSA-w5hq-g745-h8pq (transitive) | **YES** |
+| **P1** ⚠️ | `uuid` | `10.0.0` (installed) | `^11.1.1` | GHSA-w5hq-g745-h8pq (CVSS 7.5) — **still vulnerable** | **YES** |
+| **P1** ⚠️ | `bullmq` | `5.66.5` (installed) | `^5.81.4` | GHSA-w5hq-g745-h8pq (bundled `uuid 11.1.0 <11.1.1`) — **still vulnerable** | **YES** |
 | P1 | `express` | `^4.18.2` | `^5.0.0` | GHSA-37ch-88jc-xwx2, body-parser, qs ×2 | **YES** |
 | P2/P3 | `vite`, `vite-node`, `esbuild`, `nanoid`, `postcss`, `rollup` | (transitive via vitest) | resolved by vitest ^3.0.0 | 9 advisories | No |
 
@@ -166,8 +166,8 @@ WHERE routine_schema = 'public'
 | Fix plan authored (`npm-audit-fix-plan.md`) | ✅ Done |
 | `server/package.json` patched with target versions | ✅ Done (commit `94fd59ab`) |
 | `server/vitest.config.ts` host guard added | ✅ Done (commit `9c05a960`) |
-| `npm install --prefix server` executed | ⏳ Pending (requires Node.js env) |
-| `npm audit --prefix server` returns 0 critical/high | ⏳ Pending |
+| `npm install --prefix server` executed | ✅ Done (2026-08-28) |
+| `npm audit --prefix server` | ⚠️ 2 moderate remain (`uuid <11.1.1`, `bullmq 5.66.1–5.76.1`) — fix: `uuid ^11.1.1` + `bullmq ^5.81.4` (pending push + reinstall) |
 | `server/package-lock.json` updated and committed | ⏳ Pending |
 | Express v5 breaking-change checklist completed | ⏳ Pending |
 | PR approved + CI green + merged to main | ⏳ Pending |
@@ -207,6 +207,7 @@ WHERE routine_schema = 'public'
 | `0179` | `org_id NOT NULL` + backfill (F1 Phase 2 full fix) | F1 (Phase 2) |
 | `0180` | Identity reconciliation hardening | Issue #37 — `fn_verify_org_claim` + 6 RPCs |
 | `0181` | REVOKE EXECUTE FROM PUBLIC sweep | Systemic gap — 14 functions |
+| `0182` | `audit_logs` org_id NOT NULL + FK/trigger/RLS correctness (D1/D2/D3) | F5 defects in 0177: broken FK target, RLS WITH CHECK `o.id`, trigger `o.id` |
 
 All migrations have corresponding rollback files (`*_rollback.sql`) for CI forward-and-back idempotency testing. Rollback files are for CI only — **never apply to production.**
 
@@ -220,10 +221,14 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 | `supabase/tests/0177_audit_log_hardening.sql` | 0177 | Spoofed actor_id, org_id, unauthenticated RPC | F5 scenarios |
 | `supabase/tests/0178_f3_f4_rls.sql` | 0178 | F3 + F4 policy enforcement | Cross-tenant SELECT/INSERT rejection |
 | `supabase/tests/0179_f1_full_fix.sql` | 0179 | T-F1-01 → T-F1-14 (14 tests) | NOT NULL enforcement, policy isolation, cross-tenant rejection |
+| `supabase/tests/0179_not_null_sentinel_backfill.sql` | 0179 (NNB) | T-0179-NNB-01 → T-0179-NNB-35 (35 tests) | `has_column` ×11, `col_not_null` ×11, `throws_ok(23502)` ×11, zero-NULL composite ×1, sentinel UUID integrity ×1 |
 | `supabase/tests/0180_identity_reconciliation.sql` | 0180 | T-0180-01 → T-0180-17 (17 tests) | Guard failures, 6 RPC rejections, super-admin bypass, PUBLIC grant checks |
 | `supabase/tests/0181_revoke_sweep.sql` | 0181 | T-0181-01 → T-0181-18 (18 tests) | No PUBLIC EXECUTE on 14 functions; service_role grants; trigger-only function |
+| `supabase/tests/0182_audit_logs_org_id_hardening.sql` | 0182 | T-0182-01 → T-0182-13 (13 tests) | NOT NULL, FK→`org_id` (D1), trigger `o.org_id` (D3), RLS WITH CHECK `o.org_id` (D2), spoofed org rejection, service_role OK, anon rejection |
 
-**Total pgTAP tests authored:** 14 + 17 + 18 = **49 tests** (across 0179–0181 suites)
+**Total pgTAP tests authored:** 14 + 35 + 17 + 18 + 13 = **97 tests** (0179 F1: 14, 0179 NNB: 35, 0180: 17, 0181: 18, 0182: 13)
+
+**CI workflow:** `pgtap-tests.yml` written locally at `.github/workflows/pgtap-tests.yml` — push **blocked** pending PAT `workflow` scope (current token has `repo` only). File is committed in the local clone at `/tmp/monolith-git/`; re-push once a `workflow`-scoped token is available.
 
 ---
 
@@ -238,7 +243,7 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 | #43 | Issue | T1/T2 test defects (localStorage, mock shape) | `testing`, `P2` | ✅ Closed |
 | #45 | PR | v16.8.0 security hardening (0173+0174+0175) | `security` | Open |
 | #47 | PR | 0176 medium-risk SECDEF hardening | `security` | Open |
-| #48 | Issue | F5 audit_logs WITH CHECK (true) | `security`, `P1` | Open |
+| #48 | Issue | F5 audit_logs WITH CHECK (true) | `security`, `P1` | ✅ **Closed** (2026-08-28, migration 0177, PR #52) |
 | #49 | Issue | F3 notification_digest_queue no RLS | `security`, `P1` | Open (closed by PR #52) |
 | #50 | Issue | F4 platform_metrics_snapshots no RLS | `security`, `P1` | Open (closed by PR #52) |
 | #52 | PR | 0178 F3+F4 RLS hardening | `security`, `P1` | Open |
@@ -264,11 +269,11 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 
 ### Remaining open items (non-blocking):
 
-- [ ] Issue #38 — **IN PROGRESS** — `npm install` + `npm audit` verification needed
+- [ ] Issue #38 — **IN PROGRESS** — 2 moderate remaining (`uuid <11.1.1`, `bullmq 5.66.1–5.76.1`); fix: `uuid ^11.1.1` + `bullmq ^5.81.4` + overrides (pending `server/package.json` push + `npm install` re-run)
 - [ ] Issue #31 — **OPEN P3** — architecture refactor (non-security, no blocker)
 
 ---
 
 *Generated: 2026-08-28 · Monolith Workspace security audit cycle*  
 *This document is the authoritative security status record for the v16.8.0 audit cycle.*  
-*Last updated: 2026-08-28 — added 0180/0181 FIXED status, issue #37 closed, REVOKE sweep complete.*
+*Last updated: 2026-08-28 — pgTAP count 49→97 (added 0179 NNB 35 tests + 0182 13 tests); npm audit completed (2 moderate remaining: uuid <11.1.1, bullmq); 0182 migration + pgTAP suite added; issue #48 closed; CI workflow blocked pending `workflow` token scope.*
