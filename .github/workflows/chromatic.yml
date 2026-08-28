@@ -27,6 +27,8 @@ on:
       - '**/*.stories.tsx'
       - 'package.json'
       - 'package-lock.json'
+      - '**/*.visual.spec.ts'
+      - 'playwright.config.ts'
   pull_request:
     branches:
       - main
@@ -109,6 +111,68 @@ jobs:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://placeholder-api.example.com' }}
           VITE_USE_MOCK: 'true'
           VITE_FACTORY_API_BASE: ${{ secrets.VITE_FACTORY_API_BASE || 'https://placeholder-factory.example.com' }}
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # chromatic-playwright
+  # Runs Playwright visual snapshots (*.visual.spec.ts) via the
+  # @chromatic-com/playwright integration.  Snapshots are uploaded to the same
+  # Chromatic project and appear alongside Storybook snapshots in the UI.
+  #
+  # Requires chromatic-upload to succeed first so Storybook static is available
+  # on the runner (re-built in this job; chromatic-upload is a logical dep only).
+  # ────────────────────────────────────────────────────────────────────────────
+  chromatic-playwright:
+    name: Chromatic — Playwright Visual Snapshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Run after chromatic-upload so baselines exist before playwright snapshots
+    needs: chromatic-upload
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Storybook
+        run: npx storybook build --quiet --output-dir storybook-static
+        env:
+          VITE_SUPABASE_URL: https://placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: placeholder-anon-key
+          VITE_API_BASE_URL: https://placeholder-api.example.com
+          VITE_USE_MOCK: 'true'
+          VITE_FACTORY_API_BASE: https://placeholder-factory.example.com
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright visual tests
+        run: npx playwright test
+        env:
+          CI: 'true'
+          VITE_USE_MOCK: 'true'
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: playwright-visual-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Upload snapshots to Chromatic (playwright mode)
+        run: npx chromatic --playwright --project-token=${{ secrets.CHROMATIC_PROJECT_TOKEN }} --exit-zero-on-changes
+        env:
+          VITE_USE_MOCK: 'true'
 
   # ────────────────────────────────────────────────────────────────────────────
   # chromatic-storybook-verify
