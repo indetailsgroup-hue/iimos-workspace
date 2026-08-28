@@ -19,8 +19,8 @@ The audit identified **3 critical isolation gaps**, **7 cross-tenant data leaks*
 |---|---------|---------|-------|-----------|
 | F1 | **CRITICAL** | `customer`, `job`, `job_panel`, `quotation`, `quotation_line`, `invoice`, `invoice_payment` | `USING (true)` SELECT — cross-tenant data leak for all authenticated users | `0172_jobs_quotations_invoices.sql` |
 | F2 | **CRITICAL** | `public.org_invitations` | No RLS enabled — any authenticated user can enumerate all invitations for all orgs | `20260828_multi_tenant_schema.sql` |
-| F3 | **HIGH** | `notification_digest_queue` | No RLS enabled — contains `user_id` and `org_id` but no policy restricts access | `20260828_notifications_super_admin.sql` |
-| F4 | **MEDIUM** | `platform_metrics_snapshots` | No RLS enabled — exposes aggregate tenant metrics (MRR, tenant count, churn) to any authenticated user | `20260828_notifications_super_admin.sql` |
+| F3 | ~~**HIGH**~~ ✅ **FIXED** | `notification_digest_queue` | No RLS enabled — contains `user_id` and `org_id` but no policy restricts access | `20260828_notifications_super_admin.sql` → **fixed by `0178_notification_platform_metrics_rls.sql`** |
+| F4 | ~~**MEDIUM**~~ ✅ **FIXED** | `platform_metrics_snapshots` | No RLS enabled — exposes aggregate tenant metrics (MRR, tenant count, churn) to any authenticated user | `20260828_notifications_super_admin.sql` → **fixed by `0178_notification_platform_metrics_rls.sql`** |
 | F5 | ~~**MEDIUM**~~ ✅ **FIXED** | `audit_logs` | `Service role inserts audit logs` uses `WITH CHECK (true)` — any service-role caller can insert audit records without constraint | `20260828_audit_log_usage_metering.sql` → **fixed by `0177_audit_log_insert_hardening.sql`** |
 | F6 | **LOW** | `job`, `invoice` (legacy) | Added to `supabase_realtime` publication without org_id column — Realtime events are not tenant-scoped and can be observed cross-tenant via channel subscription | `0172_jobs_quotations_invoices.sql` |
 
@@ -173,89 +173,32 @@ CREATE POLICY "invitations_manage_admin" ON public.org_invitations
 
 ---
 
-### F3 — HIGH: `notification_digest_queue` Has No RLS
+### F3 — ✅ FIXED: `notification_digest_queue` Has No RLS
 **Migration:** `20260828_notifications_super_admin.sql`
-**Severity:** High
+**Severity:** High → **Fixed by `0178_notification_platform_metrics_rls.sql` (2026-08-28)**
+**Issue:** `#49`
 
-**The problem:**
-
-```sql
-CREATE TABLE IF NOT EXISTS notification_digest_queue (
-  id UUID PRIMARY KEY,
-  user_id UUID NOT NULL,
-  org_id UUID NOT NULL REFERENCES organizations(id),
-  notification_ids UUID[] NOT NULL,
-  frequency TEXT NOT NULL,
-  scheduled_at TIMESTAMPTZ NOT NULL,
-  sent_at TIMESTAMPTZ,
-  ...
-);
--- No ENABLE ROW LEVEL SECURITY
-```
-
-The table stores pending notification digests with `user_id` and `org_id`, but has no RLS. Any authenticated user can enumerate what notifications are queued for other users and orgs.
-
-**Remediation:**
-
-```sql
-ALTER TABLE notification_digest_queue ENABLE ROW LEVEL SECURITY;
-
--- Users can only see their own digest queue entries
-CREATE POLICY "digest_queue_own_user" ON notification_digest_queue
-  FOR SELECT USING (user_id = auth.uid());
-
--- Worker (service role) manages all entries — service_role bypasses RLS
--- No insert/update/delete policy needed for regular users
--- If workers run as authenticated users, add:
--- CREATE POLICY "digest_queue_worker_write" ON notification_digest_queue
---   FOR ALL USING (is_worker_role());
-```
+**Fix applied:**
+- `ALTER TABLE notification_digest_queue ENABLE ROW LEVEL SECURITY`
+- `digest_queue_own_user_select` SELECT policy: `USING (user_id = auth.uid())`
+- Background workers execute as `service_role` → bypass RLS automatically
+- pgTAP suite: `supabase/tests/0178_notification_platform_metrics_rls.sql` (T-F3-01→T-F3-05)
+- Rollback: `0178_rollback.sql`
 
 ---
 
-### F4 — MEDIUM: `platform_metrics_snapshots` Has No RLS
+### F4 — ✅ FIXED: `platform_metrics_snapshots` Has No RLS
 **Migration:** `20260828_notifications_super_admin.sql`
-**Severity:** Medium
+**Severity:** Medium → **Fixed by `0178_notification_platform_metrics_rls.sql` (2026-08-28)**
+**Issue:** `#50`
 
-**The problem:**
-
-```sql
-CREATE TABLE IF NOT EXISTS platform_metrics_snapshots (
-  id UUID PRIMARY KEY,
-  snapshot_date DATE NOT NULL UNIQUE,
-  total_tenants INTEGER,
-  active_tenants INTEGER,
-  suspended_tenants INTEGER,
-  trial_tenants INTEGER,
-  mrr_thb NUMERIC(12,2),   -- Monthly Recurring Revenue
-  total_jobs_month INTEGER,
-  plan_distribution JSONB,
-  new_tenants INTEGER,
-  churned_tenants INTEGER,
-  ...
-);
--- No ENABLE ROW LEVEL SECURITY
-```
-
-This table holds sensitive business metrics including MRR, churn, and tenant counts. Currently accessible by any authenticated user.
-
-**Remediation:**
-
-```sql
-ALTER TABLE platform_metrics_snapshots ENABLE ROW LEVEL SECURITY;
-
--- Only super admins can read platform metrics
-CREATE POLICY "platform_metrics_super_admin_only" ON platform_metrics_snapshots
-  FOR SELECT USING (
-    EXISTS (SELECT 1 FROM super_admins WHERE user_id = auth.uid())
-  );
-
--- Only super admins / service role can insert
-CREATE POLICY "platform_metrics_insert_super_admin" ON platform_metrics_snapshots
-  FOR INSERT WITH CHECK (
-    EXISTS (SELECT 1 FROM super_admins WHERE user_id = auth.uid())
-  );
-```
+**Fix applied:**
+- `ALTER TABLE platform_metrics_snapshots ENABLE ROW LEVEL SECURITY`
+- `platform_metrics_super_admin_select` SELECT policy: `USING (is_platform_super_admin())`
+- `platform_metrics_super_admin_insert` INSERT policy: `WITH CHECK (is_platform_super_admin())`
+- Daily aggregation cron runs as `service_role` → bypasses RLS automatically
+- pgTAP suite: `supabase/tests/0178_notification_platform_metrics_rls.sql` (T-F4-01→T-F4-05)
+- Rollback: `0178_rollback.sql`
 
 ---
 
@@ -340,8 +283,8 @@ Priority 1 (Immediate — stop active data leak)
   F6: Remove legacy job/invoice from supabase_realtime publication
 
 Priority 2 (Within 48 hours)
-  F3: Enable RLS on notification_digest_queue → add user-scoped policy
-  F4: Enable RLS on platform_metrics_snapshots → restrict to super_admins
+  F3: ✅ FIXED — 0178_notification_platform_metrics_rls.sql (2026-08-28) — issue #49
+  F4: ✅ FIXED — 0178_notification_platform_metrics_rls.sql (2026-08-28) — issue #50
 
 Priority 3 (Within 1 week)
   F5: ✅ FIXED — 0177_audit_log_insert_hardening.sql (2026-08-28) — issue #48
