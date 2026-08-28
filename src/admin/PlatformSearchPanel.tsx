@@ -1,8 +1,8 @@
 /**
  * PlatformSearchPanel — Super Admin global search UI
  * Searches across jobs, members, and invoices for all tenants
- * Supports keyboard navigation (Arrow Up/Down + Enter)
- * v16.6.0
+ * Supports keyboard navigation, autocomplete, and bookmarks
+ * v16.8.0
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
@@ -13,6 +13,14 @@ import {
   SearchResult,
   SearchEntityType,
 } from './platformSearch';
+import { AutocompleteDropdown } from './AutocompleteDropdown';
+import { BookmarkPanel } from './BookmarkPanel';
+import {
+  getCombinedSuggestions,
+  addRecentSearch,
+  clearRecentSearches,
+  type CombinedSuggestions,
+} from './searchAutocomplete';
 
 // ─── Sub-Components ──────────────────────────────────────────────────────────
 
@@ -159,11 +167,14 @@ export interface PlatformSearchPanelProps {
   onNavigate?: (url: string) => void;
   /** For testing: inject search function */
   searchFn?: (options: PlatformSearchOptions) => Promise<PlatformSearchResponse>;
+  /** Show bookmarks section */
+  showBookmarks?: boolean;
 }
 
 export function PlatformSearchPanel({
   onNavigate = () => {},
   searchFn = platformSearch,
+  showBookmarks = true,
 }: PlatformSearchPanelProps) {
   const [query, setQuery] = useState('');
   const [activeTypes, setActiveTypes] = useState<SearchEntityType[]>([
@@ -176,8 +187,19 @@ export function PlatformSearchPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState<number>(-1);
+
+  // Autocomplete state
+  const [suggestions, setSuggestions] = useState<CombinedSuggestions>({ recent: [], popular: [] });
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [autocompleteIndex, setAutocompleteIndex] = useState(-1);
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autocompleteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const totalSuggestionCount = suggestions.recent.length + suggestions.popular.length;
+
+  // ─── Search Execution ─────────────────────────────────────────────
 
   const executeSearch = useCallback(
     async (searchQuery: string, types: SearchEntityType[], orgId?: string) => {
@@ -198,7 +220,8 @@ export function PlatformSearchPanel({
           limit: 20,
         });
         setResponse(result);
-        setActiveIndex(-1); // Reset active index on new results
+        setActiveIndex(-1);
+        addRecentSearch(searchQuery.trim());
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Search failed');
         setResponse(null);
@@ -213,12 +236,47 @@ export function PlatformSearchPanel({
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      executeSearch(query, activeTypes, selectedOrg);
+      if (query.trim()) {
+        executeSearch(query, activeTypes, selectedOrg);
+      } else {
+        setResponse(null);
+      }
     }, 300);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [query, activeTypes, selectedOrg, executeSearch]);
+
+  // ─── Autocomplete Fetching ────────────────────────────────────────
+
+  useEffect(() => {
+    if (autocompleteRef.current) clearTimeout(autocompleteRef.current);
+
+    if (!query.trim() || query.trim().length < 2) {
+      setSuggestions({ recent: [], popular: [] });
+      setShowAutocomplete(false);
+      return;
+    }
+
+    autocompleteRef.current = setTimeout(async () => {
+      try {
+        const combined = await getCombinedSuggestions(query.trim());
+        setSuggestions(combined);
+        // Show autocomplete only when there are no results yet (user is still typing)
+        if (!response || response.results.length === 0) {
+          setShowAutocomplete(true);
+        }
+      } catch {
+        // Silently fail
+      }
+    }, 150);
+
+    return () => {
+      if (autocompleteRef.current) clearTimeout(autocompleteRef.current);
+    };
+  }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Handlers ─────────────────────────────────────────────────────
 
   const handleToggleType = (type: SearchEntityType) => {
     setActiveTypes((prev) =>
@@ -226,9 +284,77 @@ export function PlatformSearchPanel({
     );
   };
 
+  const handleSelectSuggestion = (suggestionQuery: string) => {
+    setQuery(suggestionQuery);
+    setShowAutocomplete(false);
+    setAutocompleteIndex(-1);
+    executeSearch(suggestionQuery, activeTypes, selectedOrg);
+  };
+
+  const handleClearRecent = () => {
+    clearRecentSearches();
+    setSuggestions((prev) => ({ ...prev, recent: [] }));
+  };
+
+  const handleBookmarkExecute = (bookmarkQuery: string, entityTypes: string[]) => {
+    setQuery(bookmarkQuery);
+    const types = entityTypes.filter((t): t is SearchEntityType =>
+      ['job', 'member', 'invoice'].includes(t)
+    );
+    if (types.length > 0) setActiveTypes(types);
+    executeSearch(bookmarkQuery, types.length > 0 ? types : activeTypes, selectedOrg);
+  };
+
   const resultCount = response?.results.length || 0;
 
+  // ─── Keyboard Navigation ──────────────────────────────────────────
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // When autocomplete dropdown is showing, keyboard controls it
+    if (showAutocomplete && totalSuggestionCount > 0) {
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          setAutocompleteIndex((prev) => {
+            const next = prev + 1;
+            return next >= totalSuggestionCount ? 0 : next;
+          });
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setAutocompleteIndex((prev) => {
+            const next = prev - 1;
+            return next < 0 ? totalSuggestionCount - 1 : next;
+          });
+          break;
+        case 'Enter':
+          e.preventDefault();
+          if (autocompleteIndex >= 0) {
+            const allItems = [
+              ...suggestions.recent,
+              ...suggestions.popular.map((s) => s.query),
+            ];
+            if (allItems[autocompleteIndex]) {
+              handleSelectSuggestion(allItems[autocompleteIndex]);
+            }
+          } else {
+            // Execute current query directly
+            setShowAutocomplete(false);
+            executeSearch(query, activeTypes, selectedOrg);
+          }
+          break;
+        case 'Escape':
+          e.preventDefault();
+          setShowAutocomplete(false);
+          setAutocompleteIndex(-1);
+          break;
+        default:
+          break;
+      }
+      return;
+    }
+
+    // Regular results keyboard navigation
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
@@ -254,25 +380,58 @@ export function PlatformSearchPanel({
         setQuery('');
         setResponse(null);
         setActiveIndex(-1);
+        setShowAutocomplete(false);
         break;
     }
   };
 
+  const handleInputFocus = () => {
+    if (query.trim().length >= 2 && totalSuggestionCount > 0 && !response) {
+      setShowAutocomplete(true);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setQuery(e.target.value);
+    setShowAutocomplete(true);
+  };
+
   return (
     <div className="w-full max-w-2xl mx-auto" data-testid="platform-search-panel">
+      {/* Bookmarks Section */}
+      {showBookmarks && (
+        <div className="mb-4" data-testid="bookmarks-section">
+          <BookmarkPanel
+            onExecuteBookmark={handleBookmarkExecute}
+            currentQuery={query}
+          />
+        </div>
+      )}
+
       {/* Search Input */}
       <div className="relative">
         <input
           ref={inputRef}
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={handleInputChange}
           onKeyDown={handleKeyDown}
+          onFocus={handleInputFocus}
+          onBlur={() => {
+            // Delay hide so click events on dropdown can fire
+            setTimeout(() => setShowAutocomplete(false), 200);
+          }}
           placeholder="Search jobs, members, invoices across all tenants..."
           className="w-full px-4 py-3 pl-10 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
           aria-label="Platform search"
-          aria-expanded={!!response && query.trim().length > 0}
-          aria-activedescendant={activeIndex >= 0 ? `search-result-option-${activeIndex}` : undefined}
+          aria-expanded={showAutocomplete || (!!response && query.trim().length > 0)}
+          aria-activedescendant={
+            showAutocomplete && autocompleteIndex >= 0
+              ? `autocomplete-option-${autocompleteIndex}`
+              : activeIndex >= 0
+                ? `search-result-option-${activeIndex}`
+                : undefined
+          }
           aria-controls="search-results-listbox"
           role="combobox"
           aria-autocomplete="list"
@@ -287,6 +446,16 @@ export function PlatformSearchPanel({
             ⏳
           </span>
         )}
+
+        {/* Autocomplete Dropdown */}
+        <AutocompleteDropdown
+          recent={suggestions.recent}
+          popular={suggestions.popular}
+          visible={showAutocomplete && !response}
+          activeIndex={autocompleteIndex}
+          onSelect={handleSelectSuggestion}
+          onClearRecent={handleClearRecent}
+        />
       </div>
 
       {/* Keyboard hint */}

@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchSearchAnalytics, SearchAnalyticsData } from './searchAnalytics';
+import { downloadSearchAnalyticsCsv, type SearchAnalyticsExportData } from './csvExport';
 
 // ─── KPI Card ────────────────────────────────────────────────────────────────
 
@@ -157,6 +158,9 @@ export function SearchAnalyticsDashboard({
   const [daysBack, setDaysBack] = useState(30);
   const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState<string | null>(null);
+  const [exportDateFrom, setExportDateFrom] = useState('');
+  const [exportDateTo, setExportDateTo] = useState('');
+  const [showExportPanel, setShowExportPanel] = useState(false);
 
   useEffect(() => {
     if (initialData) return;
@@ -210,6 +214,50 @@ export function SearchAnalyticsDashboard({
 
   if (!data) return null;
 
+  // ─── CSV Export Handler ─────────────────────────────────────────────
+
+  const handleCsvExport = () => {
+    if (!data) return;
+
+    // Filter daily volume by date range if specified
+    let filteredDailyVolume = data.searchesPerDay;
+    if (exportDateFrom || exportDateTo) {
+      filteredDailyVolume = data.searchesPerDay.filter((d) => {
+        if (exportDateFrom && d.date < exportDateFrom) return false;
+        if (exportDateTo && d.date > exportDateTo) return false;
+        return true;
+      });
+    }
+
+    // Compute filtered KPIs based on date range
+    const filteredTotal = exportDateFrom || exportDateTo
+      ? filteredDailyVolume.reduce((sum, d) => sum + d.count, 0)
+      : data.totalSearches;
+
+    const exportData: SearchAnalyticsExportData = {
+      kpis: {
+        totalSearches: filteredTotal,
+        uniqueUsers: data.uniqueUsers,
+        avgResultsPerSearch: data.avgResultCount,
+        zeroResultRate: data.zeroResultRate / 100, // Convert % to ratio
+      },
+      topQueries: data.topQueries.map((q) => ({
+        query: q.query,
+        count: q.count,
+        avgResults: Math.round(data.avgResultCount),
+      })),
+      dailyVolume: filteredDailyVolume.map((d) => ({
+        date: d.date,
+        searches: d.count,
+      })),
+    };
+
+    const dateRangeSuffix = exportDateFrom || exportDateTo
+      ? `_${exportDateFrom || 'start'}_to_${exportDateTo || 'end'}`
+      : `_last-${daysBack}d`;
+    downloadSearchAnalyticsCsv(exportData, `search-analytics${dateRangeSuffix}.csv`);
+  };
+
   return (
     <div className="space-y-6" data-testid="search-analytics-dashboard">
       {/* Header */}
@@ -218,23 +266,78 @@ export function SearchAnalyticsDashboard({
           <h2 className="text-lg font-bold text-gray-900">🔍 Search Analytics</h2>
           <p className="text-xs text-gray-500">Platform-wide search usage and performance</p>
         </div>
-        <div className="flex gap-2">
-          {[7, 14, 30, 90].map((days) => (
-            <button
-              key={days}
-              onClick={() => setDaysBack(days)}
-              className={`px-3 py-1 rounded text-xs font-medium ${
-                daysBack === days
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-              data-testid={`period-${days}d`}
-            >
-              {days}d
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          {/* Period buttons */}
+          <div className="flex gap-2">
+            {[7, 14, 30, 90].map((days) => (
+              <button
+                key={days}
+                onClick={() => setDaysBack(days)}
+                className={`px-3 py-1 rounded text-xs font-medium ${
+                  daysBack === days
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                data-testid={`period-${days}d`}
+              >
+                {days}d
+              </button>
+            ))}
+          </div>
+          {/* Export button */}
+          <button
+            onClick={() => setShowExportPanel((v) => !v)}
+            className="px-3 py-1 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+            data-testid="csv-export-toggle"
+            aria-label="Export CSV"
+          >
+            📥 Export CSV
+          </button>
         </div>
       </div>
+
+      {/* Export Panel (date-range filtering) */}
+      {showExportPanel && (
+        <div
+          className="p-4 bg-gray-50 border border-gray-200 rounded-lg flex items-end gap-4 flex-wrap"
+          data-testid="csv-export-panel"
+        >
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">From</label>
+            <input
+              type="date"
+              value={exportDateFrom}
+              onChange={(e) => setExportDateFrom(e.target.value)}
+              className="px-2 py-1 border border-gray-300 rounded text-xs"
+              data-testid="export-date-from"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">To</label>
+            <input
+              type="date"
+              value={exportDateTo}
+              onChange={(e) => setExportDateTo(e.target.value)}
+              className="px-2 py-1 border border-gray-300 rounded text-xs"
+              data-testid="export-date-to"
+            />
+          </div>
+          <button
+            onClick={handleCsvExport}
+            className="px-4 py-1.5 rounded text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
+            data-testid="csv-export-download"
+          >
+            Download CSV
+          </button>
+          <button
+            onClick={() => { setExportDateFrom(''); setExportDateTo(''); }}
+            className="px-3 py-1.5 rounded text-xs font-medium bg-gray-200 text-gray-600 hover:bg-gray-300"
+            data-testid="csv-export-clear-dates"
+          >
+            Clear Dates
+          </button>
+        </div>
+      )}
 
       {/* KPI Grid */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3" data-testid="kpi-grid">
