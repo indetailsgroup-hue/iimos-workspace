@@ -79,6 +79,12 @@ const OrgSettingsPageComponent = lazy(() =>
 const BillingPageComponent = lazy(() =>
   import('../tenant/BillingPage').then(m => ({ default: m.BillingPage }))
 );
+const AuditLogViewerComponent = lazy(() =>
+  import('../tenant/AuditLogViewer').then(m => ({ default: m.AuditLogViewer }))
+);
+const UsageDashboardComponent = lazy(() =>
+  import('../tenant/UsageDashboard').then(m => ({ default: m.UsageDashboard }))
+);
 
 // v15: Quotation builder
 const QuotationBuilderPage = lazy(() =>
@@ -1185,6 +1191,28 @@ export const router = createBrowserRouter([
       <RequireRole allow={['OWNER']}>
         <Suspense fallback={<PageLoadingFallback message="Loading Billing…" />}>
           <BillingPageComponent />
+        </Suspense>
+      </RequireRole>
+    ),
+  },
+  // v16.2: Audit Log — OWNER/ADMIN only
+  {
+    path: '/settings/audit-log',
+    element: (
+      <RequireRole allow={['OWNER', 'ADMIN']}>
+        <Suspense fallback={<PageLoadingFallback message="Loading Audit Log…" />}>
+          <AuditLogViewerComponent />
+        </Suspense>
+      </RequireRole>
+    ),
+  },
+  // v16.2: Usage Dashboard — OWNER/ADMIN only
+  {
+    path: '/settings/usage',
+    element: (
+      <RequireRole allow={['OWNER', 'ADMIN']}>
+        <Suspense fallback={<PageLoadingFallback message="Loading Usage…" />}>
+          <UsageDashboardComponent />
         </Suspense>
       </RequireRole>
     ),

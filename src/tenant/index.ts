@@ -153,3 +153,40 @@ export type {
   AuditLogFilters,
   AuditLogPage,
 } from './auditLog';
+
+// Audit Log Viewer
+export { AuditLogViewer } from './AuditLogViewer';
+export type { AuditLogViewerProps } from './AuditLogViewer';
+
+// Usage Dashboard
+export { UsageDashboard } from './UsageDashboard';
+export type { UsageDashboardProps } from './UsageDashboard';
+
+// Grace Period
+export {
+  DEFAULT_GRACE_CONFIG,
+  CANCELLATION_REMINDER_DAYS,
+  EMAIL_TEMPLATES,
+  calculateGraceExpiry,
+  getRemainingGraceDays,
+  isGracePeriodExpired,
+  getNextReminder,
+  createGracePeriod,
+  resolveGracePeriod,
+  expireGracePeriod,
+  buildGraceStartEmail,
+  buildGraceReminderEmail,
+  buildDowngradeEmail,
+  buildCancellationReminderEmail,
+  buildPaymentSuccessEmail,
+  processGracePeriods,
+  generateGracePeriodCronSql,
+  generateGracePeriodMigration,
+} from './gracePeriod';
+export type {
+  GracePeriodConfig,
+  GracePeriodState,
+  EmailNotification,
+  NotificationTemplate,
+  GraceAction,
+} from './gracePeriod';
