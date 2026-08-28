@@ -1,0 +1,1062 @@
+# .github/workflows/verify-digital-shadow.yml
+#
+# Five CI gates for the Digital Shadow Service backend, triggered on every PR
+# and direct push to `feat/digital-shadow-integration`:
+#
+#   lint                   — ESLint + TypeScript type-check; fails fast before
+#                            any test job runs so type + style errors surface first
+#   integration-tests      — Hono + ioredis integration specs against real Redis
+#   feature-cache-coverage — FeatureCacheService unit tests with ≥80% coverage
+#   post-coverage-badge    — Posts a coverage badge + per-method table as a PR comment
+#   e2e-backend-gate       — Playwright (Chromium) e2e gate after integration-tests pass
+#   notify-slack-on-failure       — Slack alert when e2e-backend-gate OR feature-cache-coverage fails
+#   notify-slack-on-success       — Slack alert (with coverage %) when all four gates pass
+#   notify-coverage-badge-failure — Slack alert when post-coverage-badge fails to parse/post artifact
+#
+# Job dependency graph:
+#   lint ──► integration-tests ──► e2e-backend-gate ──► notify-slack-on-failure (on failure)
+#        │                      │                    └─► notify-slack-on-success  (on all pass)
+#        └─► feature-cache-coverage ──► post-coverage-badge ──► notify-coverage-badge-failure (on failure)
+#                               │   └─► notify-slack-on-failure (on failure)
+#                               └──────► notify-slack-on-success (on all pass)
+#
+# Concurrency:
+#   A `concurrency` group keyed on workflow + ref cancels the in-progress run
+#   when a new push arrives on the same branch, preventing stale runs from
+#   holding Redis service containers open unnecessarily.
+#
+# Infrastructure:
+#   integration-tests uses a Redis 7 Alpine service container; ioredis connects
+#   to it via REDIS_URL.  feature-cache-coverage does NOT need Redis — those
+#   tests use vi.hoisted() ioredis mocks and run fully in-process.
+#
+# Design notes:
+#   • The lint job is a fast (<2 min) gate that blocks both test jobs on any
+#     ESLint error, preventing wasteful test runs against syntactically broken code.
+#   • Uses `npx vitest run` directly to avoid needing a workspace-level script.
+#   • Coverage is collected with the V8 provider (zero native overhead) scoped
+#     to FeatureCacheService.ts only; thresholds apply to that file alone so a
+#     partial test for an unrelated file cannot inflate or deflate the gate.
+#   • Three reporters: `text` (console summary), `json-summary` (badge metrics),
+#     `json` (per-function hit counts for the per-method PR table).
+#   • @vitest/coverage-v8 is installed with `--no-save` before the coverage
+#     run — safe even if it is already in package-lock.json (npm will no-op).
+
+name: Digital Shadow — Backend Integration Tests
+
+# Cancel any in-progress run for the same branch when a new push arrives.
+# Keyed on workflow name + ref so PR runs and branch runs are independent groups.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  # Manual trigger from the GitHub Actions UI — useful for re-running the
+  # backend gate after a Redis infrastructure change or a token rotation
+  # without touching source files.
+  workflow_dispatch:
+
+  pull_request:
+    branches:
+      - feat/digital-shadow-integration
+    paths:
+      - 'packages/digital-shadow-service/**'
+      - '.github/workflows/verify-digital-shadow.yml'
+  push:
+    branches:
+      - feat/digital-shadow-integration
+    paths:
+      - 'packages/digital-shadow-service/**'
+      - '.github/workflows/verify-digital-shadow.yml'
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Gate 1: ESLint + TypeScript type-check — fast fail before any test job runs
+  #
+  # Two sequential steps in one job:
+  #   1. `npm run lint`      — ESLint style/import/rule violations
+  #   2. `npm run typecheck` — tsc --noEmit across the full workspace
+  #
+  # Both `integration-tests` and `feature-cache-coverage` declare `needs: [lint]`
+  # so any style or type error cancels the slower jobs immediately.
+  # ────────────────────────────────────────────────────────────────────────────
+  lint:
+    name: ESLint & TypeScript Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # Step 1: ESLint — catches style, import, and rule violations.
+      # `--max-warnings 0` treats every warning as an error so the gate is strict.
+      # Remove the flag if the workspace has accepted warnings.
+      - name: Run ESLint
+        run: npm run lint
+        env:
+          CI: 'true'
+
+      # Step 2: TypeScript type-check — runs tsc --noEmit across the workspace.
+      # Runs AFTER ESLint so both error classes are reported in the same job
+      # rather than requiring two separate reruns.  A type error here surfaces
+      # before the heavier `typescript-build` job in playwright-e2e.yml and
+      # before the integration-tests and feature-cache-coverage jobs that depend
+      # on this lint gate — catching breakage as early and cheaply as possible.
+      - name: Run TypeScript type-check
+        run: npm run typecheck
+        env:
+          CI: 'true'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Gate 2: Hono integration tests against live Redis
+  # ────────────────────────────────────────────────────────────────────────────
+  integration-tests:
+    name: Backend Integration Tests (Node + Redis)
+    needs: [lint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # ── Service containers ───────────────────────────────────────────────────
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # Confirm the service container is reachable before handing off to Vitest.
+      - name: Verify Redis connectivity
+        run: redis-cli -h 127.0.0.1 -p 6379 ping
+
+      # Targets only the integration folder so the job stays focused and fast.
+      # REDIS_URL   → picked up by ioredis / FeatureCacheService config
+      # NODE_ENV    → disables any dev-only guards in the service layer
+      # SHADOW_PORT → prevents port collisions with other system processes
+      - name: Run backend integration tests
+        run: >
+          npx vitest run
+          --reporter=verbose
+          packages/digital-shadow-service/tests/integration
+        env:
+          CI: 'true'
+          NODE_ENV: 'test'
+          REDIS_URL: 'redis://127.0.0.1:6379'
+          SHADOW_PORT: '3199'
+
+      - name: Upload test results (JSON)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results-${{ github.run_id }}
+          path: test-results/
+          retention-days: 14
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Gate 3: FeatureCacheService unit tests + ≥80% coverage threshold
+  #
+  # Runs all three FeatureCacheService test files:
+  #   • FeatureCacheService.getAggregatedHealth.test.ts
+  #   • FeatureCacheService.getOldestTimestamp.test.ts
+  #   • FeatureCacheService.refreshTTL.test.ts
+  #
+  # Coverage is scoped to FeatureCacheService.ts only (--coverage.include).
+  # Thresholds apply per-file (--coverage.perFile=true) so the gate catches
+  # regressions in the specific methods being reviewed, not the average.
+  # ────────────────────────────────────────────────────────────────────────────
+  feature-cache-coverage:
+    name: FeatureCacheService Coverage (≥80%)
+    needs: [lint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # Ensure the V8 coverage provider is available.
+      # This is a no-op if @vitest/coverage-v8 is already in package-lock.json.
+      - name: Ensure @vitest/coverage-v8 is available
+        run: npm install --no-save @vitest/coverage-v8
+
+      # Run only the three FeatureCacheService test files.
+      # Coverage is collected for the source file only; the job exits non-zero
+      # if any threshold (lines | functions | branches | statements) < 80%.
+      - name: Run FeatureCacheService tests with coverage
+        run: >
+          npx vitest run
+          --reporter=verbose
+          --coverage.enabled=true
+          --coverage.provider=v8
+          --coverage.include="packages/digital-shadow-service/src/services/FeatureCacheService.ts"
+          --coverage.perFile=true
+          --coverage.thresholds.lines=80
+          --coverage.thresholds.functions=80
+          --coverage.thresholds.branches=80
+          --coverage.thresholds.statements=80
+          --coverage.reporter=text
+          --coverage.reporter=json-summary
+          --coverage.reporter=json
+          "packages/digital-shadow-service/src/services/FeatureCacheService.*.test.ts"
+        env:
+          CI: 'true'
+          NODE_ENV: 'test'
+
+      # Upload the coverage summary so the PR diff can show line-level coverage.
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-cache-coverage-${{ github.run_id }}
+          path: coverage/
+          retention-days: 14
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Gate 4: Post coverage badge comment to PR
+  #
+  # Downloads the json-summary + json artifact from `feature-cache-coverage`,
+  # parses both files via actions/github-script, and upserts a PR comment with:
+  #
+  #   1. Summary badge table (from coverage-summary.json):
+  #        Metric | Coverage
+  #        🟢 ≥90%  🟡 ≥80%  🔴 <80%
+  #
+  #   2. Per-method breakdown table (from coverage.json Istanbul fnMap/f):
+  #        Method | Calls | Covered
+  #      Lists every exported function in FeatureCacheService.ts with its
+  #      invocation count so reviewers can spot uncovered branches at a glance.
+  #
+  # Runs `if: always()` so the badge posts even when the coverage gate fails.
+  # Only runs on pull_request events — direct pushes have no PR to comment on.
+  # ────────────────────────────────────────────────────────────────────────────
+  post-coverage-badge:
+    name: Post Coverage Badge to PR
+    needs: [feature-cache-coverage]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Download coverage summary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: feature-cache-coverage-${{ github.run_id }}
+          path: coverage/
+
+      - name: Parse coverage and post PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs   = require('fs');
+            const path = require('path');
+
+            // ── Helpers ─────────────────────────────────────────────────────
+            function badge(pct) {
+              if (pct === undefined || pct === null) return '⚪';
+              if (pct >= 90) return '🟢';
+              if (pct >= 80) return '🟡';
+              return '🔴';
+            }
+
+            function coveredIcon(calls) {
+              return calls > 0 ? '✅' : '❌';
+            }
+
+            // ── 1. Parse coverage-summary.json (metric totals) ───────────────
+            const summaryPath = path.join('coverage', 'coverage-summary.json');
+            let summaryRows = '_coverage-summary.json not found_';
+            let allPass = false;
+            let gateStatus = '⚪ Coverage gate status unknown';
+
+            if (fs.existsSync(summaryPath)) {
+              const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+              const totals  = summary.total ?? {};
+              const metrics = {
+                Statements: totals.statements?.pct,
+                Branches:   totals.branches?.pct,
+                Functions:  totals.functions?.pct,
+                Lines:      totals.lines?.pct,
+              };
+
+              summaryRows = Object.entries(metrics)
+                .map(([name, pct]) => {
+                  const display = pct !== undefined ? `${pct.toFixed(1)} %` : 'n/a';
+                  return `| ${badge(pct)} ${name} | ${display} |`;
+                })
+                .join('\n');
+
+              allPass = Object.values(metrics).every(p => p === undefined || p >= 80);
+              gateStatus = allPass
+                ? '✅ **Coverage gate passed** (all metrics ≥ 80 %)'
+                : '❌ **Coverage gate failed** — one or more metrics dropped below 80 %';
+            } else {
+              core.warning('coverage-summary.json not found');
+            }
+
+            // ── 2. Parse coverage.json (per-function hit counts) ────────────
+            // Istanbul JSON format (emitted by @vitest/coverage-v8 with --coverage.reporter=json):
+            // {
+            //   "path/to/FeatureCacheService.ts": {
+            //     "fnMap": { "0": { "name": "getAggregatedHealth", ... }, ... },
+            //     "f":     { "0": 5, ... }   ← invocation counts per fnMap key
+            //   }
+            // }
+            const jsonPath = path.join('coverage', 'coverage.json');
+            let methodSection = '';
+
+            if (fs.existsSync(jsonPath)) {
+              const raw  = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+
+              // Find the FeatureCacheService.ts entry regardless of absolute path prefix.
+              const fileKey = Object.keys(raw).find(k =>
+                k.endsWith('FeatureCacheService.ts')
+              );
+
+              if (fileKey) {
+                const fileData = raw[fileKey];
+                const fnMap    = fileData.fnMap ?? {};
+                const fHits    = fileData.f     ?? {};
+
+                // Build sorted list: skip anonymous or internal helpers whose
+                // name starts with '<' (Istanbul anonymous markers).
+                const methods = Object.entries(fnMap)
+                  .filter(([, fn]) => fn.name && !fn.name.startsWith('<'))
+                  .sort(([a], [b]) => Number(a) - Number(b))
+                  .map(([idx, fn]) => {
+                    const calls = fHits[idx] ?? 0;
+                    return `| \`${fn.name}\` | ${calls} | ${coveredIcon(calls)} |`;
+                  });
+
+                if (methods.length > 0) {
+                  methodSection = [
+                    '',
+                    '<details>',
+                    '<summary><strong>Per-method breakdown</strong> — FeatureCacheService.ts</summary>',
+                    '',
+                    '| Method | Calls | Covered |',
+                    '|--------|------:|:-------:|',
+                    ...methods,
+                    '',
+                    '</details>',
+                  ].join('\n');
+                }
+              } else {
+                core.warning('FeatureCacheService.ts key not found in coverage.json');
+              }
+            } else {
+              core.warning('coverage.json not found — per-method table skipped');
+            }
+
+            // ── 3. Compose the full comment body ─────────────────────────────
+            const body = [
+              '<!-- coverage-badge-comment -->',
+              '## FeatureCacheService — Coverage Report',
+              '',
+              '| Metric | Coverage |',
+              '|--------|----------|',
+              summaryRows,
+              '',
+              gateStatus,
+              methodSection,
+              '',
+              `_Generated for commit \`${{ github.sha }}\` · run [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})_`,
+            ].join('\n');
+
+            // ── 4. Upsert the comment ─────────────────────────────────────────
+            const { data: comments } = await github.rest.issues.listComments({
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c =>
+              c.body?.includes('<!-- coverage-badge-comment -->')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner:      context.repo.owner,
+                repo:       context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.info(`Updated existing coverage comment #${existing.id}`);
+            } else {
+              await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+              core.info('Created new coverage comment');
+            }
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 5: Playwright E2E — Backend Gate
+  #
+  # Runs the full Digital Shadow e2e suite (Chromium only) after
+  # `integration-tests` passes.  This creates a single end-to-end proof that
+  # backend changes haven't broken the browser-side flow — without duplicating
+  # the full cross-browser matrix that playwright-e2e.yml already owns.
+  #
+  # Design notes:
+  #   • Single browser (Chromium) — this is a backend sanity gate, not a
+  #     cross-browser compatibility run.  The dedicated playwright-e2e.yml
+  #     workflow covers chromium × firefox × webkit on every frontend change.
+  #   • All Digital Shadow API routes are intercepted by page.route() inside
+  #     machine-shadow.spec.ts, so no backend process or Redis service
+  #     container is needed in this job.
+  #   • The Playwright HTML report is always uploaded (if: always()) so
+  #     developers can inspect traces and screenshots when the gate fails.
+  #   • playwright.config.ts webServer block starts the Vite dev server
+  #     automatically when CI=true (reuseExistingServer: !CI), so no manual
+  #     `npm run dev &` step is required.
+  # ────────────────────────────────────────────────────────────────────────────
+  e2e-backend-gate:
+    name: Playwright E2E — Backend Gate (Chromium)
+    needs: [integration-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Install only the Chromium binary + OS-level dependencies.
+      # --with-deps handles libnss3, libatk-bridge2.0-0 etc. on ubuntu-latest.
+      - name: Install Playwright browser (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright e2e tests (Chromium)
+        run: npx playwright test e2e/machine-shadow.spec.ts --project=chromium
+        env:
+          # Vite dev server URL — must match playwright.config.ts webServer.url
+          PLAYWRIGHT_BASE_URL: http://localhost:5173
+
+      # Upload the HTML report on every run (pass or fail) so CI artifacts
+      # include screenshots and traces for post-mortem inspection.
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-backend-gate-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 6: Slack failure notification
+  #
+  # Fires when EITHER `e2e-backend-gate` OR `feature-cache-coverage` fails,
+  # so any backend CI regression triggers an immediate channel alert.
+  #
+  # Design notes:
+  #   • `needs: [e2e-backend-gate, feature-cache-coverage]` declares both
+  #     upstreams; `if: always() && (... == 'failure' || ... == 'failure')`
+  #     fires on failure of either while `always()` prevents GitHub skipping
+  #     this job when an upstream fails.
+  #   • E2E_RESULT / COVERAGE_RESULT are injected as env vars so the Python
+  #     script can build a dynamic list of which jobs actually failed and
+  #     surface that list in the Slack message body.
+  #   • Header text is generic ("Backend CI Gate Failed") rather than hard-
+  #     coding a single job name — the body section lists the specific jobs.
+  #   • Payload is built via Python's stdlib (json + urllib.request) rather
+  #     than inline shell JSON to avoid quoting/escaping issues with branch
+  #     names, actor names, or workflow names that contain special characters.
+  #   • No third-party Slack action is pinned — keeping the dependency surface
+  #     minimal and the job auditable at a glance.
+  #   • SLACK_WEBHOOK_URL must be an Incoming Webhook URL created in Slack's
+  #     App configuration; store it under Settings → Secrets → Actions in the
+  #     GitHub repository as `SLACK_WEBHOOK_URL`.
+  # ────────────────────────────────────────────────────────────────────────────
+  notify-slack-on-failure:
+    name: Slack — Backend CI Failure Alert
+    needs: [e2e-backend-gate, feature-cache-coverage]
+    if: >-
+      always() && (
+        needs.e2e-backend-gate.result      == 'failure' ||
+        needs.feature-cache-coverage.result == 'failure'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Post Slack failure notification
+        env:
+          SLACK_WEBHOOK_URL:   ${{ secrets.SLACK_WEBHOOK_URL }}
+          # GITHUB_TOKEN is the auto-injected token; used to call the jobs API
+          # so the script can resolve each failed job's numeric ID and build a
+          # direct log URL in the format /actions/runs/{run_id}/job/{job_id}.
+          GITHUB_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_SERVER_URL:   ${{ github.server_url }}
+          GITHUB_REPOSITORY:   ${{ github.repository }}
+          GITHUB_RUN_ID:       ${{ github.run_id }}
+          GITHUB_RUN_NUMBER:   ${{ github.run_number }}
+          GITHUB_REF_NAME:     ${{ github.ref_name }}
+          GITHUB_ACTOR:        ${{ github.actor }}
+          GITHUB_WORKFLOW:     ${{ github.workflow }}
+          GITHUB_EVENT_NAME:   ${{ github.event_name }}
+          # Per-job results injected so Python can report which jobs failed
+          E2E_RESULT:          ${{ needs.e2e-backend-gate.result }}
+          COVERAGE_RESULT:     ${{ needs.feature-cache-coverage.result }}
+        run: |
+          python3 - << 'PY'
+          import json, os, sys, urllib.request, urllib.error
+
+          webhook = os.environ.get("SLACK_WEBHOOK_URL", "")
+          if not webhook:
+              print("SLACK_WEBHOOK_URL is not set — skipping notification.")
+              sys.exit(0)
+
+          run_url = (
+              f"{os.environ['GITHUB_SERVER_URL']}/"
+              f"{os.environ['GITHUB_REPOSITORY']}/"
+              f"actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          )
+
+          # ── Which jobs failed? ────────────────────────────────────────────
+          # Keys are the exact `name:` strings used in the YAML so they match
+          # the job names returned by the GitHub /jobs API.
+          JOB_WATCH = {
+              "Playwright E2E — Backend Gate (Chromium)": (
+                  "Playwright E2E — Backend Gate", os.environ.get("E2E_RESULT", "")
+              ),
+              "FeatureCacheService Coverage (≥80%)": (
+                  "FeatureCacheService Coverage", os.environ.get("COVERAGE_RESULT", "")
+              ),
+          }
+          failed = {
+              name: label
+              for name, (label, result) in JOB_WATCH.items()
+              if result == "failure"
+          }
+
+          # ── Resolve direct job-log URLs via the GitHub REST API ───────────
+          # GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs returns each
+          # job's numeric `id`; the browser URL is /actions/runs/{run_id}/job/{id}.
+          github_token = os.environ.get("GITHUB_TOKEN", "")
+          job_log_urls = {}   # job_name (exact YAML name) → direct log URL
+          if github_token:
+              jobs_api = (
+                  f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}"
+                  f"/actions/runs/{os.environ['GITHUB_RUN_ID']}/jobs?per_page=100"
+              )
+              req_api = urllib.request.Request(
+                  jobs_api,
+                  headers={
+                      "Authorization": f"Bearer {github_token}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req_api, timeout=10) as r:
+                      jobs_data = json.loads(r.read().decode("utf-8"))
+                  for job in jobs_data.get("jobs", []):
+                      if job["name"] in failed:
+                          job_log_urls[job["name"]] = (
+                              f"{os.environ['GITHUB_SERVER_URL']}/"
+                              f"{os.environ['GITHUB_REPOSITORY']}/"
+                              f"actions/runs/{os.environ['GITHUB_RUN_ID']}"
+                              f"/job/{job['id']}"
+                          )
+              except Exception as exc:
+                  # Non-fatal: fall back to run-level URL only
+                  print(f"Warning: could not fetch job IDs — {exc}", file=sys.stderr)
+
+          # ── Build Slack payload ───────────────────────────────────────────
+          failed_list = (
+              "\n".join(f"  • {label}" for label in failed.values())
+              or "  • (unknown)"
+          )
+
+          # One "Logs: <label>" button per failed job that resolved a log URL,
+          # plus a fallback "View Run" button always present at the end.
+          log_buttons = [
+              {
+                  "type": "button",
+                  "text": {"type": "plain_text", "text": f"Logs: {failed[name]}"},
+                  "url": url,
+                  "style": "danger",
+              }
+              for name, url in job_log_urls.items()
+              if name in failed
+          ]
+          log_buttons.append({
+              "type": "button",
+              "text": {"type": "plain_text", "text": "View Run"},
+              "url": run_url,
+          })
+
+          payload = {
+              "blocks": [
+                  {
+                      "type": "header",
+                      "text": {
+                          "type": "plain_text",
+                          "text": "❌ Backend CI Gate Failed",
+                          "emoji": True,
+                      },
+                  },
+                  {
+                      "type": "section",
+                      "text": {
+                          "type": "mrkdwn",
+                          "text": f"*Failed jobs:*\n{failed_list}",
+                      },
+                  },
+                  {
+                      "type": "section",
+                      "fields": [
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Branch:*\n`{os.environ['GITHUB_REF_NAME']}`",
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Triggered by:*\n{os.environ['GITHUB_ACTOR']}",
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Workflow:*\n{os.environ['GITHUB_WORKFLOW']}",
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Event:*\n{os.environ['GITHUB_EVENT_NAME']}",
+                          },
+                      ],
+                  },
+                  {
+                      "type": "actions",
+                      "elements": log_buttons,
+                  },
+              ]
+          }
+
+          data = json.dumps(payload).encode("utf-8")
+          req = urllib.request.Request(
+              webhook,
+              data=data,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=10) as resp:
+                  body = resp.read().decode("utf-8")
+                  print(f"Slack responded {resp.status}: {body}")
+          except urllib.error.HTTPError as exc:
+              print(f"Slack HTTP error {exc.code}: {exc.read().decode()}", file=sys.stderr)
+              sys.exit(1)
+          PY
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 7: Slack success notification
+  #
+  # Fires only when ALL four gates (lint, integration-tests,
+  # feature-cache-coverage, e2e-backend-gate) report `success` in the same
+  # run.  Provides a positive signal in the channel so the team knows a PR
+  # is fully green without having to open GitHub.
+  #
+  # Design notes:
+  #   • `needs` lists all four watched jobs so GitHub evaluates their results
+  #     before this job starts.
+  #   • `if: always() && ...` is required for the same reason as the failure
+  #     job: without `always()` GitHub skips downstream jobs when any upstream
+  #     has failed/been-cancelled.
+  #   • The success payload uses `style: primary` (green button) to visually
+  #     distinguish it from the failure alert's `style: danger` (red button).
+  #   • No GITHUB_TOKEN or jobs-API call needed — there are no log links to
+  #     resolve when everything passed.
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 7: Slack success notification
+  #
+  # Fires only when ALL four gates pass.  Downloads the coverage-summary.json
+  # artifact from the feature-cache-coverage job so it can report live
+  # statement / branch / function / line percentages in the Slack message.
+  #
+  # Design notes:
+  #   • `actions/download-artifact@v4` with `continue-on-error: true` means a
+  #     missing artifact (e.g. on workflow_dispatch with no prior coverage run)
+  #     degrades gracefully to "N/A" rather than failing the whole job.
+  #   • Coverage percentages are parsed with jq into GITHUB_OUTPUT vars and
+  #     forwarded to the Python notification step as env vars.
+  #   • The success payload uses `style: primary` (green button) to visually
+  #     distinguish it from the failure alert's `style: danger` (red button).
+  # ────────────────────────────────────────────────────────────────────────────
+  notify-slack-on-success:
+    name: Slack — Backend CI Success Alert
+    needs: [lint, integration-tests, feature-cache-coverage, e2e-backend-gate]
+    if: >-
+      always() &&
+      needs.lint.result                   == 'success' &&
+      needs.integration-tests.result      == 'success' &&
+      needs.feature-cache-coverage.result == 'success' &&
+      needs.e2e-backend-gate.result       == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Download coverage summary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: feature-cache-coverage-${{ github.run_id }}
+          path: coverage-report/
+        # Non-fatal: notification still posts with "N/A" if artifact is absent
+        continue-on-error: true
+
+      - name: Parse coverage percentages
+        id: coverage
+        run: |
+          FILE="coverage-report/coverage-summary.json"
+          if [ -f "$FILE" ]; then
+            echo "lines=$(jq -r '.total.lines.pct'      "$FILE")" >> "$GITHUB_OUTPUT"
+            echo "stmts=$(jq -r '.total.statements.pct' "$FILE")" >> "$GITHUB_OUTPUT"
+            echo "funcs=$(jq -r '.total.functions.pct'  "$FILE")" >> "$GITHUB_OUTPUT"
+            echo "branches=$(jq -r '.total.branches.pct' "$FILE")" >> "$GITHUB_OUTPUT"
+          else
+            echo "lines=N/A"    >> "$GITHUB_OUTPUT"
+            echo "stmts=N/A"    >> "$GITHUB_OUTPUT"
+            echo "funcs=N/A"    >> "$GITHUB_OUTPUT"
+            echo "branches=N/A" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post Slack success notification
+        env:
+          SLACK_WEBHOOK_URL:   ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_SERVER_URL:   ${{ github.server_url }}
+          GITHUB_REPOSITORY:   ${{ github.repository }}
+          GITHUB_RUN_ID:       ${{ github.run_id }}
+          GITHUB_RUN_NUMBER:   ${{ github.run_number }}
+          GITHUB_REF_NAME:     ${{ github.ref_name }}
+          GITHUB_ACTOR:        ${{ github.actor }}
+          GITHUB_WORKFLOW:     ${{ github.workflow }}
+          GITHUB_EVENT_NAME:   ${{ github.event_name }}
+          # Coverage percentages from the parsed artifact (may be "N/A")
+          COV_LINES:     ${{ steps.coverage.outputs.lines }}
+          COV_STMTS:     ${{ steps.coverage.outputs.stmts }}
+          COV_FUNCS:     ${{ steps.coverage.outputs.funcs }}
+          COV_BRANCHES:  ${{ steps.coverage.outputs.branches }}
+        run: |
+          python3 - << 'PY'
+          import json, os, sys, urllib.request, urllib.error
+
+          webhook = os.environ.get("SLACK_WEBHOOK_URL", "")
+          if not webhook:
+              print("SLACK_WEBHOOK_URL is not set — skipping notification.")
+              sys.exit(0)
+
+          run_url = (
+              f"{os.environ['GITHUB_SERVER_URL']}/"
+              f"{os.environ['GITHUB_REPOSITORY']}/"
+              f"actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          )
+
+          # ── Coverage percentages ──────────────────────────────────────────
+          def fmt_pct(val: str) -> str:
+              """Round float strings to 1 dp; pass through 'N/A'."""
+              try:
+                  return f"{float(val):.1f}%"
+              except (ValueError, TypeError):
+                  return val or "N/A"
+
+          cov_lines    = fmt_pct(os.environ.get("COV_LINES",    "N/A"))
+          cov_stmts    = fmt_pct(os.environ.get("COV_STMTS",    "N/A"))
+          cov_funcs    = fmt_pct(os.environ.get("COV_FUNCS",    "N/A"))
+          cov_branches = fmt_pct(os.environ.get("COV_BRANCHES", "N/A"))
+
+          payload = {
+              "blocks": [
+                  {
+                      "type": "header",
+                      "text": {
+                          "type": "plain_text",
+                          "text": "✅ Backend CI — All Gates Passed",
+                          "emoji": True,
+                      },
+                  },
+                  {
+                      "type": "section",
+                      "text": {
+                          "type": "mrkdwn",
+                          "text": (
+                              "*All gates green:*\n"
+                              "  • ESLint & TypeScript Check\n"
+                              "  • Backend Integration Tests (Redis)\n"
+                              "  • FeatureCacheService Coverage (≥80%)\n"
+                              "  • Playwright E2E — Backend Gate (Chromium)"
+                          ),
+                      },
+                  },
+                  {
+                      "type": "section",
+                      "text": {
+                          "type": "mrkdwn",
+                          "text": (
+                              f"*FeatureCacheService Coverage:*\n"
+                              f"  Stmts `{cov_stmts}`  "
+                              f"  Branches `{cov_branches}`  "
+                              f"  Funcs `{cov_funcs}`  "
+                              f"  Lines `{cov_lines}`"
+                          ),
+                      },
+                  },
+                  {
+                      "type": "section",
+                      "fields": [
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Branch:*\n`{os.environ['GITHUB_REF_NAME']}`",
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Triggered by:*\n{os.environ['GITHUB_ACTOR']}",
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Workflow:*\n{os.environ['GITHUB_WORKFLOW']}",
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Event:*\n{os.environ['GITHUB_EVENT_NAME']}",
+                          },
+                      ],
+                  },
+                  {
+                      "type": "actions",
+                      "elements": [
+                          {
+                              "type": "button",
+                              "text": {"type": "plain_text", "text": "View Run"},
+                              "url": run_url,
+                              "style": "primary",
+                          }
+                      ],
+                  },
+              ]
+          }
+
+          data = json.dumps(payload).encode("utf-8")
+          req = urllib.request.Request(
+              webhook,
+              data=data,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=10) as resp:
+                  body = resp.read().decode("utf-8")
+                  print(f"Slack responded {resp.status}: {body}")
+          except urllib.error.HTTPError as exc:
+              print(f"Slack HTTP error {exc.code}: {exc.read().decode()}", file=sys.stderr)
+              sys.exit(1)
+          PY
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 8: Slack notification when post-coverage-badge fails
+  #
+  # The post-coverage-badge job downloads a coverage artifact, parses two JSON
+  # files, and upserts a PR comment via the GitHub API.  Any of those steps can
+  # fail independently (missing artifact, malformed JSON, API rate-limit).
+  # This job fires whenever post-coverage-badge reports `failure` so the team
+  # is immediately aware the PR comment will be stale or absent.
+  #
+  # Design notes:
+  #   • `needs: [post-coverage-badge]` — single upstream; no OR condition needed.
+  #   • Uses GITHUB_TOKEN to call the jobs API and resolve the direct log URL
+  #     for the post-coverage-badge job, giving the engineer a one-click path
+  #     to the exact step that failed.
+  #   • `continue-on-error` semantics on the upstream job do NOT affect the
+  #     result seen here — only an actual `failure` outcome triggers this job.
+  # ────────────────────────────────────────────────────────────────────────────
+  notify-coverage-badge-failure:
+    name: Slack — Coverage Badge Post Failed
+    needs: [post-coverage-badge]
+    if: always() && needs.post-coverage-badge.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Post Slack failure notification
+        env:
+          SLACK_WEBHOOK_URL:   ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_SERVER_URL:   ${{ github.server_url }}
+          GITHUB_REPOSITORY:   ${{ github.repository }}
+          GITHUB_RUN_ID:       ${{ github.run_id }}
+          GITHUB_RUN_NUMBER:   ${{ github.run_number }}
+          GITHUB_REF_NAME:     ${{ github.ref_name }}
+          GITHUB_ACTOR:        ${{ github.actor }}
+          GITHUB_WORKFLOW:     ${{ github.workflow }}
+          GITHUB_EVENT_NAME:   ${{ github.event_name }}
+        run: |
+          python3 - << 'PY'
+          import json, os, sys, urllib.request, urllib.error
+
+          webhook = os.environ.get("SLACK_WEBHOOK_URL", "")
+          if not webhook:
+              print("SLACK_WEBHOOK_URL is not set — skipping notification.")
+              sys.exit(0)
+
+          run_url = (
+              f"{os.environ['GITHUB_SERVER_URL']}/"
+              f"{os.environ['GITHUB_REPOSITORY']}/"
+              f"actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          )
+
+          # ── Resolve direct log URL for post-coverage-badge job ────────────
+          BADGE_JOB_NAME = "Post Coverage Badge to PR"
+          github_token = os.environ.get("GITHUB_TOKEN", "")
+          job_log_url = run_url   # fallback: run-level URL
+          if github_token:
+              jobs_api = (
+                  f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}"
+                  f"/actions/runs/{os.environ['GITHUB_RUN_ID']}/jobs?per_page=100"
+              )
+              req_api = urllib.request.Request(
+                  jobs_api,
+                  headers={
+                      "Authorization": f"Bearer {github_token}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req_api, timeout=10) as r:
+                      jobs_data = json.loads(r.read().decode("utf-8"))
+                  for job in jobs_data.get("jobs", []):
+                      if job["name"] == BADGE_JOB_NAME:
+                          job_log_url = (
+                              f"{os.environ['GITHUB_SERVER_URL']}/"
+                              f"{os.environ['GITHUB_REPOSITORY']}/"
+                              f"actions/runs/{os.environ['GITHUB_RUN_ID']}"
+                              f"/job/{job['id']}"
+                          )
+                          break
+              except Exception as exc:
+                  print(f"Warning: could not fetch job IDs — {exc}", file=sys.stderr)
+
+          payload = {
+              "blocks": [
+                  {
+                      "type": "header",
+                      "text": {
+                          "type": "plain_text",
+                          "text": "⚠️ Coverage Badge Post Failed",
+                          "emoji": True,
+                      },
+                  },
+                  {
+                      "type": "section",
+                      "text": {
+                          "type": "mrkdwn",
+                          "text": (
+                              "The *Post Coverage Badge to PR* job failed.\n"
+                              "The PR coverage comment may be stale or absent.\n\n"
+                              "Common causes:\n"
+                              "  • `feature-cache-coverage-<run_id>` artifact not found\n"
+                              "  • Malformed `coverage-summary.json` or `coverage.json`\n"
+                              "  • GitHub API rate-limit on PR comment upsert"
+                          ),
+                      },
+                  },
+                  {
+                      "type": "section",
+                      "fields": [
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Branch:*\n`{os.environ['GITHUB_REF_NAME']}`",
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Triggered by:*\n{os.environ['GITHUB_ACTOR']}",
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Workflow:*\n{os.environ['GITHUB_WORKFLOW']}",
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Event:*\n{os.environ['GITHUB_EVENT_NAME']}",
+                          },
+                      ],
+                  },
+                  {
+                      "type": "actions",
+                      "elements": [
+                          {
+                              "type": "button",
+                              "text": {"type": "plain_text", "text": "View Job Logs"},
+                              "url": job_log_url,
+                              "style": "danger",
+                          },
+                          {
+                              "type": "button",
+                              "text": {"type": "plain_text", "text": "View Run"},
+                              "url": run_url,
+                          },
+                      ],
+                  },
+              ]
+          }
+
+          data = json.dumps(payload).encode("utf-8")
+          req = urllib.request.Request(
+              webhook,
+              data=data,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=10) as resp:
+                  body = resp.read().decode("utf-8")
+                  print(f"Slack responded {resp.status}: {body}")
+          except urllib.error.HTTPError as exc:
+              print(f"Slack HTTP error {exc.code}: {exc.read().decode()}", file=sys.stderr)
+              sys.exit(1)
+          PY

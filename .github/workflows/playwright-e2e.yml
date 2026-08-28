@@ -1,0 +1,325 @@
+# .github/workflows/playwright-e2e.yml
+#
+# Three CI gates for the Digital Shadow feature, triggered on every PR
+# and direct push to `feat/digital-shadow-integration`:
+#
+#   typescript-build — `npm run build`  fails fast on any TS compilation error
+#   vitest-unit      — `npm run test:unit`  all jsdom + node unit specs
+#   playwright-e2e   — matrix: Chromium × Firefox × WebKit, API mocked via page.route()
+#
+# `vitest-unit` and `playwright-e2e` both declare `needs: [typescript-build]`
+# so the cheap build gate runs first and cancels both slower jobs on type errors.
+#
+# Concurrency:
+#   A `concurrency` group keyed on workflow + ref cancels any in-progress run on
+#   the same branch when a new push arrives.  This prevents stale runs from
+#   consuming runner minutes after a fast follow-up commit.
+#
+# Matrix design:
+#   • playwright.config.ts has `chromium`, `firefox`, and `webkit` in its
+#     `projects` array; each matrix leg passes `--project=<browser>` so it
+#     runs only its own browser, not the full suite three times on one runner.
+#   • `fail-fast: false` keeps sibling legs running if one fails so all three
+#     HTML reports are always uploaded for side-by-side comparison.
+#
+# Design notes:
+#   • playwright.config.ts webServer starts the Vite dev server automatically
+#     when CI=true (reuseExistingServer: !CI) — no manual `npm run dev &` needed.
+#   • All Digital Shadow API routes in machine-shadow.spec.ts are intercepted
+#     via page.route(), so no backend or Redis is required for the e2e job.
+#   • The Playwright HTML report is uploaded per-browser on every run so
+#     developers can inspect traces/screenshots without re-running locally.
+
+name: Playwright E2E — Digital Shadow
+
+# Cancel any in-progress run for the same branch when a new push arrives.
+# Keyed on workflow name + ref so PR runs and branch runs are independent groups.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  # Manual trigger from the GitHub Actions UI — no paths filter applies so
+  # the full suite can be re-run against any ref on demand (e.g. to confirm a
+  # hotfix without a new commit).
+  # The `browser` input lets developers target a single matrix leg, saving
+  # ~15 min of runner time when only one browser needs retrying.
+  workflow_dispatch:
+    inputs:
+      browser:
+        description: 'Browser to run e2e tests against (default: all three)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - chromium
+          - firefox
+          - webkit
+
+  pull_request:
+    branches:
+      - feat/digital-shadow-integration
+    paths:
+      - 'packages/digital-shadow-service/**'
+      - 'e2e/**'
+      - '.github/workflows/playwright-e2e.yml'
+  push:
+    branches:
+      - feat/digital-shadow-integration
+    paths:
+      - 'packages/digital-shadow-service/**'
+      - 'e2e/**'
+      - '.github/workflows/playwright-e2e.yml'
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Gate 0: Resolve browser matrix
+  #
+  # Emits the strategy.matrix JSON consumed by the `playwright-e2e` job.
+  #
+  # On push / pull_request → always returns the full three-browser matrix.
+  # On workflow_dispatch with browser ≠ "all" → returns a single-entry matrix
+  # so developers can retry one flaky leg without running all three.
+  #
+  # The `include` block is always emitted (even for single-browser dispatch) so
+  # the `matrix.timeout_minutes || 20` expression in the playwright-e2e job
+  # works correctly regardless of which browser was chosen.
+  # ────────────────────────────────────────────────────────────────────────────
+  setup:
+    name: Resolve browser matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+    steps:
+      - name: Compute matrix JSON
+        id: resolve
+        shell: bash
+        run: |
+          FULL='{"browser":["chromium","firefox","webkit"],"include":[{"browser":"webkit","timeout_minutes":25}]}'
+          CHOSEN="${{ inputs.browser }}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" \
+             && -n "${CHOSEN}" \
+             && "${CHOSEN}" != "all" ]]; then
+            # Single-browser run: still emit include so the webkit timeout key
+            # is present even if webkit is the only leg (harmless on others).
+            echo "matrix={\"browser\":[\"${CHOSEN}\"],\"include\":[{\"browser\":\"webkit\",\"timeout_minutes\":25}]}" \
+              >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix=${FULL}" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Gate 1: TypeScript compilation
+  # Runs `npm run build` and fails fast on any type error, import resolution
+  # failure, or missing declaration.  The job uses `--bail` implicitly because
+  # `tsc --noEmit` (or the project build script) exits non-zero on first error.
+  # ────────────────────────────────────────────────────────────────────────────
+  typescript-build:
+    name: TypeScript Build Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # `npm run build` compiles the full workspace (frontend Vite build +
+      # backend tsc).  Any type error exits non-zero and fails this job
+      # immediately, blocking the PR before tests even run.
+      - name: TypeScript compilation & build
+        run: npm run build
+        env:
+          CI: 'true'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Gate 2: Vitest unit tests
+  # Runs the workspace-root `test:unit` script which exercises all
+  # @vitest-environment jsdom and node unit/integration specs.
+  # ────────────────────────────────────────────────────────────────────────────
+  vitest-unit:
+    name: Vitest Unit Tests
+    needs: [typescript-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Run Vitest unit tests
+        run: npm run test:unit
+        env:
+          CI: 'true'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Gate 3: Playwright e2e tests — matrix: chromium × firefox × webkit
+  #
+  # Each matrix leg installs only its own browser binary, starts a fresh Vite
+  # dev server, and runs the spec scoped to that project.  `fail-fast: false`
+  # ensures all three reports upload even when one browser fails.
+  #
+  # Per-leg timeout override:
+  #   chromium / firefox → 20 min (matrix.timeout_minutes unset → fallback 20)
+  #   webkit             → 25 min (WebKit JIT cold-start is ~3–5 min on ubuntu)
+  # ────────────────────────────────────────────────────────────────────────────
+  playwright-e2e:
+    name: Playwright E2E (${{ matrix.browser }})
+    needs: [typescript-build, setup]
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.timeout_minutes || 20 }}
+
+    strategy:
+      fail-fast: false
+      # Matrix is emitted by the `setup` job:
+      #   push/PR  → chromium + firefox + webkit (full trio)
+      #   dispatch → single browser chosen via inputs.browser
+      # The include block always carries webkit timeout_minutes: 25.
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+
+    steps:
+      # ── Source ──────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Runtime ─────────────────────────────────────────────────────────────
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── Dependencies ────────────────────────────────────────────────────────
+      - name: Install npm dependencies
+        run: npm ci
+
+      # Install only the matrix browser + its OS-level deps.
+      # This keeps each leg fast — ~300 MB for Chromium, ~80 MB for Firefox.
+      - name: Install Playwright browser (${{ matrix.browser }})
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      # ── Tests ───────────────────────────────────────────────────────────────
+      # --project scopes execution to the single browser defined in
+      # playwright.config.ts `projects` array — no double-running.
+      # CI=true  → playwright.config.ts always starts a fresh Vite dev server
+      # BASE_URL → picked up by baseURL in playwright.config.ts
+      - name: Run Playwright e2e tests (${{ matrix.browser }})
+        run: npx playwright test e2e/machine-shadow.spec.ts --project=${{ matrix.browser }}
+        env:
+          CI: 'true'
+          BASE_URL: 'http://localhost:5173'
+
+      # ── Artifacts ───────────────────────────────────────────────────────────
+      # Each browser leg uploads its own report so they don't overwrite each other.
+      - name: Upload Playwright report (${{ matrix.browser }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.browser }}-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 14
+
+      # ── Slack failure alert ──────────────────────────────────────────────────
+      # Fires only when THIS matrix leg fails (if: failure() is scoped to the
+      # current step's job context, not sibling legs).  Each failing leg posts
+      # its own message so the channel shows exactly which browsers broke.
+      # Gracefully no-ops if SLACK_WEBHOOK_URL is not set (exit 0).
+      - name: Notify Slack on failure (${{ matrix.browser }})
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID:     ${{ github.run_id }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_REF_NAME:   ${{ github.ref_name }}
+          GITHUB_ACTOR:      ${{ github.actor }}
+          GITHUB_WORKFLOW:   ${{ github.workflow }}
+          MATRIX_BROWSER:    ${{ matrix.browser }}
+        run: |
+          python3 - << 'PY'
+          import json, os, sys, urllib.request, urllib.error
+
+          webhook = os.environ.get("SLACK_WEBHOOK_URL", "")
+          if not webhook:
+              print("SLACK_WEBHOOK_URL not set — skipping Slack alert.")
+              sys.exit(0)
+
+          browser = os.environ["MATRIX_BROWSER"]
+          run_url = (
+              f"{os.environ['GITHUB_SERVER_URL']}/"
+              f"{os.environ['GITHUB_REPOSITORY']}/"
+              f"actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          )
+
+          payload = {
+              "blocks": [
+                  {
+                      "type": "header",
+                      "text": {
+                          "type": "plain_text",
+                          "text": f"❌ E2E Failed — {browser.capitalize()} leg",
+                          "emoji": True,
+                      },
+                  },
+                  {
+                      "type": "section",
+                      "fields": [
+                          {"type": "mrkdwn", "text": f"*Browser:*\n`{browser}`"},
+                          {"type": "mrkdwn", "text": f"*Branch:*\n`{os.environ['GITHUB_REF_NAME']}`"},
+                          {"type": "mrkdwn", "text": f"*Actor:*\n{os.environ['GITHUB_ACTOR']}"},
+                          {
+                              "type": "mrkdwn",
+                              "text": (
+                                  f"*Run:*\n"
+                                  f"<{run_url}|#{os.environ['GITHUB_RUN_NUMBER']}>"
+                              ),
+                          },
+                      ],
+                  },
+                  {
+                      "type": "actions",
+                      "elements": [
+                          {
+                              "type": "button",
+                              "text": {"type": "plain_text", "text": "View Run"},
+                              "url": run_url,
+                              "style": "danger",
+                          }
+                      ],
+                  },
+              ]
+          }
+
+          data = json.dumps(payload).encode("utf-8")
+          req = urllib.request.Request(
+              webhook,
+              data=data,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=10) as resp:
+                  print(f"Slack {resp.status}: {resp.read().decode()}")
+          except urllib.error.HTTPError as exc:
+              print(f"Slack HTTP {exc.code}: {exc.read().decode()}", file=sys.stderr)
+              sys.exit(1)
+          PY
