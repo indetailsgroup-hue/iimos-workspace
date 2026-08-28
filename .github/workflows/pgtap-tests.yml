@@ -1,0 +1,87 @@
+name: pgTAP Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  pgtap:
+    name: Run pgTAP suites against fresh Supabase DB
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Checkout repository
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # 2. Set up Supabase CLI
+      # -----------------------------------------------------------------------
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # -----------------------------------------------------------------------
+      # 3. Install pg_prove (TAP::Parser::SourceHandler::pgTAP)
+      # -----------------------------------------------------------------------
+      - name: Install pg_prove and pgTAP
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            postgresql-client \
+            libtap-parser-sourcehandler-pgtap-perl
+          # pg_prove is provided by the perl package above
+          pg_prove --version
+
+      # -----------------------------------------------------------------------
+      # 4. Start Supabase local stack
+      # -----------------------------------------------------------------------
+      - name: Start Supabase local stack
+        run: supabase start
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # 5. Apply all migrations (db reset runs migrations from scratch)
+      # -----------------------------------------------------------------------
+      - name: Reset database and apply migrations
+        run: supabase db reset --local
+
+      # -----------------------------------------------------------------------
+      # 6. Enable pgTAP extension
+      # -----------------------------------------------------------------------
+      - name: Enable pgTAP extension
+        run: |
+          DB_URL=$(supabase status --output env | grep DB_URL | cut -d= -f2-)
+          psql "$DB_URL" -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
+        env:
+          PGPASSWORD: postgres
+
+      # -----------------------------------------------------------------------
+      # 7. Run pg_prove on all test files
+      # -----------------------------------------------------------------------
+      - name: Run pg_prove on supabase/tests/*.sql
+        run: |
+          DB_URL=$(supabase status --output env | grep DB_URL | cut -d= -f2-)
+          pg_prove \
+            --dbname "$DB_URL" \
+            --recursive \
+            --verbose \
+            supabase/tests/*.sql
+        env:
+          PGPASSWORD: postgres
+
+      # -----------------------------------------------------------------------
+      # 8. Stop Supabase local stack (cleanup)
+      # -----------------------------------------------------------------------
+      - name: Stop Supabase local stack
+        if: always()
+        run: supabase stop
