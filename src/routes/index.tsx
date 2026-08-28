@@ -57,6 +57,9 @@ const CreateJobWizardPage = lazy(() =>
 const JobDetailPageComponent = lazy(() =>
   import('../jobs/JobDetailPage').then(m => ({ default: m.JobDetailPage }))
 );
+const JobsLayoutComponent = lazy(() =>
+  import('../jobs/JobsLayout').then(m => ({ default: m.JobsLayout }))
+);
 
 // v15: Quotation builder
 const QuotationBuilderPage = lazy(() =>
@@ -1065,14 +1068,16 @@ export const router = createBrowserRouter([
     path: '/packet/:id',
     element: <PacketViewerPage />,
   },
-  // ── Job Lifecycle Routes (v15) ──────────────────────────────────────────
+  // ── Job Lifecycle Routes (v15.4) — wrapped with JobsLayout for toasts ───
   // Job Board — accessible to DESIGNER, FACTORY, ADMIN
   {
     path: '/jobs',
     element: (
       <RequireRole allow={['DESIGNER', 'FACTORY', 'ADMIN']}>
         <Suspense fallback={<PageLoadingFallback message="Loading Job Board…" />}>
-          <JobBoardPage />
+          <JobsLayoutComponent>
+            <JobBoardPage />
+          </JobsLayoutComponent>
         </Suspense>
       </RequireRole>
     ),
@@ -1083,7 +1088,9 @@ export const router = createBrowserRouter([
     element: (
       <RequireRole allow={['DESIGNER', 'ADMIN']}>
         <Suspense fallback={<PageLoadingFallback message="Loading Job Wizard…" />}>
-          <CreateJobWizardPage />
+          <JobsLayoutComponent>
+            <CreateJobWizardPage />
+          </JobsLayoutComponent>
         </Suspense>
       </RequireRole>
     ),
@@ -1094,7 +1101,9 @@ export const router = createBrowserRouter([
     element: (
       <RequireRole allow={['DESIGNER', 'FACTORY', 'ADMIN']}>
         <Suspense fallback={<PageLoadingFallback message="Loading Job Detail…" />}>
-          <JobDetailPageWrapper />
+          <JobsLayoutComponent>
+            <JobDetailPageWrapper />
+          </JobsLayoutComponent>
         </Suspense>
       </RequireRole>
     ),

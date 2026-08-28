@@ -19,6 +19,7 @@ import {
   JOB_STATUS_COLORS,
   getNextStatuses,
 } from './types';
+import { BatchActionBar } from './BatchStatusUpdate';
 
 // ============================================================================
 // Props
@@ -49,6 +50,17 @@ export function JobBoard({
   const [filterStatus, setFilterStatus] = useState<JobStatus | 'ALL'>('ALL');
   const [filterPriority, setFilterPriority] = useState<string>('ALL');
 
+  // Multi-select state for batch operations
+  const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
+
+  const toggleJobSelection = useCallback((jobId: string) => {
+    setSelectedJobIds((prev) =>
+      prev.includes(jobId) ? prev.filter((id) => id !== jobId) : [...prev, jobId],
+    );
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedJobIds([]), []);
+
   // Filtered jobs
   const filteredJobs = useMemo(() => {
     let result = [...jobs];
@@ -69,6 +81,14 @@ export function JobBoard({
     }
     return result.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [jobs, filterStatus, filterPriority, search]);
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedJobIds.length === filteredJobs.length) {
+      setSelectedJobIds([]);
+    } else {
+      setSelectedJobIds(filteredJobs.map((j) => j.jobId));
+    }
+  }, [selectedJobIds.length, filteredJobs]);
 
   // Group by status for kanban
   const grouped = useMemo(() => {
@@ -155,6 +175,8 @@ export function JobBoard({
                     job={job}
                     onSelect={onSelectJob}
                     onTransition={handleTransition}
+                    selected={selectedJobIds.includes(job.jobId)}
+                    onToggleSelect={toggleJobSelection}
                   />
                 ))}
               </div>
@@ -169,6 +191,14 @@ export function JobBoard({
           <table style={styles.table}>
             <thead>
               <tr>
+                <th style={styles.th}>
+                  <input
+                    type="checkbox"
+                    checked={filteredJobs.length > 0 && selectedJobIds.length === filteredJobs.length}
+                    onChange={toggleSelectAll}
+                    data-testid="select-all-checkbox"
+                  />
+                </th>
                 <th style={styles.th}>รหัส</th>
                 <th style={styles.th}>งาน</th>
                 <th style={styles.th}>ลูกค้า</th>
@@ -181,10 +211,19 @@ export function JobBoard({
               {filteredJobs.map((job) => (
                 <tr
                   key={job.jobId}
-                  style={styles.tr}
+                  style={{ ...styles.tr, background: selectedJobIds.includes(job.jobId) ? '#1e3a5f' : undefined }}
                   onClick={() => onSelectJob?.(job.jobId)}
                   data-testid={`job-row-${job.jobCode}`}
                 >
+                  <td style={styles.td}>
+                    <input
+                      type="checkbox"
+                      checked={selectedJobIds.includes(job.jobId)}
+                      onChange={(e) => { e.stopPropagation(); toggleJobSelection(job.jobId); }}
+                      onClick={(e) => e.stopPropagation()}
+                      data-testid={`select-job-${job.jobCode}`}
+                    />
+                  </td>
                   <td style={styles.td}>{job.jobCode}</td>
                   <td style={styles.td}>{job.title}</td>
                   <td style={styles.td}>{job.customer.name}</td>
@@ -207,6 +246,12 @@ export function JobBoard({
           ไม่พบงาน {search && `ที่ตรงกับ "${search}"`}
         </div>
       )}
+
+      {/* Batch action bar — visible when jobs are selected */}
+      <BatchActionBar
+        selectedJobIds={selectedJobIds}
+        onClearSelection={clearSelection}
+      />
     </div>
   );
 }
@@ -219,21 +264,33 @@ function JobCard({
   job,
   onSelect,
   onTransition,
+  selected,
+  onToggleSelect,
 }: {
   job: Job;
   onSelect?: (id: string) => void;
   onTransition: (id: string, status: JobStatus) => void;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }): React.ReactElement {
   const nextStatuses = getNextStatuses(job.status);
   const isOverdue = job.deadline && new Date(job.deadline) < new Date();
 
   return (
     <div
-      style={{ ...styles.card, borderLeftColor: JOB_STATUS_COLORS[job.status] }}
+      style={{ ...styles.card, borderLeftColor: JOB_STATUS_COLORS[job.status], background: selected ? '#1e3a5f' : '#111827' }}
       onClick={() => onSelect?.(job.jobId)}
       data-testid={`job-card-${job.jobCode}`}
     >
       <div style={styles.cardHeader}>
+        <input
+          type="checkbox"
+          checked={!!selected}
+          onChange={(e) => { e.stopPropagation(); onToggleSelect?.(job.jobId); }}
+          onClick={(e) => e.stopPropagation()}
+          data-testid={`select-card-${job.jobCode}`}
+          style={{ marginRight: '6px' }}
+        />
         <span style={styles.cardCode}>{job.jobCode}</span>
         {job.priority === 'URGENT' && <span style={styles.urgentBadge}>URGENT</span>}
         {job.priority === 'HIGH' && <span style={styles.highBadge}>HIGH</span>}
