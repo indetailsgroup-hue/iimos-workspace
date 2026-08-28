@@ -7,9 +7,9 @@
 
 ## Executive Summary
 
-The audit identified **3 critical isolation gaps**, **7 cross-tenant data leaks**, and **2 medium-risk gaps** across 18 tables. The most severe issue is in `0172_jobs_quotations_invoices.sql`, which creates 7 tables without `org_id` columns and assigns `USING (true)` SELECT policies — meaning any authenticated user from any tenant can read all customers, jobs, quotations, and invoices across the entire platform.
+The audit identified **3 critical isolation gaps**, **7 cross-tenant data leaks**, and **2 medium-risk gaps** across 18 tables. **All 6 findings have been remediated as of 2026-08-28** through migrations 0173–0179. The most severe issue was in `0172_jobs_quotations_invoices.sql`, which created 7 tables without `org_id` columns and assigned `USING (true)` SELECT policies — fully resolved by the two-phase fix in 0173 + 0179.
 
-**Overall RLS posture:** The multi-tenant tables (`public.jobs`, `public.quotations`, `public.invoices`, `public.ledger_entries`) introduced in the 20260828 migration batch are correctly isolated. The legacy single-tenant tables from `0172_jobs_quotations_invoices.sql` are a severe regression in a multi-tenant context.
+**Overall RLS posture:** ✅ All findings resolved. The multi-tenant tables (`public.jobs`, `public.quotations`, `public.invoices`, `public.ledger_entries`) are correctly isolated. The legacy single-tenant tables from `0172` have been fully remediated by migrations 0173 and 0179.
 
 ---
 
@@ -17,12 +17,12 @@ The audit identified **3 critical isolation gaps**, **7 cross-tenant data leaks*
 
 | # | Severity | Table(s) | Issue | Migration |
 |---|---------|---------|-------|-----------|
-| F1 | **CRITICAL** | `customer`, `job`, `job_panel`, `quotation`, `quotation_line`, `invoice`, `invoice_payment` | `USING (true)` SELECT — cross-tenant data leak for all authenticated users | `0172_jobs_quotations_invoices.sql` |
-| F2 | **CRITICAL** | `public.org_invitations` | No RLS enabled — any authenticated user can enumerate all invitations for all orgs | `20260828_multi_tenant_schema.sql` |
+| F1 | ~~**CRITICAL**~~ ✅ **FIXED** | `customer`, `job`, `job_panel`, `quotation`, `quotation_line`, `invoice`, `invoice_payment` | `USING (true)` SELECT + unscoped write_* — cross-tenant data leak | `0172_jobs_quotations_invoices.sql` → **fixed by `0173_rls_isolation_hardening.sql` (Phase 1) + `0179_f1_full_fix_org_id_not_null.sql` (Phase 2)** |
+| F2 | ~~**CRITICAL**~~ ✅ **FIXED** | `public.org_invitations` | No RLS enabled — any authenticated user can enumerate all invitations for all orgs | `20260828_multi_tenant_schema.sql` → **fixed by `0173_rls_isolation_hardening.sql`** |
 | F3 | ~~**HIGH**~~ ✅ **FIXED** | `notification_digest_queue` | No RLS enabled — contains `user_id` and `org_id` but no policy restricts access | `20260828_notifications_super_admin.sql` → **fixed by `0178_notification_platform_metrics_rls.sql`** |
 | F4 | ~~**MEDIUM**~~ ✅ **FIXED** | `platform_metrics_snapshots` | No RLS enabled — exposes aggregate tenant metrics (MRR, tenant count, churn) to any authenticated user | `20260828_notifications_super_admin.sql` → **fixed by `0178_notification_platform_metrics_rls.sql`** |
 | F5 | ~~**MEDIUM**~~ ✅ **FIXED** | `audit_logs` | `Service role inserts audit logs` uses `WITH CHECK (true)` — any service-role caller can insert audit records without constraint | `20260828_audit_log_usage_metering.sql` → **fixed by `0177_audit_log_insert_hardening.sql`** |
-| F6 | **LOW** | `job`, `invoice` (legacy) | Added to `supabase_realtime` publication without org_id column — Realtime events are not tenant-scoped and can be observed cross-tenant via channel subscription | `0172_jobs_quotations_invoices.sql` |
+| F6 | ~~**LOW**~~ ✅ **FIXED** | `job`, `invoice` (legacy) | Added to `supabase_realtime` publication without org_id column — Realtime events are not tenant-scoped | `0172_jobs_quotations_invoices.sql` → **fixed by `0173_rls_isolation_hardening.sql`** (DROP TABLE from supabase_realtime publication; re-add only after org-scoped channel policies are configured) |
 
 ---
 
@@ -30,9 +30,10 @@ The audit identified **3 critical isolation gaps**, **7 cross-tenant data leaks*
 
 ---
 
-### F1 — CRITICAL: 7 Legacy Tables with `USING (true)` SELECT Policies
-**Migration:** `0172_jobs_quotations_invoices.sql` (dated 2026-08-27)
-**Severity:** Critical — active cross-tenant data leak
+### F1 — ✅ FIXED: 7 Legacy Tables — org_id Added, NOT NULL Enforced, write_* Policies Dropped
+**Fixed by:** `0173_rls_isolation_hardening.sql` (Phase 1 — org_id columns + org-scoped SELECT/INSERT/UPDATE) + `0179_f1_full_fix_org_id_not_null.sql` (Phase 2 — NOT NULL constraints, FK constraints, drop unscoped write_* policies, DELETE policies)
+**Severity:** ~~Critical~~ — resolved
+**Issue:** #42 (closed)
 
 **Affected tables:** `customer`, `job`, `job_panel`, `quotation`, `quotation_line`, `invoice`, `invoice_payment`
 
@@ -120,7 +121,10 @@ ALTER PUBLICATION supabase_realtime DROP TABLE invoice;
 
 ---
 
-### F2 — CRITICAL: `public.org_invitations` Has No RLS
+### F2 — ✅ FIXED: `public.org_invitations` Has No RLS
+**Fixed by:** `0173_rls_isolation_hardening.sql`
+**Severity:** ~~Critical~~ — resolved
+**Issue:** #42 (closed)
 **Migration:** `20260828_multi_tenant_schema.sql`
 **Severity:** Critical
 
@@ -230,11 +234,14 @@ The `WITH CHECK (true)` on INSERT meant any call using the service_role key coul
 
 ---
 
-### F6 — LOW: Legacy `job` and `invoice` Tables Added to Realtime Without Org Scoping
+### F6 — ✅ FIXED: Legacy `job` and `invoice` Tables Removed from Realtime Publication
+**Fixed by:** `0173_rls_isolation_hardening.sql` — `ALTER PUBLICATION supabase_realtime DROP TABLE job; DROP TABLE invoice;`
 **Migration:** `0172_jobs_quotations_invoices.sql`
-**Severity:** Low (contingent on F1)
+**Severity:** ~~Low~~ — resolved
 
-**The problem:**
+**Note:** Do NOT re-add these tables to supabase_realtime until org-scoped Supabase Realtime channel policies (row-level filters) are fully configured.
+
+**Original finding:**
 
 ```sql
 ALTER PUBLICATION supabase_realtime ADD TABLE job;
@@ -278,9 +285,9 @@ These tables have proper `org_id`-based tenant isolation and are confirmed safe:
 
 ```
 Priority 1 (Immediate — stop active data leak)
-  F1: Drop USING (true) policies → add org_id to legacy tables → create org-scoped policies
-  F2: Enable RLS on org_invitations → add policies (own email + admin manage)
-  F6: Remove legacy job/invoice from supabase_realtime publication
+  F1: ✅ FIXED — 0173_rls_isolation_hardening.sql (Phase 1) + 0179_f1_full_fix_org_id_not_null.sql (Phase 2) — 2026-08-28 — issue #42 (closed)
+  F2: ✅ FIXED — 0173_rls_isolation_hardening.sql (2026-08-28) — issue #42 (closed)
+  F6: ✅ FIXED — 0173_rls_isolation_hardening.sql (DROP TABLE from supabase_realtime) — 2026-08-28
 
 Priority 2 (Within 48 hours)
   F3: ✅ FIXED — 0178_notification_platform_metrics_rls.sql (2026-08-28) — issue #49
@@ -288,8 +295,9 @@ Priority 2 (Within 48 hours)
 
 Priority 3 (Within 1 week)
   F5: ✅ FIXED — 0177_audit_log_insert_hardening.sql (2026-08-28) — issue #48
-  F1 (full): Migrate all data from legacy tables to public.* equivalents, then DROP legacy tables
 ```
+
+**All 6 RLS findings are now FIXED as of 2026-08-28.**
 
 ---
 
