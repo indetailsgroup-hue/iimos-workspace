@@ -123,7 +123,13 @@ jobs:
 
       # -----------------------------------------------------------------------
       # 8. Run pg_prove on all test files
-      #    Runs: supabase/tests/*.sql (110 forward tests + rollback verification)
+      #    Runs: supabase/tests/*.sql — 147 total pgTAP assertions:
+      #      • 110  forward migration tests
+      #             (0179 F1: 14 · 0179 NNB: 35 · 0180: 17 · 0181: 18 · 0182: 13 · 0183: 13)
+      #      •  12  rollback verification tests (0183_rollback_verification.sql)
+      #      •  25  cross-tenant isolation tests (cross_tenant_isolation.sql:
+      #             T01–T02 setup · T03–T08 SELECT · T09–T12 INSERT 42501 ·
+      #             T13–T14 UPDATE · T23–T25 DELETE · T15–T17 own-org · T18–T22 integrity)
       #    Fails the job if any TAP assertion fails.
       # -----------------------------------------------------------------------
       - name: Run pg_prove on supabase/tests/*.sql
