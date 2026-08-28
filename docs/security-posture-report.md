@@ -225,8 +225,9 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 | `supabase/tests/0180_identity_reconciliation.sql` | 0180 | T-0180-01 → T-0180-17 (17 tests) | Guard failures, 6 RPC rejections, super-admin bypass, PUBLIC grant checks |
 | `supabase/tests/0181_revoke_sweep.sql` | 0181 | T-0181-01 → T-0181-18 (18 tests) | No PUBLIC EXECUTE on 14 functions; service_role grants; trigger-only function |
 | `supabase/tests/0182_audit_logs_org_id_hardening.sql` | 0182 | T-0182-01 → T-0182-13 (13 tests) | NOT NULL, FK→`org_id` (D1), trigger `o.org_id` (D3), RLS WITH CHECK `o.org_id` (D2), spoofed org rejection, service_role OK, anon rejection |
+| `supabase/tests/0183_baseline_org_id_not_null.sql` | 0183 | T-0183-01 → T-0183-13 (13 tests) | NOT NULL on jobs/quotations/invoices/ledger_entries, sentinel backfill, FK constraints, zero NULL rows |
 
-**Total pgTAP tests authored:** 14 + 35 + 17 + 18 + 13 = **97 tests** (0179 F1: 14, 0179 NNB: 35, 0180: 17, 0181: 18, 0182: 13)
+**Total pgTAP tests authored:** 14 + 35 + 17 + 18 + 13 + 13 = **110 tests** (0179 F1: 14, 0179 NNB: 35, 0180: 17, 0181: 18, 0182: 13, 0183: 13)
 
 **CI workflow:** `pgtap-tests.yml` written locally at `.github/workflows/pgtap-tests.yml` — push **blocked** pending PAT `workflow` scope (current token has `repo` only). File is committed in the local clone at `/tmp/monolith-git/`; re-push once a `workflow`-scoped token is available.
 
@@ -276,4 +277,4 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 
 *Generated: 2026-08-28 · Monolith Workspace security audit cycle*  
 *This document is the authoritative security status record for the v16.8.0 audit cycle.*  
-*Last updated: 2026-08-28 — pgTAP count 49→97 (added 0179 NNB 35 tests + 0182 13 tests); npm audit completed (0 vulnerabilities — uuid ^11.1.1 + bullmq ^5.81.4 applied); 0182 migration + pgTAP suite added; issue #48 closed; CI workflow blocked pending `workflow` token scope.*
+*Last updated: 2026-08-28 — pgTAP count 49→110 (0179 F1:14, 0179 NNB:35, 0180:17, 0181:18, 0182:13, 0183:13); npm audit 0 vulnerabilities confirmed; 0183 migration + pgTAP suite added; PR #55 opened for 0183 + v16.8.0 release summary; CI workflow blocked pending `workflow` token scope.*
