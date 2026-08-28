@@ -1,7 +1,8 @@
 /**
  * PlatformSearchPanel — Super Admin global search UI
  * Searches across jobs, members, and invoices for all tenants
- * v16.5.0
+ * Supports keyboard navigation (Arrow Up/Down + Enter)
+ * v16.6.0
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
@@ -51,22 +52,38 @@ function SearchFilterChips({ activeTypes, onToggle, facets }: SearchFilterChipsP
 
 interface SearchResultItemProps {
   result: SearchResult;
+  isActive: boolean;
+  index: number;
   onNavigate: (url: string) => void;
+  onHover: (index: number) => void;
 }
 
-function SearchResultItem({ result, onNavigate }: SearchResultItemProps) {
+function SearchResultItem({ result, isActive, index, onNavigate, onHover }: SearchResultItemProps) {
   const typeColors: Record<SearchEntityType, string> = {
     job: 'bg-green-100 text-green-800',
     member: 'bg-purple-100 text-purple-800',
     invoice: 'bg-amber-100 text-amber-800',
   };
 
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isActive && ref.current) {
+      ref.current.scrollIntoView && ref.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [isActive]);
+
   return (
     <div
-      className="p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
+      ref={ref}
+      className={`p-3 border-b border-gray-100 cursor-pointer transition-colors ${
+        isActive ? 'bg-blue-50 border-l-2 border-l-blue-500' : 'hover:bg-gray-50'
+      }`}
       onClick={() => onNavigate(result.url)}
+      onMouseEnter={() => onHover(index)}
       role="option"
-      aria-selected={false}
+      aria-selected={isActive}
+      id={`search-result-option-${index}`}
       data-testid={`search-result-${result.id}`}
     >
       <div className="flex items-start justify-between">
@@ -87,9 +104,7 @@ function SearchResultItem({ result, onNavigate }: SearchResultItemProps) {
           )}
         </div>
         <div className="text-right ml-3 flex-shrink-0">
-          <span className="text-xs text-gray-400">
-            {result.orgName}
-          </span>
+          <span className="text-xs text-gray-400">{result.orgName}</span>
           <p className="text-xs text-gray-300 mt-0.5">
             {new Date(result.createdAt).toLocaleDateString('th-TH')}
           </p>
@@ -160,12 +175,15 @@ export function PlatformSearchPanel({
   const [response, setResponse] = useState<PlatformSearchResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeIndex, setActiveIndex] = useState<number>(-1);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const executeSearch = useCallback(
     async (searchQuery: string, types: SearchEntityType[], orgId?: string) => {
       if (!searchQuery.trim()) {
         setResponse(null);
+        setActiveIndex(-1);
         return;
       }
 
@@ -180,6 +198,7 @@ export function PlatformSearchPanel({
           limit: 20,
         });
         setResponse(result);
+        setActiveIndex(-1); // Reset active index on new results
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Search failed');
         setResponse(null);
@@ -207,10 +226,35 @@ export function PlatformSearchPanel({
     );
   };
 
+  const resultCount = response?.results.length || 0;
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      setQuery('');
-      setResponse(null);
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setActiveIndex((prev) => {
+          const next = prev + 1;
+          return next >= resultCount ? 0 : next;
+        });
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setActiveIndex((prev) => {
+          const next = prev - 1;
+          return next < 0 ? resultCount - 1 : next;
+        });
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (activeIndex >= 0 && response?.results[activeIndex]) {
+          onNavigate(response.results[activeIndex].url);
+        }
+        break;
+      case 'Escape':
+        setQuery('');
+        setResponse(null);
+        setActiveIndex(-1);
+        break;
     }
   };
 
@@ -219,6 +263,7 @@ export function PlatformSearchPanel({
       {/* Search Input */}
       <div className="relative">
         <input
+          ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -226,6 +271,11 @@ export function PlatformSearchPanel({
           placeholder="Search jobs, members, invoices across all tenants..."
           className="w-full px-4 py-3 pl-10 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
           aria-label="Platform search"
+          aria-expanded={!!response && query.trim().length > 0}
+          aria-activedescendant={activeIndex >= 0 ? `search-result-option-${activeIndex}` : undefined}
+          aria-controls="search-results-listbox"
+          role="combobox"
+          aria-autocomplete="list"
           data-testid="search-input"
         />
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
@@ -238,6 +288,15 @@ export function PlatformSearchPanel({
           </span>
         )}
       </div>
+
+      {/* Keyboard hint */}
+      {response && response.results.length > 0 && query.trim() && (
+        <div className="mt-1 text-xs text-gray-400 flex gap-3" data-testid="keyboard-hints">
+          <span>↑↓ navigate</span>
+          <span>↵ open</span>
+          <span>esc clear</span>
+        </div>
+      )}
 
       {/* Filter Chips */}
       {query.trim() && (
@@ -270,9 +329,16 @@ export function PlatformSearchPanel({
 
           {/* Result list */}
           {response.results.length > 0 ? (
-            <div role="listbox" aria-label="Search results">
-              {response.results.map((result) => (
-                <SearchResultItem key={result.id} result={result} onNavigate={onNavigate} />
+            <div role="listbox" id="search-results-listbox" aria-label="Search results">
+              {response.results.map((result, idx) => (
+                <SearchResultItem
+                  key={result.id}
+                  result={result}
+                  isActive={idx === activeIndex}
+                  index={idx}
+                  onNavigate={onNavigate}
+                  onHover={setActiveIndex}
+                />
               ))}
             </div>
           ) : (
