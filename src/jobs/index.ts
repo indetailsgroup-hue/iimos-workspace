@@ -9,3 +9,5 @@ export { JobBoard } from './JobBoard';
 export { JobDetailPage } from './JobDetailPage';
 export { useJobBoardRealtime } from './useJobBoardRealtime';
 export { useCreateJobSubmit } from './useCreateJobSubmit';
+export { useJobDetailPdf } from './useJobDetailPdf';
+export { useJobStatusToast } from './useJobStatusToast';

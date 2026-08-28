@@ -6,9 +6,11 @@
  * - Visual status timeline showing progression through lifecycle
  * - Panel list with material/dimension info
  * - Status transition buttons (role-gated)
+ * - Print-friendly CSS for site supervisors (A4)
+ * - PDF export (browser print / programmatic jsPDF)
  * - Link to quotation/invoice when available
  *
- * @version 15.2.0
+ * @version 15.3.0
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -24,6 +26,8 @@ import {
   isTerminal,
 } from './types';
 import { useJobStore } from './jobStore';
+import { useJobDetailPdf } from './useJobDetailPdf';
+import './JobDetailPrint.css';
 
 // ============================================================================
 // Props & Types
@@ -180,6 +184,51 @@ function PanelList({ panels }: { panels: JobPanel[] }): React.ReactElement {
 }
 
 // ============================================================================
+// Export Toolbar
+// ============================================================================
+
+function ExportToolbar({
+  job,
+  pdf,
+}: {
+  job: Job;
+  pdf: ReturnType<typeof useJobDetailPdf>;
+}): React.ReactElement {
+  return (
+    <div style={styles.exportBar} data-testid="export-toolbar" data-print="hide">
+      <span style={{ fontSize: '12px', color: '#9ca3af' }}>ส่งออก:</span>
+      <button
+        style={styles.exportBtn}
+        onClick={pdf.printJobDetail}
+        data-testid="btn-print"
+        title="พิมพ์ใบสั่งงาน (Print)"
+      >
+        🖨️ พิมพ์
+      </button>
+      <button
+        style={{ ...styles.exportBtn, background: '#1e40af' }}
+        onClick={() => pdf.exportPdf(job)}
+        disabled={pdf.isExporting}
+        data-testid="btn-export-pdf"
+        title="ส่งออก PDF"
+      >
+        {pdf.isExporting ? '⏳ กำลังสร้าง...' : '📄 PDF'}
+      </button>
+      {pdf.error && (
+        <span style={{ fontSize: '11px', color: '#fca5a5' }} data-testid="export-error">
+          {pdf.error}
+        </span>
+      )}
+      {pdf.lastExportedAt && (
+        <span style={{ fontSize: '10px', color: '#6b7280' }} data-testid="export-success">
+          ✓ ส่งออกแล้ว
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
 // Transition Actions
 // ============================================================================
 
@@ -244,6 +293,9 @@ export function JobDetailPage({
   const [job, setJob] = useState<Job | undefined>(() => getJob(jobId));
   const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'polling' | 'disconnected'>('polling');
   const [transitionError, setTransitionError] = useState<string | null>(null);
+
+  // ── PDF / Print hook ────────────────────────────────────────────────────
+  const pdf = useJobDetailPdf();
 
   // ── Real-time Subscription for this single job ──────────────────────────
 
@@ -417,6 +469,9 @@ export function JobDetailPage({
         </div>
       </div>
 
+      {/* Export Toolbar (hidden in print) */}
+      <ExportToolbar job={job} pdf={pdf} />
+
       {/* Transition Error */}
       {transitionError && (
         <div style={styles.errorBanner} role="alert" data-testid="transition-error">
@@ -560,6 +615,28 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '4px 8px',
     borderRadius: '12px',
     background: '#1f2937',
+  },
+  // Export toolbar
+  exportBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '10px 16px',
+    background: '#1f2937',
+    borderRadius: '8px',
+    marginBottom: '12px',
+    border: '1px solid #374151',
+  },
+  exportBtn: {
+    padding: '6px 14px',
+    borderRadius: '6px',
+    border: 'none',
+    background: '#374151',
+    color: '#e5e7eb',
+    fontSize: '12px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'opacity 0.2s',
   },
   section: {
     background: '#111827',
