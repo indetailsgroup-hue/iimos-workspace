@@ -6,3 +6,6 @@ export { JOB_STATUSES, JOB_STATUS_LABELS, JOB_STATUS_COLORS, canTransition, getN
 export { useJobStore } from './jobStore';
 export { CreateJobWizard } from './CreateJobWizard';
 export { JobBoard } from './JobBoard';
+export { JobDetailPage } from './JobDetailPage';
+export { useJobBoardRealtime } from './useJobBoardRealtime';
+export { useCreateJobSubmit } from './useCreateJobSubmit';

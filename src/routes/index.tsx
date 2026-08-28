@@ -54,6 +54,9 @@ const JobBoardPage = lazy(() =>
 const CreateJobWizardPage = lazy(() =>
   import('../jobs/CreateJobWizard').then(m => ({ default: m.CreateJobWizard }))
 );
+const JobDetailPageComponent = lazy(() =>
+  import('../jobs/JobDetailPage').then(m => ({ default: m.JobDetailPage }))
+);
 
 // v15: Quotation builder
 const QuotationBuilderPage = lazy(() =>
@@ -780,6 +783,25 @@ function ProjectValidationPage() {
 // Factory Job Detail Page Wrapper (URL-based routing)
 // ============================================================================
 
+// ============================================================================
+// Job Detail Page Wrapper (v15.2)
+// ============================================================================
+
+function JobDetailPageWrapper() {
+  const { jobId } = useParams<{ jobId: string }>();
+  const navigate = useNavigate();
+
+  if (!jobId) {
+    return <Navigate to="/jobs" replace />;
+  }
+
+  return (
+    <Suspense fallback={<PageLoadingFallback message="Loading Job Detail…" />}>
+      <JobDetailPageComponent jobId={jobId} onNavigate={(path) => navigate(path)} />
+    </Suspense>
+  );
+}
+
 function FactoryJobDetailPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
@@ -1062,6 +1084,17 @@ export const router = createBrowserRouter([
       <RequireRole allow={['DESIGNER', 'ADMIN']}>
         <Suspense fallback={<PageLoadingFallback message="Loading Job Wizard…" />}>
           <CreateJobWizardPage />
+        </Suspense>
+      </RequireRole>
+    ),
+  },
+  // Job Detail — accessible to DESIGNER, FACTORY, ADMIN
+  {
+    path: '/jobs/:jobId',
+    element: (
+      <RequireRole allow={['DESIGNER', 'FACTORY', 'ADMIN']}>
+        <Suspense fallback={<PageLoadingFallback message="Loading Job Detail…" />}>
+          <JobDetailPageWrapper />
         </Suspense>
       </RequireRole>
     ),

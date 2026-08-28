@@ -6,3 +6,4 @@ export { QUOTATION_STATUSES, INVOICE_STATUSES, calculateQuotationTotals, calcula
 export { useQuotationStore, estimateUnitPrice, DEFAULT_UNIT_PRICES } from './quotationStore';
 export { QuotationBuilder } from './QuotationBuilder';
 export { buildQuotationPdf, downloadQuotationPdf } from './buildQuotationPdf';
+export { useQuotationPdfExport } from './useQuotationPdfExport';
