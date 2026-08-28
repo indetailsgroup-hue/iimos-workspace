@@ -72,6 +72,14 @@ const TenantOnboardingPage = lazy(() =>
   import('../tenant/TenantOnboarding').then(m => ({ default: m.TenantOnboarding }))
 );
 
+// v16.1: Settings & Billing
+const OrgSettingsPageComponent = lazy(() =>
+  import('../tenant/OrgSettingsPage').then(m => ({ default: m.OrgSettingsPage }))
+);
+const BillingPageComponent = lazy(() =>
+  import('../tenant/BillingPage').then(m => ({ default: m.BillingPage }))
+);
+
 // v15: Quotation builder
 const QuotationBuilderPage = lazy(() =>
   import('../quotation/QuotationBuilder').then(m => ({ default: m.QuotationBuilder }))
@@ -1157,6 +1165,28 @@ export const router = createBrowserRouter([
           onComplete={() => { window.location.href = '/jobs'; }}
         />
       </Suspense>
+    ),
+  },
+  // v16.1: Org Settings — ADMIN and OWNER
+  {
+    path: '/settings',
+    element: (
+      <RequireRole allow={['ADMIN', 'OWNER']}>
+        <Suspense fallback={<PageLoadingFallback message="Loading Settings…" />}>
+          <OrgSettingsPageComponent />
+        </Suspense>
+      </RequireRole>
+    ),
+  },
+  // v16.1: Billing — OWNER only
+  {
+    path: '/settings/billing',
+    element: (
+      <RequireRole allow={['OWNER']}>
+        <Suspense fallback={<PageLoadingFallback message="Loading Billing…" />}>
+          <BillingPageComponent />
+        </Suspense>
+      </RequireRole>
     ),
   },
   // Quotation management — FINANCE and ADMIN only
