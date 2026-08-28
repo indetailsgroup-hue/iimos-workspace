@@ -67,6 +67,11 @@ const DndKanbanBoardComponent = lazy(() =>
   import('../jobs/DndKanbanBoard').then(m => ({ default: m.DndKanbanBoard }))
 );
 
+// v16: Tenant onboarding
+const TenantOnboardingPage = lazy(() =>
+  import('../tenant/TenantOnboarding').then(m => ({ default: m.TenantOnboarding }))
+);
+
 // v15: Quotation builder
 const QuotationBuilderPage = lazy(() =>
   import('../quotation/QuotationBuilder').then(m => ({ default: m.QuotationBuilder }))
@@ -1138,6 +1143,20 @@ export const router = createBrowserRouter([
           </JobsLayoutComponent>
         </Suspense>
       </RequireRole>
+    ),
+  },
+  // v16: Tenant Onboarding — self-service org registration
+  {
+    path: '/onboarding',
+    element: (
+      <Suspense fallback={<PageLoadingFallback message="Loading Onboarding…" />}>
+        <TenantOnboardingPage
+          userId="pending"
+          userEmail="pending@monolith.app"
+          userDisplayName="New User"
+          onComplete={() => { window.location.href = '/jobs'; }}
+        />
+      </Suspense>
     ),
   },
   // Quotation management — FINANCE and ADMIN only

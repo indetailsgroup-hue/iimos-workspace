@@ -85,6 +85,7 @@ export interface JobCustomer {
 
 export interface Job {
   jobId: string;
+  orgId?: string;              // tenant org (multi-tenant scoping)
   jobCode: string;            // e.g. "DAPH-2026-0042"
   title: string;
   customer: JobCustomer;
