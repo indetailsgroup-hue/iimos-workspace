@@ -27,13 +27,14 @@ import { THAI_MANUFACTURING_PS_BENCHMARK } from './types';
 const ORG_ID = 'org-stories-001';
 
 /** PsScore above benchmark (score=62 > 55) */
-const mockScoreAbove: PsScore = {
+const mockScoreAbove = {
   id: 'ps-001',
   orgId: ORG_ID,
   surveyId: 'survey-001',
   periodLabel: '2569-Q2',
   periodType: 'QUARTERLY',
   score: 62,
+  overallScore: 62,
   dimensionScores: {
     SPEAK_UP: 65,
     HELP_SEEKING: 60,
@@ -42,16 +43,17 @@ const mockScoreAbove: PsScore = {
   },
   responseCount: 24,
   computedAt: '2026-07-01T00:00:00Z',
-};
+} as unknown as PsScore;
 
 /** PsScore below benchmark (score=42 < 55) */
-const mockScoreBelow: PsScore = {
+const mockScoreBelow = {
   id: 'ps-002',
   orgId: ORG_ID,
   surveyId: 'survey-001',
   periodLabel: '2569-Q1',
   periodType: 'QUARTERLY',
   score: 42,
+  overallScore: 42,
   dimensionScores: {
     SPEAK_UP: 40,
     HELP_SEEKING: 38,
@@ -60,18 +62,19 @@ const mockScoreBelow: PsScore = {
   },
   responseCount: 18,
   computedAt: '2026-04-01T00:00:00Z',
-};
+} as unknown as PsScore;
 
-const mockScoreMultiple: PsScore[] = [
-  { ...mockScoreAbove, id: 'ps-q2', periodLabel: '2569-Q2', score: 62 },
-  { ...mockScoreBelow, id: 'ps-q1', periodLabel: '2569-Q1', score: 42 },
+const mockScoreMultiple = [
+  { ...mockScoreAbove, id: 'ps-q2', periodLabel: '2569-Q2', score: 62, overallScore: 62 },
+  { ...mockScoreBelow, id: 'ps-q1', periodLabel: '2569-Q1', score: 42, overallScore: 42 },
   {
     id: 'ps-q3',
     orgId: ORG_ID,
     surveyId: 'survey-003',
     periodLabel: '2569-Q3',
-    periodType: 'QUARTERLY',
+    periodType: 'QUARTERLY' as const,
     score: 71,
+    overallScore: 71,
     dimensionScores: {
       SPEAK_UP: 72,
       HELP_SEEKING: 68,
@@ -81,7 +84,7 @@ const mockScoreMultiple: PsScore[] = [
     responseCount: 30,
     computedAt: '2026-10-01T00:00:00Z',
   },
-];
+] as unknown as PsScore[];
 
 const mockFeedbackPending: AnonymousFeedback = {
   id: 'fb-001',
