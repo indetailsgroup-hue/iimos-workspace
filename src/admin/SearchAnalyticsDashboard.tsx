@@ -398,3 +398,7 @@ export function SearchAnalyticsDashboard({
 }
 
 export default SearchAnalyticsDashboard;
+
+// ─── Super-admin-guarded export (v16.8.0) ────────────────────────────────────
+import withSuperAdminGuard from './withSuperAdminGuard';
+export const GuardedSearchAnalyticsDashboard = withSuperAdminGuard(SearchAnalyticsDashboard);
