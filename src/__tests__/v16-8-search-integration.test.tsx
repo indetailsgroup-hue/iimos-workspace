@@ -2,11 +2,19 @@
  * v16.8.0 Unit Tests — PlatformSearchPanel Autocomplete/Bookmark Integration
  * + SearchAnalyticsDashboard CSV Export with Date Filtering
  * @vitest-environment jsdom
+ *
+ * Fixes applied (2026-08-28):
+ *   T1 — localStorage key corrected from 'platform_search_recent'
+ *        to 'monolith-recent-searches' (matches searchAutocomplete.ts RECENT_KEY)
+ *   T2 — mockRpc results updated to conform to SearchResult interface
+ *        (added entityType, subtitle, orgId, orgName, matchField,
+ *         matchSnippet, createdAt, url — all required fields)
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, act, waitFor, cleanup } from '@testing-library/react';
+import type { SearchResult } from '../admin/platformSearch';
 
 afterEach(() => {
   cleanup();
@@ -37,6 +45,24 @@ vi.mock('../core/auth/supabaseClient', () => ({
     },
   },
 }));
+
+// ─── T2 Fix: SearchResult factory ────────────────────────────────────────────
+// Ensures every mock result conforms to the full SearchResult interface.
+// Pass only the fields you want to override; all others get safe defaults.
+
+const makeSearchResult = (overrides: Partial<SearchResult> = {}): SearchResult => ({
+  id: 'result-001',
+  entityType: 'job',
+  title: 'Result Title',
+  subtitle: 'Org Name',
+  orgId: 'org-001',
+  orgName: 'Org Name',
+  matchField: 'title',
+  matchSnippet: 'Result Title',
+  createdAt: '2026-01-01T00:00:00Z',
+  url: '/jobs/result-001',
+  ...overrides,
+});
 
 // ─── Mock localStorage ───────────────────────────────────────────────────────
 
@@ -101,8 +127,9 @@ describe('PlatformSearchPanel — Autocomplete & Bookmark Integration', () => {
   });
 
   it('shows autocomplete dropdown when typing with recent searches stored', async () => {
+    // T1 fix: use canonical RECENT_KEY value 'monolith-recent-searches'
     localStorageMock.setItem(
-      'platform_search_recent',
+      'monolith-recent-searches',
       JSON.stringify(['DAPH Decor', 'invoice 2024', 'metal panels'])
     );
 
@@ -123,13 +150,25 @@ describe('PlatformSearchPanel — Autocomplete & Bookmark Integration', () => {
   });
 
   it('hides autocomplete when search results arrive', async () => {
+    // T2 fix: mockRpc returns full SearchResult shape
     mockRpc.mockResolvedValue({
-      data: [{ id: '1', title: 'DAPH Job', type: 'job', org_name: 'DAPH' }],
+      data: [
+        makeSearchResult({
+          id: '1',
+          title: 'DAPH Job',
+          entityType: 'job',
+          orgId: 'org-daph',
+          orgName: 'DAPH',
+          subtitle: 'DAPH',
+          url: '/jobs/1',
+        }),
+      ],
       error: null,
     });
 
+    // T1 fix
     localStorageMock.setItem(
-      'platform_search_recent',
+      'monolith-recent-searches',
       JSON.stringify(['DAPH Decor'])
     );
 
@@ -151,8 +190,9 @@ describe('PlatformSearchPanel — Autocomplete & Bookmark Integration', () => {
   });
 
   it('ArrowDown cycles through autocomplete suggestions without crash', async () => {
+    // T1 fix
     localStorageMock.setItem(
-      'platform_search_recent',
+      'monolith-recent-searches',
       JSON.stringify(['alpha', 'beta', 'gamma'])
     );
 
@@ -175,8 +215,9 @@ describe('PlatformSearchPanel — Autocomplete & Bookmark Integration', () => {
   });
 
   it('Enter on suggestion fills search input', async () => {
+    // T1 fix
     localStorageMock.setItem(
-      'platform_search_recent',
+      'monolith-recent-searches',
       JSON.stringify(['DAPH Decor', 'invoice total'])
     );
 
@@ -197,8 +238,9 @@ describe('PlatformSearchPanel — Autocomplete & Bookmark Integration', () => {
   });
 
   it('Escape key closes autocomplete dropdown', async () => {
+    // T1 fix
     localStorageMock.setItem(
-      'platform_search_recent',
+      'monolith-recent-searches',
       JSON.stringify(['alpha', 'beta'])
     );
 
@@ -236,8 +278,19 @@ describe('PlatformSearchPanel — Autocomplete & Bookmark Integration', () => {
   });
 
   it('search execution stores query as recent', async () => {
+    // T2 fix
     mockRpc.mockResolvedValue({
-      data: [{ id: '1', title: 'Result', type: 'job', org_name: 'Org1' }],
+      data: [
+        makeSearchResult({
+          id: '1',
+          title: 'Result',
+          entityType: 'job',
+          orgId: 'org-1',
+          orgName: 'Org1',
+          subtitle: 'Org1',
+          url: '/jobs/1',
+        }),
+      ],
       error: null,
     });
 
@@ -253,9 +306,9 @@ describe('PlatformSearchPanel — Autocomplete & Bookmark Integration', () => {
       await new Promise((r) => setTimeout(r, 500));
     });
 
-    // Check localStorage was called to store recent search
+    // T1 fix: check correct localStorage key
     const setCalls = localStorageMock.setItem.mock.calls;
-    const recentCall = setCalls.find((c: string[]) => c[0] === 'platform_search_recent');
+    const recentCall = setCalls.find((c: string[]) => c[0] === 'monolith-recent-searches');
     if (recentCall) {
       expect(JSON.parse(recentCall[1])).toContain('test query xyz');
     } else {
@@ -491,15 +544,33 @@ describe('E2E: Autocomplete → Bookmark Flow', () => {
   });
 
   it('full flow: type → autocomplete → select → search → results', async () => {
+    // T1 fix
     localStorageMock.setItem(
-      'platform_search_recent',
+      'monolith-recent-searches',
       JSON.stringify(['DAPH Decor', 'panel order', 'new client'])
     );
 
+    // T2 fix: full SearchResult shape
     mockRpc.mockResolvedValue({
       data: [
-        { id: 'j1', title: 'DAPH Job A', type: 'job', org_name: 'DAPH Decor' },
-        { id: 'j2', title: 'DAPH Invoice B', type: 'invoice', org_name: 'DAPH Decor' },
+        makeSearchResult({
+          id: 'j1',
+          title: 'DAPH Job A',
+          entityType: 'job',
+          orgId: 'org-daph',
+          orgName: 'DAPH Decor',
+          subtitle: 'DAPH Decor',
+          url: '/jobs/j1',
+        }),
+        makeSearchResult({
+          id: 'j2',
+          title: 'DAPH Invoice B',
+          entityType: 'invoice',
+          orgId: 'org-daph',
+          orgName: 'DAPH Decor',
+          subtitle: 'DAPH Decor',
+          url: '/invoices/j2',
+        }),
       ],
       error: null,
     });
@@ -534,15 +605,33 @@ describe('E2E: Autocomplete → Bookmark Flow', () => {
   });
 
   it('keyboard navigation switches from autocomplete to results mode', async () => {
+    // T1 fix
     localStorageMock.setItem(
-      'platform_search_recent',
+      'monolith-recent-searches',
       JSON.stringify(['alpha query'])
     );
 
+    // T2 fix
     mockRpc.mockResolvedValue({
       data: [
-        { id: 'j1', title: 'Alpha Job', type: 'job', org_name: 'Org1' },
-        { id: 'j2', title: 'Alpha Invoice', type: 'invoice', org_name: 'Org2' },
+        makeSearchResult({
+          id: 'j1',
+          title: 'Alpha Job',
+          entityType: 'job',
+          orgId: 'org-1',
+          orgName: 'Org1',
+          subtitle: 'Org1',
+          url: '/jobs/j1',
+        }),
+        makeSearchResult({
+          id: 'j2',
+          title: 'Alpha Invoice',
+          entityType: 'invoice',
+          orgId: 'org-2',
+          orgName: 'Org2',
+          subtitle: 'Org2',
+          url: '/invoices/j2',
+        }),
       ],
       error: null,
     });
@@ -598,8 +687,19 @@ describe('E2E: Autocomplete → Bookmark Flow', () => {
       single: vi.fn().mockResolvedValue({ data: null, error: null }),
     });
 
+    // T2 fix
     mockRpc.mockResolvedValue({
-      data: [{ id: 'j1', title: 'Metal Panel Job', type: 'job', org_name: 'DAPH' }],
+      data: [
+        makeSearchResult({
+          id: 'j1',
+          title: 'Metal Panel Job',
+          entityType: 'job',
+          orgId: 'org-daph',
+          orgName: 'DAPH',
+          subtitle: 'DAPH',
+          url: '/jobs/j1',
+        }),
+      ],
       error: null,
     });
 
