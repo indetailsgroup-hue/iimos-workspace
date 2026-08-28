@@ -226,8 +226,11 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 | `supabase/tests/0181_revoke_sweep.sql` | 0181 | T-0181-01 → T-0181-18 (18 tests) | No PUBLIC EXECUTE on 14 functions; service_role grants; trigger-only function |
 | `supabase/tests/0182_audit_logs_org_id_hardening.sql` | 0182 | T-0182-01 → T-0182-13 (13 tests) | NOT NULL, FK→`org_id` (D1), trigger `o.org_id` (D3), RLS WITH CHECK `o.org_id` (D2), spoofed org rejection, service_role OK, anon rejection |
 | `supabase/tests/0183_baseline_org_id_not_null.sql` | 0183 | T-0183-01 → T-0183-13 (13 tests) | NOT NULL on jobs/quotations/invoices/ledger_entries, sentinel backfill, FK constraints, zero NULL rows |
+| `supabase/tests/cross_tenant_isolation.sql` | Integration (0173–0183) | T01–T25 (25 tests) | SELECT/INSERT/UPDATE/DELETE cross-tenant isolation, own-org access, row integrity |
 
 **Total pgTAP tests authored (forward migrations):** 14 + 35 + 17 + 18 + 13 + 13 = **110 tests** (0179 F1: 14, 0179 NNB: 35, 0180: 17, 0181: 18, 0182: 13, 0183: 13)
+
+**Grand total pgTAP assertions (pg_prove SQL suites):** 110 (forward) + 12 (rollback) + 25 (cross-tenant) = **147 tests**
 
 **Rollback verification suites (CI forward-and-back only, not counted in production total):**
 
@@ -235,7 +238,7 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 |------|-----------|-------|----------|
 | `supabase/tests/0183_rollback_verification.sql` | 0183 | T-0183-R01 → T-0183-R12 (12 tests) | information_schema nullable check, pg_catalog attnotnull=false, lives_ok NULL UPDATE on jobs/quotations/invoices/ledger_entries |
 
-**CI workflow:** `pgtap-tests.yml` written locally at `.github/workflows/pgtap-tests.yml` — push **blocked** pending PAT `workflow` scope (current token has `repo` only). File is committed in the local clone at `/tmp/monolith-git/`; re-push once a `workflow`-scoped token is available.
+**CI workflow:** `.github/workflows/pgtap-tests.yml` — live on `main` (commit `ed53e4fb10`); step 2 runs `lint-rls-org-id.py` in delta mode (A1 ✅ — commit `383bb9aca8`); step 8 pg_prove comment lists 147 total assertions (A3 ✅ — commit `1fba55bd`). Issue #56 action items A1 + A3 closed.
 
 ---
 
@@ -256,6 +259,7 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 | #52 | PR | 0178 F3+F4 RLS hardening | `security`, `P1` | Open |
 | #53 | Issue | Migration 0179 retrospective | `security`, `P1`, `database`, `retrospective` | Open |
 | #54 | PR | Identity reconciliation hardening + REVOKE sweep (0180+0181) | `security`, `P1`, `identity-security`, `database` | Open — closes #37 |
+| #56 | Issue | Post-mortem v16.8.0 — RLS linter CI gate + cross-tenant pgTAP suite | `security`, `audit`, `P1` | A1 ✅ Closed (`383bb9aca8`), A3 ✅ Closed (`1fba55bd`), A4 blocked (SUPABASE_ACCESS_TOKEN not provisioned) |
 
 ---
 
@@ -283,4 +287,4 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 
 *Generated: 2026-08-28 · Monolith Workspace security audit cycle*  
 *This document is the authoritative security status record for the v16.8.0 audit cycle.*  
-*Last updated: 2026-08-28 — pgTAP forward count 110 (0179 F1:14, 0179 NNB:35, 0180:17, 0181:18, 0182:13, 0183:13) + 12-test rollback verification suite (0183_rollback_verification.sql); PRs #45/#47/#52/#54 closed with bilingual EN+TH comments referencing PR #55; npm audit 0 vulnerabilities confirmed; CI workflow file ready — push blocked pending PAT `workflow` scope.*
+*Last updated: 2026-08-28 — pgTAP SQL total 147 (forward 110 + rollback 12 + cross-tenant 25); cross-tenant isolation suite T01–T25 live on main (commit `b63d0cd7`); CI workflow live (commit `ed53e4fb10`); lint-rls-org-id.py delta mode live (commit `383bb9aca8`); issue #56 A1+A3 closed; A4 (SUPABASE_ACCESS_TOKEN) pending; npm audit 0 vulnerabilities confirmed.*
