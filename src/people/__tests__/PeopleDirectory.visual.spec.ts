@@ -52,7 +52,7 @@ const STORY = {
   allStageBadges: 'people-peopledirectory--all-stage-badges',
   singleSuperEmployee: 'people-peopledirectory--single-super-employee',
   stageFilterSuperEmployee: 'people-peopledirectory--stage-filter-super-employee',
-  skillFilterPythonAI: 'people-peopledirectory--skill-filter-python-a-i',
+  skillFilterPythonAI: 'people-peopledirectory--skill-filter-python-ai',
   searchFilter: 'people-peopledirectory--search-filter',
   emptyState: 'people-peopledirectory--empty-state',
   loading: 'people-peopledirectory--loading',
