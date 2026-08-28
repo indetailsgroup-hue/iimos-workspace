@@ -1,58 +1,144 @@
-# Supabase config — determined-williams (Monolith / DAPH) STANDALONE
-# Q1 decision: standalone DB (self-contained invariant; separate-monolith-tcck → no TCCK coupling).
-# C12 foundation (00000000000000_c12_foundation.sql) is applied first by `supabase db reset`.
-# For reference: https://supabase.com/docs/guides/local-development/cli/config
+# supabase/config.toml
+# Supabase CLI project configuration for: monolith-workspace
+# Docs: https://supabase.com/docs/guides/cli/config
+# ---------------------------------------------------------------------------
+# To apply: supabase db push   (migrations)
+#           supabase functions deploy etax-submit-worker
+#           supabase functions deploy notify-overdue
+# ---------------------------------------------------------------------------
 
-project_id = "determined-williams"
+[project]
+project_id = "monolith-workspace"   # replace with your real Supabase project ref
 
+# ---------------------------------------------------------------------------
+# API
+# ---------------------------------------------------------------------------
 [api]
-enabled = true
-port = 54321
-schemas = ["public", "graphql_public"]
+enabled       = true
+port          = 54321
+schemas       = ["public", "storage", "graphql_public"]
 extra_search_path = ["public", "extensions"]
-max_rows = 1000
+max_rows      = 1000
 
+# ---------------------------------------------------------------------------
+# Database
+# ---------------------------------------------------------------------------
 [db]
-port = 54322
-shadow_port = 54320
-health_timeout = "2m"
-# ต้องตรงกับเวอร์ชัน remote (เท่ากับ cp06 platform เพื่อความเข้ากันของ C12)
-major_version = 17
+port          = 54322
+shadow_port   = 54320
+major_version = 15
 
 [db.pooler]
-enabled = false
+enabled        = false
+port           = 54329
+pool_mode      = "transaction"
+default_pool_size  = 20
+max_client_conn    = 100
 
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
 [auth]
 enabled = true
-# C12 helpers อ่าน auth.jwt() app_metadata.{roles, site_codes} และ auth.uid()
-# (Local dev: seed JWT app_metadata ให้มี roles/site_codes ตาม C12 — เช่น site_codes=["BKK-HQ-01"])
-site_url = "http://127.0.0.1:5199"
-additional_redirect_urls = ["http://127.0.0.1:5199", "http://localhost:5199", "http://127.0.0.1:3000"]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://localhost:3000"]
+jwt_expiry     = 3600
+enable_refresh_token_rotation    = true
+refresh_token_reuse_interval     = 10
+enable_signup                    = true
+enable_anonymous_sign_ins        = false
+minimum_password_length          = 8
 
+[auth.email]
+enable_signup          = true
+double_confirm_changes = true
+enable_confirmations   = false
+
+[auth.sms]
+enable_signup = false
+
+# ---------------------------------------------------------------------------
+# Storage
+# ---------------------------------------------------------------------------
+[storage]
+enabled = true
+# Buckets are created via migrations (0183 creates etax-pdfs).
+# file_size_limit applies globally; per-bucket limits set in migrations.
+file_size_limit = "50MiB"
+
+[storage.image_transformation]
+enabled = false
+
+# ---------------------------------------------------------------------------
+# Edge Functions
+# ---------------------------------------------------------------------------
+
+# etax-submit-worker
+# Polls etax_submissions WHERE status='queued', generates UBL 2.1 XML,
+# submits to Thai Revenue Department API, then optionally downloads the
+# resulting PDF into etax-pdfs storage bucket.
+[functions.etax-submit-worker]
+verify_jwt = false          # Called by pg_cron via pg_net (no JWT available)
+import_map = "./functions/etax-submit-worker/import_map.json"
+
+# Required secrets (set with: supabase secrets set KEY=VALUE):
+#   ETAX_PROVIDER_URL   - Thai RD / ETDA provider base URL
+#   ETAX_API_KEY        - API key / token for the RD provider
+#   ETAX_SELLER_TAX_ID  - Organisation's Thai tax ID (13 digits)
+#   ETAX_SELLER_NAME    - Organisation's registered name (Thai)
+#   SUPABASE_URL        - Auto-injected
+#   SUPABASE_SERVICE_ROLE_KEY - Auto-injected
+
+# notify-overdue
+# Calls rpc_check_overdue_invoices, then sends LINE Notify / Resend email
+# alerts per organisation's notification_settings (added in 0182).
+[functions.notify-overdue]
+verify_jwt = false          # Called by pg_cron via pg_net
+import_map = "./functions/notify-overdue/import_map.json"
+
+# Required secrets:
+#   LINE_NOTIFY_TOKEN   - LINE Notify channel access token (per org or global)
+#   RESEND_API_KEY      - Resend (email) API key
+#   CRON_SECRET         - Shared secret validated by the function
+#   SUPABASE_URL        - Auto-injected
+#   SUPABASE_SERVICE_ROLE_KEY - Auto-injected
+
+# ---------------------------------------------------------------------------
+# Studio (local dev only)
+# ---------------------------------------------------------------------------
 [studio]
 enabled = true
-port = 54323
+port    = 54323
+api_url = "http://127.0.0.1"
 
-[storage]
-enabled = false
+# ---------------------------------------------------------------------------
+# Inbucket (local email capture)
+# ---------------------------------------------------------------------------
+[inbucket]
+enabled    = true
+port       = 54324
+smtp_port  = 54325
+pop3_port  = 54326
 
-[realtime]
+# ---------------------------------------------------------------------------
+# Analytics
+# ---------------------------------------------------------------------------
+[analytics]
 enabled = false
 
 # ---------------------------------------------------------------------------
-# Edge Functions — verify_jwt (S7-1, scrutiny รอบ 7):
-# default ของ Supabase = ต้องมี JWT → endpoint ที่ "คนนอก/LINE server" เรียกตรงต้องปิด
-# ความปลอดภัยของแต่ละตัวอยู่ข้างใน: line-webhook/approval-postback = HMAC signature (Vault),
-# line-login = แลก code กับ LINE โดยตรง, doc-view = token uuid อายุจำกัด + audit
+# SCHEDULED JOBS — pg_cron configuration
 # ---------------------------------------------------------------------------
-[functions.line-webhook]
-verify_jwt = false
-
-[functions.approval-postback]
-verify_jwt = false
-
-[functions.line-login]
-verify_jwt = false
-
-[functions.doc-view]
-verify_jwt = false
+# pg_cron is enabled in Supabase Pro/Team plans (and in local dev via supabase start).
+# The cron jobs below are created by migration 0184_scheduled_jobs.sql (see below).
+# They use pg_net to send HTTP POST requests to the deployed Edge Functions.
+#
+# Schedule reference:
+#   etax-submit-worker : every 5 minutes  (*/5 * * * *)
+#   notify-overdue     : every day 08:00 ICT (01:00 UTC)  (0 1 * * *)
+#
+# NOTE: supabase/config.toml does not have a native [cron] section.
+# Scheduled jobs must be registered via SQL (pg_cron) or the Supabase Dashboard
+# (Database → Extensions → pg_cron → Cron Jobs).
+# See: supabase/migrations/0184_scheduled_jobs.sql  (created alongside this file)
+# ---------------------------------------------------------------------------
