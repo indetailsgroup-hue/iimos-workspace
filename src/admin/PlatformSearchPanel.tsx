@@ -531,3 +531,7 @@ export function PlatformSearchPanel({
 }
 
 export default PlatformSearchPanel;
+
+// ─── Super-admin-guarded export (v16.8.0) ────────────────────────────────────
+import withSuperAdminGuard from './withSuperAdminGuard';
+export const GuardedPlatformSearchPanel = withSuperAdminGuard(PlatformSearchPanel);
