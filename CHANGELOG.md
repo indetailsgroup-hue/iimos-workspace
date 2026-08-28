@@ -1,3 +1,40 @@
+## [14.2.0] – 2026-08-28
+
+### Added
+
+#### Migration 0189 — `v_mv_alert_history` view (`supabase/migrations/0189_mv_alert_history.sql`)
+- Adds `v_mv_alert_history` — a **security-barrier VIEW** that surfaces the last N critical MV-refresh alert events per authenticated org, pulling from `etax_submission_audit_log` (system rows where `alert_type = 'mv_refresh_critical'`) and joining with `v_mv_refresh_lag` (current lag state) and `mv_etax_compliance_dashboard` (impact row count).
+- CTE structure:
+  - `ranked_alerts` — all system critical-alert rows for the caller's org, ranked by `created_at DESC` with `ROW_NUMBER()` window; default limit 10 via `alert_rank <= p_limit`.
+  - `next_refresh` — detects resolution: first refresh log entry after each alert's `created_at`; computes `resolved_at` and `seconds_to_resolve`.
+  - `current_lag` — LATERAL pull from `v_mv_refresh_lag` for current freshness context.
+  - `mv_impact` — LATERAL pull from `mv_etax_compliance_dashboard` for `total_submissions` impact metric.
+- Derived columns: `was_resolved BOOLEAN`, `seconds_to_resolve INT`, `time_since_prev_alert INTERVAL` (LAG window for dedup health monitoring).
+- **REVOKE ALL** on view from `PUBLIC` and `authenticated`; `SELECT` granted to `service_role` only — data accessed exclusively through RPC.
+- Adds `rpc_list_mv_alert_history(p_limit INT DEFAULT 10)` — authenticated, roles `FINANCE/ADMIN/OWNER`, hard cap 50; calls `get_user_org_id()` for tenant isolation.
+- Adds `rpc_list_mv_alert_history_admin(p_limit INT DEFAULT 10)` — `service_role` only, hard cap 200; no `auth.uid()` call; accepts explicit `p_org_id UUID` parameter for cross-tenant admin use.
+
+#### Integration Test Suite — `0186_0187_integration.test.ts` (`src/__tests__/rls/0186_0187_integration.test.ts`)
+- Combined integration scenario for Migrations 0186 and 0187 covering the full **fresh→stale lifecycle** of the materialized view compliance dashboard.
+- **Group A — Pre-refresh baseline**: asserts `rpc_etax_compliance_dashboard_cached` returns `mv_age_seconds` immediately and MV exists with a valid `refreshed_at`.
+- **Group B — Post-refresh freshness**: calls `fn_refresh_etax_compliance_mv(p_triggered_by := 'test_suite')`, asserts `freshness_status = 'fresh'`, `mv_age_seconds < 60`, and that cached data matches expected fixture counts.
+- **Group C — Staleness progression via backdate**: backdates `etax_compliance_mv_refresh_log` by > 1800 s; asserts `freshness_status` transitions to `'critical'`; cached RPC still returns data (stale-read semantics preserved).
+- **Group D — Cached vs live accuracy**: compares `rpc_etax_compliance_dashboard_cached` row data against `rpc_etax_compliance_dashboard` (live view); post-refresh values must agree; pre-refresh stale delta is documented.
+- **Group E — Multi-org isolation**: two org fixtures; refresh for org A does not update org B's MV row; each org sees only its own data.
+- **Group F — Manual refresh via RPC**: calls `rpc_refresh_etax_compliance_mv` (ADMIN only); asserts log entry written with `triggered_by = 'manual'`; subsequent cached call returns `freshness_status = 'fresh'`.
+- **Group G — Refresh log tracking**: verifies `etax_compliance_mv_refresh_log` row count increments on each refresh; `duration_ms` and `row_count` are non-null and positive.
+- `afterEach` cleanup purges refresh log rows with `triggered_by = 'test_suite'` and resets MV to production-safe state.
+
+#### Staging Validation Script — §11 (`scripts/staging_validate_0188.sh`)
+- Adds **§11 — Vitest CI** block to `staging_validate_0188.sh`, inserted before the Summary block.
+- In **live mode**: runs `npx vitest run --reporter=verbose src/__tests__/rls/0188_mv_refresh_lag_alert.test.ts`; captures stdout/stderr; truncates CI output to first 80 lines with truncation notice; parses `N passed` / `N failed` counts from vitest summary line; increments `FAIL_COUNT` if vitest exits non-zero.
+- In **`--dry-run` mode**: prints mocked vitest output (6 representative test lines + summary) without spawning Node; emits a `pass` result so CI pipelines without Node.js still complete cleanly.
+- Guards: skips gracefully with `warn` if `npx` is not in PATH or if the test file is not present (e.g. pre-checkout CI steps).
+
+### Changed
+- `scripts/staging_validate_0188.sh` — §11 added; total sections now **§1–§11**; `exit "$FAIL_COUNT"` still final line.
+
+
 # Changelog
 
 All notable changes to the Monolith project will be documented in this file.
