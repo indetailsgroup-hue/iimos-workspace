@@ -8,9 +8,11 @@
 #   ./preflight_db_reset.sh              # validate only, no reset
 #   ./preflight_db_reset.sh --reset      # validate then execute db reset
 #   ./preflight_db_reset.sh --reset --yes # non-interactive (CI/CD)
+#   ./preflight_db_reset.sh --dry-run    # CI-safe: mock DB checks, skip real connections
+#   ./preflight_db_reset.sh --dry-run --reset  # dry-run + would-reset (no actual reset)
 #
 # Exit codes:
-#   0  All checks passed (and reset ran, if --reset was given)
+#   0  All checks passed (and reset ran, if --reset was given and NOT --dry-run)
 #   1  One or more checks failed — db reset was NOT executed
 # =============================================================================
 
@@ -20,28 +22,42 @@ set -euo pipefail
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
 
-pass()  { echo -e "  ${GREEN}✔${RESET}  $*"; }
-fail()  { echo -e "  ${RED}✖${RESET}  $*"; FAILURES=$((FAILURES + 1)); }
-warn()  { echo -e "  ${YELLOW}⚠${RESET}  $*"; WARNINGS=$((WARNINGS + 1)); }
-info()  { echo -e "  ${CYAN}ℹ${RESET}  $*"; }
-header(){ echo -e "\n${BOLD}${CYAN}━━━  $*  ━━━${RESET}"; }
+pass()    { echo -e "  ${GREEN}✔${RESET}  $*"; }
+fail()    { echo -e "  ${RED}✖${RESET}  $*"; FAILURES=$((FAILURES + 1)); }
+warn()    { echo -e "  ${YELLOW}⚠${RESET}  $*"; WARNINGS=$((WARNINGS + 1)); }
+info()    { echo -e "  ${CYAN}ℹ${RESET}  $*"; }
+drypass() { echo -e "  ${CYAN}✔ [DRY-RUN]${RESET}  $* (mocked — skipping real connection)"; }
+header()  { echo -e "\n${BOLD}${CYAN}━━━  $*  ━━━${RESET}"; }
 
 FAILURES=0
 WARNINGS=0
 DO_RESET=false
 NON_INTERACTIVE=false
+DRY_RUN=false
 
 for arg in "$@"; do
   case "$arg" in
-    --reset) DO_RESET=true ;;
-    --yes)   NON_INTERACTIVE=true ;;
+    --reset)   DO_RESET=true ;;
+    --yes)     NON_INTERACTIVE=true ;;
+    --dry-run) DRY_RUN=true ;;
   esac
 done
+
+if [[ "$DRY_RUN" == true ]]; then
+  echo -e "\n${YELLOW}${BOLD}  ⚙  DRY-RUN MODE ACTIVE${RESET}"
+  echo -e "  DB-dependent checks are mocked as PASS."
+  echo -e "  Filesystem, git, and config checks run normally."
+  echo -e "  No DB connections will be made. db reset will NOT execute.\n"
+fi
 
 # ─── 0. Prerequisites ─────────────────────────────────────────────────────────
 header "0. Tool prerequisites"
 
 for cmd in supabase psql curl jq git; do
+  if [[ "$DRY_RUN" == true && "$cmd" == "psql" ]]; then
+    drypass "psql (skipped in dry-run)"
+    continue
+  fi
   if command -v "$cmd" &>/dev/null; then
     pass "$cmd found: $(command -v "$cmd")"
   else
@@ -50,25 +66,46 @@ for cmd in supabase psql curl jq git; do
 done
 
 # Supabase CLI minimum version check (requires ≥ 1.150.0 for pg_cron support)
-SUPA_VERSION=$(supabase --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "0.0.0")
-SUPA_MAJOR=$(echo "$SUPA_VERSION" | cut -d. -f1)
-SUPA_MINOR=$(echo "$SUPA_VERSION" | cut -d. -f2)
-if [[ "$SUPA_MAJOR" -gt 1 ]] || { [[ "$SUPA_MAJOR" -eq 1 ]] && [[ "$SUPA_MINOR" -ge 150 ]]; }; then
-  pass "Supabase CLI v$SUPA_VERSION (≥ 1.150.0)"
+if [[ "$DRY_RUN" == true ]]; then
+  drypass "Supabase CLI version check (skipped in dry-run)"
 else
-  warn "Supabase CLI v$SUPA_VERSION — recommend upgrading to ≥ 1.150.0"
+  SUPA_VERSION=$(supabase --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "0.0.0")
+  SUPA_MAJOR=$(echo "$SUPA_VERSION" | cut -d. -f1)
+  SUPA_MINOR=$(echo "$SUPA_VERSION" | cut -d. -f2)
+  if [[ "$SUPA_MAJOR" -gt 1 ]] || { [[ "$SUPA_MAJOR" -eq 1 ]] && [[ "$SUPA_MINOR" -ge 150 ]]; }; then
+    pass "Supabase CLI v$SUPA_VERSION (≥ 1.150.0)"
+  else
+    warn "Supabase CLI v$SUPA_VERSION — recommend upgrading to ≥ 1.150.0"
+  fi
 fi
 
 # ─── 1. Environment variables ─────────────────────────────────────────────────
 header "1. Environment variables"
 
-# Required: Supabase project
-for var in SUPABASE_URL SUPABASE_DB_URL SUPABASE_SERVICE_ROLE_KEY SUPABASE_ANON_KEY; do
+# In dry-run: still validate env var presence (they may be unset in CI — warn, don't fail)
+ENV_CHECK_FAIL_LEVEL="fail"
+if [[ "$DRY_RUN" == true ]]; then
+  ENV_CHECK_FAIL_LEVEL="warn"
+  info "In dry-run, missing env vars are warnings (not failures) — they are not used for connections"
+fi
+
+check_env_var() {
+  local var="$1"
+  local level="${2:-$ENV_CHECK_FAIL_LEVEL}"
   if [[ -n "${!var:-}" ]]; then
     pass "$var is set"
   else
-    fail "$var is NOT set — required for db reset"
+    if [[ "$level" == "fail" ]]; then
+      fail "$var is NOT set — required for db reset"
+    else
+      warn "$var is NOT set (dry-run: no real connection will be made)"
+    fi
   fi
+}
+
+# Required: Supabase project
+for var in SUPABASE_URL SUPABASE_DB_URL SUPABASE_SERVICE_ROLE_KEY SUPABASE_ANON_KEY; do
+  check_env_var "$var"
 done
 
 # Required: e-Tax worker
@@ -108,21 +145,24 @@ done
 # ─── 2. Database connectivity ─────────────────────────────────────────────────
 header "2. Database connectivity"
 
-if DB_CHECK=$(psql "$SUPABASE_DB_URL" -c "SELECT current_database(), version();" -t 2>&1); then
-  DB_NAME=$(echo "$DB_CHECK" | awk -F'|' '{print $1}' | tr -d ' ' | head -1)
-  pass "Connected to database: $DB_NAME"
+if [[ "$DRY_RUN" == true ]]; then
+  drypass "DB connectivity (postgres — mocked)"
+  drypass "DB URL endpoint check (remote, non-localhost — mocked)"
 else
-  fail "Cannot connect to DB: $DB_CHECK"
-  echo -e "\n${RED}Database unreachable — aborting remaining DB checks.${RESET}"
-  # Continue to show all other failures but skip DB checks
-fi
-
-# Verify DB is the expected project
-if [[ -n "${SUPABASE_DB_URL:-}" ]]; then
-  if echo "$SUPABASE_DB_URL" | grep -q "localhost\|127.0.0.1\|local"; then
-    warn "DB URL points to localhost — ensure this is the staging instance, not production"
+  if DB_CHECK=$(psql "$SUPABASE_DB_URL" -c "SELECT current_database(), version();" -t 2>&1); then
+    DB_NAME=$(echo "$DB_CHECK" | awk -F'|' '{print $1}' | tr -d ' ' | head -1)
+    pass "Connected to database: $DB_NAME"
   else
-    pass "DB URL is a remote endpoint (non-localhost)"
+    fail "Cannot connect to DB: $DB_CHECK"
+    echo -e "\n${RED}Database unreachable — aborting remaining DB checks.${RESET}"
+  fi
+
+  if [[ -n "${SUPABASE_DB_URL:-}" ]]; then
+    if echo "$SUPABASE_DB_URL" | grep -q "localhost\|127.0.0.1\|local"; then
+      warn "DB URL points to localhost — ensure this is the staging instance, not production"
+    else
+      pass "DB URL is a remote endpoint (non-localhost)"
+    fi
   fi
 fi
 
@@ -132,6 +172,12 @@ header "3. PostgreSQL extensions"
 check_extension() {
   local ext="$1"
   local required="${2:-true}"
+
+  if [[ "$DRY_RUN" == true ]]; then
+    drypass "Extension $ext (mocked as installed)"
+    return
+  fi
+
   local result
   result=$(psql "$SUPABASE_DB_URL" -t -c \
     "SELECT extname FROM pg_extension WHERE extname = '$ext';" 2>/dev/null | tr -d ' \n')
@@ -154,6 +200,12 @@ header "4. DB application settings (app.settings.*)"
 
 check_db_setting() {
   local setting="$1"
+
+  if [[ "$DRY_RUN" == true ]]; then
+    drypass "$setting (mocked as configured)"
+    return
+  fi
+
   local val
   val=$(psql "$SUPABASE_DB_URL" -t -c \
     "SELECT current_setting('$setting', TRUE);" 2>/dev/null | tr -d ' \n')
@@ -191,9 +243,9 @@ else
     pass "No 20260828_*.sql found (renamed to 0000)"
   fi
 
-  # 5c. Check all expected migrations 0176–0185 are present
+  # 5c. Check all expected migrations 0176–0186 are present
   EXPECTED_MIGRATIONS=(
-    "0176" "0177" "0178" "0179" "0180" "0181" "0182" "0183" "0184" "0185"
+    "0176" "0177" "0178" "0179" "0180" "0181" "0182" "0183" "0184" "0185" "0186"
   )
   for prefix in "${EXPECTED_MIGRATIONS[@]}"; do
     if ls "$MIGRATIONS_DIR"/${prefix}_*.sql &>/dev/null; then
@@ -235,6 +287,16 @@ else
       fail "0178: $SINGULAR_REFS singular table reference(s) still present — run the pluralize fix"
     fi
   fi
+
+  # 5g. 0186 — verify compliance view migration present
+  if ls "$MIGRATIONS_DIR"/0186_*.sql &>/dev/null; then
+    FILE_0186=$(ls "$MIGRATIONS_DIR"/0186_*.sql | head -1)
+    if grep -q "v_etax_compliance_dashboard" "$FILE_0186"; then
+      pass "0186: v_etax_compliance_dashboard view definition found"
+    else
+      warn "0186: v_etax_compliance_dashboard not found in $(basename "$FILE_0186")"
+    fi
+  fi
 fi
 
 # ─── 6. Edge function files ────────────────────────────────────────────────────
@@ -245,7 +307,6 @@ for fn_path in \
   "supabase/functions/notify-overdue/index.ts"; do
   if [[ -f "$fn_path" ]]; then
     pass "$fn_path exists"
-    # Check it references downloadAndStorePdf (etax worker specific)
     if [[ "$fn_path" == *"etax-submit-worker"* ]]; then
       if grep -q "downloadAndStorePdf" "$fn_path"; then
         pass "etax-submit-worker: downloadAndStorePdf() is present"
@@ -294,10 +355,11 @@ fi
 # ─── 9. Supabase project linkage ──────────────────────────────────────────────
 header "9. Supabase project linkage"
 
-if [[ -f "supabase/.temp/project-ref" ]]; then
+if [[ "$DRY_RUN" == true ]]; then
+  drypass "Supabase project linkage (supabase/.temp/project-ref — mocked)"
+elif [[ -f "supabase/.temp/project-ref" ]]; then
   PROJECT_REF=$(cat "supabase/.temp/project-ref")
   pass "Project linked: $PROJECT_REF"
-  # Warn if project ref looks like production
   if echo "$PROJECT_REF" | grep -qiE "prod|production"; then
     fail "Project ref contains 'prod' — this may be a production project. Aborting."
   fi
@@ -308,6 +370,9 @@ fi
 # ─── 10. Summary ──────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+if [[ "$DRY_RUN" == true ]]; then
+  echo -e "${CYAN}${BOLD}  DRY-RUN COMPLETE${RESET}  — no DB connections were made"
+fi
 if [[ $FAILURES -eq 0 ]]; then
   echo -e "${GREEN}${BOLD}  ALL CHECKS PASSED${RESET}  (${WARNINGS} warning(s))"
 else
@@ -318,6 +383,12 @@ echo ""
 
 # ─── 11. Optional db reset ────────────────────────────────────────────────────
 if [[ "$DO_RESET" == true ]]; then
+  if [[ "$DRY_RUN" == true ]]; then
+    echo -e "${CYAN}${BOLD}[DRY-RUN]${RESET} Would execute: ${BOLD}supabase db reset${RESET}"
+    echo -e "${CYAN}          No reset performed — remove --dry-run to run for real.${RESET}"
+    exit $FAILURES
+  fi
+
   if [[ $FAILURES -gt 0 ]]; then
     echo -e "${RED}db reset ABORTED — fix the $FAILURES failure(s) above first.${RESET}"
     exit 1
