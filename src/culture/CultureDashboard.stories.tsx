@@ -487,7 +487,7 @@ export const StatusFilter_Resolved: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     // Find the status filter combobox
-    const statusSelect = await canvas.findByRole('combobox');
+    const statusSelect = await canvas.findByDisplayValue('ทุกสถานะ');
     await userEvent.selectOptions(statusSelect, 'RESOLVED');
     // Resolved feedback should be visible
     await expect(
@@ -511,7 +511,7 @@ export const StatusFilter_Pending: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const statusSelect = await canvas.findByRole('combobox');
+    const statusSelect = await canvas.findByDisplayValue('ทุกสถานะ');
     await userEvent.selectOptions(statusSelect, 'PENDING');
     await expect(
       canvas.getByText(/เครื่องจักรบางเครื่องยังไม่มีการล็อก/i)
