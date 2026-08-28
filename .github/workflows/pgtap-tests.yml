@@ -39,7 +39,43 @@ jobs:
         uses: actions/checkout@v4
 
       # -----------------------------------------------------------------------
-      # 2. Set up Supabase CLI
+      # 2. Lint RLS org_id coverage (delta mode — scoped to changed files)
+      #    Runs BEFORE any Supabase infra to fail fast on static analysis.
+      #    On pull_request: diffs against origin/<base_ref>.
+      #    On push to main:  diffs most recent commit (HEAD~1..HEAD).
+      #    Skips gracefully when no migration files were touched.
+      # -----------------------------------------------------------------------
+      - name: Lint RLS org_id coverage
+        run: |
+          # Fetch enough history for an accurate diff (shallow clone only has HEAD)
+          git fetch --depth=50 origin "${{ github.base_ref || 'main' }}" 2>/dev/null || true
+
+          # Collect non-rollback migration files changed in this event
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED=$(git diff --name-only \
+              "origin/${{ github.base_ref }}...HEAD" \
+              -- 'supabase/migrations/*.sql' \
+              | grep -v '_rollback' || true)
+          else
+            # push to main: scope to files in the most recent commit
+            CHANGED=$(git diff --name-only HEAD~1 HEAD \
+              -- 'supabase/migrations/*.sql' \
+              | grep -v '_rollback' || true)
+          fi
+
+          if [ -z "$CHANGED" ]; then
+            echo "[lint-rls-org-id] No migration files changed — skipping lint."
+            exit 0
+          fi
+
+          echo "[lint-rls-org-id] Linting changed files:"
+          printf '  %s\n' $CHANGED
+
+          # Pass changed files as positional args (delta mode)
+          python3 scripts/lint-rls-org-id.py $CHANGED
+
+      # -----------------------------------------------------------------------
+      # 3. Set up Supabase CLI
       # -----------------------------------------------------------------------
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
@@ -47,7 +83,7 @@ jobs:
           version: latest
 
       # -----------------------------------------------------------------------
-      # 3. Install pg_prove (TAP::Parser::SourceHandler::pgTAP)
+      # 4. Install pg_prove (TAP::Parser::SourceHandler::pgTAP)
       # -----------------------------------------------------------------------
       - name: Install pg_prove and pgTAP
         run: |
@@ -59,7 +95,7 @@ jobs:
           pg_prove --version
 
       # -----------------------------------------------------------------------
-      # 4. Start Supabase local stack
+      # 5. Start Supabase local stack
       #    Requires: SUPABASE_ACCESS_TOKEN repository secret
       #    Provision: Settings → Secrets and variables → Actions
       #    Source:    app.supabase.com → Account → Access Tokens
@@ -70,13 +106,13 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       # -----------------------------------------------------------------------
-      # 5. Apply all migrations (db reset runs migrations from scratch)
+      # 6. Apply all migrations (db reset runs migrations from scratch)
       # -----------------------------------------------------------------------
       - name: Reset database and apply migrations
         run: supabase db reset --local
 
       # -----------------------------------------------------------------------
-      # 6. Enable pgTAP extension
+      # 7. Enable pgTAP extension
       # -----------------------------------------------------------------------
       - name: Enable pgTAP extension
         run: |
@@ -86,7 +122,7 @@ jobs:
           PGPASSWORD: postgres
 
       # -----------------------------------------------------------------------
-      # 7. Run pg_prove on all test files
+      # 8. Run pg_prove on all test files
       #    Runs: supabase/tests/*.sql (110 forward tests + rollback verification)
       #    Fails the job if any TAP assertion fails.
       # -----------------------------------------------------------------------
@@ -102,7 +138,7 @@ jobs:
           PGPASSWORD: postgres
 
       # -----------------------------------------------------------------------
-      # 8. Stop Supabase local stack (cleanup — always runs)
+      # 9. Stop Supabase local stack (cleanup — always runs)
       # -----------------------------------------------------------------------
       - name: Stop Supabase local stack
         if: always()
