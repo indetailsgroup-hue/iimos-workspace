@@ -485,6 +485,61 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
+# §11 — Vitest CI: 0188 unit test suite
+# ─────────────────────────────────────────────────────────────────────────────
+section "11 — Vitest: 0188_mv_refresh_lag_alert.test.ts"
+
+VITEST_TEST_FILE="src/__tests__/rls/0188_mv_refresh_lag_alert.test.ts"
+
+if [[ "$DRY_RUN" == true ]]; then
+  # ── dry-run: emit mock output without spawning vitest ────────────────────
+  info "[DRY-RUN] Would run: npx vitest run --reporter=verbose $VITEST_TEST_FILE"
+  echo ""
+  echo "  stdout (mocked):"
+  echo "   ✓ [A-1] fn_mv_refresh_lag_alert inserts when status = critical  (12 ms)"
+  echo "   ✓ [A-2] no insert when status = fresh                           (8 ms)"
+  echo "   ✓ [B-1] dedup guard blocks second alert within 30-min window    (10 ms)"
+  echo "   ✓ [B-2] alert fires again after 30-min window expires           (9 ms)"
+  echo "   ✓ [C-1] NULL submission_id accepted for system alert            (7 ms)"
+  echo "   ✓ [D-1] cross-window flood prevention (5 alerts → 1 inserted)   (11 ms)"
+  echo "   Test Files  1 passed (1)"
+  echo "   Tests       42 passed (42)"
+  pass "[DRY-RUN] vitest reported 42/42 tests passed (mocked)"
+else
+  # ── real run ─────────────────────────────────────────────────────────────
+  if ! command -v npx &>/dev/null; then
+    warn "npx not found — skipping vitest section (Node.js not in PATH)"
+  elif [[ ! -f "$VITEST_TEST_FILE" ]]; then
+    warn "Test file not found: $VITEST_TEST_FILE — skipping vitest section"
+  else
+    info "Running: npx vitest run --reporter=verbose $VITEST_TEST_FILE"
+
+    # Capture output + exit code
+    VITEST_OUTPUT=$(npx vitest run --reporter=verbose "$VITEST_TEST_FILE" 2>&1)
+    VITEST_EXIT=$?
+
+    # Pretty-print first 80 lines so CI logs aren't flooded
+    echo "$VITEST_OUTPUT" | head -80 | sed 's/^/  /'
+    LINE_COUNT=$(echo "$VITEST_OUTPUT" | wc -l)
+    if [[ "$LINE_COUNT" -gt 80 ]]; then
+      info "  ... ($((LINE_COUNT - 80)) more lines truncated — check CI log for full output)"
+    fi
+
+    # Parse pass / fail counts from vitest summary lines:
+    #   "Tests  42 passed (42)"   or   "Tests  40 passed | 2 failed (42)"
+    PASSED_COUNT=$(echo "$VITEST_OUTPUT" | grep -Eo '[0-9]+ passed' | tail -1 | grep -Eo '[0-9]+' || echo "0")
+    FAILED_COUNT=$(echo "$VITEST_OUTPUT" | grep -Eo '[0-9]+ failed'  | tail -1 | grep -Eo '[0-9]+' || echo "0")
+
+    if [[ "$VITEST_EXIT" -eq 0 ]]; then
+      pass "Vitest passed — ${PASSED_COUNT} test(s) passed, ${FAILED_COUNT} failed"
+    else
+      fail "Vitest FAILED — ${PASSED_COUNT} test(s) passed, ${FAILED_COUNT} failed (exit $VITEST_EXIT)"
+    fi
+  fi
+fi
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo -e "\n${BOLD}══════════════════════════════════════════════════${RESET}"
