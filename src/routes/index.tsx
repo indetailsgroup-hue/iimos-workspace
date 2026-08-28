@@ -86,6 +86,16 @@ const UsageDashboardComponent = lazy(() =>
   import('../tenant/UsageDashboard').then(m => ({ default: m.UsageDashboard }))
 );
 
+// v16.4: Super Admin Dashboard
+const SuperAdminDashboardComponent = lazy(() =>
+  import('../admin/SuperAdminDashboard').then(m => ({ default: m.SuperAdminDashboard }))
+);
+
+// v16.4: Notification Preferences
+const NotificationPreferencesComponent = lazy(() =>
+  import('../notifications/NotificationPreferencesPage').then(m => ({ default: m.NotificationPreferencesPage }))
+);
+
 // v15: Quotation builder
 const QuotationBuilderPage = lazy(() =>
   import('../quotation/QuotationBuilder').then(m => ({ default: m.QuotationBuilder }))
@@ -1275,6 +1285,24 @@ export const router = createBrowserRouter([
     element: (
       <Suspense fallback={<PageLoadingFallback message="Loading Safety Diagnostics…" />}>
         <SafetyGatePage />
+      </Suspense>
+    ),
+  },
+  // v16.4: Super Admin Dashboard — platform operators only
+  {
+    path: '/admin',
+    element: (
+      <Suspense fallback={<PageLoadingFallback message="Loading Admin Dashboard…" />}>
+        <SuperAdminDashboardComponent />
+      </Suspense>
+    ),
+  },
+  // v16.4: Notification Preferences — any authenticated user
+  {
+    path: '/settings/notifications',
+    element: (
+      <Suspense fallback={<PageLoadingFallback message="Loading Notification Settings…" />}>
+        <NotificationPreferencesComponent />
       </Suspense>
     ),
   },
