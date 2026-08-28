@@ -1,0 +1,298 @@
+/**
+ * PlatformSearchPanel — Super Admin global search UI
+ * Searches across jobs, members, and invoices for all tenants
+ * v16.5.0
+ */
+
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import {
+  platformSearch,
+  PlatformSearchOptions,
+  PlatformSearchResponse,
+  SearchResult,
+  SearchEntityType,
+} from './platformSearch';
+
+// ─── Sub-Components ──────────────────────────────────────────────────────────
+
+interface SearchFilterChipsProps {
+  activeTypes: SearchEntityType[];
+  onToggle: (type: SearchEntityType) => void;
+  facets: Record<SearchEntityType, number>;
+}
+
+function SearchFilterChips({ activeTypes, onToggle, facets }: SearchFilterChipsProps) {
+  const chips: { type: SearchEntityType; label: string; icon: string }[] = [
+    { type: 'job', label: 'Jobs', icon: '📋' },
+    { type: 'member', label: 'Members', icon: '👤' },
+    { type: 'invoice', label: 'Invoices', icon: '💰' },
+  ];
+
+  return (
+    <div className="flex gap-2 mb-3" role="group" aria-label="Search filters">
+      {chips.map(({ type, label, icon }) => (
+        <button
+          key={type}
+          onClick={() => onToggle(type)}
+          className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+            activeTypes.includes(type)
+              ? 'bg-blue-100 text-blue-800 border border-blue-300'
+              : 'bg-gray-100 text-gray-500 border border-gray-200'
+          }`}
+          aria-pressed={activeTypes.includes(type)}
+          data-testid={`filter-${type}`}
+        >
+          {icon} {label} {facets[type] > 0 && `(${facets[type]})`}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface SearchResultItemProps {
+  result: SearchResult;
+  onNavigate: (url: string) => void;
+}
+
+function SearchResultItem({ result, onNavigate }: SearchResultItemProps) {
+  const typeColors: Record<SearchEntityType, string> = {
+    job: 'bg-green-100 text-green-800',
+    member: 'bg-purple-100 text-purple-800',
+    invoice: 'bg-amber-100 text-amber-800',
+  };
+
+  return (
+    <div
+      className="p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
+      onClick={() => onNavigate(result.url)}
+      role="option"
+      aria-selected={false}
+      data-testid={`search-result-${result.id}`}
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span
+              className={`px-2 py-0.5 rounded text-xs font-medium ${typeColors[result.entityType]}`}
+            >
+              {result.entityType}
+            </span>
+            <h4 className="text-sm font-medium text-gray-900 truncate">{result.title}</h4>
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5">{result.subtitle}</p>
+          {result.matchSnippet && (
+            <p className="text-xs text-gray-400 mt-1 italic">
+              Match: {result.matchField} — &quot;{result.matchSnippet}&quot;
+            </p>
+          )}
+        </div>
+        <div className="text-right ml-3 flex-shrink-0">
+          <span className="text-xs text-gray-400">
+            {result.orgName}
+          </span>
+          <p className="text-xs text-gray-300 mt-0.5">
+            {new Date(result.createdAt).toLocaleDateString('th-TH')}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface OrgFacetListProps {
+  orgFacets: { orgId: string; orgName: string; count: number }[];
+  selectedOrg: string | undefined;
+  onSelectOrg: (orgId: string | undefined) => void;
+}
+
+function OrgFacetList({ orgFacets, selectedOrg, onSelectOrg }: OrgFacetListProps) {
+  if (orgFacets.length === 0) return null;
+
+  return (
+    <div className="mt-3 border-t pt-3">
+      <h5 className="text-xs font-medium text-gray-500 mb-2">By Organization</h5>
+      <div className="flex flex-wrap gap-1">
+        <button
+          onClick={() => onSelectOrg(undefined)}
+          className={`px-2 py-0.5 rounded text-xs ${
+            !selectedOrg ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
+          }`}
+          data-testid="org-filter-all"
+        >
+          All
+        </button>
+        {orgFacets.slice(0, 8).map((org) => (
+          <button
+            key={org.orgId}
+            onClick={() => onSelectOrg(org.orgId)}
+            className={`px-2 py-0.5 rounded text-xs ${
+              selectedOrg === org.orgId ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
+            }`}
+            data-testid={`org-filter-${org.orgId}`}
+          >
+            {org.orgName} ({org.count})
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
+
+export interface PlatformSearchPanelProps {
+  onNavigate?: (url: string) => void;
+  /** For testing: inject search function */
+  searchFn?: (options: PlatformSearchOptions) => Promise<PlatformSearchResponse>;
+}
+
+export function PlatformSearchPanel({
+  onNavigate = () => {},
+  searchFn = platformSearch,
+}: PlatformSearchPanelProps) {
+  const [query, setQuery] = useState('');
+  const [activeTypes, setActiveTypes] = useState<SearchEntityType[]>([
+    'job',
+    'member',
+    'invoice',
+  ]);
+  const [selectedOrg, setSelectedOrg] = useState<string | undefined>();
+  const [response, setResponse] = useState<PlatformSearchResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const executeSearch = useCallback(
+    async (searchQuery: string, types: SearchEntityType[], orgId?: string) => {
+      if (!searchQuery.trim()) {
+        setResponse(null);
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const result = await searchFn({
+          query: searchQuery,
+          entityTypes: types,
+          orgId,
+          limit: 20,
+        });
+        setResponse(result);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Search failed');
+        setResponse(null);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [searchFn]
+  );
+
+  // Debounced search on query/filter change
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      executeSearch(query, activeTypes, selectedOrg);
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query, activeTypes, selectedOrg, executeSearch]);
+
+  const handleToggleType = (type: SearchEntityType) => {
+    setActiveTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setQuery('');
+      setResponse(null);
+    }
+  };
+
+  return (
+    <div className="w-full max-w-2xl mx-auto" data-testid="platform-search-panel">
+      {/* Search Input */}
+      <div className="relative">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Search jobs, members, invoices across all tenants..."
+          className="w-full px-4 py-3 pl-10 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+          aria-label="Platform search"
+          data-testid="search-input"
+        />
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+        {isLoading && (
+          <span
+            className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin"
+            data-testid="search-loading"
+          >
+            ⏳
+          </span>
+        )}
+      </div>
+
+      {/* Filter Chips */}
+      {query.trim() && (
+        <div className="mt-3">
+          <SearchFilterChips
+            activeTypes={activeTypes}
+            onToggle={handleToggleType}
+            facets={response?.facets.byType || { job: 0, member: 0, invoice: 0 }}
+          />
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700" data-testid="search-error">
+          {error}
+        </div>
+      )}
+
+      {/* Results */}
+      {response && query.trim() && (
+        <div className="mt-2 border border-gray-200 rounded-lg shadow-sm bg-white max-h-96 overflow-y-auto">
+          {/* Stats bar */}
+          <div className="px-3 py-2 bg-gray-50 border-b text-xs text-gray-500 flex justify-between">
+            <span data-testid="result-count">
+              {response.totalCount} result{response.totalCount !== 1 ? 's' : ''} found
+            </span>
+            <span>{response.queryTimeMs}ms</span>
+          </div>
+
+          {/* Result list */}
+          {response.results.length > 0 ? (
+            <div role="listbox" aria-label="Search results">
+              {response.results.map((result) => (
+                <SearchResultItem key={result.id} result={result} onNavigate={onNavigate} />
+              ))}
+            </div>
+          ) : (
+            <div className="p-6 text-center text-sm text-gray-400" data-testid="no-results">
+              No results found for &quot;{query}&quot;
+            </div>
+          )}
+
+          {/* Org facets */}
+          <div className="px-3 pb-3">
+            <OrgFacetList
+              orgFacets={response.facets.byOrg}
+              selectedOrg={selectedOrg}
+              onSelectOrg={setSelectedOrg}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default PlatformSearchPanel;
