@@ -227,7 +227,13 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 | `supabase/tests/0182_audit_logs_org_id_hardening.sql` | 0182 | T-0182-01 → T-0182-13 (13 tests) | NOT NULL, FK→`org_id` (D1), trigger `o.org_id` (D3), RLS WITH CHECK `o.org_id` (D2), spoofed org rejection, service_role OK, anon rejection |
 | `supabase/tests/0183_baseline_org_id_not_null.sql` | 0183 | T-0183-01 → T-0183-13 (13 tests) | NOT NULL on jobs/quotations/invoices/ledger_entries, sentinel backfill, FK constraints, zero NULL rows |
 
-**Total pgTAP tests authored:** 14 + 35 + 17 + 18 + 13 + 13 = **110 tests** (0179 F1: 14, 0179 NNB: 35, 0180: 17, 0181: 18, 0182: 13, 0183: 13)
+**Total pgTAP tests authored (forward migrations):** 14 + 35 + 17 + 18 + 13 + 13 = **110 tests** (0179 F1: 14, 0179 NNB: 35, 0180: 17, 0181: 18, 0182: 13, 0183: 13)
+
+**Rollback verification suites (CI forward-and-back only, not counted in production total):**
+
+| File | Migration | Tests | Coverage |
+|------|-----------|-------|----------|
+| `supabase/tests/0183_rollback_verification.sql` | 0183 | T-0183-R01 → T-0183-R12 (12 tests) | information_schema nullable check, pg_catalog attnotnull=false, lives_ok NULL UPDATE on jobs/quotations/invoices/ledger_entries |
 
 **CI workflow:** `pgtap-tests.yml` written locally at `.github/workflows/pgtap-tests.yml` — push **blocked** pending PAT `workflow` scope (current token has `repo` only). File is committed in the local clone at `/tmp/monolith-git/`; re-push once a `workflow`-scoped token is available.
 
@@ -277,4 +283,4 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 
 *Generated: 2026-08-28 · Monolith Workspace security audit cycle*  
 *This document is the authoritative security status record for the v16.8.0 audit cycle.*  
-*Last updated: 2026-08-28 — pgTAP count 49→110 (0179 F1:14, 0179 NNB:35, 0180:17, 0181:18, 0182:13, 0183:13); npm audit 0 vulnerabilities confirmed; 0183 migration + pgTAP suite added; PR #55 opened for 0183 + v16.8.0 release summary; CI workflow blocked pending `workflow` token scope.*
+*Last updated: 2026-08-28 — pgTAP forward count 110 (0179 F1:14, 0179 NNB:35, 0180:17, 0181:18, 0182:13, 0183:13) + 12-test rollback verification suite (0183_rollback_verification.sql); PRs #45/#47/#52/#54 closed with bilingual EN+TH comments referencing PR #55; npm audit 0 vulnerabilities confirmed; CI workflow file ready — push blocked pending PAT `workflow` scope.*
