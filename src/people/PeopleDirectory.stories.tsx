@@ -31,10 +31,10 @@ import type { Meta, StoryFn, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from '@storybook/test';
 import React from 'react';
 
-import { PeopleDirectory, PeopleDirectoryProps } from '../PeopleDirectory';
-import { usePeopleStore } from '../peopleStore';
-import type { Employee, EmployeeSkill, Skill } from '../types';
-import { DEFAULT_EMPLOYEE_FILTERS } from '../types';
+import { PeopleDirectory, PeopleDirectoryProps } from './PeopleDirectory';
+import { usePeopleStore } from './peopleStore';
+import type { Employee, EmployeeSkill, Skill } from './types';
+import { DEFAULT_EMPLOYEE_FILTERS } from './types';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Mock data factories
