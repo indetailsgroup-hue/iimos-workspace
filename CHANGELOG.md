@@ -4,6 +4,17 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+
+## [14.1.0] – 2026-08-28
+
+### Added
+- **Migration 0188 — MV Refresh-Lag Alert** (`0188_mv_refresh_lag_alert.sql`): Monitors `v_mv_refresh_lag` every 5 minutes and inserts a system-level alert row into `etax_submission_audit_log` when `freshness_status = 'critical'` (lag > 1800 s / 30 min). Key changes: (1) `etax_submission_audit_log.submission_id` altered to nullable with CHECK constraint `chk_submission_id_or_system` (`submission_id IS NOT NULL OR trigger_source = 'system'`) so system-level rows with no real submission reference are valid. (2) Partial index `idx_etax_audit_log_system_alerts` on `(changed_at DESC) WHERE trigger_source = 'system'` for fast dedup lookups. (3) `fn_mv_refresh_lag_alert()` SECURITY DEFINER function: reads `v_mv_refresh_lag`, skips if non-critical, enforces dedup guard (at most one `mv_refresh_critical` alert per 30-minute window), inserts row with `org_id = NULL`, `actor_id = NULL`, `actor_role = 'system'`, `metadata = {alert_type, lag_seconds, freshness_status, last_refreshed_at, detected_at, threshold_seconds:1800, cron_job}`. REVOKE PUBLIC / GRANT EXECUTE TO postgres. (4) pg_cron job `check-mv-refresh-lag` (`*/5 * * * *`) — idempotent unschedule-first pattern. Post-migration DO blocks assert constraint and cron job existence.
+- **`supabase/config.toml` update**: Scheduled jobs comment block expanded to a 4-row ASCII table documenting all pg_cron jobs: `etax-submit-worker` (`*/5 * * * *`, 0184, Edge Fn), `notify-overdue` (`0 1 * * *`, 0184, Edge Fn), `refresh-etax-compliance-mv` (`*/15 * * * *`, 0187, DB fn), `check-mv-refresh-lag` (`*/5 * * * *`, 0188, DB fn). Added `cron.unschedule` unregistration instructions, manual verification query (`SELECT jobname, schedule, command FROM cron.job`), and distinction between edge-function-backed vs DB-only jobs.
+- **Test suite `0188_mv_refresh_lag_alert.test.ts`** (862 lines, Groups A–G, 42 tests): critical threshold detection (10 tests — lag boundaries 1799/1800/1801, empty log = critical, NULL actor/org in alert rows); dedup guard (5 tests — 2 rapid calls, 10 rapid calls, 31-min-old alert does not block, 30-min boundary, different alert_type does not interfere); NULL submission_id CHECK compliance (7 tests — alert row has NULL sub_id, direct system insert OK, direct trigger/worker/user + NULL rejected, normal non-NULL audit row allowed, NULL status fields); cross-window flood prevention (5 tests — 100 parallel calls, backdate-then-re-alert, critical→stale→critical dedup, two alert types independent, fresh→critical transition); metadata completeness (8 tests — all required keys, lag_seconds accuracy ±10 s, detected_at recency, row_count/duration_ms, triggered_by type, attempt_count=0, actor_role=system, rd_ref_no=NULL); no-alert for fresh/stale (6 tests — 0 s, 100 s, 900 s, 1200 s, 1799 s, double-fresh-call); idempotency + pg_cron (9 tests — job registered, schedule=*/5, command contains fn name, all 4 jobs present, re-schedule idempotency, CHECK constraint exists, partial index exists, callable on fresh MV, anon key blocked).
+
+### Changed
+- `etax_submission_audit_log.submission_id` — dropped NOT NULL constraint; `trigger_source = 'system'` rows may now have `submission_id IS NULL` (guarded by `chk_submission_id_or_system`).
+
 ## [14.0.0] – 2026-08-28
 
 ### Added
