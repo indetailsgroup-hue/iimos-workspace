@@ -267,7 +267,6 @@ export const CultureDashboard: React.FC<CultureDashboardProps> = ({ orgId }) => 
   useEffect(() => {
     fetchPsScores(orgId);
     if (isAdmin) fetchAnonymousFeedback(orgId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, isAdmin]);
 
   // ─────────────────────────────────────────────────────────
