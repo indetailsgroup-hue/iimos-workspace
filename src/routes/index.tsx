@@ -60,6 +60,12 @@ const JobDetailPageComponent = lazy(() =>
 const JobsLayoutComponent = lazy(() =>
   import('../jobs/JobsLayout').then(m => ({ default: m.JobsLayout }))
 );
+const JobAnalyticsDashboardComponent = lazy(() =>
+  import('../jobs/JobAnalyticsDashboard').then(m => ({ default: m.JobAnalyticsDashboard }))
+);
+const DndKanbanBoardComponent = lazy(() =>
+  import('../jobs/DndKanbanBoard').then(m => ({ default: m.DndKanbanBoard }))
+);
 
 // v15: Quotation builder
 const QuotationBuilderPage = lazy(() =>
@@ -1103,6 +1109,32 @@ export const router = createBrowserRouter([
         <Suspense fallback={<PageLoadingFallback message="Loading Job Detail…" />}>
           <JobsLayoutComponent>
             <JobDetailPageWrapper />
+          </JobsLayoutComponent>
+        </Suspense>
+      </RequireRole>
+    ),
+  },
+  // Job Analytics Dashboard — ADMIN and FINANCE
+  {
+    path: '/jobs/analytics',
+    element: (
+      <RequireRole allow={['ADMIN', 'FINANCE']}>
+        <Suspense fallback={<PageLoadingFallback message="Loading Analytics…" />}>
+          <JobsLayoutComponent>
+            <JobAnalyticsDashboardComponent />
+          </JobsLayoutComponent>
+        </Suspense>
+      </RequireRole>
+    ),
+  },
+  // Drag-and-Drop Kanban Board — FACTORY and ADMIN
+  {
+    path: '/jobs/kanban',
+    element: (
+      <RequireRole allow={['DESIGNER', 'FACTORY', 'ADMIN']}>
+        <Suspense fallback={<PageLoadingFallback message="Loading Kanban…" />}>
+          <JobsLayoutComponent>
+            <DndKanbanBoardComponent />
           </JobsLayoutComponent>
         </Suspense>
       </RequireRole>

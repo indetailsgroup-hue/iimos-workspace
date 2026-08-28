@@ -3,17 +3,17 @@
  *
  * Provides:
  * - NotificationToastContainer (top-right)
- * - useJobStatusToast wired to useJobBoardRealtime events
+ * - Supabase Realtime channel (server-push events → store + toasts)
+ * - Connection status indicator
  * - Shared toast context for all job pages
  *
- * @version 15.4.0
+ * @version 15.5.0 — replaced store-subscribe with true Supabase Realtime channel
  */
 
 import React, { useEffect, useRef } from 'react';
 import { useToast, NotificationToastContainer } from '../core/ui/NotificationToast';
-import { useJobBoardRealtime, type RealtimeJobEvent } from './useJobBoardRealtime';
-import { useJobStatusToast } from './useJobStatusToast';
-import { useJobStore } from './jobStore';
+import { useSupabaseRealtimeChannel, type RealtimeChannelEvent } from './useSupabaseRealtimeChannel';
+import { JOB_STATUS_LABELS } from './types';
 
 // ============================================================================
 // Component
@@ -24,70 +24,123 @@ export interface JobsLayoutProps {
 }
 
 export function JobsLayout({ children }: JobsLayoutProps): React.ReactElement {
-  const jobs = useJobStore((s) => s.jobs);
   const toast = useToast(5);
-  const { handleEvent } = useJobStatusToast(toast);
-
-  // Wire realtime events into toast system
-  const realtime = useJobBoardRealtime(jobs);
+  const realtime = useSupabaseRealtimeChannel();
   const prevEventCountRef = useRef(realtime.eventCount);
 
-  // Subscribe to realtime store and detect new events
+  // ── Fire toasts when new realtime events arrive ─────────────────────────
   useEffect(() => {
-    // Subscribe to job store changes via realtime
-    const unsub = useJobStore.subscribe((state, prevState) => {
-      // Detect inserts
-      if (state.jobs.length > prevState.jobs.length) {
-        const newJobs = state.jobs.filter(
-          (j) => !prevState.jobs.some((pj) => pj.jobId === j.jobId),
-        );
-        for (const job of newJobs) {
-          handleEvent({
-            eventType: 'INSERT',
-            job: { jobId: job.jobId, jobCode: job.jobCode, status: job.status },
-            timestamp: new Date().toISOString(),
-          });
-        }
-      }
+    if (realtime.eventCount <= prevEventCountRef.current) return;
+    prevEventCountRef.current = realtime.eventCount;
 
-      // Detect status changes
-      for (const job of state.jobs) {
-        const prev = prevState.jobs.find((pj) => pj.jobId === job.jobId);
-        if (prev && prev.status !== job.status) {
-          handleEvent({
-            eventType: 'UPDATE',
-            job: { jobId: job.jobId, jobCode: job.jobCode, status: job.status },
-            timestamp: new Date().toISOString(),
-          });
-        }
-      }
+    const latestEvent = realtime.recentEvents[0];
+    if (!latestEvent) return;
 
-      // Detect deletes
-      if (state.jobs.length < prevState.jobs.length) {
-        const deleted = prevState.jobs.filter(
-          (pj) => !state.jobs.some((j) => j.jobId === pj.jobId),
-        );
-        for (const job of deleted) {
-          handleEvent({
-            eventType: 'DELETE',
-            job: { jobId: job.jobId, jobCode: job.jobCode },
-            timestamp: new Date().toISOString(),
-          });
-        }
-      }
-    });
+    const { eventType, jobCode, newStatus } = latestEvent;
 
-    return unsub;
-  }, [handleEvent]);
+    switch (eventType) {
+      case 'INSERT':
+        toast.addToast({
+          type: 'info',
+          title: 'งานใหม่',
+          message: `${jobCode ?? 'Job'} ถูกสร้างขึ้น`,
+        });
+        break;
+      case 'UPDATE':
+        toast.addToast({
+          type: 'success',
+          title: 'สถานะเปลี่ยน',
+          message: `${jobCode ?? 'Job'} → ${newStatus ? JOB_STATUS_LABELS[newStatus] : 'updated'}`,
+        });
+        break;
+      case 'DELETE':
+        toast.addToast({
+          type: 'warning',
+          title: 'งานถูกลบ',
+          message: `${jobCode ?? 'Job'} ถูกลบออก`,
+        });
+        break;
+    }
+  }, [realtime.eventCount, realtime.recentEvents, toast]);
 
   return (
     <div data-testid="jobs-layout">
+      {/* Connection status indicator */}
+      <RealtimeStatusBadge status={realtime.status} eventCount={realtime.eventCount} onReconnect={realtime.reconnect} />
+
       {children}
+
       <NotificationToastContainer
         toasts={toast.toasts}
         onDismiss={toast.removeToast}
         position="top-right"
       />
+    </div>
+  );
+}
+
+// ============================================================================
+// Realtime Status Badge
+// ============================================================================
+
+function RealtimeStatusBadge({
+  status,
+  eventCount,
+  onReconnect,
+}: {
+  status: string;
+  eventCount: number;
+  onReconnect: () => void;
+}): React.ReactElement {
+  const colors: Record<string, string> = {
+    idle: '#6b7280',
+    connecting: '#f59e0b',
+    subscribed: '#22c55e',
+    error: '#ef4444',
+    closed: '#6b7280',
+  };
+
+  const labels: Record<string, string> = {
+    idle: 'Local',
+    connecting: 'Connecting...',
+    subscribed: 'Live',
+    error: 'Error',
+    closed: 'Offline',
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed' as const,
+        bottom: '12px',
+        right: '12px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        padding: '4px 10px',
+        borderRadius: '20px',
+        background: '#111827',
+        border: `1px solid ${colors[status] ?? '#374151'}`,
+        fontSize: '10px',
+        color: colors[status] ?? '#9ca3af',
+        zIndex: 1000,
+        cursor: status === 'error' || status === 'closed' ? 'pointer' : 'default',
+      }}
+      onClick={status === 'error' || status === 'closed' ? onReconnect : undefined}
+      data-testid="realtime-status-badge"
+      title={status === 'error' || status === 'closed' ? 'Click to reconnect' : `Events: ${eventCount}`}
+    >
+      <span
+        style={{
+          width: '6px',
+          height: '6px',
+          borderRadius: '50%',
+          background: colors[status] ?? '#6b7280',
+          animation: status === 'subscribed' ? 'pulse 2s infinite' : undefined,
+        }}
+      />
+      <span>{labels[status] ?? status}</span>
+      {eventCount > 0 && <span style={{ color: '#6b7280' }}>({eventCount})</span>}
     </div>
   );
 }
