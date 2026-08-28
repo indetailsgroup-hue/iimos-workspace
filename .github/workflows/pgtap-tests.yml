@@ -1,5 +1,22 @@
 name: pgTAP Tests
 
+# =============================================================================
+# REQUIRED SECRETS
+# =============================================================================
+# Secret name          | Where to get it                          | Scope
+# ---------------------|------------------------------------------|------------------
+# SUPABASE_ACCESS_TOKEN | app.supabase.com → Account → Access     | Repo secret
+#                       | Tokens → "Generate new token"           | (all environments)
+#
+# HOW TO PROVISION (one-time per repo / environment):
+#   GitHub UI:  Settings → Secrets and variables → Actions → New repository secret
+#   GitHub CLI: gh secret set SUPABASE_ACCESS_TOKEN --body "<token>"
+#
+# The Supabase CLI uses this token to pull project config when starting the
+# local stack in CI. Without it, `supabase start` will fail with auth error.
+# See docs/ci-secrets.md for full provisioning guide.
+# =============================================================================
+
 on:
   push:
     branches:
@@ -43,6 +60,9 @@ jobs:
 
       # -----------------------------------------------------------------------
       # 4. Start Supabase local stack
+      #    Requires: SUPABASE_ACCESS_TOKEN repository secret
+      #    Provision: Settings → Secrets and variables → Actions
+      #    Source:    app.supabase.com → Account → Access Tokens
       # -----------------------------------------------------------------------
       - name: Start Supabase local stack
         run: supabase start
@@ -67,6 +87,8 @@ jobs:
 
       # -----------------------------------------------------------------------
       # 7. Run pg_prove on all test files
+      #    Runs: supabase/tests/*.sql (110 forward tests + rollback verification)
+      #    Fails the job if any TAP assertion fails.
       # -----------------------------------------------------------------------
       - name: Run pg_prove on supabase/tests/*.sql
         run: |
@@ -80,7 +102,7 @@ jobs:
           PGPASSWORD: postgres
 
       # -----------------------------------------------------------------------
-      # 8. Stop Supabase local stack (cleanup)
+      # 8. Stop Supabase local stack (cleanup — always runs)
       # -----------------------------------------------------------------------
       - name: Stop Supabase local stack
         if: always()
