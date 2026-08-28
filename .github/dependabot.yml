@@ -83,3 +83,13 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # Major version bumps for @playwright/test are excluded from the
+      # digital-shadow-devdeps group and suppressed entirely here.
+      # Playwright major releases frequently introduce breaking API changes
+      # (new config format, removed/renamed methods, browser binary changes)
+      # that require a deliberate migration.  Minor and patch bumps still
+      # flow through the digital-shadow-devdeps group above and receive an
+      # automatic weekly PR.
+      - dependency-name: "@playwright/test"
+        update-types: ["version-update:semver-major"]

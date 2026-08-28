@@ -1,6 +1,6 @@
 # .github/workflows/verify-digital-shadow.yml
 #
-# Nine CI jobs for the Digital Shadow Service backend, triggered on every PR
+# Ten CI jobs for the Digital Shadow Service backend, triggered on every PR
 # and direct push to `feat/digital-shadow-integration`:
 #
 #   lint                            — ESLint + TypeScript type-check; fails fast before
@@ -12,7 +12,8 @@
 #   notify-slack-on-failure         — Slack alert when e2e-backend-gate OR feature-cache-coverage fails
 #   notify-slack-on-success         — Slack alert (with coverage %) when all four gates pass
 #   notify-coverage-badge-failure   — Slack alert when post-coverage-badge fails to parse/post artifact
-#   notify-success-pipeline-failure — Slack alert when notify-slack-on-success itself fails
+#   notify-success-pipeline-failure — Slack alert + GitHub issue when notify-slack-on-success itself fails
+#   post-workflow-summary           — Upserts a sticky PR comment table listing all 9 job results + durations
 #
 # Job dependency graph:
 #   lint ──► integration-tests ──► e2e-backend-gate ──► notify-slack-on-failure (on failure)
@@ -21,6 +22,9 @@
 #        └─► feature-cache-coverage ──► post-coverage-badge ──► notify-coverage-badge-failure (on failure)
 #                               │   └─► notify-slack-on-failure (on failure)
 #                               └──────► notify-slack-on-success (on all pass)
+#
+#   post-workflow-summary (needs: all 9 jobs, if: always() && pull_request)
+#     └─► upserts <!-- workflow-summary-comment --> on the PR with job results table
 #
 # Concurrency:
 #   A `concurrency` group keyed on workflow + ref cancels the in-progress run
@@ -1231,6 +1235,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
 
+    permissions:
+      issues: write          # required to open a GitHub issue when the webhook is broken
+
     steps:
       # ── Step 1: GitHub annotation (zero-dependency fallback) ───────────────
       # Always runs first so the failure is visible in the PR checks summary
@@ -1373,6 +1380,202 @@ jobs:
                   body = resp.read().decode("utf-8")
                   print(f"Slack responded {resp.status}: {body}")
           except urllib.error.HTTPError as exc:
-              print(f"Slack HTTP error {exc.code}: {exc.read().decode()}", file=sys.stderr)
+              body_text = exc.read().decode("utf-8")
+              print(f"Slack HTTP error {exc.code}: {body_text}", file=sys.stderr)
+
+              # ── Open a GitHub issue so the rotation task is tracked ─────────
+              # A non-2xx from Slack means the webhook URL is invalid, revoked,
+              # or the secret is stale.  Creating an issue ensures the rotation
+              # task lands on the project board even if no one is watching the
+              # Actions run.  Failures here are logged as warnings — the job
+              # still exits 1 regardless so the annotation chain fires correctly.
+              try:
+                  issue_body = (
+                      "The Slack webhook POST returned HTTP **{}** during the "
+                      "`Slack — Success Notifier Health Check` job.\n\n"
+                      "**Action required:** rotate `SLACK_WEBHOOK_URL` in the "
+                      "repository secrets.\n\n"
+                      "| Field | Value |\n"
+                      "|---|---|\n"
+                      "| Branch | `{}` |\n"
+                      "| Run | [{}]({}) |\n"
+                      "| Actor | {} |\n"
+                      "| HTTP status | {} |\n"
+                  ).format(
+                      exc.code,
+                      os.environ["GITHUB_REF_NAME"],
+                      os.environ["GITHUB_RUN_ID"], run_url,
+                      os.environ["GITHUB_ACTOR"],
+                      exc.code,
+                  )
+                  issues_api = (
+                      "https://api.github.com/repos/"
+                      + os.environ["GITHUB_REPOSITORY"]
+                      + "/issues"
+                  )
+                  issue_payload = json.dumps({
+                      "title": "\U0001f514 Slack webhook broken \u2014 rotate SLACK_WEBHOOK_URL",
+                      "body":  issue_body,
+                      "labels": ["webhook-broken"],
+                  }).encode("utf-8")
+                  req_issue = urllib.request.Request(
+                      issues_api,
+                      data=issue_payload,
+                      headers={
+                          "Authorization":        f"token {os.environ['GITHUB_TOKEN']}",
+                          "Accept":               "application/vnd.github+json",
+                          "Content-Type":         "application/json",
+                          "X-GitHub-Api-Version": "2022-11-28",
+                      },
+                      method="POST",
+                  )
+                  with urllib.request.urlopen(req_issue, timeout=10) as r_issue:
+                      issue_data = json.loads(r_issue.read().decode("utf-8"))
+                      print(
+                          f"GitHub issue created: {issue_data.get('html_url', '(no URL)')}",
+                          file=sys.stderr,
+                      )
+              except Exception as issue_exc:
+                  print(
+                      f"Warning: could not create GitHub issue \u2014 {issue_exc}",
+                      file=sys.stderr,
+                  )
+
               sys.exit(1)
           PY
+
+  # ── Job 10: post-workflow-summary ──────────────────────────────────────────
+  # Runs after ALL nine upstream jobs regardless of their outcome (always()).
+  # Restricted to pull_request events so the comment only appears on PRs, not
+  # on branch pushes where there is no PR context to comment on.
+  #
+  # Steps:
+  #   1. Call listJobsForWorkflowRun to get live job names, conclusions, and
+  #      timestamps directly from the GitHub API — no artifact download needed.
+  #   2. Build a markdown table: | Job | Result | Duration |
+  #      Status emoji: ✅ success, ❌ failure, ⏭ skipped, 🔄 in_progress, ⚪ other
+  #   3. Upsert a sticky PR comment identified by the sentinel
+  #      <!-- workflow-summary-comment --> so reruns overwrite the previous
+  #      summary instead of accumulating duplicate comments.
+  #
+  post-workflow-summary:
+    name: Post Workflow Summary to PR
+    needs:
+      - lint
+      - integration-tests
+      - feature-cache-coverage
+      - post-coverage-badge
+      - e2e-backend-gate
+      - notify-slack-on-failure
+      - notify-slack-on-success
+      - notify-coverage-badge-failure
+      - notify-success-pipeline-failure
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    permissions:
+      pull-requests: write   # upsert PR comment
+      actions:       read    # read job list for this run
+
+    steps:
+      - name: Build and upsert workflow-summary PR comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // ── 1. Fetch live job data for this run ─────────────────────────
+            const { data: { jobs } } = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              run_id: context.runId,
+              per_page: 100,
+            });
+
+            // ── 2. Build markdown table ──────────────────────────────────────
+            const SENTINEL = '<!-- workflow-summary-comment -->';
+
+            const statusEmoji = (conclusion, status) => {
+              if (status === 'in_progress' || status === 'queued') return '🔄';
+              switch (conclusion) {
+                case 'success':   return '✅';
+                case 'failure':   return '❌';
+                case 'skipped':   return '⏭';
+                case 'cancelled': return '🚫';
+                default:          return '⚪';
+              }
+            };
+
+            const fmtDuration = (startedAt, completedAt) => {
+              if (!startedAt || !completedAt) return '—';
+              const secs = Math.round(
+                (new Date(completedAt) - new Date(startedAt)) / 1000
+              );
+              if (secs < 60) return `${secs}s`;
+              return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+            };
+
+            // Job names that belong to THIS workflow (exclude the summary job itself)
+            const WORKFLOW_JOB_NAMES = new Set([
+              'ESLint & TypeScript Check',
+              'Backend Integration Tests (Node + Redis)',
+              'FeatureCacheService Coverage (≥80%)',
+              'Post Coverage Badge to PR',
+              'Playwright E2E — Backend Gate (Chromium)',
+              'Slack — Backend CI Failure Alert',
+              'Slack — Backend CI Success Alert',
+              'Slack — Coverage Badge Post Failed',
+              'Slack — Success Notifier Health Check',
+            ]);
+
+            const rows = jobs
+              .filter(j => WORKFLOW_JOB_NAMES.has(j.name))
+              .map(j => {
+                const emoji    = statusEmoji(j.conclusion, j.status);
+                const result   = j.conclusion ?? j.status ?? 'unknown';
+                const duration = fmtDuration(j.started_at, j.completed_at);
+                const logUrl   = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}/job/${j.id}`;
+                return `| [${j.name}](${logUrl}) | ${emoji} ${result} | ${duration} |`;
+              });
+
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const body = [
+              SENTINEL,
+              '## Digital Shadow CI — Workflow Summary',
+              '',
+              `| Job | Result | Duration |`,
+              `|---|---|---|`,
+              ...rows,
+              '',
+              `---`,
+              `Commit: \`${context.sha.slice(0,7)}\` · Run [#${context.runNumber}](${runUrl})`,
+            ].join('\n');
+
+            // ── 3. Upsert: find existing comment by sentinel, update or create ─
+            const pr_number = context.issue.number;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: pr_number,
+              per_page: 100,
+            });
+
+            const existing = comments.find(c => c.body.includes(SENTINEL));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner:      context.repo.owner,
+                repo:       context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.info(`Updated existing summary comment #${existing.id}`);
+            } else {
+              const created = await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: pr_number,
+                body,
+              });
+              core.info(`Created new summary comment #${created.data.id}`);
+            }
