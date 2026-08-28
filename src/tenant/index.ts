@@ -108,3 +108,48 @@ export type {
   UploadParams,
   UploadResult,
 } from './tenantStorage';
+
+// Usage Metering
+export {
+  PLAN_STORAGE_LIMITS,
+  getCurrentPeriod,
+  getPeriodRange,
+  isInPeriod,
+  canCreateJob,
+  canInviteMember,
+  canUseFeature,
+  canUploadFile,
+  getUsageAlerts,
+  buildUsageMetrics,
+  jobCountQuery,
+  memberCountQuery,
+  generateUsageMeteringRpc,
+  enforceLimit,
+} from './usageMetering';
+export type {
+  UsageMetrics,
+  UsageCheckResult,
+  UsageAlert,
+  UsageResource,
+} from './usageMetering';
+
+// Audit Log
+export {
+  AUDIT_ACTION_LABELS,
+  getActionCategory,
+  getActionSeverity,
+  recordAuditEntry,
+  fetchAuditLog,
+  formatAuditDescription,
+  getAuditIcon,
+  generateAuditLogMigration,
+} from './auditLog';
+export type {
+  AuditCategory,
+  AuditAction,
+  ActorType,
+  AuditLogEntry,
+  CreateAuditEntry,
+  AuditLogFilters,
+  AuditLogPage,
+} from './auditLog';
