@@ -130,15 +130,45 @@ enabled = false
 # SCHEDULED JOBS — pg_cron configuration
 # ---------------------------------------------------------------------------
 # pg_cron is enabled in Supabase Pro/Team plans (and in local dev via supabase start).
-# The cron jobs below are created by migration 0184_scheduled_jobs.sql (see below).
-# They use pg_net to send HTTP POST requests to the deployed Edge Functions.
+# Jobs are registered via SQL migrations; supabase/config.toml has no native [cron]
+# section — this block is documentation only.
 #
-# Schedule reference:
-#   etax-submit-worker : every 5 minutes  (*/5 * * * *)
-#   notify-overdue     : every day 08:00 ICT (01:00 UTC)  (0 1 * * *)
+# ┌─────────────────────────────────┬──────────────────┬───────────────────────────────┐
+# │ Job name                        │ Schedule         │ Migration / Source            │
+# ├─────────────────────────────────┼──────────────────┼───────────────────────────────┤
+# │ etax-submit-worker              │ */5  * * * *     │ 0184_scheduled_jobs.sql       │
+# │   → Edge Fn: etax-submit-worker │ (every 5 min)    │   calls pg_net HTTP POST      │
+# ├─────────────────────────────────┼──────────────────┼───────────────────────────────┤
+# │ notify-overdue                  │ 0 1  * * *       │ 0184_scheduled_jobs.sql       │
+# │   → Edge Fn: notify-overdue     │ (01:00 UTC /     │   calls pg_net HTTP POST      │
+# │                                 │  08:00 ICT daily)│                               │
+# ├─────────────────────────────────┼──────────────────┼───────────────────────────────┤
+# │ refresh-etax-compliance-mv      │ */15 * * * *     │ 0187_etax_compliance_         │
+# │   → DB fn: fn_refresh_          │ (every 15 min)   │   dashboard_mv.sql            │
+# │     etax_compliance_mv()        │                  │   Pure SQL — no edge fn       │
+# ├─────────────────────────────────┼──────────────────┼───────────────────────────────┤
+# │ check-mv-refresh-lag            │ */5  * * * *     │ 0188_mv_refresh_lag_alert.sql │
+# │   → DB fn: fn_mv_refresh_       │ (every 5 min)    │   Pure SQL — no edge fn       │
+# │     lag_alert()                 │                  │   Inserts alert into          │
+# │                                 │                  │   etax_submission_audit_log   │
+# │                                 │                  │   when lag > 1800 s (30 min)  │
+# └─────────────────────────────────┴──────────────────┴───────────────────────────────┘
 #
-# NOTE: supabase/config.toml does not have a native [cron] section.
-# Scheduled jobs must be registered via SQL (pg_cron) or the Supabase Dashboard
-# (Database → Extensions → pg_cron → Cron Jobs).
-# See: supabase/migrations/0184_scheduled_jobs.sql  (created alongside this file)
+# How to register jobs in production / staging:
+#   1. Run `supabase db push` — migrations 0184, 0187, 0188 call cron.schedule()
+#      which registers the jobs automatically.
+#   2. Verify in Supabase Dashboard → Database → Extensions → pg_cron → Cron Jobs.
+#   3. Or query: SELECT jobname, schedule, command FROM cron.job ORDER BY jobname;
+#
+# How to unschedule a job manually:
+#   SELECT cron.unschedule('<job-name>');
+#
+# Secrets required by edge-function-backed jobs (etax-submit-worker, notify-overdue):
+#   supabase secrets set ETAX_PROVIDER_URL=...  ETAX_API_KEY=...
+#                        ETAX_SELLER_TAX_ID=... ETAX_SELLER_NAME=...
+#                        RESEND_API_KEY=...      LINE_NOTIFY_TOKEN=...
+#                        CRON_SECRET=...
+#
+# DB-only jobs (refresh-etax-compliance-mv, check-mv-refresh-lag) have no secrets;
+# they run as the postgres role (SECURITY DEFINER functions).
 # ---------------------------------------------------------------------------
