@@ -69,7 +69,7 @@ test.describe('PeopleDirectory — Visual Regression', () => {
 
     // Assert key structural elements are present before snapshot
     await expect(page.getByTestId('people-directory')).toBeVisible();
-    await expect(page.getByTestId('employee-card')).toHaveCount({ minimum: 1 } as never);
+    await expect(page.getByTestId('employee-card').first()).toBeVisible();
 
     await takeSnapshot(page, 'PeopleDirectory — Default', testInfo);
   });

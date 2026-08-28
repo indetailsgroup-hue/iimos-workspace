@@ -54,6 +54,7 @@ interface StageBadgeProps {
 const StageBadge: React.FC<StageBadgeProps> = ({ stage, withIcon = true }) => (
   <span
     className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${STAGE_BADGE_CLASS[stage]}`}
+    data-testid={stage === 'SUPER_EMPLOYEE' ? 'super-employee-badge' : undefined}
   >
     {withIcon && stage === 'SUPER_EMPLOYEE' && (
       <span aria-hidden="true">⭐</span>
@@ -127,6 +128,7 @@ const EmployeeRow: React.FC<EmployeeRowProps> = ({ employee, employeeSkills, onS
   return (
     <div
       className="rounded-xl border border-gray-100 bg-white shadow-sm transition-shadow hover:shadow-md"
+      data-testid="employee-card"
     >
       <button
         type="button"
@@ -271,7 +273,7 @@ export const PeopleDirectory: React.FC<PeopleDirectoryProps> = ({
   // Render
   // ─────────────────────────────────────────────────────────
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-testid="people-directory">
       {/* ── Header ── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
