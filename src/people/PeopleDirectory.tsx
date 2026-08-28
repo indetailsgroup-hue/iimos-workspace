@@ -217,8 +217,8 @@ export const PeopleDirectory: React.FC<PeopleDirectoryProps> = ({
   const filters = usePeopleStore((s) => s.filters);
   const loadingEmployees = usePeopleStore((s) => s.loadingEmployees);
   const loadingSkills = usePeopleStore((s) => s.loadingSkills);
-  const fetchEmployees = usePeopleStore((s) => s.fetchEmployees);
-  const fetchSkills = usePeopleStore((s) => s.fetchSkills);
+  const fetchEmployees = usePeopleStore((s) => s.loadEmployees);
+  const fetchSkills = usePeopleStore((s) => s.loadSkills);
   const setFilters = usePeopleStore((s) => s.setFilters);
   const getFilteredEmployees = usePeopleStore((s) => s.getFilteredEmployees);
   const employeeSkillsByEmployee = usePeopleStore((s) => s.employeeSkillsByEmployee);
