@@ -14,6 +14,7 @@ name: Chromatic Visual Regression
 # ──────────────────────────────────────────────────────────────────────────────
 
 on:
+  workflow_dispatch: # allow manual trigger from GitHub Actions UI
   push:
     branches:
       - feature/people-culture-module
