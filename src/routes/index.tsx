@@ -12,6 +12,10 @@
  * /validation                  - Redirect to /projects/current/validation
  * /release                     - Release wizard
  * /packet/:id                  - View released packet
+ * /jobs                         - Job Board (DESIGNER, FACTORY, ADMIN)
+ * /jobs/new                     - Create Job wizard (DESIGNER, ADMIN)
+ * /jobs/:jobId                  - Job detail (DESIGNER, FACTORY, ADMIN)
+ * /quotations                   - Quotation list (FINANCE, ADMIN)
  * /factory                     - Factory dashboard (FACTORY role)
  * /factory/jobs/:jobId         - Factory job detail (FACTORY role)
  * /finance                     - Finance screen (FINANCE role)
@@ -41,6 +45,19 @@ const SafetyGatePage = lazy(() =>
 // O4: Factory dashboard app
 const FactoryApp = lazy(() =>
   import('../factory/FactoryApp').then(m => ({ default: m.FactoryApp }))
+);
+
+// v15: Job lifecycle pages
+const JobBoardPage = lazy(() =>
+  import('../jobs/JobBoard').then(m => ({ default: m.JobBoard }))
+);
+const CreateJobWizardPage = lazy(() =>
+  import('../jobs/CreateJobWizard').then(m => ({ default: m.CreateJobWizard }))
+);
+
+// v15: Quotation builder
+const QuotationBuilderPage = lazy(() =>
+  import('../quotation/QuotationBuilder').then(m => ({ default: m.QuotationBuilder }))
 );
 
 // S18 L7 Slice 4: Finance dashboard (built by lane L4 as src/pages/FinanceDashboard).
@@ -1025,6 +1042,43 @@ export const router = createBrowserRouter([
   {
     path: '/packet/:id',
     element: <PacketViewerPage />,
+  },
+  // ── Job Lifecycle Routes (v15) ──────────────────────────────────────────
+  // Job Board — accessible to DESIGNER, FACTORY, ADMIN
+  {
+    path: '/jobs',
+    element: (
+      <RequireRole allow={['DESIGNER', 'FACTORY', 'ADMIN']}>
+        <Suspense fallback={<PageLoadingFallback message="Loading Job Board…" />}>
+          <JobBoardPage />
+        </Suspense>
+      </RequireRole>
+    ),
+  },
+  // Create Job Wizard — only DESIGNER and ADMIN can create jobs
+  {
+    path: '/jobs/new',
+    element: (
+      <RequireRole allow={['DESIGNER', 'ADMIN']}>
+        <Suspense fallback={<PageLoadingFallback message="Loading Job Wizard…" />}>
+          <CreateJobWizardPage />
+        </Suspense>
+      </RequireRole>
+    ),
+  },
+  // Quotation management — FINANCE and ADMIN only
+  {
+    path: '/quotations',
+    element: (
+      <RequireRole allow={['FINANCE', 'ADMIN']}>
+        <Suspense fallback={<PageLoadingFallback message="Loading Quotations…" />}>
+          <div style={{ padding: '24px', color: '#f3f4f6', fontFamily: 'Inter, system-ui, sans-serif' }}>
+            <h2>Quotation Management</h2>
+            <p style={{ color: '#9ca3af' }}>Select a job from the Job Board to create a quotation.</p>
+          </div>
+        </Suspense>
+      </RequireRole>
+    ),
   },
   // Factory dashboard (role-protected) - O4: Lazy loaded
   // S18 L7 Slice 3: no silent bounce — default RoleGateDialog fallback explains
