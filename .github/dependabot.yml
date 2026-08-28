@@ -1,0 +1,85 @@
+# .github/dependabot.yml
+#
+# Dependabot auto-update configuration for monolith-workspace.
+#
+# Two update ecosystems:
+#
+#   1. github-actions — scans every `uses:` reference in .github/workflows/
+#      and opens a PR whenever a newer version tag is published.  Keeps
+#      actions/checkout, actions/setup-node, actions/download-artifact,
+#      actions/github-script, etc. up to date without manual tracking.
+#
+#   2. npm — scans package.json in packages/digital-shadow-service/ and
+#      opens a PR for each outdated dependency (production + dev).
+#      Scoped to the Digital Shadow Service package directory so the
+#      root workspace and other packages are not touched.
+#
+# Schedule: weekly on Monday at 09:00 UTC for both ecosystems.
+# Assignees and reviewers are left unset — rely on CODEOWNERS for that.
+#
+# PR limits:
+#   open-pull-requests-limit: 5 for Actions (small surface area)
+#   open-pull-requests-limit: 10 for npm    (larger dependency graph)
+#
+# Groups:
+#   • "github-actions-minor-patch" — batches all non-major Actions bumps
+#     into a single weekly PR to avoid PR noise from frequent patch releases
+#     (e.g. actions/checkout v4.1.0 → v4.1.1).  Major version bumps still
+#     open individually so breaking changes are reviewed explicitly.
+#   • "digital-shadow-devdeps" — batches all devDependency minor/patch bumps
+#     (Vitest, Playwright, TypeScript, ESLint toolchain) into one PR.
+#     Production dependency updates open individually.
+
+version: 2
+
+updates:
+  # ── 1. GitHub Actions ──────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"                    # Dependabot always scans /.github/workflows from here
+    schedule:
+      interval: "weekly"
+      day:      "monday"
+      time:     "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      github-actions-minor-patch:
+        # Batch all minor and patch bumps; major bumps open individually
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ── 2. npm — packages/digital-shadow-service ──────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/packages/digital-shadow-service"
+    schedule:
+      interval: "weekly"
+      day:      "monday"
+      time:     "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "digital-shadow-service"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(dev-deps)"
+    # Allow both production and development dependency updates
+    allow:
+      - dependency-type: "all"
+    groups:
+      digital-shadow-devdeps:
+        # Batch all devDependency minor/patch bumps into one PR per week.
+        # Covers: vitest, @vitest/coverage-v8, @playwright/test, typescript,
+        # eslint, @typescript-eslint/*, @testing-library/*, etc.
+        applies-to: version-updates
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"

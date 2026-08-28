@@ -1,21 +1,23 @@
 # .github/workflows/verify-digital-shadow.yml
 #
-# Five CI gates for the Digital Shadow Service backend, triggered on every PR
+# Nine CI jobs for the Digital Shadow Service backend, triggered on every PR
 # and direct push to `feat/digital-shadow-integration`:
 #
-#   lint                   — ESLint + TypeScript type-check; fails fast before
-#                            any test job runs so type + style errors surface first
-#   integration-tests      — Hono + ioredis integration specs against real Redis
-#   feature-cache-coverage — FeatureCacheService unit tests with ≥80% coverage
-#   post-coverage-badge    — Posts a coverage badge + per-method table as a PR comment
-#   e2e-backend-gate       — Playwright (Chromium) e2e gate after integration-tests pass
-#   notify-slack-on-failure       — Slack alert when e2e-backend-gate OR feature-cache-coverage fails
-#   notify-slack-on-success       — Slack alert (with coverage %) when all four gates pass
-#   notify-coverage-badge-failure — Slack alert when post-coverage-badge fails to parse/post artifact
+#   lint                            — ESLint + TypeScript type-check; fails fast before
+#                                     any test job runs so type + style errors surface first
+#   integration-tests               — Hono + ioredis integration specs against real Redis
+#   feature-cache-coverage          — FeatureCacheService unit tests with ≥80% coverage
+#   post-coverage-badge             — Posts coverage badge + current-vs-previous delta table as PR comment
+#   e2e-backend-gate                — Playwright (Chromium) e2e gate after integration-tests pass
+#   notify-slack-on-failure         — Slack alert when e2e-backend-gate OR feature-cache-coverage fails
+#   notify-slack-on-success         — Slack alert (with coverage %) when all four gates pass
+#   notify-coverage-badge-failure   — Slack alert when post-coverage-badge fails to parse/post artifact
+#   notify-success-pipeline-failure — Slack alert when notify-slack-on-success itself fails
 #
 # Job dependency graph:
 #   lint ──► integration-tests ──► e2e-backend-gate ──► notify-slack-on-failure (on failure)
 #        │                      │                    └─► notify-slack-on-success  (on all pass)
+#        │                      │                                └─► notify-success-pipeline-failure (on failure)
 #        └─► feature-cache-coverage ──► post-coverage-badge ──► notify-coverage-badge-failure (on failure)
 #                               │   └─► notify-slack-on-failure (on failure)
 #                               └──────► notify-slack-on-success (on all pass)
@@ -252,14 +254,23 @@ jobs:
   # Downloads the json-summary + json artifact from `feature-cache-coverage`,
   # parses both files via actions/github-script, and upserts a PR comment with:
   #
-  #   1. Summary badge table (from coverage-summary.json):
-  #        Metric | Coverage
+  #   1. Summary badge table with current-vs-previous delta column:
+  #        Metric | Current | Previous | Δ
   #        🟢 ≥90%  🟡 ≥80%  🔴 <80%
+  #        Δ rendered as ▲ +N.N % 🟩 (improvement) or ▼ −N.N % 🟥 (regression)
+  #        Falls back to two-column table if no previous successful run exists.
   #
   #   2. Per-method breakdown table (from coverage.json Istanbul fnMap/f):
   #        Method | Calls | Covered
   #      Lists every exported function in FeatureCacheService.ts with its
   #      invocation count so reviewers can spot uncovered branches at a glance.
+  #
+  # Previous-run delta:
+  #   A Python shell step calls the GitHub REST API to find the most recent
+  #   successful run of this workflow on the same branch, downloads its
+  #   coverage artifact into coverage-prev/, and the script step reads both
+  #   summaries to produce the Δ column.  The step uses continue-on-error: true
+  #   so a missing or expired previous artifact never blocks the badge post.
   #
   # Runs `if: always()` so the badge posts even when the coverage gate fails.
   # Only runs on pull_request events — direct pushes have no PR to comment on.
@@ -269,10 +280,11 @@ jobs:
     needs: [feature-cache-coverage]
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
 
     permissions:
       pull-requests: write
+      actions: read        # needed to list workflow runs and download artifacts via REST API
 
     steps:
       - name: Download coverage summary artifact
@@ -280,6 +292,84 @@ jobs:
         with:
           name: feature-cache-coverage-${{ github.run_id }}
           path: coverage/
+
+      - name: Fetch previous run coverage for delta comparison
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 << 'PY'
+          import os, json, urllib.request, urllib.error, zipfile, io, sys
+
+          token   = os.environ["GITHUB_TOKEN"]
+          repo    = os.environ["GITHUB_REPOSITORY"]
+          run_id  = os.environ["GITHUB_RUN_ID"]
+          # For PRs GITHUB_HEAD_REF holds the source branch; for direct pushes GITHUB_REF_NAME
+          branch  = os.environ.get("GITHUB_HEAD_REF") or os.environ.get("GITHUB_REF_NAME", "")
+
+          hdrs = {
+              "Authorization":        f"token {token}",
+              "Accept":               "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+
+          def api_get(url):
+              req = urllib.request.Request(url, headers=hdrs)
+              with urllib.request.urlopen(req, timeout=15) as r:
+                  return json.loads(r.read())
+
+          try:
+              # ── 1. Find the most recent successful run before this one ──────
+              runs_url = (
+                  f"https://api.github.com/repos/{repo}/actions/workflows/"
+                  f"verify-digital-shadow.yml/runs"
+                  f"?branch={branch}&status=success&per_page=10"
+              )
+              runs_data = api_get(runs_url)
+              prev_run  = next(
+                  (r for r in runs_data.get("workflow_runs", [])
+                   if str(r["id"]) != run_id),
+                  None,
+              )
+              if not prev_run:
+                  print("No previous successful run found — skipping delta column.")
+                  sys.exit(0)
+
+              prev_run_id = prev_run["id"]
+              print(f"Previous successful run: {prev_run_id} ({prev_run['created_at']})")
+
+              # ── 2. Find the coverage artifact in that run ───────────────────
+              arts_url  = (
+                  f"https://api.github.com/repos/{repo}/actions/runs/"
+                  f"{prev_run_id}/artifacts"
+              )
+              arts_data = api_get(arts_url)
+              art = next(
+                  (a for a in arts_data.get("artifacts", [])
+                   if "feature-cache-coverage" in a["name"]),
+                  None,
+              )
+              if not art:
+                  print(f"No coverage artifact in run {prev_run_id} — skipping delta column.")
+                  sys.exit(0)
+
+              # ── 3. Download and extract coverage-summary.json ───────────────
+              dl_req = urllib.request.Request(art["archive_download_url"], headers=hdrs)
+              with urllib.request.urlopen(dl_req, timeout=30) as r:
+                  zip_bytes = r.read()
+
+              os.makedirs("coverage-prev", exist_ok=True)
+              with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
+                  if "coverage-summary.json" in z.namelist():
+                      z.extract("coverage-summary.json", "coverage-prev")
+                      print(f"Extracted previous coverage-summary.json from run {prev_run_id}")
+                  else:
+                      print(f"coverage-summary.json not in artifact zip (run {prev_run_id})")
+          except urllib.error.HTTPError as exc:
+              print(f"Warning: HTTP {exc.code} fetching previous coverage — {exc.read().decode()}", file=sys.stderr)
+          except Exception as exc:
+              print(f"Warning: could not fetch previous coverage — {exc}", file=sys.stderr)
+          PY
+        continue-on-error: true
 
       - name: Parse coverage and post PR comment
         uses: actions/github-script@v7
@@ -296,33 +386,36 @@ jobs:
               return '🔴';
             }
 
+            // Returns "▲ +N.N % 🟩", "▼ −N.N % 🟥", or "—" for <0.05 change.
+            function delta(curr, prev) {
+              if (curr === undefined || prev === undefined) return '—';
+              const diff = curr - prev;
+              if (Math.abs(diff) < 0.05) return '—';
+              return diff > 0
+                ? `▲ +${diff.toFixed(1)} % 🟩`
+                : `▼ ${diff.toFixed(1)} % 🟥`;
+            }
+
             function coveredIcon(calls) {
               return calls > 0 ? '✅' : '❌';
             }
 
-            // ── 1. Parse coverage-summary.json (metric totals) ───────────────
+            // ── 1. Parse current coverage-summary.json ───────────────────────
             const summaryPath = path.join('coverage', 'coverage-summary.json');
-            let summaryRows = '_coverage-summary.json not found_';
-            let allPass = false;
+            let metrics    = {};
+            let hasSummary = false;
+            let allPass    = false;
             let gateStatus = '⚪ Coverage gate status unknown';
 
             if (fs.existsSync(summaryPath)) {
-              const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
-              const totals  = summary.total ?? {};
-              const metrics = {
+              hasSummary = true;
+              const totals = JSON.parse(fs.readFileSync(summaryPath, 'utf8')).total ?? {};
+              metrics = {
                 Statements: totals.statements?.pct,
                 Branches:   totals.branches?.pct,
                 Functions:  totals.functions?.pct,
                 Lines:      totals.lines?.pct,
               };
-
-              summaryRows = Object.entries(metrics)
-                .map(([name, pct]) => {
-                  const display = pct !== undefined ? `${pct.toFixed(1)} %` : 'n/a';
-                  return `| ${badge(pct)} ${name} | ${display} |`;
-                })
-                .join('\n');
-
               allPass = Object.values(metrics).every(p => p === undefined || p >= 80);
               gateStatus = allPass
                 ? '✅ **Coverage gate passed** (all metrics ≥ 80 %)'
@@ -331,7 +424,53 @@ jobs:
               core.warning('coverage-summary.json not found');
             }
 
-            // ── 2. Parse coverage.json (per-function hit counts) ────────────
+            // ── 2. Parse previous coverage-summary.json (delta) ─────────────
+            const prevSummaryPath = path.join('coverage-prev', 'coverage-summary.json');
+            let prevMetrics = {};
+            let hasPrev     = false;
+
+            if (fs.existsSync(prevSummaryPath)) {
+              hasPrev = true;
+              const prevTotals = JSON.parse(fs.readFileSync(prevSummaryPath, 'utf8')).total ?? {};
+              prevMetrics = {
+                Statements: prevTotals.statements?.pct,
+                Branches:   prevTotals.branches?.pct,
+                Functions:  prevTotals.functions?.pct,
+                Lines:      prevTotals.lines?.pct,
+              };
+            }
+
+            // ── 3. Build summary table ────────────────────────────────────────
+            let summaryRows;
+            if (hasSummary) {
+              if (hasPrev) {
+                // Four-column table with delta
+                summaryRows = [
+                  '| Metric | Current | Previous | Δ |',
+                  '|--------|--------:|--------:|:--|',
+                  ...Object.entries(metrics).map(([name, pct]) => {
+                    const curr  = pct                     !== undefined ? `${pct.toFixed(1)} %`                     : 'n/a';
+                    const prev  = prevMetrics[name]       !== undefined ? `${prevMetrics[name].toFixed(1)} %`       : 'n/a';
+                    const d     = delta(pct, prevMetrics[name]);
+                    return `| ${badge(pct)} ${name} | ${curr} | ${prev} | ${d} |`;
+                  }),
+                ].join('\n');
+              } else {
+                // Two-column table — no previous run available
+                summaryRows = [
+                  '| Metric | Coverage |',
+                  '|--------|----------|',
+                  ...Object.entries(metrics).map(([name, pct]) => {
+                    const display = pct !== undefined ? `${pct.toFixed(1)} %` : 'n/a';
+                    return `| ${badge(pct)} ${name} | ${display} |`;
+                  }),
+                ].join('\n');
+              }
+            } else {
+              summaryRows = '_coverage-summary.json not found_';
+            }
+
+            // ── 4. Parse coverage.json (per-function hit counts) ────────────
             // Istanbul JSON format (emitted by @vitest/coverage-v8 with --coverage.reporter=json):
             // {
             //   "path/to/FeatureCacheService.ts": {
@@ -343,20 +482,13 @@ jobs:
             let methodSection = '';
 
             if (fs.existsSync(jsonPath)) {
-              const raw  = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-
-              // Find the FeatureCacheService.ts entry regardless of absolute path prefix.
-              const fileKey = Object.keys(raw).find(k =>
-                k.endsWith('FeatureCacheService.ts')
-              );
+              const raw     = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+              const fileKey = Object.keys(raw).find(k => k.endsWith('FeatureCacheService.ts'));
 
               if (fileKey) {
-                const fileData = raw[fileKey];
-                const fnMap    = fileData.fnMap ?? {};
-                const fHits    = fileData.f     ?? {};
+                const fnMap  = raw[fileKey].fnMap ?? {};
+                const fHits  = raw[fileKey].f     ?? {};
 
-                // Build sorted list: skip anonymous or internal helpers whose
-                // name starts with '<' (Istanbul anonymous markers).
                 const methods = Object.entries(fnMap)
                   .filter(([, fn]) => fn.name && !fn.name.startsWith('<'))
                   .sort(([a], [b]) => Number(a) - Number(b))
@@ -385,14 +517,17 @@ jobs:
               core.warning('coverage.json not found — per-method table skipped');
             }
 
-            // ── 3. Compose the full comment body ─────────────────────────────
+            // ── 5. Compose the full comment body ─────────────────────────────
+            const deltaNote = hasPrev
+              ? ''
+              : '\n> _No previous successful run found on this branch — delta column not available._';
+
             const body = [
               '<!-- coverage-badge-comment -->',
               '## FeatureCacheService — Coverage Report',
               '',
-              '| Metric | Coverage |',
-              '|--------|----------|',
               summaryRows,
+              deltaNote,
               '',
               gateStatus,
               methodSection,
@@ -400,7 +535,7 @@ jobs:
               `_Generated for commit \`${{ github.sha }}\` · run [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})_`,
             ].join('\n');
 
-            // ── 4. Upsert the comment ─────────────────────────────────────────
+            // ── 6. Upsert the comment ─────────────────────────────────────────
             const { data: comments } = await github.rest.issues.listComments({
               owner:        context.repo.owner,
               repo:         context.repo.repo,
@@ -1032,6 +1167,187 @@ jobs:
                           {
                               "type": "button",
                               "text": {"type": "plain_text", "text": "View Job Logs"},
+                              "url": job_log_url,
+                              "style": "danger",
+                          },
+                          {
+                              "type": "button",
+                              "text": {"type": "plain_text", "text": "View Run"},
+                              "url": run_url,
+                          },
+                      ],
+                  },
+              ]
+          }
+
+          data = json.dumps(payload).encode("utf-8")
+          req = urllib.request.Request(
+              webhook,
+              data=data,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=10) as resp:
+                  body = resp.read().decode("utf-8")
+                  print(f"Slack responded {resp.status}: {body}")
+          except urllib.error.HTTPError as exc:
+              print(f"Slack HTTP error {exc.code}: {exc.read().decode()}", file=sys.stderr)
+              sys.exit(1)
+          PY
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 9: Slack notification when notify-slack-on-success itself fails
+  #
+  # The notify-slack-on-success job (Job 7) can fail for several reasons that
+  # are unrelated to whether the CI gates actually passed:
+  #   • SLACK_WEBHOOK_URL secret is missing, expired, or revoked
+  #   • Python payload construction script raised a runtime error
+  #   • actions/download-artifact failed (coverage artifact missing or expired)
+  #   • Transient Slack API timeout or network error
+  #
+  # This job fires whenever notify-slack-on-success reports `failure` so the
+  # team is alerted that the success notification was NOT delivered and can
+  # immediately diagnose the root cause.
+  #
+  # Two-layer fallback:
+  #   1. ::error:: GitHub workflow annotation — visible in the PR check summary
+  #      even if Slack itself is broken (zero external dependencies).
+  #   2. Slack alert with a direct link to the failed notifier job's logs.
+  #      If the webhook is broken, this step will also fail — but the annotation
+  #      in step 1 ensures the issue is always visible in the GitHub UI.
+  #
+  # Note: Job 9 purposefully does NOT use `continue-on-error` so a broken
+  #       webhook URL surfaces as a visible job failure on every PR, prompting
+  #       rotation.  The annotation in step 1 is the zero-dependency signal.
+  #
+  # Exact job name used for API lookup:
+  #   "Slack — Backend CI Success Alert"   (the `name:` field of Job 7)
+  # ────────────────────────────────────────────────────────────────────────────
+  notify-success-pipeline-failure:
+    name: Slack — Success Notifier Health Check
+    needs: [notify-slack-on-success]
+    if: always() && needs.notify-slack-on-success.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      # ── Step 1: GitHub annotation (zero-dependency fallback) ───────────────
+      # Always runs first so the failure is visible in the PR checks summary
+      # even if the Slack webhook is broken or the secret is missing.
+      - name: Emit GitHub workflow annotation
+        run: |
+          echo "::error title=Success Notifier Pipeline Failure::The 'Slack — Backend CI Success Alert' job failed. The Slack success message was NOT delivered. Check SLACK_WEBHOOK_URL secret and the job logs."
+
+      # ── Step 2: Slack alert with direct log link ────────────────────────────
+      - name: Post Slack alert for success-notifier failure
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_TOKEN:      ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 << 'PY'
+          import json, os, sys, urllib.request, urllib.error
+
+          webhook = os.environ.get("SLACK_WEBHOOK_URL", "")
+          if not webhook:
+              print(
+                  "::error title=SLACK_WEBHOOK_URL missing::"
+                  "Secret is empty — cannot post Slack alert for success-notifier failure.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          run_url = (
+              f"{os.environ['GITHUB_SERVER_URL']}/"
+              f"{os.environ['GITHUB_REPOSITORY']}/"
+              f"actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          )
+
+          # ── Resolve direct log URL for the notify-slack-on-success job ─────
+          # Exact `name:` field from the YAML for that job:
+          SUCCESS_JOB_NAME = "Slack — Backend CI Success Alert"
+          job_log_url = run_url   # fallback to run URL if lookup fails
+
+          api_url = (
+              f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/"
+              f"actions/runs/{os.environ['GITHUB_RUN_ID']}/jobs?per_page=100"
+          )
+          try:
+              req_api = urllib.request.Request(
+                  api_url,
+                  headers={
+                      "Authorization":        f"token {os.environ['GITHUB_TOKEN']}",
+                      "Accept":               "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              with urllib.request.urlopen(req_api, timeout=10) as r:
+                  jobs_data = json.loads(r.read().decode("utf-8"))
+              for job in jobs_data.get("jobs", []):
+                  if job["name"] == SUCCESS_JOB_NAME:
+                      job_log_url = (
+                          f"{os.environ['GITHUB_SERVER_URL']}/"
+                          f"{os.environ['GITHUB_REPOSITORY']}/"
+                          f"actions/runs/{os.environ['GITHUB_RUN_ID']}"
+                          f"/job/{job['id']}"
+                      )
+                      break
+          except Exception as exc:
+              print(f"Warning: could not fetch job IDs — {exc}", file=sys.stderr)
+
+          payload = {
+              "blocks": [
+                  {
+                      "type": "header",
+                      "text": {
+                          "type": "plain_text",
+                          "text": "⚠️ Success Notifier Pipeline Failure",
+                          "emoji": True,
+                      },
+                  },
+                  {
+                      "type": "section",
+                      "text": {
+                          "type": "mrkdwn",
+                          "text": (
+                              "The *Slack — Backend CI Success Alert* job failed "
+                              "after all CI gates passed successfully.\n"
+                              "The success notification was *not delivered* to Slack.\n\n"
+                              "Common causes:\n"
+                              "  • `SLACK_WEBHOOK_URL` secret is missing, expired, or revoked\n"
+                              "  • Python payload script raised a runtime error\n"
+                              "  • `actions/download-artifact` failed (coverage artifact missing or expired)\n"
+                              "  • Transient Slack API timeout or network error"
+                          ),
+                      },
+                  },
+                  {
+                      "type": "section",
+                      "fields": [
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Branch:*\n`{os.environ['GITHUB_REF_NAME']}`",
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Triggered by:*\n{os.environ['GITHUB_ACTOR']}",
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Workflow:*\n{os.environ['GITHUB_WORKFLOW']}",
+                          },
+                          {
+                              "type": "mrkdwn",
+                              "text": f"*Event:*\n{os.environ['GITHUB_EVENT_NAME']}",
+                          },
+                      ],
+                  },
+                  {
+                      "type": "actions",
+                      "elements": [
+                          {
+                              "type": "button",
+                              "text": {"type": "plain_text", "text": "View Notifier Logs"},
                               "url": job_log_url,
                               "style": "danger",
                           },
