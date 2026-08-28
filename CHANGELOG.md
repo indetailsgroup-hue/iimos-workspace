@@ -4,6 +4,49 @@ All notable changes to the Monolith project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [13.9.0] – 2026-08-28
+
+### Added
+- **Migration 0185 — e-Tax Audit Log** (`etax_submission_audit_log`): Immutable append-only table recording every `status` / `pdf_status` transition on `etax_submissions`. Columns: `actor_id`, `actor_role` (snapshotted), `old_status`, `new_status`, `old_pdf_status`, `new_pdf_status`, `trigger_source` (`user/trigger/worker/system/api`), `rd_ref_no`, `attempt_count`, `metadata` JSONB. Trigger `trg_etax_audit_on_status_change` (AFTER INSERT OR UPDATE OF status, pdf_status) runs as SECURITY DEFINER. RPCs: `rpc_list_etax_audit_log(submission_id)`, `rpc_list_etax_org_audit_log(from, to, status_filter, limit, offset)`. View `v_etax_audit_summary`. Backfill INSERT seeds existing rows. RLS: SELECT for org members; INSERT via trigger only; UPDATE/DELETE blocked for all.
+
+## [13.8.0] – 2026-08-28
+
+### Added
+- **Migration 0183 — e-Tax PDF Download Pipeline**: Adds `pdf_status` (`pending/downloading/downloaded/failed`), `pdf_downloaded_at`, `pdf_error` to `etax_submissions`. Trigger `trg_queue_pdf_on_submitted` (idempotent guard: skips `downloaded` rows). `_etax_claim_pdf_batch(limit)` with `FOR UPDATE SKIP LOCKED`. RPCs: `rpc_etax_mark_pdf_downloaded` (idempotency `{ok:true,idempotent:true}`), `rpc_etax_mark_pdf_failed` (wrong-state warning), `rpc_etax_retry_pdf` (OWNER/ADMIN/FINANCE). Storage RLS on `etax-pdfs` bucket: FINANCE INSERT, org members SELECT own-org, DELETE blocked.
+- **Migration 0184 — Scheduled Jobs** (`pg_cron + pg_net`): `etax-submit-worker` every 5 min (`*/5 * * * *`), `notify-overdue` daily 01:00 UTC (08:00 ICT). Invoke Edge Functions via `pg_net.http_post` with `Authorization: Bearer {cron_secret}`. Idempotent `unschedule`/`schedule`.
+- **Edge Function `etax-submit-worker`** (updated): Inline PDF download after `rpc_etax_mark_submitted` — `_etax_claim_pdf_batch` → `GET {ETAX_PROVIDER_URL}/v1/documents/{rdRefNo}/pdf` → Storage `etax-pdfs/{org_id}/{YYYY}/{submission_id}.pdf` → `rpc_etax_mark_pdf_downloaded` or `rpc_etax_mark_pdf_failed`. Non-fatal to submission. `WorkerResult` adds `pdf_ok`/`pdf_fail` counters.
+- **Test suite `0183_etax_pdf_download.test.ts`** (907 lines, Groups A–G, 27 tests): trigger lifecycle (5), batch-claim SKIP LOCKED concurrency (6), mark-downloaded idempotency (4), mark-failed wrong-state (4), retry role matrix (6), Storage RLS (6), end-to-end + backfill + cross-tenant (4).
+- **`supabase/config.toml`**: `[functions.etax-submit-worker]` and `[functions.notify-overdue]` with `schedule` and `verify_jwt = true`.
+
+## [13.7.0] – 2026-08-28
+
+### Added
+- **Migration 0182 — Org Notification Settings**: `notification_settings JSONB` on `organizations` (`overdue_enabled`, `etax_enabled`, `channels: {line, email}`). RLS: OWNER/ADMIN UPDATE. RPC `rpc_update_org_notification_settings` with key-schema validation.
+- **Migration 0181 — e-Tax Auto-Submit**: `etax_submissions` table (status queued→submitting→submitted→failed→cancelled, `attempt_count`, `xml_payload`, UBL 2.1). Trigger `trg_etax_auto_queue_on_approval`. RPC `rpc_etax_auto_submit` (max 5 retries, exponential back-off, idempotent on `(invoice_id, document_type)` UNIQUE). `fn_generate_etax_xml` (OASIS UBL 2.1, InvoiceTypeCode 388).
+- **Test suite `0181_etax_auto_submit.test.ts`** (862 lines, Groups A–F): auto-queue trigger, idempotency on re-approval, retry max-5 guard, XML schema, cross-tenant isolation, RPC permission matrix.
+
+## [13.6.0] – 2026-08-28
+
+### Added
+- **Migration 0180 — Overdue Invoice Detection**: `invoice_notifications` table with 4-tier overdue classification (`grace` 1–7d / `warning` 8–30d / `critical` 31–60d / `final` 60+d). Idempotency constraint `(invoice_id, overdue_type, notification_date)`. Trigger `trg_check_invoice_overdue` on invoice UPDATE. RPC `rpc_check_overdue_invoices(org_id, dry_run)`. RPCs: `rpc_list_overdue_invoices`, `rpc_acknowledge_notification`, `rpc_snooze_notification`. Views: `v_overdue_invoices`, `v_overdue_aging_summary`. pg_cron `check-overdue-invoices` 01:00 UTC daily.
+- **Edge Function `notify-overdue/index.ts`** (548 lines): per-org LINE Notify + Resend email fan-out; per-channel fault isolation; reads `notification_settings.channels`.
+- **Test suite `0180_overdue_detection.test.ts`** (953 lines): bucket classification, idempotency, dry-run mode, snooze expiry, cross-tenant isolation, aging summary view.
+
+## [13.5.0] – 2026-08-28
+
+### Added
+- **Migration 0178 — RLS Deduplication & Hardening**: `org_id IF NOT EXISTS` on 7 tables (`customers`, `jobs`, `job_panels`, `quotations`, `quotation_lines`, `invoices`, `invoice_payments`). Replaces over-broad `authenticated_read_*`/`write_*` policies with CRUD-scoped RLS. Unique constraints `(org_id, job_code)`, `(org_id, quotation_code)`, `(org_id, invoice_code)`. Hardened RPCs: `rpc_approve_quotation`, `rpc_record_payment` (FINANCE-only), `rpc_job_board` (stable, paginated).
+- **Migration 0179 — Dynamic Multi-Book Support**: `book_registry` table + `book_id` FK on `journal_entry`. Trigger `trg_journal_validate_book` (org isolation + active-book check). RPCs: `rpc_register_book`, `rpc_list_books`, `rpc_deactivate_book`, `rpc_post_journal_entry`. RLS: OWNER/ADMIN manage; all members read.
+- **Migration 0176 — Auto-Journal on Invoice Approval**: Trigger `trg_auto_post_invoice_journal` (DR 1200 AR / CR 4100 Revenue + 2200 VAT Payable). Reversal `trg_auto_reverse_invoice_journal` on void.
+- **Migration 0177 — Auto-Receipt on Payment Confirm**: `payment_receipt` table (idempotency constraint). Trigger `trg_post_payment_receipt_journal` (DR 1100 Cash/Bank / CR 1200 AR). RPCs: `rpc_confirm_payment`, `rpc_void_payment_receipt`, `rpc_list_payment_receipts`. View `v_invoice_payment_status` (`total_paid`, `remaining_amount`). Partial payment support.
+- **Test suite `0173_rls_multitenancy.test.ts`** (1 248 lines): RLS isolation on all 7 tables, `rpc_approve_invoice`, `rpc_void_invoice`, cross-tenant attack vectors.
+- **Test suite `0177_payment_receipt.test.ts`** (1 020 lines): confirm, void, partial payment, idempotency, cross-tenant isolation.
+- **Diff report `docs/0178-vs-multi-tenant-diff-report.md`**: pre-reset conflict analysis — singular vs plural table names, duplicate org_id additions, execution-order hazard.
+
+### Fixed
+- `0000_multi_tenant_schema.sql`: Renamed from `20260828_multi_tenant_schema.sql`; resolves lexicographic execution order bug (`get_user_org_id()` now defined before 0178+).
+- `0178_rls_dedup_and_hardening.sql`: All 7 table references pluralized (30/30 validation checks pass); `rpc_job_board` JOIN aliases restored; rowtype variables corrected.
+
 ## [13.4.0] – 2026-08-27
 
 ### Added
