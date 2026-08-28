@@ -64,18 +64,18 @@ const STORY = {
 
 test.describe('PeopleDirectory — Visual Regression', () => {
   // ── Default view ────────────────────────────────────────────────────────────
-  test('Default: full employee list renders correctly', async ({ page }) => {
+  test('Default: full employee list renders correctly', async ({ page }, testInfo) => {
     await gotoStory(page, STORY.default);
 
     // Assert key structural elements are present before snapshot
     await expect(page.getByTestId('people-directory')).toBeVisible();
     await expect(page.getByTestId('employee-card')).toHaveCount({ minimum: 1 } as never);
 
-    await takeSnapshot(page, 'PeopleDirectory — Default');
+    await takeSnapshot(page, 'PeopleDirectory — Default', testInfo);
   });
 
   // ── All stage badges ─────────────────────────────────────────────────────────
-  test('AllStageBadges: every SuperEmployeeStage badge visible', async ({ page }) => {
+  test('AllStageBadges: every SuperEmployeeStage badge visible', async ({ page }, testInfo) => {
     await gotoStory(page, STORY.allStageBadges);
 
     await expect(page.getByTestId('people-directory')).toBeVisible();
@@ -83,49 +83,49 @@ test.describe('PeopleDirectory — Visual Regression', () => {
     const badges = page.locator('[data-testid="super-employee-badge"]');
     await expect(badges.first()).toBeVisible();
 
-    await takeSnapshot(page, 'PeopleDirectory — All Stage Badges');
+    await takeSnapshot(page, 'PeopleDirectory — All Stage Badges', testInfo);
   });
 
   // ── Single Super Employee ─────────────────────────────────────────────────────
-  test('SingleSuperEmployee: Super Employee badge highlighted', async ({ page }) => {
+  test('SingleSuperEmployee: Super Employee badge highlighted', async ({ page }, testInfo) => {
     await gotoStory(page, STORY.singleSuperEmployee);
 
     await expect(page.getByTestId('people-directory')).toBeVisible();
     const badge = page.locator('[data-testid="super-employee-badge"]').first();
     await expect(badge).toBeVisible();
 
-    await takeSnapshot(page, 'PeopleDirectory — Single Super Employee');
+    await takeSnapshot(page, 'PeopleDirectory — Single Super Employee', testInfo);
   });
 
   // ── Stage filter ─────────────────────────────────────────────────────────────
-  test('StageFilter: SuperEmployee stage filter applied', async ({ page }) => {
+  test('StageFilter: SuperEmployee stage filter applied', async ({ page }, testInfo) => {
     await gotoStory(page, STORY.stageFilterSuperEmployee);
 
     await expect(page.getByTestId('people-directory')).toBeVisible();
 
-    await takeSnapshot(page, 'PeopleDirectory — Stage Filter (SuperEmployee)');
+    await takeSnapshot(page, 'PeopleDirectory — Stage Filter (SuperEmployee)', testInfo);
   });
 
   // ── Skill filter ─────────────────────────────────────────────────────────────
-  test('SkillFilter: Python/AI skill chip filter applied', async ({ page }) => {
+  test('SkillFilter: Python/AI skill chip filter applied', async ({ page }, testInfo) => {
     await gotoStory(page, STORY.skillFilterPythonAI);
 
     await expect(page.getByTestId('people-directory')).toBeVisible();
 
-    await takeSnapshot(page, 'PeopleDirectory — Skill Filter (Python/AI)');
+    await takeSnapshot(page, 'PeopleDirectory — Skill Filter (Python/AI)', testInfo);
   });
 
   // ── Search filter ─────────────────────────────────────────────────────────────
-  test('SearchFilter: search input with text renders filtered list', async ({ page }) => {
+  test('SearchFilter: search input with text renders filtered list', async ({ page }, testInfo) => {
     await gotoStory(page, STORY.searchFilter);
 
     await expect(page.getByTestId('people-directory')).toBeVisible();
 
-    await takeSnapshot(page, 'PeopleDirectory — Search Filter');
+    await takeSnapshot(page, 'PeopleDirectory — Search Filter', testInfo);
   });
 
   // ── Empty state ──────────────────────────────────────────────────────────────
-  test('EmptyState: no matching employees shows empty message', async ({ page }) => {
+  test('EmptyState: no matching employees shows empty message', async ({ page }, testInfo) => {
     await gotoStory(page, STORY.emptyState);
 
     await expect(page.getByTestId('people-directory')).toBeVisible();
@@ -135,11 +135,11 @@ test.describe('PeopleDirectory — Visual Regression', () => {
       await expect(emptyMsg.first()).toBeVisible();
     }
 
-    await takeSnapshot(page, 'PeopleDirectory — Empty State');
+    await takeSnapshot(page, 'PeopleDirectory — Empty State', testInfo);
   });
 
   // ── Loading skeleton ──────────────────────────────────────────────────────────
-  test('Loading: skeleton loader displayed during fetch', async ({ page }) => {
+  test('Loading: skeleton loader displayed during fetch', async ({ page }, testInfo) => {
     await gotoStory(page, STORY.loading);
 
     // Skeleton should be visible (or the directory container at minimum)
@@ -153,7 +153,7 @@ test.describe('PeopleDirectory — Visual Regression', () => {
       await expect(directory).toBeVisible();
     }
 
-    await takeSnapshot(page, 'PeopleDirectory — Loading Skeleton');
+    await takeSnapshot(page, 'PeopleDirectory — Loading Skeleton', testInfo);
   });
 });
 
@@ -162,7 +162,7 @@ test.describe('PeopleDirectory — Visual Regression', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 test.describe('PeopleDirectory — Interaction Snapshots', () => {
-  test('Stage filter dropdown: options visible on open', async ({ page }) => {
+  test('Stage filter dropdown: options visible on open', async ({ page }, testInfo) => {
     await gotoStory(page, STORY.default);
 
     await expect(page.getByTestId('people-directory')).toBeVisible();
@@ -172,13 +172,13 @@ test.describe('PeopleDirectory — Interaction Snapshots', () => {
     if (await stageSelect.count() > 0) {
       // Take snapshot with select focused (before selecting)
       await stageSelect.focus();
-      await takeSnapshot(page, 'PeopleDirectory — Stage Select Focused');
+      await takeSnapshot(page, 'PeopleDirectory — Stage Select Focused', testInfo);
     } else {
-      await takeSnapshot(page, 'PeopleDirectory — Stage Filter Area');
+      await takeSnapshot(page, 'PeopleDirectory — Stage Filter Area', testInfo);
     }
   });
 
-  test('Search input: typed query filters list', async ({ page }) => {
+  test('Search input: typed query filters list', async ({ page }, testInfo) => {
     await gotoStory(page, STORY.default);
 
     await expect(page.getByTestId('people-directory')).toBeVisible();
@@ -187,7 +187,7 @@ test.describe('PeopleDirectory — Interaction Snapshots', () => {
     if (await searchInput.count() > 0) {
       await searchInput.fill('สมชาย');
       await page.waitForTimeout(300); // debounce
-      await takeSnapshot(page, 'PeopleDirectory — Search Typed');
+      await takeSnapshot(page, 'PeopleDirectory — Search Typed', testInfo);
     }
   });
 });

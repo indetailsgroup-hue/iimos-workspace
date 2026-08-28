@@ -27,7 +27,7 @@
  *      correctly against the injected state).
  */
 
-import type { Meta, StoryFn, StoryObj } from '@storybook/react-vite';
+import type { Meta, StoryFn, StoryObj } from '@storybook/react';
 import { expect, userEvent, within } from '@storybook/test';
 import React from 'react';
 
@@ -75,7 +75,6 @@ function makeSkill(id: string, name: string, isAiSkill = false): Skill {
     roleRelevance: ['FACTORY', 'ADMIN'],
     isAiSkill,
     aiPartnerThreshold: isAiSkill ? 'INTERMEDIATE' : null,
-    requiredLevel: 'INTERMEDIATE',
     createdAt: '2022-03-01T00:00:00Z',
   };
 }
@@ -300,7 +299,7 @@ export const StageFilterSuperEmployee: Story = {
 export const StageFilterInteraction: Story = {
   name: 'Stage Filter — Interaction (AI_ASSISTED)',
   decorators: [withPeopleStore()],
-  play: async ({ canvasElement }) => {
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
     const stageSelect = canvas.getByRole('combobox', { name: /กรองตาม Stage/i });
@@ -331,7 +330,7 @@ export const StageFilterInteraction: Story = {
 export const SkillFilterPythonAI: Story = {
   name: 'Skill Filter — Python / AI',
   decorators: [withPeopleStore()],
-  play: async ({ canvasElement }) => {
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
     const skillSelect = canvas.getByRole('combobox', { name: /กรองตามทักษะ/i });
@@ -364,7 +363,7 @@ export const SkillFilterPythonAI: Story = {
 export const SkillFilterQC: Story = {
   name: 'Skill Filter — ควบคุมคุณภาพ (QC)',
   decorators: [withPeopleStore()],
-  play: async ({ canvasElement }) => {
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
     const skillSelect = canvas.getByRole('combobox', { name: /กรองตามทักษะ/i });
@@ -387,7 +386,7 @@ export const SkillFilterQC: Story = {
 export const SearchFilter: Story = {
   name: 'Search — "นิภา"',
   decorators: [withPeopleStore()],
-  play: async ({ canvasElement }) => {
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
     const searchInput = canvas.getByRole('textbox', { name: /ค้นหาพนักงาน/i });
@@ -419,7 +418,7 @@ export const SearchFilter: Story = {
 export const ResetFilters: Story = {
   name: 'Reset Filters',
   decorators: [withPeopleStore()],
-  play: async ({ canvasElement }) => {
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
     // 1. Type in search to activate filter
@@ -536,7 +535,7 @@ export const WithInactiveEmployee: Story = {
 export const OnSelectCallback: Story = {
   name: 'onSelectEmployee Callback',
   decorators: [withPeopleStore()],
-  play: async ({ canvasElement, args }) => {
+  play: async ({ canvasElement, args }: { canvasElement: HTMLElement; args: PeopleDirectoryProps }) => {
     const canvas = within(canvasElement);
 
     const superEmpRow = canvas.getByRole('button', {

@@ -295,7 +295,7 @@ export const SuperEmployeeProgressCard: React.FC<SuperEmployeeProgressCardProps>
 }) => {
   const [triggerOpen, setTriggerOpen] = useState(defaultShowTrigger);
 
-  const currentStage = employee.aiStage;
+  const currentStage = employee.superEmployeeStage;
   const config = getConfig(currentStage);
   const fillPercentage = config.percentage;
   const isMaxStage = currentStage === 'SUPER_EMPLOYEE';
@@ -355,7 +355,7 @@ export const SuperEmployeeProgressCard: React.FC<SuperEmployeeProgressCardProps>
         {/* ── Employee Info ── */}
         <div className="flex items-center justify-between text-xs text-gray-400">
           <span className="font-medium text-gray-700">
-            {employee.firstName} {employee.lastName}
+            {employee.name}
           </span>
           {employee.employeeCode && (
             <span className="rounded border border-gray-100 bg-gray-50 px-2 py-0.5 font-mono">

@@ -107,6 +107,8 @@ export interface Employee {
   isActive: boolean;
   /** Current position in the Super Employee journey */
   superEmployeeStage: SuperEmployeeStage;
+  /** Optional short code displayed on employee cards (e.g. "EMP001") */
+  employeeCode?: string;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
