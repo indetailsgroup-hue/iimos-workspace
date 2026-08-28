@@ -1,3 +1,34 @@
+## [14.3.0] – 2026-08-28
+
+### Added
+
+#### Migration 0190 — `v_etax_submission_health` (`supabase/migrations/0190_etax_submission_health.sql`)
+- Adds `v_etax_submission_health` — a **SECURITY DEFINER** view joining per-org `etax_submissions` metrics with system-level `v_mv_alert_history` aggregates via **CROSS JOIN**. Alert-health columns carry an identical system-wide snapshot across every org row, giving each org row full MV-freshness context alongside its own submission stats.
+- **CTE design:**
+  - `org_stats` — groups `etax_submissions` by `org_id`; produces `total_submissions`, `successful_submissions`, `failed_submissions`, `pending_submissions`, `cancelled_submissions`, `exhausted_submissions` (attempt_count ≥ 5 AND status = 'failed'), `retry_exhaustion_rate_pct` (ROUND 2dp), `success_rate_pct` (ROUND 2dp), `avg_attempt_count` (ROUND 2dp), `max_attempt_count`, `pdfs_downloaded`, `pdfs_failed`, `last_submission_at`, `first_submission_at`.
+  - `alert_health` — single-row aggregate over `v_mv_alert_history`; produces `total_alerts_in_window`, `resolved_alerts`, `unresolved_alerts`, `alert_resolution_rate_pct`, `avg_seconds_to_resolve` (ROUND 2dp — filtered to `was_resolved = true`), `oldest_alert_in_window`, `latest_alert_at`, `current_freshness_status`, `current_lag_seconds`, `current_last_refreshed_at` (the latter three sourced from the most recent alert row via `ARRAY_AGG ORDER BY alert_rank`).
+- **Permissions:** `REVOKE ALL` from `PUBLIC` and `authenticated`; `SELECT` granted to `service_role` only — all access mediated by SECURITY DEFINER RPCs.
+- **Ordering:** `retry_exhaustion_rate_pct DESC NULLS LAST`, then `failed_submissions DESC` — highest-risk orgs surface first.
+- Adds `rpc_etax_submission_health()` — authenticated, roles `FINANCE/ADMIN/OWNER`, org-scoped via `get_user_org_id()`; returns single-row health snapshot for caller's org.
+- Adds `rpc_etax_submission_health_admin()` — `service_role`/`postgres` only; no `auth.uid()` call; safe for cron jobs and admin tooling; returns health rows for all orgs in risk-descending order.
+- Prerequisite guard block raises `EXCEPTION` if `etax_submissions`, `v_mv_alert_history`, or `v_mv_refresh_lag` are absent (migrations 0181/0189/0187 respectively).
+- Post-migration DO block verifies view, both RPCs, and key columns `retry_exhaustion_rate_pct` + `avg_seconds_to_resolve` exist before committing.
+
+#### Test Suite — `0189_mv_alert_history.test.ts` (`src/__tests__/rls/0189_mv_alert_history.test.ts`)
+Test suite for `v_mv_alert_history` and its RPCs (899 lines, Groups A–G, 44 tests):
+- **Group A — Schema** (6 tests): asserts all 26 expected columns present on the view; verifies `was_resolved`, `seconds_to_resolve`, `alert_rank`, `time_since_prev_alert`, `current_freshness_status`, `current_lag_seconds` exist.
+- **Group B — Access Control** (8 tests): `OWNER`, `ADMIN`, `FINANCE` roles can invoke `rpc_list_mv_alert_history`; `VIEWER` and `DESIGNER` receive `P0001` rejection; unauthenticated callers rejected; view itself inaccessible to `authenticated` via direct SELECT.
+- **Group C — Resolution Detection** (10 tests): `was_resolved = false` when no refresh log entry exists after alert; `was_resolved` flips to `true` after inserting a `etax_compliance_mv_refresh_log` row with `refreshed_at > alerted_at`; `seconds_to_resolve > 0` and matches wall-clock delta ±2 s; multiple unresolved alerts handled independently; resolution of a later alert does not retroactively resolve an earlier unrelated one.
+- **Group D — Admin Cross-Org Access** (7 tests): `rpc_list_mv_alert_history_admin(p_limit)` (service_role only) returns alerts across all orgs; OWNER/ADMIN calls to admin RPC are rejected; admin RPC has no `p_org_id` parameter; result set from admin RPC contains system-level rows for both org_A and org_B fixtures.
+- **Group E — `p_limit` Cap Enforcement** (7 tests): regular RPC clamps at `LEAST(GREATEST(p_limit,1),50)`; floor `p_limit=0 → 1 row`; ceiling `p_limit=100 → 50 rows`; admin RPC clamps at `LEAST(GREATEST(p_limit,1),200)`; negative p_limit → 1 row; default (no arg) returns up to 10.
+- **Group F — `alert_rank` Ordering** (4 tests): `alert_rank=1` is always the most recent alert; ranks are sequential integers with no gaps across a multi-alert window; `time_since_prev_alert` is `NULL` for rank 1 and positive `INTERVAL` for subsequent ranks.
+- **Group G — Idempotency / Rollback Safety** (2 tests): duplicate alert inserts within the 30-min dedup window produce a single row in the view; a rolled-back transaction leaves the view row count unchanged.
+- Helpers: `insertSystemAlert()` seeds with `trigger_source='system'`, `metadata->alert_type='mv_refresh_critical'`, `metadata->test_tag='0189_test_suite'`; `afterEach` purges via `metadata->>'test_tag' = '0189_test_suite'`.
+
+### Notes
+- `v_etax_submission_health` is intentionally **not** a materialized view — health data must always reflect current `etax_submissions` state; cached variants would mask active retry-exhaustion incidents.
+- `avg_seconds_to_resolve` is system-level (not per-org); it reflects the platform's overall MV alert response time and is the same value in every org row. This is by design — a per-org metric would be meaningless for a system-level MV alert.
+
 ## [14.2.0] – 2026-08-28
 
 ### Added
