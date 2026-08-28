@@ -1,7 +1,7 @@
 -- =============================================================================
 -- cross_tenant_isolation.sql — pgTAP cross-tenant isolation integration tests
 --
--- Suite: 23 tests
+-- Suite: 25 tests
 -- Purpose: Verify that the RLS policies introduced in migrations 0173–0183
 --          prevent one tenant (Beta) from reading or mutating rows that belong
 --          to another tenant (Alpha).
@@ -13,7 +13,7 @@
 --   T13–T14  UPDATE isolation  (Beta UPDATE on Alpha rows affects 0 rows)
 --   T15–T17  Own-org access    (Beta can see / write its own rows)
 --   T18–T22  Row integrity     (Alpha data is unchanged after Beta access attempts)
---   T23      DELETE isolation  (Beta DELETE on Alpha customer rows affects 0 rows)
+--   T23–T25  DELETE isolation  (Beta DELETE on Alpha customer/job/quotation_line rows affect 0 rows)
 --
 -- Design notes:
 --   * Runs inside BEGIN … ROLLBACK so no persistent state is written.
@@ -35,7 +35,7 @@
 
 BEGIN;
 
-SELECT plan(23);
+SELECT plan(25);
 
 -- ---------------------------------------------------------------------------
 -- T01  Confirm we are running as superuser
@@ -321,6 +321,30 @@ SELECT is(
   SELECT COUNT(*) FROM del),
   0::bigint,
   'T23: Beta DELETE on Alpha customer row affects 0 rows'
+);
+
+-- T24  DELETE job — Beta DELETE on Alpha job row touches 0 rows
+SELECT is(
+  (WITH del AS (
+    DELETE FROM public.job
+     WHERE job_id = 'a1a1a1a1-0002-0000-0000-000000000001'
+    RETURNING 1
+  )
+  SELECT COUNT(*) FROM del),
+  0::bigint,
+  'T24: Beta DELETE on Alpha job row affects 0 rows'
+);
+
+-- T25  DELETE quotation_line — Beta DELETE on Alpha quotation_line row touches 0 rows
+SELECT is(
+  (WITH del AS (
+    DELETE FROM public.quotation_line
+     WHERE line_id = 'a1a1a1a1-0005-0000-0000-000000000001'
+    RETURNING 1
+  )
+  SELECT COUNT(*) FROM del),
+  0::bigint,
+  'T25: Beta DELETE on Alpha quotation_line row affects 0 rows'
 );
 
 -- ===========================================================================
