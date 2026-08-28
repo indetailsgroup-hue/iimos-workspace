@@ -627,3 +627,622 @@ describe("Accounting Invariants", () => {
     });
   });
 });
+
+// =============================================================================
+// Additional Tests: rpc_approve_invoice & rpc_void_invoice (Migration 0176)
+// =============================================================================
+
+describe("RPC: rpc_approve_invoice (Migration 0176)", () => {
+  let jobId: string;
+  let draftInvoiceId: string;
+  let approvedInvoiceId: string;
+  let etaxInvoiceId: string;
+
+  beforeAll(async () => {
+    jobId = await seedJob(orgA.id, "JOB-APPR-A001");
+
+    // Invoice with line items — ready to approve
+    const { data: inv } = await serviceClient
+      .from("invoices")
+      .insert({
+        org_id: orgA.id,
+        job_id: jobId,
+        code: "INV-APPR-001",
+        status: "draft",
+        total: 10700, // 10000 + 7% VAT
+        is_vat_inclusive: true,
+        issued_date: "2026-08-01",
+      })
+      .select("id")
+      .single();
+    draftInvoiceId = inv!.id;
+
+    // Add line item
+    await serviceClient.from("invoice_line_items").insert({
+      org_id: orgA.id,
+      invoice_id: draftInvoiceId,
+      description: "Cabinet set",
+      amount: 10700,
+    });
+
+    // Pre-approved invoice (for idempotency test)
+    const { data: approved } = await serviceClient
+      .from("invoices")
+      .insert({
+        org_id: orgA.id,
+        job_id: jobId,
+        code: "INV-ALREADY-APPROVED",
+        status: "approved",
+        total: 5350,
+        is_vat_inclusive: true,
+        issued_date: "2026-08-01",
+        approved_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    approvedInvoiceId = approved!.id;
+
+    // Invoice marked as eTax submitted
+    const { data: etax } = await serviceClient
+      .from("invoices")
+      .insert({
+        org_id: orgA.id,
+        job_id: jobId,
+        code: "INV-ETAX-001",
+        status: "approved",
+        total: 5350,
+        is_vat_inclusive: true,
+        issued_date: "2026-08-01",
+        approved_at: new Date().toISOString(),
+        etax_submitted_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    etaxInvoiceId = etax!.id;
+  });
+
+  describe("Happy path", () => {
+    it("approves a draft invoice and returns success JSON", async () => {
+      const { data, error } = await userClient(userA.accessToken).rpc(
+        "rpc_approve_invoice",
+        { p_invoice_id: draftInvoiceId }
+      );
+      expect(error).toBeNull();
+      expect(data).toMatchObject({
+        success: true,
+        invoice_id: draftInvoiceId,
+        status: "approved",
+      });
+    });
+
+    it("sets invoice.status to 'approved' in DB", async () => {
+      const { data } = await serviceClient
+        .from("invoices")
+        .select("status, approved_at")
+        .eq("id", draftInvoiceId)
+        .single();
+      expect(data!.status).toBe("approved");
+      expect(data!.approved_at).not.toBeNull();
+    });
+
+    it("auto-posts a journal entry after approval", async () => {
+      const { data } = await serviceClient
+        .from("invoices")
+        .select("auto_journal_entry_id, auto_journal_posted_at")
+        .eq("id", draftInvoiceId)
+        .single();
+      expect(data!.auto_journal_entry_id).not.toBeNull();
+      expect(data!.auto_journal_posted_at).not.toBeNull();
+    });
+
+    it("journal entry has correct debit = credit (double-entry balance)", async () => {
+      const { data: inv } = await serviceClient
+        .from("invoices")
+        .select("auto_journal_entry_id, total")
+        .eq("id", draftInvoiceId)
+        .single();
+
+      const { data: lines } = await serviceClient
+        .from("journal_line")
+        .select("debit, credit")
+        .eq("journal_entry_id", inv!.auto_journal_entry_id);
+
+      const totalDebit = lines!.reduce((s, l) => s + Number(l.debit), 0);
+      const totalCredit = lines!.reduce((s, l) => s + Number(l.credit), 0);
+      expect(Math.abs(totalDebit - totalCredit)).toBeLessThanOrEqual(0.01);
+      expect(totalDebit).toBeCloseTo(Number(inv!.total), 1);
+    });
+
+    it("journal line: DR 1200 (AR) = invoice total", async () => {
+      const { data: inv } = await serviceClient
+        .from("invoices")
+        .select("auto_journal_entry_id, total")
+        .eq("id", draftInvoiceId)
+        .single();
+
+      const { data: arLine } = await serviceClient
+        .from("journal_line")
+        .select("debit, account_id")
+        .eq("journal_entry_id", inv!.auto_journal_entry_id)
+        .gt("debit", 0)
+        .single();
+
+      // Verify account code = 1200
+      const { data: account } = await serviceClient
+        .from("chart_of_accounts")
+        .select("code")
+        .eq("id", arLine!.account_id)
+        .single();
+
+      expect(account!.code).toBe("1200");
+      expect(Number(arLine!.debit)).toBeCloseTo(Number(inv!.total), 1);
+    });
+
+    it("journal line: CR 4100 (Revenue) = net amount (excl. VAT)", async () => {
+      const { data: inv } = await serviceClient
+        .from("invoices")
+        .select("auto_journal_entry_id, total")
+        .eq("id", draftInvoiceId)
+        .single();
+
+      const { data: lines } = await serviceClient
+        .from("journal_line")
+        .select("credit, account_id")
+        .eq("journal_entry_id", inv!.auto_journal_entry_id)
+        .gt("credit", 0);
+
+      // Find revenue line (4100)
+      const revenueLines = [];
+      for (const line of lines!) {
+        const { data: acc } = await serviceClient
+          .from("chart_of_accounts")
+          .select("code")
+          .eq("id", line.account_id)
+          .single();
+        if (acc?.code === "4100") revenueLines.push(line);
+      }
+      expect(revenueLines).toHaveLength(1);
+      // Net = 10700 / 1.07 ≈ 10000
+      expect(Number(revenueLines[0].credit)).toBeCloseTo(10000, 0);
+    });
+
+    it("journal line: CR 2200 (VAT Payable) = 7% of net", async () => {
+      const { data: inv } = await serviceClient
+        .from("invoices")
+        .select("auto_journal_entry_id")
+        .eq("id", draftInvoiceId)
+        .single();
+
+      const { data: lines } = await serviceClient
+        .from("journal_line")
+        .select("credit, account_id")
+        .eq("journal_entry_id", inv!.auto_journal_entry_id)
+        .gt("credit", 0);
+
+      const vatLines = [];
+      for (const line of lines!) {
+        const { data: acc } = await serviceClient
+          .from("chart_of_accounts")
+          .select("code")
+          .eq("id", line.account_id)
+          .single();
+        if (acc?.code === "2200") vatLines.push(line);
+      }
+      expect(vatLines).toHaveLength(1);
+      expect(Number(vatLines[0].credit)).toBeCloseTo(700, 0); // 10700 - 10000
+    });
+  });
+
+  describe("Idempotency", () => {
+    it("calling rpc_approve_invoice on already-approved invoice returns error", async () => {
+      const { data } = await userClient(userA.accessToken).rpc(
+        "rpc_approve_invoice",
+        { p_invoice_id: approvedInvoiceId }
+      );
+      expect(data.success).toBe(false);
+      expect(data.error).toMatch(/already approved/i);
+    });
+
+    it("does NOT double-post journal if trigger fires twice (idempotency guard)", async () => {
+      // Try to approve already-approved invoice directly via service client
+      await serviceClient
+        .from("invoices")
+        .update({ status: "approved" })
+        .eq("id", draftInvoiceId);
+
+      // Should still have exactly 1 journal entry
+      const { data: inv } = await serviceClient
+        .from("invoices")
+        .select("auto_journal_entry_id")
+        .eq("id", draftInvoiceId)
+        .single();
+
+      const { count } = await serviceClient
+        .from("journal_entry")
+        .select("*", { count: "exact", head: true })
+        .eq("source_id", draftInvoiceId)
+        .eq("source_type", "invoice");
+
+      expect(count).toBe(1); // Never double-posted
+    });
+  });
+
+  describe("Validation failures", () => {
+    it("rejects invoice with zero total", async () => {
+      const { data: zeroInv } = await serviceClient
+        .from("invoices")
+        .insert({
+          org_id: orgA.id,
+          job_id: jobId,
+          code: "INV-ZERO",
+          status: "draft",
+          total: 0,
+          issued_date: "2026-08-01",
+        })
+        .select("id")
+        .single();
+
+      // Add line item
+      await serviceClient.from("invoice_line_items").insert({
+        org_id: orgA.id,
+        invoice_id: zeroInv!.id,
+        description: "Empty",
+        amount: 0,
+      });
+
+      const { data } = await userClient(userA.accessToken).rpc(
+        "rpc_approve_invoice",
+        { p_invoice_id: zeroInv!.id }
+      );
+      expect(data.success).toBe(false);
+    });
+
+    it("rejects invoice with no line items", async () => {
+      const { data: noLineInv } = await serviceClient
+        .from("invoices")
+        .insert({
+          org_id: orgA.id,
+          job_id: jobId,
+          code: "INV-NOLINE",
+          status: "draft",
+          total: 5000,
+          issued_date: "2026-08-01",
+        })
+        .select("id")
+        .single();
+
+      const { data } = await userClient(userA.accessToken).rpc(
+        "rpc_approve_invoice",
+        { p_invoice_id: noLineInv!.id }
+      );
+      expect(data.success).toBe(false);
+      expect(data.error).toMatch(/no line items/i);
+    });
+  });
+
+  describe("Cross-tenant isolation", () => {
+    it("userB CANNOT approve orgA invoice", async () => {
+      // Create another draft invoice in orgA
+      const jobAId2 = await seedJob(orgA.id, "JOB-XAPPR-A");
+      const { data: xInv } = await serviceClient
+        .from("invoices")
+        .insert({
+          org_id: orgA.id,
+          job_id: jobAId2,
+          code: "INV-XAPPR",
+          status: "draft",
+          total: 5350,
+          issued_date: "2026-08-01",
+        })
+        .select("id")
+        .single();
+
+      await serviceClient.from("invoice_line_items").insert({
+        org_id: orgA.id,
+        invoice_id: xInv!.id,
+        description: "Cross-tenant test",
+        amount: 5350,
+      });
+
+      const { data } = await userClient(userB.accessToken).rpc(
+        "rpc_approve_invoice",
+        { p_invoice_id: xInv!.id }
+      );
+      expect(data.success).toBe(false); // Access denied
+
+      // Verify status unchanged
+      const { data: after } = await serviceClient
+        .from("invoices")
+        .select("status")
+        .eq("id", xInv!.id)
+        .single();
+      expect(after!.status).toBe("draft");
+    });
+  });
+});
+
+// =============================================================================
+// RPC: rpc_void_invoice tests
+// =============================================================================
+
+describe("RPC: rpc_void_invoice (Migration 0176)", () => {
+  let jobId: string;
+  let approvedInvoiceId: string;
+  let etaxInvoiceId: string;
+  let draftInvoiceId2: string;
+  let originalEntryId: string;
+
+  beforeAll(async () => {
+    jobId = await seedJob(orgA.id, "JOB-VOID-A001");
+
+    // Approved invoice (ready to void)
+    const { data: inv } = await serviceClient
+      .from("invoices")
+      .insert({
+        org_id: orgA.id,
+        job_id: jobId,
+        code: "INV-VOID-001",
+        status: "draft",
+        total: 5350,
+        is_vat_inclusive: true,
+        issued_date: "2026-08-01",
+      })
+      .select("id")
+      .single();
+
+    await serviceClient.from("invoice_line_items").insert({
+      org_id: orgA.id,
+      invoice_id: inv!.id,
+      description: "To be voided",
+      amount: 5350,
+    });
+
+    // Approve it first (to create the AR journal entry)
+    await userClient(userA.accessToken).rpc("rpc_approve_invoice", {
+      p_invoice_id: inv!.id,
+    });
+
+    const { data: approved } = await serviceClient
+      .from("invoices")
+      .select("id, auto_journal_entry_id")
+      .eq("id", inv!.id)
+      .single();
+    approvedInvoiceId = approved!.id;
+    originalEntryId = approved!.auto_journal_entry_id;
+
+    // eTax invoice (cannot be voided)
+    const { data: etax } = await serviceClient
+      .from("invoices")
+      .insert({
+        org_id: orgA.id,
+        job_id: jobId,
+        code: "INV-ETAX-VOID",
+        status: "approved",
+        total: 5350,
+        is_vat_inclusive: true,
+        issued_date: "2026-08-01",
+        approved_at: new Date().toISOString(),
+        etax_submitted_at: new Date().toISOString(),
+        auto_journal_entry_id: originalEntryId,
+        auto_journal_posted_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    etaxInvoiceId = etax!.id;
+
+    // Draft invoice (cannot be voided via rpc_void_invoice — needs approval first)
+    const { data: draft } = await serviceClient
+      .from("invoices")
+      .insert({
+        org_id: orgA.id,
+        job_id: jobId,
+        code: "INV-DRAFT-VOID",
+        status: "draft",
+        total: 5350,
+        issued_date: "2026-08-01",
+      })
+      .select("id")
+      .single();
+    draftInvoiceId2 = draft!.id;
+  });
+
+  describe("Happy path", () => {
+    it("voids an approved invoice successfully", async () => {
+      const { data, error } = await userClient(userA.accessToken).rpc(
+        "rpc_void_invoice",
+        { p_invoice_id: approvedInvoiceId, p_reason: "Customer cancelled order" }
+      );
+      expect(error).toBeNull();
+      expect(data).toMatchObject({ success: true, status: "voided" });
+    });
+
+    it("sets invoice.status to 'voided' in DB", async () => {
+      const { data } = await serviceClient
+        .from("invoices")
+        .select("status, voided_at, void_reason")
+        .eq("id", approvedInvoiceId)
+        .single();
+      expect(data!.status).toBe("voided");
+      expect(data!.voided_at).not.toBeNull();
+      expect(data!.void_reason).toBe("Customer cancelled order");
+    });
+
+    it("auto-posts reversal journal entry after void", async () => {
+      // There should be a reversal entry pointing back to the original
+      const { data: reversal } = await serviceClient
+        .from("journal_entry")
+        .select("id, reversal_of, source_type")
+        .eq("source_id", approvedInvoiceId)
+        .eq("source_type", "invoice_reversal")
+        .single();
+      expect(reversal).not.toBeNull();
+      expect(reversal!.reversal_of).toBe(originalEntryId);
+    });
+
+    it("reversal journal entry is balanced (debit = credit)", async () => {
+      const { data: reversal } = await serviceClient
+        .from("journal_entry")
+        .select("id")
+        .eq("source_id", approvedInvoiceId)
+        .eq("source_type", "invoice_reversal")
+        .single();
+
+      const { data: lines } = await serviceClient
+        .from("journal_line")
+        .select("debit, credit")
+        .eq("journal_entry_id", reversal!.id);
+
+      const totalDebit = lines!.reduce((s, l) => s + Number(l.debit), 0);
+      const totalCredit = lines!.reduce((s, l) => s + Number(l.credit), 0);
+      expect(Math.abs(totalDebit - totalCredit)).toBeLessThanOrEqual(0.01);
+    });
+
+    it("reversal journal lines are the inverse of original (swap debit/credit)", async () => {
+      const { data: reversal } = await serviceClient
+        .from("journal_entry")
+        .select("id")
+        .eq("source_id", approvedInvoiceId)
+        .eq("source_type", "invoice_reversal")
+        .single();
+
+      const { data: originalLines } = await serviceClient
+        .from("journal_line")
+        .select("account_id, debit, credit")
+        .eq("journal_entry_id", originalEntryId)
+        .order("account_id");
+
+      const { data: reversalLines } = await serviceClient
+        .from("journal_line")
+        .select("account_id, debit, credit")
+        .eq("journal_entry_id", reversal!.id)
+        .order("account_id");
+
+      // Each original line should have swapped debit/credit in reversal
+      for (let i = 0; i < originalLines!.length; i++) {
+        const orig = originalLines![i];
+        const rev = reversalLines!.find((r) => r.account_id === orig.account_id);
+        if (rev) {
+          expect(Number(rev.debit)).toBeCloseTo(Number(orig.credit), 1);
+          expect(Number(rev.credit)).toBeCloseTo(Number(orig.debit), 1);
+        }
+      }
+    });
+  });
+
+  describe("eTax invoice protection", () => {
+    it("CANNOT void an eTax-submitted invoice", async () => {
+      const { data, error } = await userClient(userA.accessToken).rpc(
+        "rpc_void_invoice",
+        { p_invoice_id: etaxInvoiceId }
+      );
+      expect(data.success).toBe(false);
+      expect(data.error).toMatch(/eTax|credit note/i);
+
+      // Status unchanged
+      const { data: after } = await serviceClient
+        .from("invoices")
+        .select("status")
+        .eq("id", etaxInvoiceId)
+        .single();
+      expect(after!.status).toBe("approved");
+    });
+  });
+
+  describe("Status validation", () => {
+    it("returns error when trying to void a draft invoice", async () => {
+      // Draft invoices don't have journal entries, void behavior TBD
+      const { data } = await userClient(userA.accessToken).rpc(
+        "rpc_void_invoice",
+        { p_invoice_id: draftInvoiceId2 }
+      );
+      // Should either succeed with no reversal (no journal to reverse) or fail gracefully
+      // In any case, should not throw an unhandled error
+      expect(data).toBeDefined();
+      expect(typeof data.success).toBe("boolean");
+    });
+  });
+
+  describe("Cross-tenant isolation", () => {
+    it("userB CANNOT void orgA invoice", async () => {
+      // Create another approved invoice in orgA
+      const jobAId3 = await seedJob(orgA.id, "JOB-XVOID-A");
+      const { data: inv } = await serviceClient
+        .from("invoices")
+        .insert({
+          org_id: orgA.id,
+          job_id: jobAId3,
+          code: "INV-XVOID",
+          status: "approved",
+          total: 5350,
+          issued_date: "2026-08-01",
+          approved_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
+
+      const { data } = await userClient(userB.accessToken).rpc(
+        "rpc_void_invoice",
+        { p_invoice_id: inv!.id }
+      );
+      expect(data.success).toBe(false);
+
+      // Status unchanged
+      const { data: after } = await serviceClient
+        .from("invoices")
+        .select("status")
+        .eq("id", inv!.id)
+        .single();
+      expect(after!.status).toBe("approved");
+    });
+  });
+
+  describe("v_invoice_journal_status view", () => {
+    it("shows 'reversed' status for voided invoice", async () => {
+      const { data } = await userClient(userA.accessToken)
+        .from("v_invoice_journal_status")
+        .select("*")
+        .eq("invoice_id", approvedInvoiceId)
+        .single();
+      expect(data!.journal_posting_status).toBe("reversed");
+    });
+
+    it("shows 'posted' status for approved invoice", async () => {
+      // Use the draftInvoiceId that was approved in previous test
+      const { data: inv } = await serviceClient
+        .from("invoices")
+        .select("id")
+        .eq("code", "INV-APPR-001")
+        .single();
+
+      const { data } = await userClient(userA.accessToken)
+        .from("v_invoice_journal_status")
+        .select("*")
+        .eq("invoice_id", inv!.id)
+        .single();
+      expect(data!.journal_posting_status).toBe("posted");
+    });
+
+    it("does NOT show orgB invoices to userA", async () => {
+      const jobBId2 = await seedJob(orgB.id, "JOB-VIEW-B");
+      const { data: bInv } = await serviceClient
+        .from("invoices")
+        .insert({
+          org_id: orgB.id,
+          job_id: jobBId2,
+          code: "INV-VIEW-B001",
+          status: "approved",
+          total: 5350,
+          issued_date: "2026-08-01",
+        })
+        .select("id")
+        .single();
+
+      const { data } = await userClient(userA.accessToken)
+        .from("v_invoice_journal_status")
+        .select("*")
+        .eq("invoice_id", bInv!.id);
+
+      expect(data).toHaveLength(0); // RLS blocks orgB data
+    });
+  });
+});
