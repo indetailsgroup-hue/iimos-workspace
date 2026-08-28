@@ -20,3 +20,8 @@ export { BookmarkPanel } from './BookmarkPanel';
 export type { AutocompleteSuggestion, CombinedSuggestions } from './searchAutocomplete';
 export type { SearchBookmark, CreateBookmarkParams } from './searchBookmarks';
 export type { SearchAnalyticsExportData } from './csvExport';
+
+// v16.8.0 — Super-admin-guarded panel exports
+export { default as withSuperAdminGuard, SuperAdminDenied } from './withSuperAdminGuard';
+export { GuardedPlatformSearchPanel } from './PlatformSearchPanel';
+export { GuardedSearchAnalyticsDashboard } from './SearchAnalyticsDashboard';
