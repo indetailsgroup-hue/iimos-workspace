@@ -70,7 +70,7 @@ jobs:
         run: npm ci
 
       - name: TypeCheck
-        run: npx tsc --noEmit
+        run: npx tsc --noEmit -p tsconfig.people-culture.json
 
   storybook-build:
     name: Storybook Build (CI verify)
