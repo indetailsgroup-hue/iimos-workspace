@@ -28,7 +28,7 @@
  */
 
 import type { Meta, StoryFn, StoryObj } from '@storybook/react';
-import { expect, userEvent, within } from '@storybook/test';
+import { expect, fn, userEvent, within } from '@storybook/test';
 import React from 'react';
 
 import { PeopleDirectory, PeopleDirectoryProps } from './PeopleDirectory';
@@ -534,25 +534,24 @@ export const WithInactiveEmployee: Story = {
  */
 export const OnSelectCallback: Story = {
   name: 'onSelectEmployee Callback',
+  args: { onSelectEmployee: fn() },
   decorators: [withPeopleStore()],
   play: async ({ canvasElement, args }: { canvasElement: HTMLElement; args: PeopleDirectoryProps }) => {
     const canvas = within(canvasElement);
 
-    const superEmpRow = canvas.getByRole('button', {
+    const superEmpRow = await canvas.findByRole('button', {
       name: /อาทิตย์ สว่าง/i,
       // The button contains name + department text; use partial match
     });
     await userEvent.click(superEmpRow);
 
-    // Callback should have been invoked with the SUPER_EMPLOYEE
-    if (args.onSelectEmployee) {
-      await expect(args.onSelectEmployee).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 'emp-5',
-          superEmployeeStage: 'SUPER_EMPLOYEE',
-        }),
-      );
-    }
+    // Callback must be a fn() spy — assert it was invoked with the SUPER_EMPLOYEE
+    await expect(args.onSelectEmployee).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'emp-5',
+        superEmployeeStage: 'SUPER_EMPLOYEE',
+      }),
+    );
   },
   parameters: {
     docs: {
