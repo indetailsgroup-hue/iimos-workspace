@@ -186,7 +186,7 @@ jobs:
   # Job 2: Apply migrations to Supabase (runs only on push to main)
   # ───────────────────────────────────────────────────────────────────────────
   migrate:
-    name: Apply Migrations (0176→0214)
+    name: Apply Migrations (0176→0215)
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -203,7 +203,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client
 
-      - name: Apply migrations 0176→0214
+      - name: Apply migrations 0176→0215
         run: |
           chmod +x scripts/apply_migrations.sh
           ./scripts/apply_migrations.sh
@@ -243,8 +243,9 @@ jobs:
 
   # ───────────────────────────────────────────────────────────────────────────
   # Job 4: E2E Smoke Tests — local Supabase via `supabase start`
-  #   Spins up a full local Postgres+Auth stack, applies all 39 migrations
-  #   (0176→0214), then runs the Deno e2e_smoke_test.ts against it.
+  #   Spins up a full local Postgres+Auth stack, auto-applies all migrations
+  #   in supabase/migrations/ (0000_e2e_prereqs + 0176→0215), then runs the
+  #   Deno e2e_smoke_test.ts against it.
   #   Runs on every PR so regressions are caught before merge.
   # ───────────────────────────────────────────────────────────────────────────
   e2e-smoke:
@@ -269,23 +270,58 @@ jobs:
         with:
           version: latest
 
+      # ── Write e2e prereq stub migration ───────────────────────────────────
+      # Creates minimal organizations + org_members tables so that
+      # 0173_rls_isolation_hardening.sql's existence check passes when
+      # supabase start auto-applies all migrations in supabase/migrations/.
+      # This file is written only to the runner's working tree; NOT committed.
+      - name: Write e2e prereq migration stub
+        run: |
+          cat > supabase/migrations/0000_e2e_prereqs.sql << 'SQL'
+          -- E2E runner prereq stub: satisfies table-existence guards in later migrations.
+          -- Generated at CI runtime. This file is NOT stored in the repo.
+          CREATE TABLE IF NOT EXISTS organizations (
+            id   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            name text NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS org_members (
+            id      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id  uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            user_id uuid NOT NULL
+          );
+          SQL
+
+      # ── Restore Supabase Docker image cache ────────────────────────────────
+      # Cache key: SHA of supabase/config.toml (Supabase version pin).
+      # Cache path: /tmp/supabase-images — saved as a single tar after first pull.
+      - name: Restore Supabase Docker image cache
+        id: cache-supabase-images
+        uses: actions/cache@v4
+        with:
+          path: /tmp/supabase-images
+          key: supabase-images-${{ hashFiles('supabase/config.toml') }}
+
+      # Load pre-pulled images on cache hit — skips the Docker pull entirely
+      - name: Load Supabase images from cache
+        if: steps.cache-supabase-images.outputs.cache-hit == 'true'
+        run: docker load --input /tmp/supabase-images/supabase-images.tar
+
       # ── Start local Supabase stack (Docker available on ubuntu-latest) ─────
+      # supabase start auto-applies every .sql file in supabase/migrations/
+      # in lexicographic order, so 0000_e2e_prereqs runs before 0173+.
       - name: Start local Supabase
         run: supabase start
 
-      # ── Install psql for the migration runner ──────────────────────────────
-      - name: Install PostgreSQL client
+      # Save Supabase images to cache after a cold pull (cache miss only)
+      - name: Save Supabase images to cache
+        if: steps.cache-supabase-images.outputs.cache-hit != 'true'
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends postgresql-client
-
-      # ── Apply all migrations 0176→0214 against the local DB ───────────────
-      - name: Apply migrations (0176→0214)
-        run: |
-          chmod +x scripts/apply_migrations.sh
-          ./scripts/apply_migrations.sh
-        env:
-          DATABASE_URL: "postgresql://postgres:postgres@localhost:54322/postgres"
+          mkdir -p /tmp/supabase-images
+          docker save \
+            $(docker images --format '{{.Repository}}:{{.Tag}}' \
+              | grep -E 'supabase|postgres' \
+              | grep -v '<none>') \
+            --output /tmp/supabase-images/supabase-images.tar
 
       # ── Extract local API credentials from `supabase status` ──────────────
       - name: Export local Supabase credentials
