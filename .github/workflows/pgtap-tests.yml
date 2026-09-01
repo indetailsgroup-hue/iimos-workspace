@@ -95,7 +95,28 @@ jobs:
           pg_prove --version
 
       # -----------------------------------------------------------------------
-      # 5. Start Supabase local stack
+      # 5. Rename 20260828_* migrations to 0172_z0x_* for correct sort order
+      #    Rationale: 20260828_* sorts after 0173_* lexicographically (2 > 0),
+      #    which means multi_tenant_schema runs AFTER 0173 guard and fails.
+      #    Renaming to 0172_z0x_* ensures:
+      #      • All six files run BEFORE 0173_rls_isolation_hardening.sql
+      #      • multi_tenant_schema (z00) runs first within the group
+      #      • Remaining five run in dependency order (z01–z05)
+      # -----------------------------------------------------------------------
+      - name: Reorder 20260828 migrations to 0172_z0x prefix
+        run: |
+          cd supabase/migrations
+          mv 20260828_multi_tenant_schema.sql        0172_z00_multi_tenant_schema.sql
+          mv 20260828_audit_log_usage_metering.sql   0172_z01_audit_log_usage_metering.sql
+          mv 20260828_notifications_super_admin.sql  0172_z02_notifications_super_admin.sql
+          mv 20260828_platform_fts.sql               0172_z03_platform_fts.sql
+          mv 20260828_platform_search.sql            0172_z04_platform_search.sql
+          mv 20260828_search_bookmarks_autocomplete.sql 0172_z05_search_bookmarks_autocomplete.sql
+          echo "Migration order after rename:"
+          ls -1 0172_z*.sql
+
+      # -----------------------------------------------------------------------
+      # 6. Start Supabase local stack
       #    Requires: SUPABASE_ACCESS_TOKEN repository secret
       #    Provision: Settings → Secrets and variables → Actions
       #    Source:    app.supabase.com → Account → Access Tokens
@@ -106,7 +127,7 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       # -----------------------------------------------------------------------
-      # 6. Apply all migrations (db reset runs migrations from scratch)
+      # 7. Apply all migrations (db reset runs migrations from scratch)
       #    NOTE: rollback scripts live in supabase/rollbacks/ (not migrations/)
       #    so they are NOT applied by db reset. This avoids duplicate publication
       #    membership errors (SQLSTATE 42710) that occur when rollback SQL runs
@@ -116,7 +137,7 @@ jobs:
         run: supabase db reset --local
 
       # -----------------------------------------------------------------------
-      # 7. Enable pgTAP extension
+      # 8. Enable pgTAP extension
       # -----------------------------------------------------------------------
       - name: Enable pgTAP extension
         run: |
@@ -126,7 +147,7 @@ jobs:
           PGPASSWORD: postgres
 
       # -----------------------------------------------------------------------
-      # 8. Run pg_prove on all test files
+      # 9. Run pg_prove on all test files
       #    Runs: supabase/tests/*.sql — 511 total pgTAP assertions:
       #      • 474  forward migration tests
       #             (0179 F1: 14 · 0179 NNB: 35 · 0180: 17 · 0181: 18 · 0182: 13 · 0183: 13 ·
@@ -156,7 +177,7 @@ jobs:
           PGPASSWORD: postgres
 
       # -----------------------------------------------------------------------
-      # 9. Stop Supabase local stack (cleanup — always runs)
+      # 10. Stop Supabase local stack (cleanup — always runs)
       # -----------------------------------------------------------------------
       - name: Stop Supabase local stack
         if: always()
