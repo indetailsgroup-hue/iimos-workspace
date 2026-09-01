@@ -354,6 +354,14 @@ jobs:
           -- multi-tenant bootstrap script (not part of the numbered sequence).
           -- Generated at CI runtime. NOT committed to the repo.
 
+          -- ── Clear the 0172 migration record so Supabase CLI can insert it ──
+          -- Both 0172_jobs_quotations_invoices.sql and this file share the same
+          -- leading numeric version (0172). The CLI records the version after
+          -- running each file; if the record already exists the INSERT fails.
+          -- Deleting it here lets the CLI re-insert for this file, which is
+          -- safe in CI because every run starts from a fresh container.
+          DELETE FROM supabase_migrations.schema_migrations WHERE version = '0172';
+
           -- ── Missing platform tables ─────────────────────────────────────────
           CREATE TABLE IF NOT EXISTS org_invitations (
             id     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
