@@ -300,10 +300,23 @@
   <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
     <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
       <div>
-        <h2 class="text-base font-semibold text-slate-700">30-Day Cumulative Breach Trend</h2>
-        <p class="text-xs text-slate-400 mt-0.5">Running total of SLA breaches per document type — fetched from daily breach timeline</p>
+        <h2 class="text-base font-semibold text-slate-700" id="sla-chart-title">30-Day Cumulative Breach Trend</h2>
+        <p class="text-xs text-slate-400 mt-0.5" id="sla-chart-subtitle">Running total of SLA breaches per document type — fetched from daily breach timeline</p>
       </div>
       <div class="flex items-center gap-2">
+        <!-- Chart type segmented control -->
+        <div class="inline-flex rounded-lg border border-slate-200 overflow-hidden text-xs font-medium shadow-sm">
+          <button id="chart-mode-line"
+            onclick="switchChartMode('line')"
+            class="px-3 py-1.5 bg-brand-500 text-white transition-colors">
+            Cumulative
+          </button>
+          <button id="chart-mode-bar"
+            onclick="switchChartMode('bar')"
+            class="px-3 py-1.5 bg-white text-slate-600 border-l border-slate-200 hover:bg-slate-50 transition-colors">
+            Daily Breaches
+          </button>
+        </div>
         <label class="text-xs text-slate-500">Days:</label>
         <select id="chart-days-select" onchange="onChartDaysChange()" class="text-sm border border-slate-200 rounded-lg px-2 py-1 focus:ring-2 focus:ring-brand-500 focus:outline-none">
           <option value="7">7 days</option>
@@ -603,7 +616,8 @@ const DOC_COLORS = {
   T04: { border: '#ef4444', bg: 'rgba(239,68,68,0.12)'  },
 };
 
-let _slaChart = null;
+let _slaChart    = null;
+let _chartMode   = 'line'; // 'line' = cumulative_breached | 'bar' = daily breached_count
 
 function renderSlaChart(timelineRows) {
   const rows   = timelineRows ?? state.slaTimeline ?? [];
@@ -629,13 +643,27 @@ function renderSlaChart(timelineRows) {
   const labels     = [...dateSet].sort();
   const docTypes   = [...new Set(rows.map(r => r.document_type))].sort();
 
+  // Branch on chart mode
+  const isBar     = _chartMode === 'bar';
+  const valueKey  = isBar ? 'breached_count' : 'cumulative_breached';
+
   // Build dataset per doc type
   const datasets = docTypes.map(dt => {
     const dtRows = rows.filter(r => r.document_type === dt);
-    // Map breach_date → cumulative_breached
-    const lookup = Object.fromEntries(dtRows.map(r => [r.breach_date, r.cumulative_breached]));
+    const lookup = Object.fromEntries(dtRows.map(r => [r.breach_date, r[valueKey]]));
     const data   = labels.map(d => lookup[d] ?? null);
     const col    = DOC_COLORS[dt] || { border: '#64748b', bg: 'rgba(100,116,139,0.12)' };
+    if (isBar) {
+      return {
+        label:           dt,
+        data,
+        backgroundColor: col.border,
+        borderColor:     col.border,
+        borderWidth:     1,
+        borderRadius:    4,
+        spanGaps:        true,
+      };
+    }
     return {
       label:                dt,
       data,
@@ -660,8 +688,23 @@ function renderSlaChart(timelineRows) {
     _slaChart = null;
   }
 
+  const chartTitle    = isBar ? 'Daily Breach Counts' : '30-Day Cumulative Breach Trend';
+  const chartSubtitle = isBar
+    ? 'Daily SLA breach count per document type — bar view'
+    : 'Running total of SLA breaches per document type — fetched from daily breach timeline';
+  const yAxisTitle    = isBar ? 'Daily Breaches' : 'Cumulative Breaches';
+  const tooltipLabel  = isBar
+    ? ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y ?? 0} daily breaches`
+    : ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y ?? 0} cumulative breaches`;
+
+  // Update heading
+  const titleEl    = document.getElementById('sla-chart-title');
+  const subtitleEl = document.getElementById('sla-chart-subtitle');
+  if (titleEl)    titleEl.textContent    = chartTitle;
+  if (subtitleEl) subtitleEl.textContent = chartSubtitle;
+
   _slaChart = new Chart(canvas, {
-    type: 'line',
+    type: isBar ? 'bar' : 'line',
     data: { labels, datasets },
     options: {
       responsive:          true,
@@ -675,27 +718,29 @@ function renderSlaChart(timelineRows) {
         tooltip: {
           callbacks: {
             title: ctx => `Date: ${ctx[0].label}`,
-            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y ?? 0} cumulative breaches`,
+            label: tooltipLabel,
           },
         },
       },
       scales: {
         x: {
-          type: 'category',
+          type:    'category',
+          stacked: isBar,
           ticks: {
             maxTicksLimit: 10,
-            font: { size: 11 },
-            maxRotation: 30,
+            font:          { size: 11 },
+            maxRotation:   30,
           },
           grid: { color: 'rgba(148,163,184,0.15)' },
         },
         y: {
           beginAtZero: true,
-          ticks: { precision: 0, font: { size: 11 } },
-          grid: { color: 'rgba(148,163,184,0.2)' },
+          stacked:     false,
+          ticks:       { precision: 0, font: { size: 11 } },
+          grid:        { color: 'rgba(148,163,184,0.2)' },
           title: {
             display: true,
-            text:    'Cumulative Breaches',
+            text:    yAxisTitle,
             font:    { size: 11 },
             color:   '#94a3b8',
           },
@@ -707,6 +752,24 @@ function renderSlaChart(timelineRows) {
 
 async function onChartDaysChange() {
   await refreshSlaChart();
+}
+
+function switchChartMode(mode) {
+  _chartMode = mode;
+  // Update segmented control button styles
+  const lineBtn = document.getElementById('chart-mode-line');
+  const barBtn  = document.getElementById('chart-mode-bar');
+  if (lineBtn && barBtn) {
+    if (mode === 'line') {
+      lineBtn.className = 'px-3 py-1.5 bg-brand-500 text-white transition-colors';
+      barBtn.className  = 'px-3 py-1.5 bg-white text-slate-600 border-l border-slate-200 hover:bg-slate-50 transition-colors';
+    } else {
+      lineBtn.className = 'px-3 py-1.5 bg-white text-slate-600 hover:bg-slate-50 transition-colors';
+      barBtn.className  = 'px-3 py-1.5 bg-brand-500 text-white border-l border-slate-200 transition-colors';
+    }
+  }
+  // Re-render with current data
+  renderSlaChart(state.slaTimeline ?? []);
 }
 
 async function refreshSlaChart() {
