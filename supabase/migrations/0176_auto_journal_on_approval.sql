@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS public.invoice_line_items (
   created_at  TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
 ALTER TABLE public.invoice_line_items ENABLE ROW LEVEL SECURITY;
+-- Ensure org_id exists even if invoice_line_items was pre-created by e2e stub without it
+ALTER TABLE public.invoice_line_items ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
 
 ALTER TABLE public.invoices
   ADD COLUMN IF NOT EXISTS approved_at       TIMESTAMPTZ,
