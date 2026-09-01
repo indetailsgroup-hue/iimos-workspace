@@ -5,6 +5,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v17.5.4] — AiSchedulerBoard UI + APS Store Tests + Culture Metrics Store Tests — 2027-01-26
+
+### Added
+
+#### UI Component — AI Production Scheduler
+- `src/ai-scheduler/AiSchedulerBoard.tsx` — ENTERPRISE-gated production scheduler board
+  - Two-panel layout: runs list (left) + selected-run detail (right)
+  - `RunCard` sub-component with `run-approve-btn` / `run-cancel-btn` (READY state only)
+  - `RunStatusTimeline` sub-component: linear DRAFT→GENERATING→READY→APPROVED→IN_PROGRESS→COMPLETED with CANCELLED/FAILED terminal branch; `data-active` / `data-done` attributes per step
+  - Schedule items table with `item-override-badge` for overridden items
+  - Props: `{ orgId, orgPlan, isAdmin? }` — 20 `data-testid` hooks
+  - Plan gate wall renders for non-ENTERPRISE plans (`plan-gate-wall` testid)
+
+#### Vitest Unit Tests — AI Production Scheduler Store
+- `src/ai-scheduler/__tests__/aiSchedulerStore.test.ts` — 33 tests, all passing
+  - Plan gate: all 9 write actions (createMachineConfig, updateMachineConfig, createProductionRun, approveRun, cancelRun, addScheduleItem, updateItemStatus, createConstraint, deactivateConstraint) throw `AiSchedulerPlanGateError` for FREE / STARTER / PROFESSIONAL; resolve for ENTERPRISE
+  - `addScheduleItem` auto-sequence: empty run → order 1; 2-item run → order 3; explicit `sequenceOrder` override; cross-run isolation (other-run items not counted)
+  - `approveRun` auth write: `getUser()` called; patch contains `status: 'APPROVED'`, `approved_by` (user id), `approved_at` (ISO timestamp within test window); store `productionRuns` updated in-place
+  - `updateItemStatus` is_overridden: with `overrideReason` → patch has `is_overridden: true`; without → `is_overridden` absent; store `scheduleItems` updated
+  - `setFilters` partial merge; `clearError` idempotent
+
+#### Vitest Unit Tests — Culture Metrics Store
+- `src/culture-metrics/__tests__/cultureMetricsStore.test.ts` — 36 tests, all passing
+  - Plan gate PROFESSIONAL+: `createMetricDefinition` / `createEnpsSurvey` throw `CultureMetricsPlanGateError` for FREE / STARTER; resolve for PROFESSIONAL / ENTERPRISE; `updateMetricDefinition`, `recordSnapshot`, `activateEnpsSurvey`, `closeEnpsSurvey` all throw for FREE
+  - `submitEnpsResponse` exemption: resolves without orgPlan; inserts to `cmd_enps_responses`; insert args include `anonymous_token`, `score`, `survey_id` but NO `user_id` / `employee_id`; `auth.getUser` NOT called
+  - `fetchEnpsResults`: queries `cmd_enps_results_v`; empty data → empty store; populated → rows mapped via `mapEnpsResultsRow`; `npsScore: null` when view returns null (below min_responses threshold); error fallback message; `isEnpsLoading` resets to false
+  - `setFilters` partial merge; `clearError` idempotent
+
+---
+
 ## [v17.5.3] — AI Production Scheduler + Culture Metrics Dashboard + AiCostDashboard Tests — 2027-01-25
 
 ### Added

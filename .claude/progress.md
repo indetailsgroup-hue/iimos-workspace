@@ -36,6 +36,11 @@
 - `src/ai-cost/AiCostDashboard.tsx` — ENTERPRISE-gated; summary cards, budget utilization (progress bar + over-threshold warning), monthly trend (CSS bar chart), usage-by-tool table; 20 data-testids
 - `src/ai-cost/AiCostDashboard.stories.tsx` — 8 CSF3 stories; withDashboardStore decorator; PlanGateWallFree, PlanGateWallProfessional, DashboardLoading, EmptyState, WithUsageData (play assertions), WithBudgetUtilization, BudgetOverThreshold (play assertion), AdminView, StoreError
 
+### ✅ All completed (v17.5.4 — AiSchedulerBoard + APS Store Tests + Culture Metrics Store Tests)
+- `src/ai-scheduler/AiSchedulerBoard.tsx` — ENTERPRISE-gated board; two-panel layout; `RunCard` with approve/cancel; `RunStatusTimeline` (6 steps + terminal CANCELLED/FAILED branch); items table + override badge; 20 data-testids
+- `src/ai-scheduler/__tests__/aiSchedulerStore.test.ts` — 33 tests (plan gate ×27, auto-sequence ×4, approveRun auth write ×3, updateItemStatus is_overridden ×3, setFilters ×2, clearError ×2); all passing
+- `src/culture-metrics/__tests__/cultureMetricsStore.test.ts` — 36 tests (plan gate ×12, submitEnpsResponse exemption ×5, fetchEnpsResults ×6, setFilters ×2, clearError ×2); all passing
+
 ### ✅ All completed (v17.5.3 — AI Production Scheduler + Culture Metrics Dashboard + AiCostDashboard tests)
 - `supabase/migrations/20270125_ai_production_scheduler.sql` — `aps_schedule_runs`, `aps_schedule_items` (`depends_on UUID[]`, `ai_confidence_score`), `aps_run_events`; `aps_run_summary_v`; ENTERPRISE gate; RLS; 6 indexes
 - `src/ai-scheduler/aiSchedulerTypes.ts` — `ApsRunStatus` (7 states), `ApsItemStatus`, `ApsEventType`; DB + app-layer types; payloads; `AiSchedulerPlanGateError`; label constants; 4 mappers
@@ -46,10 +51,10 @@
 - `src/ai-cost/__tests__/AiCostDashboard.test.tsx` — 10 Vitest tests: plan gate (FREE/PROFESSIONAL), loading, empty states, 4 summary cards, budget over-threshold (90% ≥ 80%), budget under-threshold, 3 trend bars, error banner, admin upgrade copy
 
 ### 📋 Next (v17.5 remaining)
-- AI Production Scheduler UI (AiSchedulerBoard.tsx + stories + tests)
+- AI Production Scheduler UI (AiSchedulerBoard stories + full integration tests)
 - Culture Metrics Dashboard UI (CultureDashboard.tsx + stories + tests)
 
-**Last updated:** 2027-01-25
+**Last updated:** 2027-01-26
 
 ---
 
