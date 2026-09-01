@@ -130,6 +130,7 @@
     <button onclick="switchTab('ranking')"   id="tab-ranking"   class="tab-inactive px-5 py-3 text-sm transition-colors">Risk Ranking</button>
     <button onclick="switchTab('detail')"    id="tab-detail"    class="tab-inactive px-5 py-3 text-sm transition-colors">Compliance Detail</button>
     <button onclick="switchTab('sla')"       id="tab-sla"       class="tab-inactive px-5 py-3 text-sm transition-colors">SLA Monitor</button>
+    <button onclick="switchTab('executive')" id="tab-executive" class="tab-inactive px-5 py-3 text-sm transition-colors">Executive Summary</button>
   </div>
 </div>
 
@@ -453,6 +454,56 @@
   </div>
 </div>
 
+<!-- Executive Summary Tab -->
+<div id="panel-executive" class="hidden fade-in max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+  <!-- KPI Banner -->
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+    <h2 class="text-lg font-semibold text-slate-800 mb-4">Executive KPI Banner</h2>
+    <div id="exec-kpi-loading" class="text-sm text-slate-500">Loading…</div>
+    <div id="exec-kpi-banner" class="hidden grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div class="bg-slate-50 rounded-xl p-4 text-center"><div class="text-2xl font-bold text-slate-800" id="exec-total-orgs">–</div><div class="text-xs text-slate-500 mt-1">Total Orgs</div></div>
+      <div class="bg-orange-50 rounded-xl p-4 text-center"><div class="text-2xl font-bold text-orange-700" id="exec-attention-orgs">–</div><div class="text-xs text-slate-500 mt-1">Require Attention</div></div>
+      <div class="bg-slate-50 rounded-xl p-4 text-center"><div class="text-2xl font-bold text-slate-800" id="exec-live-submissions">–</div><div class="text-xs text-slate-500 mt-1">Live Submissions</div></div>
+      <div class="bg-red-50 rounded-xl p-4 text-center"><div class="text-2xl font-bold text-red-700" id="exec-live-breached">–</div><div class="text-xs text-slate-500 mt-1">Live Breached</div></div>
+      <div class="bg-purple-50 rounded-xl p-4 text-center"><div class="text-sm font-bold text-purple-700" id="exec-worst-severity">–</div><div class="text-xs text-slate-500 mt-1">Worst Severity</div></div>
+      <div class="bg-blue-50 rounded-xl p-4 text-center"><div class="text-2xl font-bold text-blue-700" id="exec-peak-breach-rate">–</div><div class="text-xs text-slate-500 mt-1">Peak Breach Rate</div></div>
+      <div class="bg-slate-50 rounded-xl p-4 text-center"><div class="text-2xl font-bold text-slate-800" id="exec-archive-created">–</div><div class="text-xs text-slate-500 mt-1">Archive Submissions</div></div>
+      <div class="bg-red-50 rounded-xl p-4 text-center"><div class="text-2xl font-bold text-red-700" id="exec-archive-breached">–</div><div class="text-xs text-slate-500 mt-1">Archive Breached</div></div>
+      <div class="bg-slate-50 rounded-xl p-4 text-center"><div class="text-2xl font-bold text-slate-800" id="exec-sla-threshold">–</div><div class="text-xs text-slate-500 mt-1">SLA Threshold (hrs)</div></div>
+    </div>
+  </div>
+
+  <!-- Org Executive Summary Table -->
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold text-slate-800">Org-Level SLA Executive Summary</h2>
+      <span id="exec-summary-count" class="text-xs bg-slate-100 text-slate-600 rounded-full px-3 py-1"></span>
+    </div>
+    <div id="exec-summary-empty" class="hidden text-sm text-slate-400 py-8 text-center">No data available.</div>
+    <div id="exec-summary-wrap" class="hidden overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-slate-200 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            <th class="py-3 pr-4">Org</th>
+            <th class="py-3 pr-4 text-right">Live Submissions</th>
+            <th class="py-3 pr-4 text-right">Live Breached</th>
+            <th class="py-3 pr-4 text-right">Live Breach Rate</th>
+            <th class="py-3 pr-4 text-center">Live Severity</th>
+            <th class="py-3 pr-4 text-right">Archive Submissions</th>
+            <th class="py-3 pr-4 text-right">Archive Breached</th>
+            <th class="py-3 pr-4 text-right">Archive Breach Rate</th>
+            <th class="py-3 pr-4 text-center">Combined Severity</th>
+            <th class="py-3 text-center">Requires Attention</th>
+          </tr>
+        </thead>
+        <tbody id="exec-summary-tbody" class="divide-y divide-slate-100"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
 </main>
 
 <!-- ── Config Modal ────────────────────────────────────────────────────────── -->
@@ -543,6 +594,8 @@ let state = {
   slaTimeline:       [],
   slaArchiveRollup:  [],   // rpc_etax_sla_archive_org_rollup (Migration 0202)
   slaArchiveSummary: [],   // rpc_etax_sla_archive_summary    (Migration 0202)
+  executiveSummary:  [],   // rpc_etax_sla_executive_summary  (Migration 0203)
+  executiveKpiBanner: null, // rpc_etax_executive_kpi_banner   (Migration 0204)
   loading:           false,
   error:             null,
   lastRefreshed:     null,
@@ -604,7 +657,8 @@ async function fetchAllData() {
 
   try {
     const [compliance, healthSummary, riskRanking, slaRows, slaSummary, slaTimeline,
-           slaArchiveRollup, slaArchiveSummary] = await Promise.all([
+           slaArchiveRollup, slaArchiveSummary,
+           executiveSummary, executiveKpiBanner] = await Promise.all([
       apiFetch('v_etax_compliance_dashboard?select=*&order=org_id.asc').catch(e => { console.warn('compliance:', e); return []; }),
       apiFetch('v_etax_full_health_summary?select=*&order=health_score.asc').catch(e => { console.warn('health:', e); return []; }),
       rpcFetch('rpc_etax_org_risk_ranking_admin', { p_limit: 200 }).catch(() =>
@@ -615,6 +669,8 @@ async function fetchAllData() {
       rpcFetch('rpc_etax_sla_breach_timeline', { p_days: 30 }).catch(e => { console.warn('sla_timeline:', e); return []; }),
       rpcFetch('rpc_etax_sla_archive_org_rollup', {}).catch(e => { console.warn('sla_archive_rollup:', e); return []; }),
       rpcFetch('rpc_etax_sla_archive_summary', {}).catch(e => { console.warn('sla_archive_summary:', e); return []; }),
+      rpcFetch('rpc_etax_sla_executive_summary', {}).catch(e => { console.warn('executive_summary:', e); return []; }),
+      rpcFetch('rpc_etax_executive_kpi_banner', {}).catch(e => { console.warn('executive_kpi_banner:', e); return null; }),
     ]);
 
     state.compliance        = compliance    || [];
@@ -625,6 +681,8 @@ async function fetchAllData() {
     state.riskRanking       = Array.isArray(riskRanking) ? riskRanking : [];
     state.slaArchiveRollup  = Array.isArray(slaArchiveRollup)  ? slaArchiveRollup  : [];
     state.slaArchiveSummary = Array.isArray(slaArchiveSummary) ? slaArchiveSummary : [];
+    state.executiveSummary  = Array.isArray(executiveSummary)  ? executiveSummary  : [];
+    state.executiveKpiBanner = Array.isArray(executiveKpiBanner) ? (executiveKpiBanner[0] || null) : executiveKpiBanner;
     state.lastRefreshed = new Date();
     state.error         = null;
 
@@ -649,6 +707,7 @@ function renderAll() {
   renderRankingTable();
   renderDetailTable();
   renderSlaTab();
+  renderExecutiveTab();
 }
 
 // ── SLA Monitor Tab ──────────────────────────────────────────────────────────
@@ -1281,7 +1340,7 @@ let activeTab = 'overview';
 
 function switchTab(tab) {
   activeTab = tab;
-  ['overview', 'ranking', 'detail', 'sla'].forEach(t => {
+  ['overview', 'ranking', 'detail', 'sla', 'executive'].forEach(t => {
     document.getElementById(`panel-${t}`).classList.toggle('hidden', t !== tab);
     document.getElementById(`tab-${t}`).className =
       t === tab ? 'tab-active px-5 py-3 text-sm transition-colors'
@@ -1387,6 +1446,69 @@ updateToggleVisual();
     startAutoRefresh();
   }
 })();
+
+// Executive Summary Tab
+function renderExecutiveTab() {
+  const b = state.executiveKpiBanner;
+  const kpiBanner  = document.getElementById('exec-kpi-banner');
+  const kpiLoading = document.getElementById('exec-kpi-loading');
+
+  if (b) {
+    if (kpiLoading) kpiLoading.classList.add('hidden');
+    if (kpiBanner)  kpiBanner.classList.remove('hidden');
+    const pct = v => v != null ? Number(v).toFixed(1) + '%' : '–';
+    const fmt = v => (v ?? 0).toLocaleString();
+    document.getElementById('exec-total-orgs').textContent       = fmt(b.total_orgs);
+    document.getElementById('exec-attention-orgs').textContent   = fmt(b.orgs_requiring_attention);
+    document.getElementById('exec-live-submissions').textContent = fmt(b.live_total_submissions);
+    document.getElementById('exec-live-breached').textContent    = fmt(b.live_total_breached);
+    document.getElementById('exec-worst-severity').textContent   = b.global_worst_severity || '–';
+    document.getElementById('exec-peak-breach-rate').textContent = pct(b.global_peak_breach_rate_pct);
+    document.getElementById('exec-archive-created').textContent  = fmt(b.archive_total_created);
+    document.getElementById('exec-archive-breached').textContent = fmt(b.archive_total_breached);
+    document.getElementById('exec-sla-threshold').textContent    = b.sla_threshold_hours ?? '24';
+  } else {
+    if (kpiLoading) kpiLoading.textContent = 'No data available.';
+  }
+
+  const rows    = state.executiveSummary || [];
+  const empty   = document.getElementById('exec-summary-empty');
+  const wrap    = document.getElementById('exec-summary-wrap');
+  const tbody   = document.getElementById('exec-summary-tbody');
+  const countEl = document.getElementById('exec-summary-count');
+
+  if (!rows.length) {
+    if (empty) empty.classList.remove('hidden');
+    if (wrap)  wrap.classList.add('hidden');
+    if (countEl) countEl.textContent = '0 orgs';
+    return;
+  }
+  if (empty) empty.classList.add('hidden');
+  if (wrap)  wrap.classList.remove('hidden');
+  if (countEl) countEl.textContent = rows.length + ' org' + (rows.length !== 1 ? 's' : '');
+
+  const fmt = v => (v ?? 0).toLocaleString();
+  const pct = v => v != null ? Number(v).toFixed(1) + '%' : '–';
+
+  tbody.innerHTML = rows.map(r => {
+    const attn = r.requires_attention
+      ? '<span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">Yes</span>'
+      : '<span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">No</span>';
+    return '<tr class="hover:bg-slate-50 transition-colors">'
+      + '<td class="py-2 pr-4 font-medium text-slate-700">' + esc(r.org_name || r.org_id) + '</td>'
+      + '<td class="py-2 pr-4 text-right text-slate-600">' + fmt(r.live_total_submissions) + '</td>'
+      + '<td class="py-2 pr-4 text-right text-slate-600">' + fmt(r.live_breach_count) + '</td>'
+      + '<td class="py-2 pr-4 text-right text-slate-600">' + pct(r.live_breach_rate_pct) + '</td>'
+      + '<td class="py-2 pr-4 text-center">' + tierBadge(r.live_worst_severity) + '</td>'
+      + '<td class="py-2 pr-4 text-right text-slate-600">' + fmt(r.archive_total_created) + '</td>'
+      + '<td class="py-2 pr-4 text-right text-slate-600">' + fmt(r.archive_total_breached) + '</td>'
+      + '<td class="py-2 pr-4 text-right text-slate-600">' + pct(r.archive_breach_rate_pct) + '</td>'
+      + '<td class="py-2 pr-4 text-center">' + tierBadge(r.combined_worst_severity) + '</td>'
+      + '<td class="py-2 text-center">' + attn + '</td>'
+      + '</tr>';
+  }).join('');
+}
 </script>
 </body>
 </html>
+
