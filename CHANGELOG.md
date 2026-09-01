@@ -5,6 +5,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v18.0.3] — RoleNetworkCanvas Stories + roleNetworkStore Tests + QC Anomaly Detection Module — 2027-02-10
+
+### Added
+
+#### Stories — src/role-network/RoleNetworkCanvas.stories.tsx
+- 10 CSF3 Storybook stories with withRoleNetworkStore decorator
+- Decorator seeds useRoleNetworkStore.setState(...) before each story; fetchNetwork always overridden to async () => {} to prevent live Supabase calls
+- Stories: PlanGateWallFree, PlanGateWallProfessional, LoadingState, EmptyState, StoreError, WithNodes, RelationshipEdgeRendering, RoleDetailPanelOpen, RoleDetailPanelAddInteraction, RoleDetailPanelRemoveInteraction, NodeClickSelectsRole, AdminView, ReadOnlyView
+- RoleDetailPanelAddInteraction play: selects target via combobox, verifies addRelationshipSpy called with correct from/to role ids
+- RoleDetailPanelRemoveInteraction play: clicks first rnv-remove-relationship-btn, verifies removeRelationshipSpy called with rel-1
+
+#### Tests — src/role-network/__tests__/roleNetworkStore.test.ts
+- **52 Vitest unit tests — all passing**
+- Plan gate: describe.each(ACTIONS) x it.each(NON_ENTERPRISE) — 24 reject tests; 8 ENTERPRISE pass tests
+- fetchNetwork: parallel load, enrichment, isLoading flag, error path (5 tests)
+- deleteRole: cascade, selectedRoleId reset/preserved, error path (4 tests)
+- addRelationship: isRelationshipLoading sync, append, clear, error path (4 tests)
+- removeRelationship: remove by id, error path (2 tests)
+- UI helpers: selectRole, selectRole(null), setFilters, clearError (5 tests)
+
+#### QC Anomaly Detection — supabase/migrations/20270210_qc_anomaly_detection.sql
+- Enums: qca_threshold_type (MIN/MAX/RANGE/ZSCORE), qca_metric_key (7 keys), qca_anomaly_severity (LOW/MEDIUM/HIGH/CRITICAL), qca_anomaly_status (OPEN/ACKNOWLEDGED/RESOLVED)
+- Tables: qca_threshold_configs, qca_measurements, qca_anomaly_events
+- View: qca_anomaly_summary_v — open/acknowledged/resolved counts per org_id + metric_key
+- Functions: qca_is_enterprise() plan gate, qca_set_updated_at() trigger, qca_detect_anomaly() AFTER INSERT — MIN/MAX/RANGE + ZSCORE (rolling 30-measurement stddev_pop) with severity derivation
+- RLS: SELECT = ENTERPRISE members; INSERT/UPDATE/DELETE = ENTERPRISE + ADMIN+ (hierarchy_level >= 80)
+- 7 indexes; assertion block (3 tables + 1 view)
+
+#### QC Anomaly Detection — src/qc-anomaly/qcAnomalyTypes.ts
+- Enum types, DB row types, app-layer aliases, payloads, DEFAULT_QCA_FILTERS
+- canAccessQcAnomaly / QcAnomalyPlanGateError (ENTERPRISE only)
+- Thai label constants (4 maps) + 4 label getters + 4 row mappers
+
+#### QC Anomaly Detection — src/qc-anomaly/qcAnomalyStore.ts
+- useQcAnomalyStore — state: thresholds, anomalies, summaries, recentMeasurements, selectedAnomalyId, isLoading, isMeasurementLoading, filters, error
+- 8 ENTERPRISE-gated actions: fetchThresholds, createThreshold, updateThreshold, deleteThreshold (local cleanup), fetchAnomalies (parallel events + summary), acknowledgeAnomaly (optimistic + rollback to OPEN), resolveAnomaly (optimistic + rollback), submitMeasurement (insert + slice 50 + re-fetch anomalies)
+- UI helpers: selectAnomaly, setFilters (merge), clearError
+
+
+---
+
 ## [v18.0.2] — OrgChartCanvas Stories + orgChartStore Tests + RoleNetworkCanvas UI — 2027-02-10
 
 ### Added

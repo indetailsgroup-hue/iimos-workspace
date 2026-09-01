@@ -20,10 +20,15 @@
 - `src/orgchart/orgChartStore.ts` — fix: `moveNode` catch block re-ordered (`fetchChart` → `set({error})`) to preserve error after rollback re-fetch
 - `src/role-network/RoleNetworkCanvas.tsx` — ENTERPRISE-gated canvas; `computeNodePositions`/`computeCanvasSize` layout utils; sub-components: `RoleNodeCard` (seniority + headcount badges), `RelationshipEdgesSvg` (SVG arrowheads + dashed DEPENDS_ON + Thai labels), `RoleDetailPanel` (add/remove relationship controls); all data-testids; named + default export
 
-### 📋 Remaining v18.0 tasks (sprint 4+)
-- Storybook stories for `RoleNetworkCanvas.tsx`
-- Vitest unit tests for `roleNetworkStore.ts`
-- QC Anomaly Detection module (schema + types + store + UI)
+### ✅ Completed (v18.0 — sprint 4: RoleNetworkCanvas stories + roleNetworkStore tests + QC Anomaly Detection module)
+- `src/role-network/RoleNetworkCanvas.stories.tsx` — 10 CSF3 Storybook stories; `withRoleNetworkStore` decorator; `addRelationshipSpy`/`removeRelationshipSpy` fn() spies; play functions for add/remove relationship interactions; full ENTERPRISE gate wall, empty state, loading, error, node graph, edge rendering coverage
+- `src/role-network/__tests__/roleNetworkStore.test.ts` — **52 Vitest unit tests, all passing**; 24 plan gate reject tests; 8 ENTERPRISE pass tests; fetchNetwork (5), deleteRole (4), addRelationship (4), removeRelationship (2), UI helpers (5)
+- `supabase/migrations/20270210_qc_anomaly_detection.sql` — 4 enums; `qca_threshold_configs`, `qca_measurements`, `qca_anomaly_events` tables; `qca_anomaly_summary_v` view; `qca_is_enterprise()` plan gate; `qca_detect_anomaly()` AFTER INSERT trigger (MIN/MAX/RANGE + ZSCORE with rolling 30-measurement stddev_pop); RLS (ENTERPRISE SELECT, ADMIN+ write); 7 indexes; assertion block
+- `src/qc-anomaly/qcAnomalyTypes.ts` — 4 enum types; DB row + app-layer types; payloads; `DEFAULT_QCA_FILTERS`; `canAccessQcAnomaly`/`QcAnomalyPlanGateError`; Thai label constants × 4 + getters × 4 + mappers × 4
+- `src/qc-anomaly/qcAnomalyStore.ts` — `useQcAnomalyStore`; 8 ENTERPRISE-gated actions (fetchThresholds, createThreshold, updateThreshold, deleteThreshold, fetchAnomalies, acknowledgeAnomaly, resolveAnomaly, submitMeasurement); 3 UI helpers
+
+### 📋 Remaining v18.0 tasks (sprint 5+)
+- QC Anomaly Detection UI component (`QcAnomalyDashboard.tsx`)
 - AI Quotation Draft module
 - Leadership Action Tracker module
 
