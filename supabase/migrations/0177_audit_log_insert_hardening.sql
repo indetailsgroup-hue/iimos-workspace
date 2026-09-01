@@ -33,6 +33,16 @@ ALTER TYPE public.invoice_status ADD VALUE IF NOT EXISTS 'paid';
 ALTER TYPE public.invoice_status ADD VALUE IF NOT EXISTS 'partial';
 ALTER TYPE public.invoice_status ADD VALUE IF NOT EXISTS 'pending';
 
+-- Utility function (missing from early migrations — defined here so the merged
+-- 0177 group can reference it via trigger).
+CREATE OR REPLACE FUNCTION public.fn_set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at := NOW();
+  RETURN NEW;
+END;
+$$;
+
 BEGIN;
 
 -- ============================================================================
