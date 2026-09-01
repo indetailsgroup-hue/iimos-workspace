@@ -12,7 +12,7 @@
 --              rpc_list_overdue_invoices   — ดู overdue ของ org
 --              rpc_acknowledge_notification — mark as read
 --              rpc_snooze_notification     — snooze N วัน
--- Depends    : 0172_jobs_quotations_invoices (invoices, customer)
+-- Depends    : 0172_jobs_quotations_invoices (invoices, customers)
 --              0177_auto_receipt_on_payment_confirm (paid_amount, remaining_amount, paid_at)
 --              20260828_multi_tenant_schema (org_id, get_user_org_id)
 -- Rollback   : DROP TABLE invoice_notifications CASCADE;
@@ -202,7 +202,7 @@ BEGIN
       COALESCE(c.name, 'Unknown') AS customer_name,
       (v_today - i.due_date)::INT AS days_overdue_calc
     FROM invoices i
-    LEFT JOIN customer c ON c.customer_id = i.customer_id
+    LEFT JOIN customers c ON c.customer_id = i.customer_id
     WHERE
       -- กรอง org (NULL = ทุก org สำหรับ service role)
       (v_org_id IS NULL OR i.org_id = v_org_id)
@@ -339,7 +339,7 @@ BEGIN
     NEW.remaining_amount,
     NEW.code,
     c.name
-  FROM customer c
+  FROM customers c
   WHERE c.customer_id = NEW.customer_id
   ON CONFLICT (invoice_id, notification_type, (created_at::DATE))
   DO NOTHING;
@@ -426,7 +426,7 @@ BEGIN
     ) AS row_data,
     (v_today - i.due_date::DATE)::INT AS days_overdue
     FROM invoices i
-    LEFT JOIN customer c ON c.customer_id = i.customer_id
+    LEFT JOIN customers c ON c.customer_id = i.customer_id
     WHERE
       i.org_id          = v_org_id
       AND i.remaining_amount > 0
@@ -596,7 +596,7 @@ SELECT
   )                                       AS last_notified_at
 
 FROM invoices i
-LEFT JOIN customer c ON c.customer_id = i.customer_id
+LEFT JOIN customers c ON c.customer_id = i.customer_id
 WHERE
   i.org_id           = get_user_org_id()   -- RLS ผ่าน view
   AND i.remaining_amount > 0
