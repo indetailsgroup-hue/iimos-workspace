@@ -753,6 +753,45 @@ jobs:
           END;
           $$;
 
+          -- ── iter 25d: extend line_oa_message_templates message_kind CHECK ────────────
+          -- 0098 added message_kind column; 0134 narrowed CHECK to ('text','flex','image').
+          -- 01772_field_purchase_line_flow.sql uses ADD COLUMN IF NOT EXISTS which is
+          -- silently skipped (column exists), so its new CHECK constraint never fires.
+          -- The old message_kind_check blocks INSERT of 'quick_reply'.  Drop + recreate
+          -- with all known values so downstream migrations can insert any kind freely.
+          DO $$ BEGIN
+            IF EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'line_oa_message_templates_message_kind_check'
+                AND conrelid = 'public.line_oa_message_templates'::regclass
+            ) THEN
+              ALTER TABLE public.line_oa_message_templates
+                DROP CONSTRAINT line_oa_message_templates_message_kind_check;
+            END IF;
+          END $$;
+          DO $$ BEGIN
+            IF EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'line_oa_message_templates_kind_chk'
+                AND conrelid = 'public.line_oa_message_templates'::regclass
+            ) THEN
+              ALTER TABLE public.line_oa_message_templates
+                DROP CONSTRAINT line_oa_message_templates_kind_chk;
+            END IF;
+          END $$;
+          -- Add broad constraint covering all values used through 0215
+          DO $$ BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'line_oa_message_templates_message_kind_check'
+                AND conrelid = 'public.line_oa_message_templates'::regclass
+            ) THEN
+              ALTER TABLE public.line_oa_message_templates
+                ADD CONSTRAINT line_oa_message_templates_message_kind_check
+                CHECK (message_kind IN ('text', 'flex', 'image', 'quick_reply'));
+            END IF;
+          END $$;
+
           -- ── Iteration 14: rename singular→plural so 0173 finds expected table names ─
           -- Fix U (commit cc18e6129ddf) removed plural CREATE TABLE statements from
           -- 20260828_multi_tenant_schema.sql; 0172 now creates singular names; 0173
