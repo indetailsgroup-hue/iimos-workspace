@@ -337,21 +337,46 @@ jobs:
           CREATE INDEX IF NOT EXISTS idx_quotation_org ON quotation(org_id);
 
           CREATE TABLE IF NOT EXISTS invoice (
-            invoice_id    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-            invoice_code  text NOT NULL DEFAULT '',
-            created_by    uuid,
-            org_id        uuid
+            invoice_id       uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
+            invoice_code     text          NOT NULL DEFAULT '',
+            status           text          NOT NULL DEFAULT 'PENDING',
+            quotation_id     uuid,
+            job_id           uuid,
+            customer_id      uuid,
+            subtotal         numeric(12,2) NOT NULL DEFAULT 0,
+            vat_rate         numeric(4,4)  NOT NULL DEFAULT 0.07,
+            vat_amount       numeric(12,2) NOT NULL DEFAULT 0,
+            discount         numeric(12,2)          DEFAULT 0,
+            total            numeric(12,2) NOT NULL DEFAULT 0,
+            paid_amount      numeric(12,2) NOT NULL DEFAULT 0,
+            remaining_amount numeric(12,2) NOT NULL DEFAULT 0,
+            due_date         date          NOT NULL DEFAULT CURRENT_DATE,
+            issued_at        timestamptz   NOT NULL DEFAULT now(),
+            notes            text,
+            created_by       uuid,
+            org_id           uuid
           );
           CREATE INDEX IF NOT EXISTS idx_invoice_org ON invoice(org_id);
 
           CREATE TABLE IF NOT EXISTS job (
-            job_id        uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-            status        text        NOT NULL DEFAULT 'open',
-            quotation_id  uuid,
-            invoice_id    uuid,
-            created_by    uuid,
-            org_id        uuid,
-            updated_at    timestamptz NOT NULL DEFAULT now()
+            job_id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+            job_code            text        NOT NULL DEFAULT '',
+            title               text        NOT NULL DEFAULT '',
+            customer_id         uuid,
+            status              text        NOT NULL DEFAULT 'DRAFT',
+            priority            text        NOT NULL DEFAULT 'NORMAL',
+            assigned_to         uuid,
+            deadline            date,
+            material_group      text        NOT NULL DEFAULT 'MDF 18mm White',
+            total_panel_count   int         NOT NULL DEFAULT 0,
+            estimated_cost      numeric(12,2),
+            quotation_id        uuid,
+            invoice_id          uuid,
+            notes               text,
+            created_by          uuid,
+            org_id              uuid,
+            created_at          timestamptz NOT NULL DEFAULT now(),
+            updated_at          timestamptz NOT NULL DEFAULT now()
           );
           CREATE INDEX IF NOT EXISTS idx_job_org ON job(org_id);
 
