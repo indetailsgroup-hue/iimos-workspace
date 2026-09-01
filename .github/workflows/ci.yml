@@ -660,6 +660,8 @@ jobs:
               BEGIN ALTER TYPE invoice_status ADD VALUE IF NOT EXISTS 'approved'; EXCEPTION WHEN duplicate_object THEN NULL; END;
               BEGIN ALTER TYPE invoice_status ADD VALUE IF NOT EXISTS 'voided';   EXCEPTION WHEN duplicate_object THEN NULL; END;
               BEGIN ALTER TYPE invoice_status ADD VALUE IF NOT EXISTS 'cancelled'; EXCEPTION WHEN duplicate_object THEN NULL; END;
+              BEGIN ALTER TYPE invoice_status ADD VALUE IF NOT EXISTS 'paid';     EXCEPTION WHEN duplicate_object THEN NULL; END;
+              BEGIN ALTER TYPE invoice_status ADD VALUE IF NOT EXISTS 'partial';  EXCEPTION WHEN duplicate_object THEN NULL; END;
             END IF;
           END $$;
 
