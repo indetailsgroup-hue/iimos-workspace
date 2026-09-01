@@ -3448,8 +3448,12 @@ jobs:
     permissions:
       pull-requests: write
       statuses: write
+    outputs:
+      overall_status:       ${{ steps.aggregate.outputs.overall_status }}
+      critical_failed_jobs: ${{ steps.aggregate.outputs.critical_failed_jobs }}
     steps:
       - name: Aggregate results and post pipeline gate
+        id: aggregate
         uses: actions/github-script@v7
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
@@ -3612,6 +3616,10 @@ jobs:
             });
             core.info(`Commit status '${statusState}' posted for ${sha.slice(0,7)}`);
 
+            // Export computed results as job outputs for downstream callers
+            core.setOutput('overall_status', overallStatus);
+            core.setOutput('critical_failed_jobs', criticalFailed.join(','));
+
             // Fail the job step so branch protection sees a failing required check
             if (overallStatus === 'failure' && !skipConclude) {
               core.setFailed(`Pipeline gate failed — critical jobs: ${criticalFailed.join(', ')}`);
@@ -3717,3 +3725,35 @@ jobs:
               print(f'Slack notify failed: {e}')
               sys.exit(1)
           PYSLACK2
+
+  # ── Job 24: Run Pipeline Gate reusable workflow ─────────────────────────────
+  # Calls conclude-pipeline-gate.yml with the pre-computed outputs from Job 23
+  # (conclude-pipeline).  The reusable gate re-validates inputs via
+  # validate-inputs, posts a structured PR comment, and writes a final
+  # ci/pipeline-gate commit status that supersedes Job 23's status — callers
+  # can branch on the validation_passed workflow output.
+  #
+  # Note: conclude-pipeline (Job 23) already posts ci/pipeline-gate directly.
+  # This job posts a second, schema-validated status via the reusable gate;
+  # the last status posted wins in branch-protection UI.
+  run-pipeline-gate:
+    name: Run Pipeline Gate (Reusable)
+    needs: [conclude-pipeline, upload-eslint-sarif]
+    if: always()
+    uses: ./.github/workflows/conclude-pipeline-gate.yml
+    with:
+      overall_status:            ${{ needs.conclude-pipeline.outputs.overall_status || 'failure' }}
+      critical_failed_jobs:      ${{ needs.conclude-pipeline.outputs.critical_failed_jobs || '' }}
+      sarif_new_findings:        ${{ fromJSON(needs.upload-eslint-sarif.outputs.new-findings || '0') }}
+      sarif_total_findings:      ${{ fromJSON(needs.upload-eslint-sarif.outputs.total-findings || '0') }}
+      sarif_suppressed_findings: ${{ fromJSON(needs.upload-eslint-sarif.outputs.suppressed-findings || '0') }}
+      sarif_threshold:           ${{ fromJSON(env.SARIF_CRITICAL_THRESHOLD) }}
+      skip_gate:                 ${{ env.SKIP_CONCLUDE == 'true' }}
+      commit_sha:                ${{ github.event.pull_request.head.sha || github.sha }}
+      run_url:                   ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run_number:                ${{ github.run_number }}
+      repository:                ${{ github.repository }}
+      ref_name:                  ${{ github.ref_name }}
+      actor:                     ${{ github.actor }}
+      pr_number:                 ${{ github.event.pull_request.number || 0 }}
+    secrets: inherit

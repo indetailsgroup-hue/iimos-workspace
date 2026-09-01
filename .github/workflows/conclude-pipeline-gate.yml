@@ -263,6 +263,14 @@ jobs:
                 );
             }
 
+            // Cross-validate: non-empty critical_failed_jobs must imply overall_status='failure'
+            if (criticalFailedRaw.length > 0 && overallStatus !== 'failure') {
+              errors.push(
+                `overall_status is '${overallStatus}' but critical_failed_jobs is non-empty ` +
+                `(${criticalFailedRaw.join(', ')}) — expected overall_status to be 'failure'`
+              );
+            }
+
             if (errors.length > 0) {
               errors.forEach(msg => core.error(msg));
               core.setOutput('validation_passed', 'false');
@@ -281,7 +289,7 @@ jobs:
     name: Post Pipeline Gate
     needs: [validate-inputs]
     runs-on: ubuntu-latest
-    if: needs.validate-inputs.result == 'success'
+    if: always() && !cancelled()
 
     permissions:
       pull-requests: write
@@ -308,9 +316,34 @@ jobs:
           COMMIT_SHA:            ${{ inputs.commit_sha }}
           RUN_URL:               ${{ inputs.run_url }}
           RUN_NUMBER:            ${{ inputs.run_number }}
+          VALIDATION_PASSED:     ${{ needs.validate-inputs.outputs.validation_passed }}
         with:
           github-token: ${{ secrets.GATE_TOKEN }}
           script: |
+            // ── Validation guard ─────────────────────────────────────────────────
+            // If schema validation failed, post an advisory neutral commit status
+            // and return early instead of running gate logic with bad inputs.
+            const validationPassed = process.env.VALIDATION_PASSED;
+            if (validationPassed !== 'true') {
+              core.warning(
+                'Schema validation failed — posting advisory neutral commit status and skipping gate logic.'
+              );
+              const earlyCommitSha = process.env.COMMIT_SHA || '';
+              if (/^[0-9a-f]{40}$/i.test(earlyCommitSha)) {
+                await github.rest.repos.createCommitStatus({
+                  owner:       context.repo.owner,
+                  repo:        context.repo.repo,
+                  sha:         earlyCommitSha,
+                  state:       'success',
+                  context:     'ci/pipeline-gate',
+                  description: 'Advisory: schema validation failed — check validate-inputs logs.',
+                  target_url:  process.env.RUN_URL || '',
+                });
+                core.info(`Advisory commit status posted for ${earlyCommitSha.slice(0, 7)}.`);
+              }
+              return;
+            }
+
             // ── Parse inputs ────────────────────────────────────────────────────
             const overallStatus   = process.env.OVERALL_STATUS   || 'failure';
             const criticalFailed  = (process.env.CRITICAL_FAILED_JOBS || '')
