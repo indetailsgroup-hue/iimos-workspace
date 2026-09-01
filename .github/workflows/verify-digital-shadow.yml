@@ -80,6 +80,14 @@ on:
         required: false
         type: string
         default: ''
+      sarif_run_mode:
+        description: 'SARIF analysis mode: full (download baseline + diff) or diff-only (skip baseline, treat all findings as new).'
+        required: false
+        type: choice
+        options:
+          - full
+          - diff-only
+        default: full
 
   pull_request:
     branches:
@@ -100,6 +108,7 @@ on:
 env:
   SARIF_CRITICAL_THRESHOLD: "${{ github.event.inputs.sarif_critical_threshold || '10' }}"
   SLACK_CHANNEL_OVERRIDE: "${{ github.event.inputs.slack_channel_override || '' }}"
+  SARIF_RUN_MODE: "${{ github.event.inputs.sarif_run_mode || 'full' }}"
 
 jobs:
   # ────────────────────────────────────────────────────────────────────────────
@@ -1837,6 +1846,7 @@ jobs:
           CI: 'true'
 
       - name: Download previous SARIF baseline
+        if: env.SARIF_RUN_MODE != 'diff-only'
         env:
           GITHUB_TOKEN:      ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -2893,6 +2903,16 @@ jobs:
               'This workflow was triggered via **workflow_dispatch**.',
               'The following table shows what each job *would* have done on a real push.',
               '',
+              '### Active Overrides',
+              '',
+              '| Input | Value |',
+              '|-------|-------|',
+              `| \`SARIF_CRITICAL_THRESHOLD\` | ${{ github.event.inputs.sarif_critical_threshold || '10 (default)' }} |`,
+              `| \`SLACK_CHANNEL_OVERRIDE\` | ${${{ github.event.inputs.slack_channel_override || '' }} ? '\`${{ github.event.inputs.slack_channel_override }}\`' : '_none (webhook default)_'} |`,
+              `| \`SARIF_RUN_MODE\` | ${{ github.event.inputs.sarif_run_mode || 'full (default)' }} |`,
+              '',
+              '### Job Would-Be Results',
+              '',
               '| Job ID | Job Name | Would-be Status |',
               '|--------|----------|-----------------|',
               rows,
@@ -2906,3 +2926,114 @@ jobs:
               body,
             });
             core.info('Dry-run summary comment posted to PR #44.');
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 21: Workflow-run step summary
+  #         Runs after post-sarif-pr-description on PR events and posts a
+  #         structured JSON workflow-run summary to the Actions step summary
+  #         using core.summary.addTable.
+  workflow-run-step-summary:
+    name: "Workflow-Run Step Summary"
+    runs-on: ubuntu-latest
+    needs: [post-sarif-pr-description, upload-eslint-sarif]
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      needs.upload-eslint-sarif.result != 'cancelled'
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Build and post workflow-run step summary
+        uses: actions/github-script@v7
+        env:
+          SARIF_TOTAL:       ${{ needs.upload-eslint-sarif.outputs.total-findings }}
+          SARIF_NEW:         ${{ needs.upload-eslint-sarif.outputs.new-findings }}
+          SARIF_SUPPRESSED:  ${{ needs.upload-eslint-sarif.outputs.suppressed-findings }}
+          SARIF_THRESHOLD:   ${{ env.SARIF_CRITICAL_THRESHOLD }}
+          SARIF_RUN_MODE:    ${{ env.SARIF_RUN_MODE }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const total      = process.env.SARIF_TOTAL      || 'n/a';
+            const newF       = process.env.SARIF_NEW        || 'n/a';
+            const suppressed = process.env.SARIF_SUPPRESSED || 'n/a';
+            const threshold  = process.env.SARIF_THRESHOLD  || '10';
+            const runMode    = process.env.SARIF_RUN_MODE   || 'full';
+
+            const exceeded = newF !== 'n/a' && threshold !== 'n/a'
+              ? Number(newF) > Number(threshold)
+              : false;
+
+            // ── Fetch job statuses from the Actions API ──────────────────
+            const { owner, repo } = context.repo;
+            const runId = context.runId;
+            const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
+              owner, repo, run_id: runId, per_page: 100,
+            });
+
+            const statusIcon = s => ({
+              success:   '\u2705',
+              failure:   '\u274c',
+              cancelled: '\u26d4',
+              skipped:   '\u23ed\ufe0f',
+            })[s] || '\u23f3';
+
+            // ── Build summary JSON artifact written to step output ───────
+            const summaryJson = {
+              run_id:     runId,
+              sha:        context.sha,
+              ref:        context.ref,
+              triggered:  new Date().toISOString(),
+              sarif: {
+                total, new: newF, suppressed, threshold,
+                run_mode:   runMode,
+                exceeded,
+              },
+              jobs: jobsData.jobs.map(j => ({
+                id:         j.name,
+                status:     j.status,
+                conclusion: j.conclusion,
+                started_at: j.started_at,
+                completed_at: j.completed_at,
+              })),
+            };
+
+            // ── Write step summary ───────────────────────────────────────
+            await core.summary
+              .addHeading('\ud83d\udcca Workflow-Run Summary', 2)
+              .addTable([
+                [
+                  { data: 'Field',      header: true },
+                  { data: 'Value',      header: true },
+                ],
+                ['Run ID',       String(runId)],
+                ['SHA',          context.sha.slice(0, 7)],
+                ['Ref',          context.ref],
+                ['Triggered at', new Date().toUTCString()],
+                ['SARIF mode',   runMode],
+                ['Total findings',      total],
+                ['New findings',        newF],
+                ['Suppressed findings', suppressed],
+                ['Critical threshold',  threshold],
+                ['Threshold exceeded',  exceeded ? '\u274c Yes' : '\u2705 No'],
+              ])
+              .addHeading('Job Results', 3)
+              .addTable([
+                [
+                  { data: 'Job',        header: true },
+                  { data: 'Status',     header: true },
+                  { data: 'Conclusion', header: true },
+                ],
+                ...jobsData.jobs.map(j => [
+                  j.name,
+                  j.status,
+                  `${statusIcon(j.conclusion)} ${j.conclusion || '\u2014'}`,
+                ]),
+              ])
+              .addRaw('\n<details><summary>Raw JSON</summary>\n\n```json\n')
+              .addRaw(JSON.stringify(summaryJson, null, 2))
+              .addRaw('\n```\n</details>')
+              .write();
+
+            core.info('Workflow-run step summary written.');
