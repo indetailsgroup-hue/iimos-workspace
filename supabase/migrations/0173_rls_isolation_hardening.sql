@@ -156,10 +156,14 @@ DECLARE
   v_org_count       INT;
 BEGIN
   -- Determine single-org fallback (safe only in bootstrap / single-tenant env)
-  SELECT COUNT(*), MIN(org_id)
-    INTO v_org_count, v_fallback_org_id
+  -- NOTE: MIN(uuid) is not universally available; use two separate queries.
+  SELECT COUNT(*) INTO v_org_count
     FROM public.organizations
     WHERE is_active = true;
+  SELECT org_id INTO v_fallback_org_id
+    FROM public.organizations
+    WHERE is_active = true
+    LIMIT 1;
 
   IF v_org_count > 1 THEN
     -- Multi-org environment — do NOT use a blanket fallback.
