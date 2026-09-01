@@ -456,4 +456,36 @@ describe('withSuperAdminGuard + get_search_suggestions (SECURITY INVOKER)', () =
       });
     },
   );
+
+  // ── T-SG-12 ──────────────────────────────────────────────────────────────
+  it(
+    'T-SG-12: super-admin passes guard but session expires mid-RPC call — component shows JWT error',
+    async () => {
+      mockGetUser.mockResolvedValue({
+        data: { user: { id: 'sa-005' } },
+        error: null,
+      } as never);
+      mockSuperAdminsQuery({ data: { user_id: 'sa-005' }, error: null });
+
+      // Simulate Supabase session expiry during the RPC call (PGRST301 — JWT expired)
+      mockRpc.mockResolvedValue({
+        data: null,
+        error: { message: 'JWT expired', code: 'PGRST301' },
+      } as never);
+
+      render(<GuardedSearchPanel queryPrefix="shelf" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('rpc-error')).toBeInTheDocument();
+      });
+
+      expect(screen.getByTestId('rpc-error')).toHaveTextContent('JWT expired');
+      expect(screen.queryByTestId('suggestions-list')).not.toBeInTheDocument();
+
+      expect(mockRpc).toHaveBeenCalledWith('get_search_suggestions', {
+        query_prefix: 'shelf',
+        result_limit: 8,
+      });
+    },
+  );
 });
