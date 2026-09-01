@@ -1124,9 +1124,10 @@ jobs:
           # Match: trailing comma on updated_at + blank line + Thai comment +
           # CONSTRAINT uq_notification_daily UNIQUE (..., (created_at::DATE)) + );
           # Replace: drop the comma + constraint block; add CREATE UNIQUE INDEX after );
+          # Step 1 (iter 25i): remove expression UNIQUE constraint from CREATE TABLE; add CREATE UNIQUE INDEX
           new_content = re.sub(
               ',\n\n  --[^\n]*\n  CONSTRAINT uq_notification_daily\n    UNIQUE \\(invoice_id, notification_type, \\(created_at::DATE\\)\\)\n\\);',
-              '\n);\nCREATE UNIQUE INDEX IF NOT EXISTS uq_notification_daily\n  ON invoice_notifications(invoice_id, notification_type, (created_at::DATE));',
+              "\n);\nCREATE UNIQUE INDEX IF NOT EXISTS uq_notification_daily\n  ON invoice_notifications(invoice_id, notification_type, (created_at AT TIME ZONE 'UTC')::DATE);",
               content
           )
 
@@ -1134,9 +1135,18 @@ jobs:
               print(f'ERROR: CONSTRAINT uq_notification_daily pattern not found in {fname}')
               sys.exit(1)
 
+          # Step 2 (iter 25i): fix ALL remaining (created_at::DATE) -> IMMUTABLE expression
+          # Covers: ON CONFLICT clause in trigger fn (orig line 344) + CREATE INDEX (orig line 697)
+          count_before = new_content.count('(created_at::DATE)')
+          new_content = new_content.replace(
+              '(created_at::DATE)',
+              "(created_at AT TIME ZONE 'UTC')::DATE"
+          )
+          print(f'  iter 25i: replaced {count_before} remaining occurrence(s) with IMMUTABLE expr')
+
           with open(filepath, 'w', encoding='utf-8') as f:
               f.write(new_content)
-          print(f'Patch applied: removed expression UNIQUE constraint; added CREATE UNIQUE INDEX in {fname}')
+          print(f'Patch applied (iter 25i): constraint removed + all (created_at::DATE) fixed in {fname}')
           PYEOF
 
       # ── Start local Supabase stack (Docker available on ubuntu-latest) ─────
