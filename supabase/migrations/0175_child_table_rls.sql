@@ -28,55 +28,55 @@
 -- Operations: SELECT, INSERT, UPDATE, DELETE
 -- ============================================================================
 
-ALTER TABLE public.job_panel ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.job_panels ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: panel belongs to a job the caller can see
-DROP POLICY IF EXISTS "job_panel_org_select" ON public.job_panel;
-CREATE POLICY "job_panel_org_select" ON public.job_panel
+DROP POLICY IF EXISTS "job_panel_org_select" ON public.job_panels;
+CREATE POLICY "job_panel_org_select" ON public.job_panels
   FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM public.job j
-      WHERE j.job_id = job_panel.job_id
+      SELECT 1 FROM public.jobs j
+      WHERE j.job_id = job_panels.job_id
         AND j.org_id = public.get_user_org_id()
     )
     OR public.is_platform_super_admin()
   );
 
 -- INSERT: new panels must be for a job in the caller's org
-DROP POLICY IF EXISTS "job_panel_org_insert" ON public.job_panel;
-CREATE POLICY "job_panel_org_insert" ON public.job_panel
+DROP POLICY IF EXISTS "job_panel_org_insert" ON public.job_panels;
+CREATE POLICY "job_panel_org_insert" ON public.job_panels
   FOR INSERT
   WITH CHECK (
     EXISTS (
-      SELECT 1 FROM public.job j
-      WHERE j.job_id = job_panel.job_id
+      SELECT 1 FROM public.jobs j
+      WHERE j.job_id = job_panels.job_id
         AND j.org_id = public.get_user_org_id()
     )
     OR public.is_platform_super_admin()
   );
 
 -- UPDATE: can only modify panels for jobs in the caller's org
-DROP POLICY IF EXISTS "job_panel_org_update" ON public.job_panel;
-CREATE POLICY "job_panel_org_update" ON public.job_panel
+DROP POLICY IF EXISTS "job_panel_org_update" ON public.job_panels;
+CREATE POLICY "job_panel_org_update" ON public.job_panels
   FOR UPDATE
   USING (
     EXISTS (
-      SELECT 1 FROM public.job j
-      WHERE j.job_id = job_panel.job_id
+      SELECT 1 FROM public.jobs j
+      WHERE j.job_id = job_panels.job_id
         AND j.org_id = public.get_user_org_id()
     )
     OR public.is_platform_super_admin()
   );
 
 -- DELETE: can only remove panels for jobs in the caller's org
-DROP POLICY IF EXISTS "job_panel_org_delete" ON public.job_panel;
-CREATE POLICY "job_panel_org_delete" ON public.job_panel
+DROP POLICY IF EXISTS "job_panel_org_delete" ON public.job_panels;
+CREATE POLICY "job_panel_org_delete" ON public.job_panels
   FOR DELETE
   USING (
     EXISTS (
-      SELECT 1 FROM public.job j
-      WHERE j.job_id = job_panel.job_id
+      SELECT 1 FROM public.jobs j
+      WHERE j.job_id = job_panels.job_id
         AND j.org_id = public.get_user_org_id()
     )
     OR public.is_platform_super_admin()
@@ -88,55 +88,55 @@ CREATE POLICY "job_panel_org_delete" ON public.job_panel
 -- Operations: SELECT, INSERT, UPDATE, DELETE
 -- ============================================================================
 
-ALTER TABLE public.quotation_line ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quotation_lines ENABLE ROW LEVEL SECURITY;
 
 -- SELECT
-DROP POLICY IF EXISTS "quotation_line_org_select" ON public.quotation_line;
-CREATE POLICY "quotation_line_org_select" ON public.quotation_line
+DROP POLICY IF EXISTS "quotation_line_org_select" ON public.quotation_lines;
+CREATE POLICY "quotation_line_org_select" ON public.quotation_lines
   FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM public.quotation q
-      WHERE q.quotation_id = quotation_line.quotation_id
+      SELECT 1 FROM public.quotations q
+      WHERE q.quotation_id = quotation_lines.quotation_id
         AND q.org_id = public.get_user_org_id()
     )
     OR public.is_platform_super_admin()
   );
 
 -- INSERT
-DROP POLICY IF EXISTS "quotation_line_org_insert" ON public.quotation_line;
-CREATE POLICY "quotation_line_org_insert" ON public.quotation_line
+DROP POLICY IF EXISTS "quotation_line_org_insert" ON public.quotation_lines;
+CREATE POLICY "quotation_line_org_insert" ON public.quotation_lines
   FOR INSERT
   WITH CHECK (
     EXISTS (
-      SELECT 1 FROM public.quotation q
-      WHERE q.quotation_id = quotation_line.quotation_id
+      SELECT 1 FROM public.quotations q
+      WHERE q.quotation_id = quotation_lines.quotation_id
         AND q.org_id = public.get_user_org_id()
     )
     OR public.is_platform_super_admin()
   );
 
 -- UPDATE
-DROP POLICY IF EXISTS "quotation_line_org_update" ON public.quotation_line;
-CREATE POLICY "quotation_line_org_update" ON public.quotation_line
+DROP POLICY IF EXISTS "quotation_line_org_update" ON public.quotation_lines;
+CREATE POLICY "quotation_line_org_update" ON public.quotation_lines
   FOR UPDATE
   USING (
     EXISTS (
-      SELECT 1 FROM public.quotation q
-      WHERE q.quotation_id = quotation_line.quotation_id
+      SELECT 1 FROM public.quotations q
+      WHERE q.quotation_id = quotation_lines.quotation_id
         AND q.org_id = public.get_user_org_id()
     )
     OR public.is_platform_super_admin()
   );
 
 -- DELETE
-DROP POLICY IF EXISTS "quotation_line_org_delete" ON public.quotation_line;
-CREATE POLICY "quotation_line_org_delete" ON public.quotation_line
+DROP POLICY IF EXISTS "quotation_line_org_delete" ON public.quotation_lines;
+CREATE POLICY "quotation_line_org_delete" ON public.quotation_lines
   FOR DELETE
   USING (
     EXISTS (
-      SELECT 1 FROM public.quotation q
-      WHERE q.quotation_id = quotation_line.quotation_id
+      SELECT 1 FROM public.quotations q
+      WHERE q.quotation_id = quotation_lines.quotation_id
         AND q.org_id = public.get_user_org_id()
     )
     OR public.is_platform_super_admin()
@@ -149,24 +149,24 @@ CREATE POLICY "quotation_line_org_delete" ON public.quotation_line
 -- Note: invoice_payment was created in 0172 but RLS was never enabled.
 -- ============================================================================
 
-ALTER TABLE public.invoice_payment ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.invoice_payments ENABLE ROW LEVEL SECURITY;
 
 -- SELECT
-DROP POLICY IF EXISTS "invoice_payment_org_select" ON public.invoice_payment;
-CREATE POLICY "invoice_payment_org_select" ON public.invoice_payment
+DROP POLICY IF EXISTS "invoice_payment_org_select" ON public.invoice_payments;
+CREATE POLICY "invoice_payment_org_select" ON public.invoice_payments
   FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM public.invoice i
-      WHERE i.invoice_id = invoice_payment.invoice_id
+      SELECT 1 FROM public.invoices i
+      WHERE i.invoice_id = invoice_payments.invoice_id
         AND i.org_id = public.get_user_org_id()
     )
     OR public.is_platform_super_admin()
   );
 
 -- INSERT: only finance/admin roles can record payments (role check + org check)
-DROP POLICY IF EXISTS "invoice_payment_org_insert" ON public.invoice_payment;
-CREATE POLICY "invoice_payment_org_insert" ON public.invoice_payment
+DROP POLICY IF EXISTS "invoice_payment_org_insert" ON public.invoice_payments;
+CREATE POLICY "invoice_payment_org_insert" ON public.invoice_payments
   FOR INSERT
   WITH CHECK (
     (
@@ -174,8 +174,8 @@ CREATE POLICY "invoice_payment_org_insert" ON public.invoice_payment
     )
     AND (
       EXISTS (
-        SELECT 1 FROM public.invoice i
-        WHERE i.invoice_id = invoice_payment.invoice_id
+        SELECT 1 FROM public.invoices i
+        WHERE i.invoice_id = invoice_payments.invoice_id
           AND i.org_id = public.get_user_org_id()
       )
       OR public.is_platform_super_admin()
@@ -183,8 +183,8 @@ CREATE POLICY "invoice_payment_org_insert" ON public.invoice_payment
   );
 
 -- UPDATE: finance/admin + same org
-DROP POLICY IF EXISTS "invoice_payment_org_update" ON public.invoice_payment;
-CREATE POLICY "invoice_payment_org_update" ON public.invoice_payment
+DROP POLICY IF EXISTS "invoice_payment_org_update" ON public.invoice_payments;
+CREATE POLICY "invoice_payment_org_update" ON public.invoice_payments
   FOR UPDATE
   USING (
     (
@@ -192,8 +192,8 @@ CREATE POLICY "invoice_payment_org_update" ON public.invoice_payment
     )
     AND (
       EXISTS (
-        SELECT 1 FROM public.invoice i
-        WHERE i.invoice_id = invoice_payment.invoice_id
+        SELECT 1 FROM public.invoices i
+        WHERE i.invoice_id = invoice_payments.invoice_id
           AND i.org_id = public.get_user_org_id()
       )
       OR public.is_platform_super_admin()
@@ -201,15 +201,15 @@ CREATE POLICY "invoice_payment_org_update" ON public.invoice_payment
   );
 
 -- DELETE: admin only + same org
-DROP POLICY IF EXISTS "invoice_payment_org_delete" ON public.invoice_payment;
-CREATE POLICY "invoice_payment_org_delete" ON public.invoice_payment
+DROP POLICY IF EXISTS "invoice_payment_org_delete" ON public.invoice_payments;
+CREATE POLICY "invoice_payment_org_delete" ON public.invoice_payments
   FOR DELETE
   USING (
     public.has_app_role('admin')
     AND (
       EXISTS (
-        SELECT 1 FROM public.invoice i
-        WHERE i.invoice_id = invoice_payment.invoice_id
+        SELECT 1 FROM public.invoices i
+        WHERE i.invoice_id = invoice_payments.invoice_id
           AND i.org_id = public.get_user_org_id()
       )
       OR public.is_platform_super_admin()
@@ -221,12 +221,12 @@ CREATE POLICY "invoice_payment_org_delete" ON public.invoice_payment
 -- (Idempotent — safe to re-run)
 -- ============================================================================
 
-ALTER TABLE public.job              ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.quotation        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.invoice          ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.job_panel        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.quotation_line   ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.invoice_payment  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.jobs              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quotations        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.invoices          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.job_panels        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quotation_lines   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.invoice_payments  ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
 -- END OF MIGRATION 0175
