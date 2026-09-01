@@ -1,6 +1,6 @@
 # .github/workflows/verify-digital-shadow.yml
 #
-# Ten CI jobs for the Digital Shadow Service backend, triggered on every PR
+# Twelve CI jobs for the Digital Shadow Service backend, triggered on every PR
 # and direct push to `feat/digital-shadow-integration`:
 #
 #   lint                            — ESLint + TypeScript type-check; fails fast before
@@ -12,19 +12,24 @@
 #   notify-slack-on-failure         — Slack alert when e2e-backend-gate OR feature-cache-coverage fails
 #   notify-slack-on-success         — Slack alert (with coverage %) when all four gates pass
 #   notify-coverage-badge-failure   — Slack alert when post-coverage-badge fails to parse/post artifact
+#   create-webhook-broken-label     — Idempotently creates the webhook-broken label before Job 9 runs
 #   notify-success-pipeline-failure — Slack alert + GitHub issue when notify-slack-on-success itself fails
-#   post-workflow-summary           — Upserts a sticky PR comment table listing all 9 job results + durations
+#   post-workflow-summary           — Upserts a sticky PR comment table (backend + Playwright legs) on the PR
+#   upload-eslint-sarif             — Re-runs ESLint with SARIF formatter; uploads to Code Scanning tab
 #
 # Job dependency graph:
 #   lint ──► integration-tests ──► e2e-backend-gate ──► notify-slack-on-failure (on failure)
 #        │                      │                    └─► notify-slack-on-success  (on all pass)
-#        │                      │                                └─► notify-success-pipeline-failure (on failure)
+#        │                      │                                ├─► create-webhook-broken-label (on failure)
+#        │                      │                                └─► notify-success-pipeline-failure (on failure, after label job)
+#        │                      └─► notify-slack-on-failure (on failure)
 #        └─► feature-cache-coverage ──► post-coverage-badge ──► notify-coverage-badge-failure (on failure)
-#                               │   └─► notify-slack-on-failure (on failure)
 #                               └──────► notify-slack-on-success (on all pass)
 #
-#   post-workflow-summary (needs: all 9 jobs, if: always() && pull_request)
-#     └─► upserts <!-- workflow-summary-comment --> on the PR with job results table
+#   post-workflow-summary (needs: all 11 jobs, if: always() && pull_request)
+#     └─► upserts <!-- workflow-summary-comment --> (backend + playwright-e2e sections)
+#   upload-eslint-sarif (needs: lint, if: not cancelled)
+#     └─► uploads eslint.sarif to Security → Code Scanning
 #
 # Concurrency:
 #   A `concurrency` group keyed on workflow + ref cancels the in-progress run
@@ -1201,6 +1206,47 @@ jobs:
           PY
 
   # ────────────────────────────────────────────────────────────────────────────
+  # Job 9a: Ensure webhook-broken label exists before Job 9 tries to create an
+  # issue tagged with it.  GitHub's Issues API returns 422 if the label does
+  # not exist when creating an issue — this pre-job idempotently creates it so
+  # Job 9 never fails at the issue-creation step for that reason alone.
+  # ────────────────────────────────────────────────────────────────────────────
+  create-webhook-broken-label:
+    name: Ensure webhook-broken Label Exists
+    needs: [notify-slack-on-success]
+    if: always() && needs.notify-slack-on-success.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    permissions:
+      issues: write    # required to create repository labels
+
+    steps:
+      - name: Create webhook-broken label (idempotent)
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            try {
+              await github.rest.issues.createLabel({
+                owner:       context.repo.owner,
+                repo:        context.repo.repo,
+                name:        'webhook-broken',
+                color:       'e11d48',   // rose-700 — signals an operational action item
+                description: 'Slack webhook URL needs rotation',
+              });
+              core.info('Label webhook-broken created.');
+            } catch (err) {
+              if (err.status === 422) {
+                // 422 Unprocessable Entity = label already exists — safe to ignore
+                core.info('Label webhook-broken already exists — skipping creation.');
+              } else {
+                // Unexpected error — warn but do not fail so Job 9 still runs
+                core.warning(`Could not create webhook-broken label: ${err.message}`);
+              }
+            }
+
+  # ────────────────────────────────────────────────────────────────────────────
   # Job 9: Slack notification when notify-slack-on-success itself fails
   #
   # The notify-slack-on-success job (Job 7) can fail for several reasons that
@@ -1230,7 +1276,7 @@ jobs:
   # ────────────────────────────────────────────────────────────────────────────
   notify-success-pipeline-failure:
     name: Slack — Success Notifier Health Check
-    needs: [notify-slack-on-success]
+    needs: [notify-slack-on-success, create-webhook-broken-label]
     if: always() && needs.notify-slack-on-success.result == 'failure'
     runs-on: ubuntu-latest
     timeout-minutes: 3
@@ -1469,7 +1515,9 @@ jobs:
       - notify-slack-on-failure
       - notify-slack-on-success
       - notify-coverage-badge-failure
+      - create-webhook-broken-label
       - notify-success-pipeline-failure
+      - upload-eslint-sarif
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1538,15 +1586,79 @@ jobs:
                 return `| [${j.name}](${logUrl}) | ${emoji} ${result} | ${duration} |`;
               });
 
+            // ── 2b. Fetch Playwright E2E jobs from playwright-e2e.yml ───────
+            // Queries the companion workflow for the same head SHA so the PR
+            // comment shows browser-leg results alongside backend job results.
+            // Errors are caught as warnings so a missing/pending E2E run never
+            // blocks the summary comment from being posted.
+            let e2eSection = [];
+            try {
+              const { data: { workflows } } = await github.rest.actions.listRepoWorkflows({
+                owner:    context.repo.owner,
+                repo:     context.repo.repo,
+                per_page: 30,
+              });
+              const e2eWorkflow = workflows.find(w => w.path.endsWith('playwright-e2e.yml'));
+              if (e2eWorkflow) {
+                const { data: { workflow_runs: e2eRuns } } = await github.rest.actions.listWorkflowRuns({
+                  owner:       context.repo.owner,
+                  repo:        context.repo.repo,
+                  workflow_id: e2eWorkflow.id,
+                  head_sha:    context.sha,
+                  per_page:    5,
+                });
+                const e2eRun = e2eRuns[0];
+                if (e2eRun) {
+                  const { data: { jobs: e2eJobs } } = await github.rest.actions.listJobsForWorkflowRun({
+                    owner:    context.repo.owner,
+                    repo:     context.repo.repo,
+                    run_id:   e2eRun.id,
+                    per_page: 100,
+                  });
+                  // Include browser matrix legs + build/unit jobs from playwright-e2e.yml
+                  const E2E_PATTERNS = [
+                    /^Playwright E2E \(/,
+                    /^TypeScript Build Check$/,
+                    /^Vitest Unit Tests$/,
+                  ];
+                  const e2eRows = e2eJobs
+                    .filter(j => E2E_PATTERNS.some(p => p.test(j.name)))
+                    .map(j => {
+                      const emoji    = statusEmoji(j.conclusion, j.status);
+                      const result   = j.conclusion ?? j.status ?? 'unknown';
+                      const duration = fmtDuration(j.started_at, j.completed_at);
+                      const logUrl   = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${e2eRun.id}/job/${j.id}`;
+                      return `| [${j.name}](${logUrl}) | ${emoji} ${result} | ${duration} |`;
+                    });
+                  if (e2eRows.length > 0) {
+                    const e2eRunUrl = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${e2eRun.id}`;
+                    e2eSection = [
+                      '',
+                      `### Playwright E2E — [Run #${e2eRun.run_number}](${e2eRunUrl})`,
+                      `| Job | Result | Duration |`,
+                      `|---|---|---|`,
+                      ...e2eRows,
+                    ];
+                  }
+                } else {
+                  e2eSection = ['', '_Playwright E2E workflow: no run found for this commit yet._'];
+                }
+              }
+            } catch (e2eErr) {
+              core.warning(`Could not fetch playwright-e2e jobs: ${e2eErr.message}`);
+            }
+
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
             const body = [
               SENTINEL,
               '## Digital Shadow CI — Workflow Summary',
               '',
+              `### Backend (verify-digital-shadow)`,
               `| Job | Result | Duration |`,
               `|---|---|---|`,
               ...rows,
+              ...e2eSection,
               '',
               `---`,
               `Commit: \`${context.sha.slice(0,7)}\` · Run [#${context.runNumber}](${runUrl})`,
@@ -1579,3 +1691,68 @@ jobs:
               });
               core.info(`Created new summary comment #${created.data.id}`);
             }
+
+  # ── Job 11: Upload ESLint results as SARIF to GitHub Code Scanning ──────────
+  # Runs after the lint job (success OR failure) so Code Scanning always
+  # receives up-to-date ESLint findings, even when the lint gate fails.
+  # Results appear in the Security → Code Scanning tab of the repository.
+  #
+  # Steps:
+  #   1. Install @microsoft/eslint-formatter-sarif (zero-save, CI-safe).
+  #   2. Re-run ESLint with the SARIF formatter, writing eslint.sarif.
+  #      `--no-eslintrc` is NOT used so the workspace .eslintrc applies.
+  #      `|| true` prevents the step from failing on lint rule violations —
+  #      we want the SARIF file regardless of whether rules pass.
+  #   3. Upload eslint.sarif via github/codeql-action/upload-sarif@v3.
+  #      category: 'eslint' namespaces the results so they don't collide
+  #      with any CodeQL scans on the same repo.
+  # ────────────────────────────────────────────────────────────────────────────
+  upload-eslint-sarif:
+    name: Upload ESLint SARIF to Code Scanning
+    needs: [lint]
+    if: always() && needs.lint.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    permissions:
+      security-events: write   # required by upload-sarif action
+      contents:        read    # checkout
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install ESLint SARIF formatter
+        # --no-save keeps package-lock.json clean; npm no-ops if already present
+        run: npm install --no-save @microsoft/eslint-formatter-sarif
+
+      - name: Run ESLint and emit SARIF
+        # `|| true` ensures the step succeeds even when lint violations exist so
+        # the SARIF upload step always runs and Code Scanning always gets results.
+        run: |
+          npx eslint \
+            --format @microsoft/eslint-formatter-sarif \
+            --output-file eslint.sarif \
+            "packages/digital-shadow-service/src/**/*.{ts,tsx}" \
+            "packages/digital-shadow-service/tests/**/*.{ts,tsx}" \
+            || true
+        env:
+          CI: 'true'
+
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: eslint.sarif
+          category:   eslint
+          # wait-for-processing keeps the job log informative; remove if
+          # the step blocks too long in the presence of many findings.
+          wait-for-processing: true
