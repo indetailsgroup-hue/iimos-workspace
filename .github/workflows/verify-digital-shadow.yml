@@ -69,6 +69,12 @@ on:
   # backend gate after a Redis infrastructure change or a token rotation
   # without touching source files.
   workflow_dispatch:
+    inputs:
+      sarif_critical_threshold:
+        description: 'Override SARIF_CRITICAL_THRESHOLD (leave blank to use default of 10)'
+        required: false
+        type: string
+        default: ''
 
   pull_request:
     branches:
@@ -87,7 +93,7 @@ on:
 # Raise SARIF_CRITICAL_THRESHOLD to change both the 30-day artifact retention
 # override and the Job 14 GitHub issue gate in one place.
 env:
-  SARIF_CRITICAL_THRESHOLD: '10'
+  SARIF_CRITICAL_THRESHOLD: "${{ github.event.inputs.sarif_critical_threshold || '10' }}"
 
 jobs:
   # ────────────────────────────────────────────────────────────────────────────
@@ -2645,18 +2651,18 @@ jobs:
   block-merge-on-sarif-critical:
     name: "Block Merge — Critical SARIF Findings"
     needs: [upload-eslint-sarif]
-    if: |
+    if: >-
       always() &&
       github.event_name == 'pull_request' &&
       needs.upload-eslint-sarif.result != 'cancelled' &&
-      needs.upload-eslint-sarif.outputs.new-findings != '' &&
-      fromJSON(needs.upload-eslint-sarif.outputs.new-findings) > fromJSON(env.SARIF_CRITICAL_THRESHOLD)
+      needs.upload-eslint-sarif.outputs.new-findings != ''
     runs-on: ubuntu-latest
     timeout-minutes: 3
     permissions:
       pull-requests: write
     steps:
       - name: Post REQUEST_CHANGES review for critical SARIF findings
+        if: fromJSON(needs.upload-eslint-sarif.outputs.new-findings) > fromJSON(env.SARIF_CRITICAL_THRESHOLD)
         uses: actions/github-script@v7
         env:
           NEW_FINDINGS: ${{ needs.upload-eslint-sarif.outputs.new-findings }}
@@ -2698,3 +2704,89 @@ jobs:
             });
 
             core.info(`Blocking review posted — ${newFindings} new findings exceed threshold ${threshold}`);
+
+      - name: Dismiss blocking review when SARIF findings recover
+        id: dismiss-review
+        if: fromJSON(needs.upload-eslint-sarif.outputs.new-findings) <= fromJSON(env.SARIF_CRITICAL_THRESHOLD)
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const { owner, repo } = context.repo;
+
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner, repo, pull_number: prNumber,
+            });
+
+            const blocking = reviews
+              .filter(r => r.state === 'CHANGES_REQUESTED' && r.user.login === 'github-actions[bot]')
+              .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+
+            if (blocking.length === 0) {
+              core.info('No blocking review found — nothing to dismiss.');
+              return;
+            }
+
+            const reviewId = blocking[0].id;
+            await github.rest.pulls.dismissReview({
+              owner, repo,
+              pull_number: prNumber,
+              review_id: reviewId,
+              message: 'SARIF critical findings have dropped to acceptable levels — auto-dismissing blocking review.',
+            });
+            core.info(`Dismissed review ${reviewId}.`);
+
+  post-sarif-pr-description:
+    name: "Post SARIF Summary in PR Description"
+    runs-on: ubuntu-latest
+    needs: [upload-eslint-sarif]
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      needs.upload-eslint-sarif.result != 'cancelled' &&
+      needs.upload-eslint-sarif.outputs.new-findings != ''
+    permissions:
+      pull-requests: write
+      actions: read
+    steps:
+      - name: Download SARIF delta summary artifact
+        id: download
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: sarif-delta-summary
+          path: /tmp/sarif-summary/
+
+      - name: Update PR description with SARIF summary
+        if: steps.download.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const summaryPath = '/tmp/sarif-summary/sarif-delta-summary.md';
+            if (!fs.existsSync(summaryPath)) {
+              core.info('sarif-delta-summary.md not found — skipping PR description update.');
+              return;
+            }
+            const summaryMd = fs.readFileSync(summaryPath, 'utf8').trim();
+            const START = '<!-- sarif-summary-start -->';
+            const END   = '<!-- sarif-summary-end -->';
+            const block = `${START}\n<details>\n<summary>SARIF Delta Summary</summary>\n\n${summaryMd}\n</details>\n${END}`;
+
+            const prNumber = context.payload.pull_request.number;
+            const { owner, repo } = context.repo;
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+            let body = pr.body || '';
+
+            const si = body.indexOf(START);
+            const ei = body.indexOf(END);
+            if (si !== -1 && ei !== -1) {
+              body = body.slice(0, si) + block + body.slice(ei + END.length);
+            } else {
+              body = body + '\n\n' + block;
+            }
+
+            await github.rest.pulls.update({ owner, repo, pull_number: prNumber, body });
+            core.info('PR description updated with SARIF summary.');
