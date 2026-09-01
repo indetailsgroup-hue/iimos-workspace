@@ -786,10 +786,17 @@ jobs:
               sys.exit(1)
           PYEOF
 
+          # Rename so it gets a unique version key (01731 > 0173) and does not
+          # collide with the version=0173 already recorded by
+          # 0173_rls_isolation_hardening.sql in schema_migrations.
+          mv supabase/migrations/0173_rollback.sql \
+             supabase/migrations/01731_rollback.sql 2>/dev/null || true
+          echo "Renamed: 0173_rollback.sql → 01731_rollback.sql (version conflict fix)"
+
       # ── Start local Supabase stack (Docker available on ubuntu-latest) ─────
       # supabase start auto-applies every .sql file in supabase/migrations/
       # in lexicographic order:
-      #   0000_e2e_prereqs → 0001...0172 → 0172_z_e2e_platform_stub → 0173 → ... → 0215
+      #   0000_e2e_prereqs → 0001...0172 → 0172_z_e2e_platform_stub → 0173 → 01731 → ... → 0215
       - name: Start local Supabase
         run: supabase start
 
