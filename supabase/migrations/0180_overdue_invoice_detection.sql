@@ -80,14 +80,12 @@ CREATE TABLE IF NOT EXISTS invoice_notifications (
   acknowledged_by   UUID,
 
   created_at        TIMESTAMPTZ       NOT NULL DEFAULT now(),
-  updated_at        TIMESTAMPTZ       NOT NULL DEFAULT now()
+  updated_at        TIMESTAMPTZ       NOT NULL DEFAULT now(),
 
-  -- ป้องกัน spam: uniqueness enforced via CREATE UNIQUE INDEX below (expression columns)
+  -- ป้องกัน spam: notification type เดียวกัน ต่อ invoice ต่อวัน
+  CONSTRAINT uq_notification_daily
+    UNIQUE (invoice_id, notification_type, (created_at::DATE))
 );
-
--- One notification per type per invoice per calendar day (expression-based unique index)
-CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_daily
-  ON invoice_notifications(invoice_id, notification_type, (created_at::DATE));
 
 CREATE INDEX IF NOT EXISTS idx_notif_invoice   ON invoice_notifications(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_notif_org       ON invoice_notifications(org_id);
@@ -648,10 +646,9 @@ BEGIN
     SELECT 1 FROM pg_extension WHERE extname = 'pg_cron'
   ) THEN
     -- Unschedule เก่าก่อน (idempotent)
-    PERFORM cron.unschedule('check-overdue-invoices')
-    WHERE EXISTS (
-      SELECT 1 FROM cron.job WHERE jobname = 'check-overdue-invoices'
-    );
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'check-overdue-invoices') THEN
+      PERFORM cron.unschedule('check-overdue-invoices');
+    END IF;
 
     -- Schedule ใหม่: ทุกวัน 01:00 UTC (= 08:00 ICT)
     PERFORM cron.schedule(
