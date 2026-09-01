@@ -58,6 +58,33 @@ ALLOWLIST: frozenset[str] = frozenset(
         "_org_id_backfill_quarantine",  # Temporary quarantine table; dropped post-backfill.
         # ── Background-worker queues ───────────────────────────────────────
         "notification_digest_queue",    # Background queue; scoped by user_id.
+        # ── Platform config tables (no org_id column; shared across all tenants) ──
+        # Added in v16.8.0 audit (issue #56) — lint-rls-org-id full-corpus scan.
+        "action_type_registry",   # Platform-wide lookup table; no tenant scope.
+        "addon_catalog",          # Shared product catalog; org-specific copies live in org_addons.
+        "fraud_signal_config",    # Platform-level fraud rules; applied across all orgs.
+        "ledger_account",         # Chart-of-accounts master; not per-org.
+        "market_price_bands",     # Global price band configuration; no org_id column.
+        "millwork_stage_defs",    # Shared millwork workflow definitions; platform-managed.
+        "process_model",          # Process templates shared across tenants.
+        "vendor_master",          # Platform-wide vendor registry; org-specific refs via FK.
+        # ── MCP infrastructure tables (platform-service-level; no org_id column) ──
+        "mcp_tool_registry",      # Registry of MCP tools; platform-managed, no tenant scope.
+        "mcp_rate_limit_counter", # Per-tool rate limit counters; scoped by tool_id, not org.
+        "mcp_audit_log",          # MCP invocation audit trail; scoped by invocation_id.
+        "mcp_idempotency_record", # Idempotency keys for MCP calls; no org_id column.
+        "tool_invocation",        # Individual tool call records; no tenant isolation needed.
+        "pending_invocation",     # Async invocation queue; processed by platform worker.
+        # ── Platform monitoring tables (no org_id column; aggregate metrics) ─────
+        "platform_metrics_snapshots",  # Aggregated platform health snapshots; no org_id.
+        "platform_search_logs",        # Platform-level search telemetry; org_filter is optional.
+        # ── User-scoped tables (scoped by user_id, not org_id) ────────────
+        "identity_binding",       # User identity federation; scoped by user_id = auth.uid().
+        "delegation",             # Per-user delegation grants; scoped by delegator_id.
+        "copilot_suggestion",     # Per-user AI suggestions; scoped by user_id = auth.uid().
+        "knowledge_import",       # Per-user knowledge base imports; scoped by user_id.
+        "notification",           # Per-user notification inbox; scoped by recipient_id.
+        "designer_profiles",      # Per-user designer profile; scoped by user_id = auth.uid().
     }
 )
 
