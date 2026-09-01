@@ -107,6 +107,7 @@ declare -a SCRIPT_REGISTRY=(
   "0202|${SCRIPT_DIR}/staging_validate_0202.sh"
   "0203|${SCRIPT_DIR}/staging_validate_0203.sh"
   "0204|${SCRIPT_DIR}/staging_validate_0204.sh"
+  "0205|${SCRIPT_DIR}/staging_validate_0205.sh"
 )
 
 # ---------------------------------------------------------------------------
@@ -201,9 +202,9 @@ section "§3 Combined vitest run"
 if $NO_VITEST; then
   warn "Vitest suppressed via --no-vitest"
 else
-  info "Running all eTax observability test suites (0186–0204) with vitest..."
+  info "Running all eTax observability test suites (0186–0205) with vitest..."
   info "  Covers: src/__tests__/rls/ (0186-0195), src/__tests__/migrations/ (0195b-0203), and src/__tests__/integrations/ (0198_0203)"
-  TEST_PATTERN="src/__tests__/(rls|migrations|integrations)/(0186|0187|0188|0189|0190|0191|0192|0193|0194|0195|0195b|0196|0197|0198|0199|0200|0201|0202|0203|0198_0203)"
+  TEST_PATTERN="src/__tests__/(rls|migrations|integrations)/(0186|0187|0188|0189|0190|0191|0192|0193|0194|0195|0195b|0196|0197|0198|0199|0200|0201|0202|0203|0205|0198_0203)"
 
   T_VIT_START=$(date +%s)
   set +e
@@ -242,7 +243,7 @@ for MIG_ID in "${ORDER[@]}"; do
   case "$MIG_ID" in
     vitest)
       LABEL="(combined vitest)"
-      SCRIPT_LABEL="npx vitest run (all 0186–0204 test suites)"
+      SCRIPT_LABEL="npx vitest run (all 0186–0205 test suites)"
       ;;
     *)
       LABEL="$MIG_ID"
