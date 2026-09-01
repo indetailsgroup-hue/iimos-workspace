@@ -804,12 +804,13 @@ jobs:
           );
 
           CREATE TABLE IF NOT EXISTS public.invoice_line_items (
-            id         uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
-            invoice_id uuid    NOT NULL,
+            id          uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id      uuid,
+            invoice_id  uuid    NOT NULL,
             description text,
-            quantity   numeric NOT NULL DEFAULT 1,
-            unit_price numeric NOT NULL DEFAULT 0,
-            amount     numeric GENERATED ALWAYS AS (quantity * unit_price) STORED
+            quantity    numeric NOT NULL DEFAULT 1,
+            unit_price  numeric NOT NULL DEFAULT 0,
+            amount      numeric NOT NULL DEFAULT 0
           );
           SQL
 
