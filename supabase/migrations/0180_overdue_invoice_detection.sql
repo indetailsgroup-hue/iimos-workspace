@@ -80,12 +80,14 @@ CREATE TABLE IF NOT EXISTS invoice_notifications (
   acknowledged_by   UUID,
 
   created_at        TIMESTAMPTZ       NOT NULL DEFAULT now(),
-  updated_at        TIMESTAMPTZ       NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ       NOT NULL DEFAULT now()
 
-  -- ป้องกัน spam: notification type เดียวกัน ต่อ invoice ต่อวัน
-  CONSTRAINT uq_notification_daily
-    UNIQUE (invoice_id, notification_type, (created_at::DATE))
+  -- ป้องกัน spam: uniqueness enforced via CREATE UNIQUE INDEX below (expression columns)
 );
+
+-- One notification per type per invoice per calendar day (expression-based unique index)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_daily
+  ON invoice_notifications(invoice_id, notification_type, (created_at::DATE));
 
 CREATE INDEX IF NOT EXISTS idx_notif_invoice   ON invoice_notifications(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_notif_org       ON invoice_notifications(org_id);
