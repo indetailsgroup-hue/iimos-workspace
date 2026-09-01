@@ -744,6 +744,15 @@ jobs:
             WHERE user_id = auth.uid() AND is_active = true LIMIT 1;
           $$;
 
+          -- ── fn_set_updated_at stub (C12 helper from 0001 — used by triggers in 01772+) ─
+          CREATE OR REPLACE FUNCTION public.fn_set_updated_at()
+          RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN
+            NEW.updated_at = now();
+            RETURN NEW;
+          END;
+          $$;
+
           -- ── Iteration 14: rename singular→plural so 0173 finds expected table names ─
           -- Fix U (commit cc18e6129ddf) removed plural CREATE TABLE statements from
           -- 20260828_multi_tenant_schema.sql; 0172 now creates singular names; 0173
