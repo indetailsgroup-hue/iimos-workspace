@@ -658,6 +658,20 @@ jobs:
             END IF;
           END $$;
 
+          -- ── Iter 19b: add columns 0176 expects on invoices (production uses 'id'/'code'/etc.) ─
+          -- 0172 creates invoice_id/invoice_code; 0176 references i.id, i.code, i.issued_date, etc.
+          ALTER TABLE IF EXISTS public.invoices ADD COLUMN IF NOT EXISTS id            uuid    DEFAULT gen_random_uuid();
+          ALTER TABLE IF EXISTS public.invoices ADD COLUMN IF NOT EXISTS code          text    DEFAULT '';
+          ALTER TABLE IF EXISTS public.invoices ADD COLUMN IF NOT EXISTS issued_date   date    DEFAULT CURRENT_DATE;
+          ALTER TABLE IF EXISTS public.invoices ADD COLUMN IF NOT EXISTS is_vat_inclusive boolean DEFAULT true;
+          ALTER TABLE IF EXISTS public.invoices ADD COLUMN IF NOT EXISTS updated_by    text;
+          -- get_user_org_id() stub (used in 0174 RLS policies and 0176 view — returns caller's org)
+          CREATE OR REPLACE FUNCTION public.get_user_org_id()
+          RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER AS $$
+            SELECT org_id FROM public.org_members
+            WHERE user_id = auth.uid() AND is_active = true LIMIT 1;
+          $$;
+
           -- ── Iteration 14: rename singular→plural so 0173 finds expected table names ─
           -- Fix U (commit cc18e6129ddf) removed plural CREATE TABLE statements from
           -- 20260828_multi_tenant_schema.sql; 0172 now creates singular names; 0173
