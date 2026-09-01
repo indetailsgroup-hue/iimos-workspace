@@ -35,6 +35,36 @@ name: Conclude Pipeline Gate
 # ──────────────────────────────────────────────────────────────────────────────
 
 on:
+  workflow_dispatch:
+    inputs:
+      overall_status:
+        description: 'Pre-computed overall pipeline status for manual test runs'
+        required: false
+        default: 'success'
+        type: choice
+        options:
+          - success
+          - failure
+      sarif_threshold:
+        description: 'SARIF critical threshold override (numeric string, default 10)'
+        required: false
+        default: '10'
+        type: string
+      skip_gate:
+        description: 'Dry-run mode - post advisory success status only'
+        required: false
+        default: false
+        type: boolean
+      commit_sha:
+        description: 'Full SHA to post commit status on (leave blank to skip status)'
+        required: false
+        default: ''
+        type: string
+      run_url:
+        description: 'Full URL of the triggering run (shown in comment / Slack)'
+        required: false
+        default: ''
+        type: string
   workflow_call:
     inputs:
 
@@ -146,12 +176,17 @@ on:
       sarif_breached:
         description: 'true if sarifNewFindings exceeded sarifThreshold, else false'
         value: ${{ jobs.post-pipeline-gate.outputs.sarif_breached }}
+      validation_passed:
+        description: 'true if validate-inputs passed all schema checks, else false'
+        value: ${{ jobs.validate-inputs.outputs.validation_passed }}
 
 # ──────────────────────────────────────────────────────────────────────────────
 jobs:
   validate-inputs:
     name: Validate Caller Inputs
     runs-on: ubuntu-latest
+    outputs:
+      validation_passed: ${{ steps.schema-check.outputs.validation_passed }}
     steps:
       - name: Schema-check workflow_call inputs
         id: schema-check
@@ -166,6 +201,7 @@ jobs:
           SARIF_THRESHOLD:   ${{ inputs.sarif_threshold }}
           PR_NUMBER:         ${{ inputs.pr_number }}
           RUN_NUMBER:        ${{ inputs.run_number }}
+          CRITICAL_FAILED_JOBS: ${{ inputs.critical_failed_jobs }}
         with:
           script: |
             const errors = [];
@@ -205,12 +241,36 @@ jobs:
                 errors.push(`${name} must be an integer >= ${minVal}; got '${raw}'`);
             }
 
+            // critical_failed_jobs allowlist check
+            const KNOWN_JOB_IDS = [
+              'lint', 'integration-tests', 'feature-cache-coverage', 'post-coverage-badge',
+              'e2e-backend-gate', 'notify-slack-on-failure', 'notify-slack-on-success',
+              'notify-coverage-badge-failure', 'create-webhook-broken-label',
+              'notify-success-pipeline-failure', 'post-workflow-summary', 'upload-eslint-sarif',
+              'close-webhook-broken-issue', 'notify-slack-on-sarif-findings',
+              'notify-slack-on-sarif-critical', 'open-sarif-findings-issue',
+              'close-sarif-findings-issue', 'block-merge-on-sarif-critical',
+              'post-sarif-pr-description', 'dry-run-summary', 'workflow-run-step-summary',
+              'pr-job-conclusion-diff', 'conclude-pipeline',
+            ];
+            const criticalFailedRaw = (process.env.CRITICAL_FAILED_JOBS || '')
+              .split(',').map(s => s.trim()).filter(Boolean);
+            for (const jobId of criticalFailedRaw) {
+              if (!KNOWN_JOB_IDS.includes(jobId))
+                errors.push(
+                  `critical_failed_jobs contains unknown job ID: '${jobId}' — ` +
+                  `must be one of: ${KNOWN_JOB_IDS.join(', ')}`
+                );
+            }
+
             if (errors.length > 0) {
               errors.forEach(msg => core.error(msg));
+              core.setOutput('validation_passed', 'false');
               core.setFailed(
                 `conclude-pipeline-gate: ${errors.length} input validation error(s) — see above`
               );
             } else {
+              core.setOutput('validation_passed', 'true');
               core.info(
                 `All inputs valid — overall_status=${overallStatus}, ` +
                 `sha=${commitSha.slice(0, 7)}, sarif_threshold=${process.env.SARIF_THRESHOLD}`
