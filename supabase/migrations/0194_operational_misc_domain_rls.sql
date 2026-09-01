@@ -22,7 +22,7 @@ alter table public.design_lock_field_config alter column org_id set not null;
 
 create policy design_lock_field_config_tenant_isolation on public.design_lock_field_config
   for select to authenticated
-  using (org_id = public.get_my_org_id()
+  using (org_id = public.get_user_org_id()
       or org_id = '00000000-0000-0000-0000-000000000000'::uuid);
 
 -- ---------------------------------------------------------------------------
@@ -40,7 +40,7 @@ alter table public.issue_routing alter column org_id set not null;
 
 create policy issue_routing_tenant_isolation on public.issue_routing
   for select to authenticated
-  using (org_id = public.get_my_org_id()
+  using (org_id = public.get_user_org_id()
       or org_id = '00000000-0000-0000-0000-000000000000'::uuid);
 
 -- ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ alter table public.lead_followup_config alter column org_id set not null;
 
 create policy lead_followup_config_tenant_isolation on public.lead_followup_config
   for select to authenticated
-  using (org_id = public.get_my_org_id()
+  using (org_id = public.get_user_org_id()
       or org_id = '00000000-0000-0000-0000-000000000000'::uuid);
 
 -- ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ alter table public.material_master alter column org_id set not null;
 
 create policy material_master_tenant_isolation on public.material_master
   for select to authenticated
-  using (org_id = public.get_my_org_id()
+  using (org_id = public.get_user_org_id()
       or org_id = '00000000-0000-0000-0000-000000000000'::uuid);
 
 -- ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@ alter table public.material_purchase_price alter column org_id set not null;
 
 create policy material_purchase_price_tenant_isolation on public.material_purchase_price
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 6. ops_contacts  (role → employee_id config — sentinel shared data)
@@ -119,7 +119,7 @@ alter table public.ops_contacts alter column org_id set not null;
 
 create policy ops_contacts_tenant_isolation on public.ops_contacts
   for select to authenticated
-  using (org_id = public.get_my_org_id()
+  using (org_id = public.get_user_org_id()
       or org_id = '00000000-0000-0000-0000-000000000000'::uuid);
 
 -- ---------------------------------------------------------------------------
@@ -143,7 +143,7 @@ alter table public.phase_rosters alter column org_id set not null;
 
 create policy phase_rosters_tenant_isolation on public.phase_rosters
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 8. released_spec  (shared design reference catalog — sentinel)
@@ -160,7 +160,7 @@ alter table public.released_spec alter column org_id set not null;
 
 create policy released_spec_tenant_isolation on public.released_spec
   for select to authenticated
-  using (org_id = public.get_my_org_id()
+  using (org_id = public.get_user_org_id()
       or org_id = '00000000-0000-0000-0000-000000000000'::uuid);
 
 -- ---------------------------------------------------------------------------
@@ -186,7 +186,7 @@ alter table public.revision_event alter column org_id set not null;
 
 create policy revision_event_tenant_isolation on public.revision_event
   for select to authenticated
-  using (org_id = public.get_my_org_id() or public.is_governance_role());
+  using (org_id = public.get_user_org_id() or public.is_governance_role());
 
 -- ---------------------------------------------------------------------------
 -- 10. staff_bind_tokens  (governance-managed bind tokens — governance-only read)
@@ -228,4 +228,4 @@ alter table public.workflow_audit_log alter column org_id set not null;
 
 create policy workflow_audit_log_tenant_isolation on public.workflow_audit_log
   for select to authenticated
-  using (org_id = public.get_my_org_id() or public.is_governance_role());
+  using (org_id = public.get_user_org_id() or public.is_governance_role());
