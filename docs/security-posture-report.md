@@ -259,7 +259,7 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 | #52 | PR | 0178 F3+F4 RLS hardening | `security`, `P1` | Open |
 | #53 | Issue | Migration 0179 retrospective | `security`, `P1`, `database`, `retrospective` | Open |
 | #54 | PR | Identity reconciliation hardening + REVOKE sweep (0180+0181) | `security`, `P1`, `identity-security`, `database` | Open — closes #37 |
-| #56 | Issue | Post-mortem v16.8.0 — RLS linter CI gate + cross-tenant pgTAP suite | `security`, `audit`, `P1` | A1 ✅ Closed (`383bb9aca8`), A3 ✅ Closed (`1fba55bd`), A4 blocked (SUPABASE_ACCESS_TOKEN not provisioned) |
+| #56 | Issue | Post-mortem v16.8.0 — RLS linter CI gate + cross-tenant pgTAP suite | `security`, `audit`, `P1` | A1 ✅ Closed (`383bb9aca8`), A3 ✅ Closed (`1fba55bd`), A4 ✅ Closed (SUPABASE_ACCESS_TOKEN provisioned via Secrets API) |
 
 ---
 
@@ -287,4 +287,4 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 
 *Generated: 2026-08-28 · Monolith Workspace security audit cycle*  
 *This document is the authoritative security status record for the v16.8.0 audit cycle.*  
-*Last updated: 2026-08-28 — pgTAP SQL total 147 (forward 110 + rollback 12 + cross-tenant 25); cross-tenant isolation suite T01–T25 live on main (commit `b63d0cd7`); CI workflow live (commit `ed53e4fb10`); lint-rls-org-id.py delta mode live (commit `383bb9aca8`); issue #56 A1+A3 closed; A4 (SUPABASE_ACCESS_TOKEN) pending; npm audit 0 vulnerabilities confirmed.*
+*Last updated: 2026-09-01 — pgTAP SQL total 147 (forward 110 + rollback 12 + cross-tenant 25); cross-tenant isolation suite T01–T25 live on main (commit `b63d0cd7`); CI workflow live (commit `ed53e4fb10`); lint-rls-org-id.py delta mode live (commit `383bb9aca8`); issue #56 fully closed — A1 ✅ (`383bb9aca8`), A3 ✅ (`1fba55bd`), A4 ✅ (SUPABASE_ACCESS_TOKEN provisioned via Secrets API, key_id `3380204578043523366`); withSuperAdminGuard test suite extended T-SG-08–11 (commit `ffb489d64c`); npm audit 0 vulnerabilities confirmed.*
