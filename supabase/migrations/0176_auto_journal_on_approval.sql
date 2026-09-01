@@ -9,6 +9,11 @@
 -- Rollback : DROP TRIGGER / FUNCTION ด้านล่าง
 -- =============================================================================
 
+-- Extend invoice_status enum for approval/void workflow states
+-- (must run OUTSIDE a transaction block — PostgreSQL constraint)
+ALTER TYPE public.invoice_status ADD VALUE IF NOT EXISTS 'approved';
+ALTER TYPE public.invoice_status ADD VALUE IF NOT EXISTS 'voided';
+
 BEGIN;
 
 -- ── Dependency DDL (added for CI compatibility) ──────────────────────────────
