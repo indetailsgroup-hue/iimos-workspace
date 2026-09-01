@@ -1144,9 +1144,27 @@ jobs:
           )
           print(f'  iter 25j: replaced {count_before} remaining occurrence(s) with double-wrapped IMMUTABLE expr')
 
+          # Step 3 (iter 25k): fix PERFORM cron.unschedule(...) WHERE EXISTS -> valid IF/THEN
+          old_cron = (
+              "    PERFORM cron.unschedule('check-overdue-invoices')\n"
+              "    WHERE EXISTS (\n"
+              "      SELECT 1 FROM cron.job WHERE jobname = 'check-overdue-invoices'\n"
+              "    );"
+          )
+          new_cron = (
+              "    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'check-overdue-invoices') THEN\n"
+              "      PERFORM cron.unschedule('check-overdue-invoices');\n"
+              "    END IF;"
+          )
+          if old_cron in new_content:
+              new_content = new_content.replace(old_cron, new_cron)
+              print('  iter 25k: fixed PERFORM cron.unschedule WHERE EXISTS -> IF/THEN')
+          else:
+              print('  iter 25k: cron pattern not found (may be already patched)')
+
           with open(filepath, 'w', encoding='utf-8') as f:
               f.write(new_content)
-          print(f'Patch applied (iter 25j): constraint removed + all (created_at::DATE) fixed in {fname}')
+          print(f'Patch applied (iter 25j+25k): constraint removed + all (created_at::DATE) fixed in {fname}')
           PYEOF
 
       # ── Start local Supabase stack (Docker available on ubuntu-latest) ─────
