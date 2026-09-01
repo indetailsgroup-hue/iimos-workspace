@@ -106,6 +106,10 @@ ALLOWLIST: frozenset[str] = frozenset(
         "line_oa_message_templates",   # 0189: sentinel-org backfill (config table); policy added.
         "line_oa_orders",              # 0189: org_id backfilled from site_code; policy added.
         "line_oa_outbound_messages",   # 0189: org_id via line_oa_conversations FK; policy added.
+        # ── Phase 2 RLS — 0194 Operational Misc domain (governance-only tables) ─────────
+        # Migration 0194 replaced the SELECT policy with governance-only access.
+        # staff_bind_tokens holds sensitive login-binding tokens; no per-org user access permitted.
+        "staff_bind_tokens",           # 0194: governance-only policy (is_governance_role()); intentionally not org_id-scoped.
     }
 )
 
