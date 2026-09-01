@@ -725,6 +725,67 @@ jobs:
           echo "  CONCURRENTLY lines remaining: $(grep -c 'CONCURRENTLY' supabase/migrations/0173_rls_isolation_hardening.sql || echo 0)"
           echo "  MIN(org_id) remaining: $(grep -c 'MIN(org_id)' supabase/migrations/0173_rls_isolation_hardening.sql || echo 0)"
 
+      # ── Iter 15: patch 0173_rollback.sql — plural table names + exception-safe
+      #   publication adds.  Uses Python heredoc so $pub$ dollar signs are never
+      #   expanded by the shell.
+      - name: Patch 0173_rollback — plural names + exception-safe publication adds
+        run: |
+          python3 - <<'PYEOF'
+          import re, sys
+
+          path = 'supabase/migrations/0173_rollback.sql'
+          with open(path) as f:
+              txt = f.read()
+
+          # ── 1. Wrap ADD TABLE lines in exception-safe DO blocks + plural rename ──
+          txt = txt.replace(
+              'ALTER PUBLICATION supabase_realtime ADD TABLE job;',
+              'DO $pub$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE jobs; EXCEPTION WHEN OTHERS THEN NULL; END $pub$;'
+          )
+          txt = txt.replace(
+              'ALTER PUBLICATION supabase_realtime ADD TABLE invoice;',
+              'DO $pub$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE invoices; EXCEPTION WHEN OTHERS THEN NULL; END $pub$;'
+          )
+
+          # ── 2. DROP POLICY ... ON <singular> → ON <plural> ───────────────────────
+          # Apply longer compound names FIRST to prevent substring collision.
+          for old, new in [
+              (' ON job_panel;',       ' ON job_panels;'),
+              (' ON invoice_payment;', ' ON invoice_payments;'),
+              (' ON quotation_line;',  ' ON quotation_lines;'),
+              (' ON customer;',        ' ON customers;'),
+              (' ON job;',             ' ON jobs;'),
+              (' ON quotation;',       ' ON quotations;'),
+              (' ON invoice;',         ' ON invoices;'),
+          ]:
+              txt = txt.replace(old, new)
+
+          # ── 3. ALTER TABLE <singular> → ALTER TABLE <plural> ─────────────────────
+          for old, new in [
+              ('ALTER TABLE job_panel ',       'ALTER TABLE job_panels '),
+              ('ALTER TABLE invoice_payment ', 'ALTER TABLE invoice_payments '),
+              ('ALTER TABLE quotation_line ',  'ALTER TABLE quotation_lines '),
+              ('ALTER TABLE customer ',        'ALTER TABLE customers '),
+              ('ALTER TABLE job ',             'ALTER TABLE jobs '),
+              ('ALTER TABLE quotation ',       'ALTER TABLE quotations '),
+              ('ALTER TABLE invoice ',         'ALTER TABLE invoices '),
+          ]:
+              txt = txt.replace(old, new)
+
+          with open(path, 'w') as f:
+              f.write(txt)
+
+          # Verify: no bare singular publication-add lines should remain
+          remaining = [l.strip() for l in txt.splitlines()
+                       if 'ADD TABLE job;' in l or 'ADD TABLE invoice;' in l]
+          print(f"0173_rollback.sql patched.")
+          print(f"  Unpatched ADD TABLE lines remaining: {len(remaining)}")
+          if remaining:
+              for r in remaining:
+                  print(f"    {r}")
+              sys.exit(1)
+          PYEOF
+
       # ── Start local Supabase stack (Docker available on ubuntu-latest) ─────
       # supabase start auto-applies every .sql file in supabase/migrations/
       # in lexicographic order:
