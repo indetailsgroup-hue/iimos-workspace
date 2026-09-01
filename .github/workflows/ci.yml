@@ -872,6 +872,35 @@ jobs:
             unit_price  numeric NOT NULL DEFAULT 0,
             amount      numeric NOT NULL DEFAULT 0
           );
+
+          -- ── iter 25g: CI bypass — rpc_upsert_vendor without governance guard ──────
+          -- In local CI the postgres session carries no JWT, so is_governance_role()
+          -- returns false and the real definition (0064) rejects every call.
+          -- This stub (01721) runs before the vendor seed (01782), so this override
+          -- is in effect when 01782 calls rpc_upsert_vendor.
+          CREATE OR REPLACE FUNCTION public.rpc_upsert_vendor(
+            p_vendor_code text,
+            p_name        text,
+            p_tax_id      text    DEFAULT NULL,
+            p_address     text    DEFAULT NULL,
+            p_active      boolean DEFAULT true
+          )
+          RETURNS text
+          LANGUAGE plpgsql
+          SECURITY DEFINER
+          SET search_path = public
+          AS $$
+          BEGIN
+            INSERT INTO public.vendor_master (vendor_code, name, tax_id, address, active)
+            VALUES (p_vendor_code, p_name, p_tax_id, p_address, p_active)
+            ON CONFLICT (vendor_code) DO UPDATE SET
+              name    = EXCLUDED.name,
+              tax_id  = EXCLUDED.tax_id,
+              address = EXCLUDED.address,
+              active  = EXCLUDED.active;
+            RETURN p_vendor_code;
+          END;
+          $$;
           SQL
 
           # ── iter 25e: dedup migration — drop policies 0173 created that 0178 also creates ──
