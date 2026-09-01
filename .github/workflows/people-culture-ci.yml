@@ -1,6 +1,7 @@
 name: People & Culture CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [feature/people-culture-module]
     paths:
