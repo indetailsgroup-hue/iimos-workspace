@@ -205,7 +205,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_org_id        UUID;
-  v_invoice       invoice%ROWTYPE;
+  v_invoice       invoices%ROWTYPE;
   v_new_remaining NUMERIC;
   v_payment_id    UUID := gen_random_uuid();
 BEGIN
@@ -335,7 +335,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_qt       quotation%ROWTYPE;
+  v_qt       quotations%ROWTYPE;
   v_inv_id   UUID;
   v_inv_code TEXT;
   v_due      DATE;
