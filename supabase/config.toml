@@ -119,6 +119,13 @@ command  = "SELECT rpc_refresh_etax_health_trend_mv();"
 schedule = "0 0 20 * *"
 command  = "SELECT public.fn_auto_create_next_etax_partition();"
 
+
+# [7] Hourly refresh of mv_etax_submission_sla (SLA compliance materialized view)
+#     Keeps SLA breach flags and severity tiers fresh for rpc_etax_submission_sla_cached().
+[cron."refresh-etax-sla-mv"]
+schedule = "0 * * * *"
+command  = "SELECT public.fn_refresh_mv_etax_submission_sla();"
+
 [functions.etax-risk-notify]
 verify_jwt = true
 
