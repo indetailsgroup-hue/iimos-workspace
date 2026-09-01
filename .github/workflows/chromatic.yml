@@ -86,6 +86,10 @@ jobs:
           #   (uses Chromatic's TurboSnap feature — reduces snapshot quota)
           onlyChanged: true
 
+          # --auto-accept-changes: automatically accept all visual changes on this
+          # branch as the new baseline. Enables baseline establishment on first run.
+          autoAcceptChanges: "feature/people-culture-module"
+
           # --exit-zero-on-changes: CI stays green even when visual diffs are
           # detected; review diffs in the Chromatic UI and accept/deny there.
           # Set to false if you want CI to block on unaccepted visual changes.
