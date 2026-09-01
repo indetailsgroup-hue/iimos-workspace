@@ -236,6 +236,19 @@
           oninput="applyFilters()"
           class="w-full text-xs border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
+      <!-- Date range filter -->
+      <div class="flex items-center gap-2">
+        <label class="text-xs font-medium text-slate-500">จากวันที่:</label>
+        <input id="filter-date-from" type="date"
+          oninput="applyFilters()"
+          class="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-xs font-medium text-slate-500">ถึงวันที่:</label>
+        <input id="filter-date-to" type="date"
+          oninput="applyFilters()"
+          class="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
+      </div>
       <div id="filter-count" class="text-xs text-slate-400 whitespace-nowrap"></div>
     </div>
   </div>
@@ -343,6 +356,17 @@
         <div id="site-bars" class="space-y-2.5">
           <div class="text-xs text-slate-400">กำลังโหลด...</div>
         </div>
+      </div>
+    </section>
+
+    <!-- ── Daily Trend Chart ── -->
+    <section class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h3 class="text-sm font-semibold text-slate-700">แนวโน้มรายวัน (จำนวน FPR)</h3>
+        <span class="text-xs text-slate-400" id="trend-chart-range"></span>
+      </div>
+      <div style="position:relative; height:220px;">
+        <canvas id="trend-chart"></canvas>
       </div>
     </section>
 
@@ -940,6 +964,7 @@ async function loadDashboard() {
     renderStats(allRows);
     renderChart(allRows);
     renderSiteBars(allRows);
+    renderTrendChart(allRows);
     loadApprovalQueue(getConfig());
     loadDeadLetterPanel(getConfig());
     document.getElementById('last-updated').textContent = new Date().toLocaleTimeString('th-TH');
@@ -1034,6 +1059,79 @@ function renderSiteBars(rows) {
     </div>`).join('');
 }
 
+// ─── Daily Trend Chart ───────────────────────────────────────────────────────
+let trendChartInstance = null;
+
+function renderTrendChart(rows) {
+  // Bucket requests by day (created_at date string YYYY-MM-DD)
+  const dayCounts = {};
+  for (const r of rows) {
+    if (!r.created_at) continue;
+    const day = r.created_at.slice(0, 10); // "YYYY-MM-DD"
+    dayCounts[day] = (dayCounts[day] || 0) + 1;
+  }
+
+  const sortedDays = Object.keys(dayCounts).sort();
+  if (sortedDays.length === 0) {
+    const canvas = document.getElementById('trend-chart');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    document.getElementById('trend-chart-range').textContent = 'ไม่มีข้อมูล';
+    return;
+  }
+
+  const labels = sortedDays;
+  const data   = sortedDays.map(d => dayCounts[d]);
+
+  document.getElementById('trend-chart-range').textContent =
+    `${sortedDays[0]}  →  ${sortedDays[sortedDays.length - 1]}`;
+
+  const canvas = document.getElementById('trend-chart');
+  if (trendChartInstance) { trendChartInstance.destroy(); trendChartInstance = null; }
+
+  trendChartInstance = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'จำนวน FPR / วัน',
+        data,
+        tension: 0.35,
+        fill: true,
+        borderColor: 'rgb(59,130,246)',
+        backgroundColor: 'rgba(59,130,246,0.08)',
+        pointRadius: data.length <= 30 ? 4 : 2,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.parsed.y} คำขอ`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { maxTicksLimit: 14, font: { size: 11 } },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { precision: 0, font: { size: 11 } },
+          grid: { color: 'rgba(148,163,184,0.15)' },
+        },
+      },
+    },
+  });
+}
+
 // ─── Site filter population ───────────────────────────────────────────────────
 function populateSiteFilter(rows) {
   const sites = [...new Set(rows.map(r => r.site_code))].sort();
@@ -1045,15 +1143,19 @@ function populateSiteFilter(rows) {
 
 // ─── Filters ─────────────────────────────────────────────────────────────────
 function applyFilters() {
-  const status = document.getElementById('filter-status').value;
-  const site   = document.getElementById('filter-site').value;
-  const level  = document.getElementById('filter-level').value;
+  const status    = document.getElementById('filter-status').value;
+  const site      = document.getElementById('filter-site').value;
+  const level     = document.getElementById('filter-level').value;
+  const dateFrom  = document.getElementById('filter-date-from').value;  // "YYYY-MM-DD" or ""
+  const dateTo    = document.getElementById('filter-date-to').value;
   const search = document.getElementById('filter-search').value.trim().toLowerCase();
 
   filteredRows = allRows.filter(r => {
     if (status && r.status !== status) return false;
     if (site   && r.site_code !== site) return false;
     if (level  && r.approval_level !== level) return false;
+    if (dateFrom && r.created_at && r.created_at.slice(0,10) < dateFrom) return false;
+    if (dateTo   && r.created_at && r.created_at.slice(0,10) > dateTo)   return false;
     if (search) {
       const hay = [r.reason,r.item_hint,r.requester,r.site_code,r.status,r.approver]
         .filter(Boolean).join(' ').toLowerCase();
@@ -1067,7 +1169,10 @@ function applyFilters() {
   renderTable(filteredRows);
 
   const filterCount = document.getElementById('filter-count');
-  if (status || site || level || search) {
+  // Also re-render trend chart with filtered rows
+  renderTrendChart(filteredRows);
+
+  if (status || site || level || search || dateFrom || dateTo) {
     filterCount.textContent = `แสดง ${filteredRows.length} / ${allRows.length} รายการ`;
   } else {
     filterCount.textContent = '';
