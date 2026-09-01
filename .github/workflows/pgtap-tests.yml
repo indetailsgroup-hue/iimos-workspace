@@ -199,9 +199,10 @@ jobs:
                 echo "Prefix $prefix -> target: $target"
               else
                 echo "  + appending $f"
-                printf '\n-- ================================================\n' >> "$target"
-                printf '-- Merged from: %s (CI dup-prefix fix)\n' "$f" >> "$target"
-                printf '-- ================================================\n' >> "$target"
+                echo '' >> "$target"
+                echo '-- ================================================' >> "$target"
+                echo "-- Merged from: $f (CI dup-prefix fix)" >> "$target"
+                echo '-- ================================================' >> "$target"
                 cat "$f" >> "$target"
                 rm "$f"
               fi
