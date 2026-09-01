@@ -70,6 +70,9 @@ CREATE TABLE IF NOT EXISTS invoice_notifications (
   invoice_code      TEXT              NOT NULL,
   customer_name     TEXT,
 
+  -- Spam-prevention date (indexed separately; TIMESTAMPTZ::DATE is not IMMUTABLE)
+  notification_date DATE              NOT NULL DEFAULT CURRENT_DATE,
+
   -- Snooze
   snoozed_until     DATE,
   snooze_count      INT               NOT NULL DEFAULT 0,
@@ -85,7 +88,7 @@ CREATE TABLE IF NOT EXISTS invoice_notifications (
 
 -- ป้องกัน spam: notification type เดียวกัน ต่อ invoice ต่อวัน (expression index, not inline constraint)
 CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_daily
-  ON invoice_notifications(invoice_id, notification_type, (created_at::DATE));
+  ON invoice_notifications(invoice_id, notification_type, notification_date);
 
 CREATE INDEX IF NOT EXISTS idx_notif_invoice   ON invoice_notifications(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_notif_org       ON invoice_notifications(org_id);
@@ -254,7 +257,8 @@ BEGIN
         days_overdue,
         amount_remaining,
         invoice_code,
-        customer_name
+        customer_name,
+        notification_date
       )
       VALUES (
         v_invoice.org_id,
@@ -264,7 +268,8 @@ BEGIN
         v_days_overdue,
         v_invoice.remaining_amount,
         v_invoice.invoice_code,
-        v_invoice.customer_name
+        v_invoice.customer_name,
+        CURRENT_DATE
       );
       v_inserted := v_inserted + 1;
 
@@ -328,7 +333,8 @@ BEGIN
     days_overdue,
     amount_remaining,
     invoice_code,
-    customer_name
+    customer_name,
+    notification_date
   )
   SELECT
     NEW.org_id,
@@ -338,10 +344,11 @@ BEGIN
     v_days_overdue,
     NEW.remaining_amount,
     NEW.invoice_code,
-    c.name
+    c.name,
+    CURRENT_DATE
   FROM customers c
   WHERE c.customer_id = NEW.customer_id
-  ON CONFLICT (invoice_id, notification_type, (created_at::DATE))
+  ON CONFLICT (invoice_id, notification_type, notification_date)
   DO NOTHING;
 
   RETURN NEW;
@@ -693,7 +700,7 @@ CREATE INDEX IF NOT EXISTS idx_invoices_overdue
     AND status NOT IN ('PAID', 'CANCELLED');
 
 CREATE INDEX IF NOT EXISTS idx_notif_invoice_type_date
-  ON invoice_notifications(invoice_id, notification_type, (created_at::DATE));
+  ON invoice_notifications(invoice_id, notification_type, notification_date);
 
 -- ============================================================================
 -- END OF MIGRATION 0180
