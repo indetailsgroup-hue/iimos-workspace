@@ -331,14 +331,18 @@ jobs:
             approved_at   timestamptz,
             approved_by   uuid,
             created_by    uuid,
+            org_id        uuid,
             updated_at    timestamptz   NOT NULL DEFAULT now()
           );
+          CREATE INDEX IF NOT EXISTS idx_quotation_org ON quotation(org_id);
 
           CREATE TABLE IF NOT EXISTS invoice (
             invoice_id    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
             invoice_code  text NOT NULL DEFAULT '',
-            created_by    uuid
+            created_by    uuid,
+            org_id        uuid
           );
+          CREATE INDEX IF NOT EXISTS idx_invoice_org ON invoice(org_id);
 
           CREATE TABLE IF NOT EXISTS job (
             job_id        uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -346,31 +350,46 @@ jobs:
             quotation_id  uuid,
             invoice_id    uuid,
             created_by    uuid,
+            org_id        uuid,
             updated_at    timestamptz NOT NULL DEFAULT now()
           );
+          CREATE INDEX IF NOT EXISTS idx_job_org ON job(org_id);
 
-          -- Additional singular legacy stubs required by 0173 F1 ALTER TABLE / backfill
+          -- Additional singular legacy stubs required by 0173 F1 ALTER TABLE / backfill.
+          -- org_id is included so that 0173's ALTER TABLE ... ADD COLUMN IF NOT EXISTS
+          -- is a no-op, and non-concurrent indexes are pre-created so that 0173's
+          -- CREATE INDEX CONCURRENTLY IF NOT EXISTS statements are also no-ops
+          -- (CONCURRENTLY cannot run inside a BEGIN; transaction block, but
+          -- IF NOT EXISTS on a pre-existing index exits silently before that check).
           CREATE TABLE IF NOT EXISTS customer (
             customer_id  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
             name         text        NOT NULL    DEFAULT '',
             created_by   uuid,
+            org_id       uuid,
             updated_at   timestamptz             DEFAULT now()
           );
+          CREATE INDEX IF NOT EXISTS idx_customer_org ON customer(org_id);
 
           CREATE TABLE IF NOT EXISTS job_panel (
             panel_id  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-            job_id    uuid
+            job_id    uuid,
+            org_id    uuid
           );
+          CREATE INDEX IF NOT EXISTS idx_job_panel_org ON job_panel(org_id);
 
           CREATE TABLE IF NOT EXISTS quotation_line (
             line_id      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-            quotation_id uuid
+            quotation_id uuid,
+            org_id       uuid
           );
+          CREATE INDEX IF NOT EXISTS idx_quotation_line_org ON quotation_line(org_id);
 
           CREATE TABLE IF NOT EXISTS invoice_payment (
             payment_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-            invoice_id uuid
+            invoice_id uuid,
+            org_id     uuid
           );
+          CREATE INDEX IF NOT EXISTS idx_invoice_payment_org ON invoice_payment(org_id);
           SQL
 
           # ── File 2: satisfies all remaining 0173 prerequisites ──────────────
