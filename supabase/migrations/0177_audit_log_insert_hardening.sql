@@ -43,6 +43,15 @@ BEGIN
 END;
 $$;
 
+-- Extend message_kind check constraint to include 'quick_reply' (needed by 0177 group).
+-- Migration 0098 defined CHECK (message_kind IN ('text', 'flex')); we need to add
+-- 'quick_reply'. DROP + re-ADD is the only way to extend a CHECK constraint in PG.
+ALTER TABLE public.line_oa_message_templates
+    DROP CONSTRAINT IF EXISTS line_oa_message_templates_message_kind_check;
+ALTER TABLE public.line_oa_message_templates
+    ADD CONSTRAINT line_oa_message_templates_message_kind_check
+        CHECK (message_kind IN ('text', 'flex', 'quick_reply'));
+
 BEGIN;
 
 -- ============================================================================
