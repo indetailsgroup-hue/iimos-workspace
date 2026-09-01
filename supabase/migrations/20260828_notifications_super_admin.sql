@@ -6,7 +6,7 @@
 -- Notifications table (tenant-scoped)
 CREATE TABLE IF NOT EXISTS notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  org_id UUID NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
   user_id UUID NOT NULL, -- target user, or '*' for broadcast
   category TEXT NOT NULL CHECK (category IN ('job_status', 'billing', 'team', 'system', 'usage', 'export')),
   priority TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
@@ -29,7 +29,7 @@ CREATE INDEX idx_notifications_category ON notifications(org_id, category);
 CREATE TABLE IF NOT EXISTS notification_preferences (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL,
-  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  org_id UUID NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
   email_digest JSONB NOT NULL DEFAULT '{"job_status":"immediate","billing":"immediate","team":"daily","system":"weekly","usage":"immediate","export":"none"}',
   in_app_enabled JSONB NOT NULL DEFAULT '{"job_status":true,"billing":true,"team":true,"system":true,"usage":true,"export":true}',
   global_mute BOOLEAN DEFAULT false,
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
 CREATE TABLE IF NOT EXISTS notification_digest_queue (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL,
-  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  org_id UUID NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
   notification_ids UUID[] NOT NULL,
   frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly')),
   scheduled_at TIMESTAMPTZ NOT NULL,
