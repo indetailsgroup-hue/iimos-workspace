@@ -1,5 +1,28 @@
 # Monolith Implementation Progress
 
+## v17.5 — Training Tracker Module (🚧 In Progress — Q1 2027)
+
+**Branch:** `feature/v17-5-training-tracker-stories` | **PR:** #76 (open) | **Commit:** 1cd41b27
+
+### ✅ Committed to branch
+- `supabase/migrations/20270101_training_tracker.sql` — 3 tables (`training_courses`, `training_enrollments`, `training_completions`), `tt_is_professional_plus()` plan gate helper, 2 triggers, 2 views, RLS, 10 global seed courses
+- `src/training/trainingTypes.ts` — full type system: `TrainingCourseCategory` (8), `TrainingStatus` (4), `TRAINING_PLAN_GATE`, all interfaces + filters + `TrainingTrackerState`
+- `src/jobs/ProcessTemplateList.stories.tsx` — appended `CloneFlowInteraction` story (now 12 stories); module-level `cloneGlobalTemplateSpy = fn(...)`
+- `.github/ISSUE_TEMPLATE/v17-process-templates-bug.yml` — bug report template; labels: `bug`, `v17-process-templates`
+- `src/training/trainingStore.ts` — Zustand store; `TrainingPlanGateError` class; fetchCourses, enroll, logCompletion + all CRUD + analytics; all writes PROFESSIONAL+ gated
+- `src/training/__tests__/trainingTypes.test.ts` — 50+ Vitest tests: canAccessTrainingTracker, all 8 categories, all 4 statuses, defaults, interface satisfies, SuperEmployeeStage linkage
+- `src/training/TrainingCourseList.tsx` — PROFESSIONAL+ gate wall, debounced search (300ms), category + stage + isActive filters, course cards with stage badge/enroll btn, loading skeleton, empty state, error banner
+
+### ✅ Written this session (to be committed)
+- `src/training/__tests__/trainingStore.test.ts` — 55 Vitest tests; thenable Proxy mock; TrainingPlanGateError, plan gate FREE/STARTER/PROFESSIONAL/ENTERPRISE, fetchCourses, logCompletion optimistic, cancelEnrollment optimistic, deleteCourse optimistic
+- `src/training/TrainingEnrollmentPanel.tsx` — bulk enroll panel; employee ID tag input (Enter/click); due date picker; notes textarea; status timeline (enrolledAt, dueDate, status badge); plan gate wall; all 15 data-testids
+- `src/training/TrainingCourseList.stories.tsx` — 10 Storybook stories; Default, PlanGateWallFree, PlanGateWallStarter, LoadingSkeleton, EmptyStateNoResults, EmptyStateFirstRun, ProfessionalPlanAdmin, CategoryFilterAiLiteracy, StageFilterPreset, AdminEnrollFlow (play fn + module-level enrollSpy)
+
+### 🔜 Pending
+- [ ] Merge PR #76 → main + release tag v17.5.0
+
+---
+
 ## v17.0 — Process Templates Module (✅ Released 2026-12-01)
 
 **Release tag:** v17.0.0 | **PR:** #75 (merged) | **Merge SHA:** 7d9e0467
@@ -48,4 +71,4 @@
 - [ ] Multi-signature release approval
 - [ ] Push to GitHub (auth pending)
 
-*Last updated: 2026-02-16*
+*Last updated: 2027-01-01*

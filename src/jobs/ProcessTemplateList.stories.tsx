@@ -296,3 +296,56 @@ export const CategoryDropdownInteraction: Story = {
     await expect(select).toHaveValue('CNC');
   },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Clone Flow Interaction (play function)
+// Added v17.5: verifies cloneGlobalTemplate is called with correct args
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Module-level spy so both the decorator and play function share the same ref.
+ * fn() is @storybook/test's vi-compatible mock — supports .mockClear() and
+ * toHaveBeenCalledWith assertions.
+ */
+const cloneGlobalTemplateSpy = fn(async (_templateId: string, _orgId: string) => ({} as import('./processTemplateTypes').JobTemplateSummary));
+
+/** Clone flow interaction: Admin clicks Clone on a global template */
+export const CloneFlowInteraction: Story = {
+  name: 'Clone Flow — Interaction Test',
+  args: { isAdmin: true, orgId: ORG_ID },
+  decorators: [
+    (Story: StoryFn) => {
+      // Reset call history on each story render so interaction tests are idempotent
+      cloneGlobalTemplateSpy.mockClear();
+      useProcessTemplateStore.setState({
+        templates: MOCK_TEMPLATES,
+        filters: { ...DEFAULT_TEMPLATE_FILTERS },
+        isLoading: false,
+        error: null,
+        fetchTemplates: async () => {},
+        cloneGlobalTemplate: cloneGlobalTemplateSpy,
+      });
+      return <Story />;
+    },
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+
+    // 1. Verify clone buttons are rendered for admin (global templates only)
+    const cloneBtns = canvas.getAllByTestId('clone-template-btn');
+    await expect(cloneBtns.length).toBeGreaterThan(0);
+    await expect(cloneBtns.length).toBe(GLOBAL_TEMPLATES.length);
+
+    // 2. Click the first clone button (first global template: Cabinet Kitchen Standard)
+    await userEvent.click(cloneBtns[0]);
+
+    // 3. cloneGlobalTemplate must have been called exactly once
+    await expect(cloneGlobalTemplateSpy).toHaveBeenCalledTimes(1);
+
+    // 4. Verify it was called with (templateId, orgId) matching the first global template
+    await expect(cloneGlobalTemplateSpy).toHaveBeenCalledWith(
+      GLOBAL_TEMPLATES[0].id,  // 't-001'
+      ORG_ID,                  // 'org-daph-th-001'
+    );
+  },
+};

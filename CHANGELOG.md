@@ -5,6 +5,53 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v17.5.0] — Training Tracker Module — 🚧 In Progress (Q1 2027)
+
+### Added
+
+#### Training Tracker (`src/training/`)
+- **`src/training/trainingTypes.ts`** — complete TypeScript type system for Training Tracker module
+  - `TrainingCourseCategory` union (8 values): `AI_LITERACY`, `SAFETY`, `QUALITY`, `MACHINE_OPERATION`, `SOFT_SKILLS`, `COMPLIANCE`, `LEADERSHIP`, `TECHNICAL`
+  - `TrainingStatus` union (4 values): `NOT_STARTED`, `IN_PROGRESS`, `COMPLETED`, `EXPIRED`
+  - `TRAINING_PLAN_GATE = 'PROFESSIONAL'` — PROFESSIONAL+ gated feature
+  - `TrainingCourse`, `TrainingEnrollment`, `TrainingCompletion` interfaces
+  - `TrainingCourseFilters`, `DEFAULT_TRAINING_FILTERS`, `TrainingTrackerState`
+  - `SuperEmployeeStage`-linked seed courses (AI Literacy ×3 covering AI_UNAWARE → SUPER_EMPLOYEE progression)
+
+#### Database Migrations
+- **`supabase/migrations/20270101_training_tracker.sql`** — Training Tracker schema
+  - `training_courses` table — global + org-specific courses; `required_for_stage` links to `SuperEmployeeStage`
+  - `training_enrollments` table — per-employee enrollment with `status` and `progress_pct`
+  - `training_completions` table — completion records with `score` and `is_passed` (trigger-computed vs `passing_score`)
+  - `tt_is_professional_plus()` plan gate helper — delegates to `pt_current_org_plan()` from process templates migration
+  - `tt_set_completion_passed` trigger — sets `is_passed` by joining `training_courses.passing_score`
+  - `tt_sync_enrollment_completed` trigger — auto-sets enrollment `status = COMPLETED` on completion insert
+  - `training_progress_v` view — per-employee completion stats with `SECURITY INVOKER`
+  - `org_training_summary_v` view — org-level aggregates (completion rate, avg score, enrolled count)
+  - RLS policies — tenant isolation; ADMIN+ for course creation; employees see own enrollments/completions
+  - 10 global seed courses (AI Literacy ×3 mapped to SuperEmployeeStage progression)
+
+#### Storybook (Process Templates — v17.0 enhancement)
+- **`CloneFlowInteraction`** story added to `src/jobs/ProcessTemplateList.stories.tsx` (now 12 stories)
+  - Uses `cloneGlobalTemplateSpy = fn(...)` module-level spy + `mockClear()` in decorator for idempotent play()
+  - Interaction test: click clone button → await spy called with correct templateId → verify toast visible
+
+#### GitHub Issue Templates
+- **`.github/ISSUE_TEMPLATE/v17-process-templates-bug.yml`** — bug report template for v17.0 Process Templates
+  - Labels: `bug`, `v17-process-templates`
+  - 8 fields: title, environment, plan tier, affected component (ProcessTemplateList / BottleneckHeatmap / Both), steps to reproduce, expected/actual behavior, logs
+
+### In Progress
+- `src/training/trainingStore.ts` — Zustand store (pending)
+- `src/training/TrainingCourseList.tsx` — UI component (pending)
+- `src/training/TrainingEnrollmentPanel.tsx` — UI component (pending)
+- Vitest unit tests for trainingTypes + trainingStore (pending)
+- Storybook stories for Training Tracker components (pending)
+
+**Branch:** `feature/v17-5-training-tracker-stories` | **PR:** #76 (open)
+
+---
+
 ## [v17.0.0] — Process Templates Module — 2026-12-01
 
 ### Added
