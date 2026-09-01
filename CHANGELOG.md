@@ -5,6 +5,77 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v17.5.3] — AI Production Scheduler + Culture Metrics Dashboard + AiCostDashboard Tests — 2027-01-25
+
+### Added
+
+#### SQL Migration — AI Production Scheduler
+- `supabase/migrations/20270125_ai_production_scheduler.sql` — ENTERPRISE-gated module
+  - Tables: `aps_schedule_runs` (run header, status, ENTERPRISE gate check), `aps_schedule_items` (ordered line items, `depends_on UUID[]`, `ai_confidence_score 0–100`, `is_overridden`, `override_reason`), `aps_run_events` (audit log, `event_type`, `triggered_by`)
+  - View: `aps_run_summary_v` — aggregates item counts, weighted confidence, override rate per run
+  - Function: `aps_is_enterprise()` — plan gate helper
+  - RLS: tenant isolation on all 3 tables; MANAGER+ create/approve runs; STAFF read own items; `aps_run_events` insert-only for authenticated users
+  - Indexes: 6 covering tenant lookups, status filtering, item ordering
+  - Assertion block: verifies table/view/function existence post-migration
+
+#### TypeScript Types — AI Production Scheduler
+- `src/ai-scheduler/aiSchedulerTypes.ts` — complete type system (ENTERPRISE gate)
+  - Union types: `ApsRunStatus` (DRAFT / PENDING_APPROVAL / APPROVED / RUNNING / COMPLETED / FAILED / CANCELLED), `ApsItemStatus`, `ApsEventType`
+  - DB row types: `ApsScheduleRunRow`, `ApsScheduleItemRow`, `ApsRunEventRow`, `ApsRunSummaryRow`
+  - App-layer types: `ApsScheduleRun`, `ApsScheduleItem`, `ApsRunEvent`, `ApsRunSummary`
+  - Payload types: `CreateScheduleRunPayload`, `AddScheduleItemPayload`, `UpdateItemStatusPayload`, `ApproveRunPayload`
+  - Plan gate: `AiSchedulerPlanGateError` (extends Error), `canAccessAiScheduler`, `AI_SCHEDULER_PLAN_GATE = 'ENTERPRISE'`
+  - Label constants: `APS_RUN_STATUS_LABEL`, `APS_ITEM_STATUS_LABEL`, `APS_EVENT_TYPE_LABEL`
+  - Mappers: `mapDbScheduleRun`, `mapDbScheduleItem`, `mapDbRunEvent`, `mapDbRunSummary`
+
+#### Zustand Store — AI Production Scheduler
+- `src/ai-scheduler/aiSchedulerStore.ts` — `useAiSchedulerStore`; ENTERPRISE gate on all write actions
+  - State: `runs`, `currentRun`, `scheduleItems`, `runEvents`, `runSummaries`, `isLoading`, `error`
+  - Fetch actions: `fetchRuns`, `fetchScheduleItems`, `fetchRunEvents`, `fetchRunSummaries`
+  - Write actions (ENTERPRISE gate): `createRun`, `addScheduleItem` (auto-sets `sequence_order` to `currentItems.length + 1`), `updateItemStatus` (sets `is_overridden: true` when `overrideReason` provided), `approveRun` (writes `approved_by` from `supabase.auth.getUser()` + `approved_at: new Date().toISOString()`), `cancelRun`
+  - Utility: `setFilters`, `clearError`
+
+#### SQL Migration — Culture Metrics Dashboard
+- `supabase/migrations/20270125_culture_metrics_dashboard.sql` — PROFESSIONAL+-gated module
+  - Tables: `cmd_metric_definitions` (custom KPIs, hierarchy_level, weight), `cmd_metric_snapshots` (time-series values, `snapshot_date`, `recorded_by`), `cmd_enps_surveys` (eNPS survey lifecycle, `min_responses` default 3, `is_active`), `cmd_enps_responses` (anonymous — **no user_id column**)
+  - Views: `cmd_org_health_v` (weighted composite score, last 30 days), `cmd_enps_results_v` (hides results until `total_responses >= min_responses`)
+  - Function: `cmd_is_professional_plus()` — plan gate helper
+  - RLS: tenant isolation; MANAGER+ create/update definitions and surveys; anonymous `cmd_enps_responses` INSERT allowed for any authenticated user (no ownership check); results view hidden until threshold met
+  - Assertion block: verifies table/view/function existence post-migration
+
+#### TypeScript Types — Culture Metrics Dashboard
+- `src/culture-metrics/cultureMetricsTypes.ts` — complete type system (PROFESSIONAL+ gate)
+  - Union types: `CmdMetricCategory`, `CmdSnapshotTrend`, `CmdSurveyStatus`, `CmdHealthTier`
+  - DB row types: `CmdMetricDefinitionRow`, `CmdMetricSnapshotRow`, `CmdEnpsSurveyRow`, `CmdEnpsResponseRow`, `CmdOrgHealthRow`, `CmdEnpsResultRow`
+  - App-layer types: `CmdMetricDefinition`, `CmdMetricSnapshot`, `CmdEnpsSurvey`, `CmdEnpsResponse`, `CmdOrgHealth`, `CmdEnpsResult`
+  - Payload types: `CreateMetricDefinitionPayload`, `RecordSnapshotPayload`, `CreateEnpsSurveyPayload`, `SubmitEnpsResponsePayload`
+  - Plan gate: `CultureMetricsPlanGateError` (extends Error), `canAccessCultureMetrics`, `CULTURE_METRICS_PLAN_GATE`
+  - Constants: `DEFAULT_CMD_FILTERS`, `CMD_METRIC_CATEGORY_LABEL`, `CMD_SURVEY_STATUS_LABEL`, `CMD_HEALTH_TIER_LABEL`
+  - Mappers: `mapDbMetricDefinition`, `mapDbMetricSnapshot`, `mapDbEnpsSurvey`, `mapDbEnpsResponse`, `mapDbOrgHealth`, `mapDbEnpsResult`
+
+#### Zustand Store — Culture Metrics Dashboard
+- `src/culture-metrics/cultureMetricsStore.ts` — `useCultureMetricsStore`; PROFESSIONAL+ gate on all write actions except `submitEnpsResponse`
+  - State: `metricDefinitions`, `snapshots`, `orgHealth`, `enpsSurveys`, `enpsResults`, `filters`, `isLoading`, `error`
+  - Fetch actions: `fetchMetricDefinitions`, `fetchSnapshots`, `fetchOrgHealth`, `fetchEnpsSurveys`, `fetchEnpsResults`
+  - Write actions (PROFESSIONAL+ gate): `createMetricDefinition`, `updateMetricDefinition`, `recordSnapshot`, `createEnpsSurvey`, `activateEnpsSurvey`, `closeEnpsSurvey`
+  - Exempt from plan gate: `submitEnpsResponse` — anonymous employee survey submissions allowed on any authenticated plan
+  - Utility: `setFilters`, `clearError`
+
+#### Vitest Unit Tests — `AiCostDashboard.tsx`
+- `src/ai-cost/__tests__/AiCostDashboard.test.tsx` — 10 Vitest tests; mocks `useAiCostEstimationStore` via `vi.mock('../aiCostEstimationStore')` + `vi.mocked(...).mockReturnValue({...} as any)` per test
+  - FREE plan → `plan-gate-wall` visible
+  - PROFESSIONAL plan → `plan-gate-wall` visible
+  - ENTERPRISE + `isLoading=true` + empty data → `dashboard-loading` visible
+  - ENTERPRISE + empty lists → `no-budget-data`, `no-trend-data`, `no-usage-data` all visible
+  - Current-month summary rows → all 4 card testids visible + correct models count
+  - Budget over-threshold: `totalCostThb=9000`, `budgetThb=10000`, `alertThreshold=0.8` → 90% ≥ 80% → `budget-over-threshold` visible
+  - Budget under-threshold: `totalCostThb=3000` → 30% < 80% → `budget-over-threshold` absent
+  - 3 distinct months (`'2026-07'`, `'2026-08'`, `'2026-09'`) → 3 `trend-bar` elements
+  - Store error → `error-banner` with message text
+  - FREE plan + `isAdmin=true` → admin upgrade copy visible
+
+---
+
 ## [v17.5.2] — AI Cost Estimation: Tests + Dashboard + Stories — 2027-01-25
 
 ### Added

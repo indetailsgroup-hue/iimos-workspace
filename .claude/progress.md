@@ -36,9 +36,18 @@
 - `src/ai-cost/AiCostDashboard.tsx` — ENTERPRISE-gated; summary cards, budget utilization (progress bar + over-threshold warning), monthly trend (CSS bar chart), usage-by-tool table; 20 data-testids
 - `src/ai-cost/AiCostDashboard.stories.tsx` — 8 CSF3 stories; withDashboardStore decorator; PlanGateWallFree, PlanGateWallProfessional, DashboardLoading, EmptyState, WithUsageData (play assertions), WithBudgetUtilization, BudgetOverThreshold (play assertion), AdminView, StoreError
 
+### ✅ All completed (v17.5.3 — AI Production Scheduler + Culture Metrics Dashboard + AiCostDashboard tests)
+- `supabase/migrations/20270125_ai_production_scheduler.sql` — `aps_schedule_runs`, `aps_schedule_items` (`depends_on UUID[]`, `ai_confidence_score`), `aps_run_events`; `aps_run_summary_v`; ENTERPRISE gate; RLS; 6 indexes
+- `src/ai-scheduler/aiSchedulerTypes.ts` — `ApsRunStatus` (7 states), `ApsItemStatus`, `ApsEventType`; DB + app-layer types; payloads; `AiSchedulerPlanGateError`; label constants; 4 mappers
+- `src/ai-scheduler/aiSchedulerStore.ts` — `useAiSchedulerStore`; 5 fetch + 5 write actions (ENTERPRISE gate); `addScheduleItem` auto-sets `sequence_order`; `approveRun` writes `approved_by`/`approved_at`; `updateItemStatus` sets `is_overridden` when `overrideReason` provided
+- `supabase/migrations/20270125_culture_metrics_dashboard.sql` — `cmd_metric_definitions`, `cmd_metric_snapshots`, `cmd_enps_surveys`, `cmd_enps_responses` (no user_id); `cmd_org_health_v`, `cmd_enps_results_v` (hides until `min_responses`); PROFESSIONAL+ gate; RLS
+- `src/culture-metrics/cultureMetricsTypes.ts` — `CmdMetricCategory`, `CmdSnapshotTrend`, `CmdSurveyStatus`, `CmdHealthTier`; DB + app-layer types; payloads; `CultureMetricsPlanGateError`; `DEFAULT_CMD_FILTERS`; 6 mappers
+- `src/culture-metrics/cultureMetricsStore.ts` — `useCultureMetricsStore`; 14 actions; PROFESSIONAL+ gate on writes; `submitEnpsResponse` exempt (anonymous survey); queries 4 tables + 2 views
+- `src/ai-cost/__tests__/AiCostDashboard.test.tsx` — 10 Vitest tests: plan gate (FREE/PROFESSIONAL), loading, empty states, 4 summary cards, budget over-threshold (90% ≥ 80%), budget under-threshold, 3 trend bars, error banner, admin upgrade copy
+
 ### 📋 Next (v17.5 remaining)
-- AI Production Scheduler module (schema + types + store + UI)
-- Culture Metrics Dashboard module
+- AI Production Scheduler UI (AiSchedulerBoard.tsx + stories + tests)
+- Culture Metrics Dashboard UI (CultureDashboard.tsx + stories + tests)
 
 **Last updated:** 2027-01-25
 
