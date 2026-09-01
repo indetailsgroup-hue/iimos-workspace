@@ -23,19 +23,19 @@
 
 -- job
 ALTER TABLE public.jobs
-  ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organization(org_id);
+  ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
 
 -- quotation
 ALTER TABLE public.quotations
-  ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organization(org_id);
+  ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
 
 -- invoice
 ALTER TABLE public.invoices
-  ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organization(org_id);
+  ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
 
 -- platform_search_logs (super-admin log aggregation; stores the org context of the searcher)
 ALTER TABLE public.platform_search_logs
-  ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organization(org_id);
+  ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
 
 -- ============================================================================
 -- SECTION 2: Backfill org_id from org_members(user_id = created_by)
@@ -116,12 +116,12 @@ INSERT INTO public._org_id_backfill_quarantine (table_name, record_id, created_b
 DO $$
 BEGIN
   -- Ensure the sentinel org exists (idempotent)
-  INSERT INTO public.organization (org_id, name, slug, is_active)
+  INSERT INTO public.organizations (org_id, name, slug, status)
   VALUES (
     '00000000-0000-0000-0000-000000000000',
     '__orphaned_backfill_sentinel__',
     '__orphaned__',
-    false
+    'ACTIVE'
   )
   ON CONFLICT (org_id) DO NOTHING;
 END;
