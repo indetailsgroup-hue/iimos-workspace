@@ -1,0 +1,254 @@
+name: Supabase DB Lint
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/seed.sql'
+    types: [opened, synchronize, reopened]
+
+# Required repository secrets:
+#   SUPABASE_ACCESS_TOKEN  — personal access token from app.supabase.com/account/tokens
+#   SUPABASE_PROJECT_REF   — project reference ID (e.g. abcdefghijklmnop)
+#                            found at: Project Settings → General → Reference ID
+#
+# The lint job runs against the remote project schema so no Docker is required.
+# All migration files under supabase/migrations/ are applied to the linked project
+# before linting, matching the exact behaviour of your production schema.
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  db-lint:
+    name: Supabase DB Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link Supabase project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+
+      - name: Run db lint
+        id: lint
+        # continue-on-error so the comment step always runs, even on lint failure
+        continue-on-error: true
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase db lint 2>&1 | tee lint-output.txt
+          LINT_EXIT=${PIPESTATUS[0]}
+          echo "exit_code=$LINT_EXIT" >> "$GITHUB_OUTPUT"
+
+      - name: Parse lint output
+        if: always()
+        run: |
+          python3 << 'PYEOF'
+          import re, json, pathlib
+
+          raw = pathlib.Path("lint-output.txt").read_text(errors="replace")
+
+          findings = []
+          # Supabase CLI lint format:
+          #   WARNING  path/to/file.sql:line:col  rule_name  human-readable description
+          #   ERROR    path/to/file.sql:line:col  rule_name  human-readable description
+          pattern = re.compile(
+              r"^\s*(ERROR|WARNING|HINT|INFO)\s+"      # level
+              r"([\w./ \\-]+(?::\d+(?::\d+)?)?)\s+"   # location (file:line:col)
+              r"(\w[\w_-]*)\s+"                        # rule name
+              r"(.+)$",                                 # description
+              re.IGNORECASE | re.MULTILINE,
+          )
+          for m in pattern.finditer(raw):
+              level, location, rule, message = m.groups()
+              findings.append({
+                  "level":    level.upper(),
+                  "location": location.strip(),
+                  "rule":     rule.strip(),
+                  "message":  message.strip(),
+              })
+
+          # Fallback: capture any line that starts with ERROR or WARNING
+          if not findings:
+              for line in raw.splitlines():
+                  m2 = re.match(r"^\s*(ERROR|WARNING)\s+(.+)$", line, re.IGNORECASE)
+                  if m2:
+                      findings.append({
+                          "level":    m2.group(1).upper(),
+                          "location": "",
+                          "rule":     "",
+                          "message":  m2.group(2).strip(),
+                      })
+
+          error_count = sum(1 for f in findings if f["level"] == "ERROR")
+          warn_count  = sum(1 for f in findings if f["level"] == "WARNING")
+
+          result = {
+              "findings":    findings,
+              "error_count": error_count,
+              "warn_count":  warn_count,
+              "total":       len(findings),
+              # Truncate raw output to avoid huge JSON blobs
+              "raw_tail":    raw[-4000:] if len(raw) > 4000 else raw,
+          }
+          pathlib.Path("lint-results.json").write_text(json.dumps(result, indent=2))
+          print(f"Lint: {error_count} error(s), {warn_count} warning(s), {len(findings)} total")
+          PYEOF
+
+      - name: Upload lint artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: supabase-lint-results
+          path: |
+            lint-output.txt
+            lint-results.json
+          if-no-files-found: warn
+
+      - name: Post lint comment on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            const MARKER = '<!-- supabase-db-lint -->';
+
+            // ── Load parsed results ────────────────────────────────────────────
+            let data = null;
+            try {
+              data = JSON.parse(fs.readFileSync('lint-results.json', 'utf8'));
+            } catch (_) { /* file missing — lint step may have failed to produce output */ }
+
+            const lintExitCode = '${{ steps.lint.outputs.exit_code }}';
+            const lintFailed   = lintExitCode !== '0';
+
+            let body;
+
+            if (!data) {
+              // Lint runner itself failed (e.g. missing secret, network error)
+              body = [
+                MARKER,
+                '## 🔍 Supabase DB Lint',
+                '',
+                '> ❌ The lint runner did not produce output — check the workflow logs.',
+                '',
+                lintFailed
+                  ? `Lint exited with code \`${lintExitCode}\`.`
+                  : '',
+              ].join('\n');
+            } else {
+              const { findings, error_count, warn_count, total, raw_tail } = data;
+
+              const statusEmoji  = error_count > 0 ? '❌' : warn_count > 0 ? '⚠️' : '✅';
+              const statusLabel  = error_count > 0
+                ? `**${error_count} error(s) found** — review required`
+                : warn_count > 0
+                  ? `**${warn_count} warning(s)** — no blocking errors`
+                  : '**No issues found** — all checks passed';
+
+              const lines = [
+                MARKER,
+                `## ${statusEmoji} Supabase DB Lint`,
+                '',
+                statusLabel,
+                '',
+                '| | Count |',
+                '|---|---|',
+                `| ❌ Errors   | ${error_count} |`,
+                `| ⚠️ Warnings | ${warn_count}  |`,
+                `| 📋 Total    | ${total}       |`,
+              ];
+
+              if (findings.length > 0) {
+                // Group by level: errors first, then warnings
+                const byLevel = (lvl) => findings.filter(f => f.level === lvl);
+                const errors   = byLevel('ERROR');
+                const warnings = byLevel('WARNING');
+                const others   = findings.filter(f => !['ERROR','WARNING'].includes(f.level));
+
+                const renderGroup = (label, emoji, items) => {
+                  if (!items.length) return [];
+                  const rows = items.map(f => {
+                    const loc  = f.location ? `\`${f.location}\`` : '—';
+                    const rule = f.rule     ? `\`${f.rule}\``     : '—';
+                    const msg  = f.message.slice(0, 150);
+                    return `| ${emoji} ${f.level} | ${loc} | ${rule} | ${msg} |`;
+                  });
+                  return [
+                    '',
+                    `### ${emoji} ${label}`,
+                    '',
+                    '| Level | Location | Rule | Message |',
+                    '|---|---|---|---|',
+                    ...rows,
+                  ];
+                };
+
+                lines.push(...renderGroup('Errors',   '❌', errors));
+                lines.push(...renderGroup('Warnings', '⚠️', warnings));
+                lines.push(...renderGroup('Other',    'ℹ️', others));
+              }
+
+              // Raw tail (collapsed) — useful for debugging rules not yet parsed
+              if (raw_tail && raw_tail.trim()) {
+                lines.push('');
+                lines.push('<details>');
+                lines.push('<summary>Raw lint output (tail)</summary>');
+                lines.push('');
+                lines.push('```');
+                lines.push(raw_tail.trim().slice(0, 3000));
+                lines.push('```');
+                lines.push('');
+                lines.push('</details>');
+              }
+
+              body = lines.join('\n');
+            }
+
+            // ── Upsert comment ─────────────────────────────────────────────────
+            const { data: comments } = await github.rest.issues.listComments({
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body && c.body.includes(MARKER));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner:      context.repo.owner,
+                repo:       context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              console.log(`Updated lint comment ${existing.id} on PR #${context.issue.number}`);
+            } else {
+              await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+              console.log(`Created lint comment on PR #${context.issue.number}`);
+            }
+
+      # ── Hard-fail the job if lint reported errors ─────────────────────────────
+      # This runs AFTER the comment is posted so reviewers always see the output.
+      - name: Fail job on lint errors
+        if: steps.lint.outputs.exit_code != '0'
+        run: |
+          echo "::error::supabase db lint found errors — see PR comment for details"
+          exit 1
