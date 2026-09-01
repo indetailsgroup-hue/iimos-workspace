@@ -27,7 +27,7 @@ alter table public.package_addons alter column org_id set not null;
 
 create policy package_addons_tenant_isolation on public.package_addons
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 2. package_estimates  (package_id PK → work_packages → installation_projects.org_id)
@@ -51,7 +51,7 @@ alter table public.package_estimates alter column org_id set not null;
 
 create policy package_estimates_tenant_isolation on public.package_estimates
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 3. package_materials  (package_id → work_packages → installation_projects.org_id)
@@ -75,7 +75,7 @@ alter table public.package_materials alter column org_id set not null;
 
 create policy package_materials_tenant_isolation on public.package_materials
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 4. package_stages  (package_id → work_packages → installation_projects.org_id)
@@ -99,7 +99,7 @@ alter table public.package_stages alter column org_id set not null;
 
 create policy package_stages_tenant_isolation on public.package_stages
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 5. price_rates  (SENTINEL CONFIG — shared rate table; no org link)
@@ -116,7 +116,7 @@ alter table public.price_rates alter column org_id set not null;
 
 create policy price_rates_tenant_isolation on public.price_rates
   for select to authenticated
-  using (org_id = public.get_my_org_id()
+  using (org_id = public.get_user_org_id()
       or org_id = '00000000-0000-0000-0000-000000000000'::uuid);
 
 -- ---------------------------------------------------------------------------
@@ -140,7 +140,7 @@ alter table public.project_turnkey alter column org_id set not null;
 
 create policy project_turnkey_tenant_isolation on public.project_turnkey
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 7. turnkey_offers  (SENTINEL CONFIG — shared tier catalog; no org link)
@@ -157,5 +157,5 @@ alter table public.turnkey_offers alter column org_id set not null;
 
 create policy turnkey_offers_tenant_isolation on public.turnkey_offers
   for select to authenticated
-  using (org_id = public.get_my_org_id()
+  using (org_id = public.get_user_org_id()
       or org_id = '00000000-0000-0000-0000-000000000000'::uuid);
