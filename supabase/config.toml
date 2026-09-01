@@ -76,7 +76,7 @@ verify_jwt = false
 verify_jwt = false
 
 # ---------------------------------------------------------------------------
-# pg_cron scheduled jobs (release/15.0.0)
+# pg_cron scheduled jobs (updated: release/15.6.0 — 8 jobs total)
 #
 # ┌───────── minute (0-59)
 # │  ┌──────── hour (0-23)
@@ -86,11 +86,14 @@ verify_jwt = false
 # │  │  │  │  │
 # job name                          schedule        description
 # ──────────────────────────────────────────────────────────────────────────
-# etax-submit-worker                */5 * * * *     poll & submit queued eTax docs
-# notify-overdue                    0 1 * * *       nightly overdue invoice alerts
-# refresh-etax-compliance-mv        */15 * * * *    refresh mv_etax_compliance_dashboard
-# check-mv-refresh-lag              */5 * * * *     alert if MV refresh > 15 min stale
-# refresh-etax-health-trend-mv      0 0 * * *       daily refresh mv_etax_health_trend
+# [1] etax-submit-worker             */5 * * * *     poll & submit queued eTax docs
+# [2] notify-overdue                 0 1 * * *       nightly overdue invoice alerts
+# [3] refresh-etax-compliance-mv     */15 * * * *    refresh mv_etax_compliance_dashboard
+# [4] check-mv-refresh-lag           */5 * * * *     alert if MV refresh > 15 min stale
+# [5] refresh-etax-health-trend-mv   0 0 * * *       daily refresh mv_etax_health_trend
+# [6] auto-create-etax-partition     0 0 20 * *      pre-create next monthly partition
+# [7] refresh-etax-sla-mv            0 * * * *       hourly refresh mv_etax_submission_sla
+# [8] archive-etax-sla-breach-daily  15 0 * * *      daily SLA breach archive → etax_sla_breach_archive
 # ---------------------------------------------------------------------------
 [cron."etax-submit-worker"]
 schedule = "*/5 * * * *"
@@ -125,6 +128,14 @@ command  = "SELECT public.fn_auto_create_next_etax_partition();"
 [cron."refresh-etax-sla-mv"]
 schedule = "0 * * * *"
 command  = "SELECT public.fn_refresh_mv_etax_submission_sla();"
+
+# [8] Daily SLA breach archive (Migration 0201 — runs 00:15 UTC)
+#     Archives v_etax_sla_breach_timeline rows into etax_sla_breach_archive
+#     for long-term retention beyond the 90-day live view window.
+[cron."archive-etax-sla-breach-daily"]
+schedule = "15 0 * * *"
+command  = "SELECT public.fn_archive_etax_sla_breach_timeline();"
+
 
 [functions.etax-risk-notify]
 verify_jwt = true
