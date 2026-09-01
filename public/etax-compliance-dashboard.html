@@ -128,6 +128,7 @@
     <button onclick="switchTab('overview')"  id="tab-overview"  class="tab-active   px-5 py-3 text-sm transition-colors">Overview</button>
     <button onclick="switchTab('ranking')"   id="tab-ranking"   class="tab-inactive px-5 py-3 text-sm transition-colors">Risk Ranking</button>
     <button onclick="switchTab('detail')"    id="tab-detail"    class="tab-inactive px-5 py-3 text-sm transition-colors">Compliance Detail</button>
+    <button onclick="switchTab('sla')"       id="tab-sla"       class="tab-inactive px-5 py-3 text-sm transition-colors">SLA Monitor</button>
   </div>
 </div>
 
@@ -276,6 +277,70 @@
     </div>
   </div>
 
+<!-- ─────────────────────────────────────────────────────────────────────────
+     SLA Monitor tab
+────────────────────────────────────────────────────────────────────────── -->
+<div id="panel-sla" class="hidden fade-in max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+  <!-- SLA Summary Card -->
+  <div id="sla-summary-card" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+    <h2 class="text-base font-semibold text-slate-700 mb-4">SLA Health Summary</h2>
+    <div id="sla-summary-content" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div class="text-center"><div class="text-2xl font-bold text-slate-800" id="sla-total-submissions">–</div><div class="text-xs text-slate-500 mt-1">Total Submissions</div></div>
+      <div class="text-center"><div class="text-2xl font-bold text-red-600" id="sla-breach-count">–</div><div class="text-xs text-slate-500 mt-1">Breached</div></div>
+      <div class="text-center"><div class="text-2xl font-bold text-amber-600" id="sla-breach-rate">–</div><div class="text-xs text-slate-500 mt-1">Breach Rate</div></div>
+      <div class="text-center"><div class="text-2xl font-bold text-slate-800" id="sla-worst-type">–</div><div class="text-xs text-slate-500 mt-1">Worst Type</div></div>
+      <div class="text-center"><div class="text-2xl font-bold text-slate-800" id="sla-threshold">–</div><div class="text-xs text-slate-500 mt-1">SLA Threshold (h)</div></div>
+      <div class="text-center"><div id="sla-summary-tier" class="inline-block px-3 py-1 rounded-full text-sm font-semibold">–</div><div class="text-xs text-slate-500 mt-1">Severity</div></div>
+    </div>
+  </div>
+
+  <!-- SLA per Document Type Table -->
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="p-4 border-b border-slate-100 flex flex-wrap items-center gap-3">
+      <h2 class="text-base font-semibold text-slate-700 flex-1">SLA Status by Document Type</h2>
+      <select id="sla-filter-severity" onchange="applySlaFilter()"
+        class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-brand-500 focus:outline-none">
+        <option value="">All Severity</option>
+        <option value="CRITICAL">CRITICAL</option>
+        <option value="WARNING">WARNING</option>
+        <option value="ELEVATED">ELEVATED</option>
+        <option value="NORMAL">NORMAL</option>
+        <option value="HEALTHY">HEALTHY</option>
+      </select>
+      <select id="sla-filter-doctype" onchange="applySlaFilter()"
+        class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-brand-500 focus:outline-none">
+        <option value="">All Types</option>
+        <option value="T01">T01</option>
+        <option value="T02">T02</option>
+        <option value="T03">T03</option>
+        <option value="T04">T04</option>
+      </select>
+      <span id="sla-count" class="text-xs text-slate-400"></span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
+          <tr>
+            <th class="px-4 py-3 text-left">Organisation</th>
+            <th class="px-4 py-3 text-center">Doc Type</th>
+            <th class="px-4 py-3 text-right">Total</th>
+            <th class="px-4 py-3 text-right">Breached</th>
+            <th class="px-4 py-3 text-right">Breach Rate</th>
+            <th class="px-4 py-3 text-right">Avg Hours</th>
+            <th class="px-4 py-3 text-right">SLA (h)</th>
+            <th class="px-4 py-3 text-center">Severity</th>
+            <th class="px-4 py-3 text-center">Breach Flag</th>
+          </tr>
+        </thead>
+        <tbody id="sla-tbody" class="divide-y divide-slate-100">
+          <tr><td colspan="9" class="px-4 py-8 text-center text-slate-400">Loading SLA data…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 </main>
 
 <!-- ── Config Modal ────────────────────────────────────────────────────────── -->
@@ -361,6 +426,8 @@ let state = {
   compliance:    [],
   healthSummary: [],
   riskRanking:   [],
+  slaRows:       [],
+  slaSummary:    null,
   loading:       false,
   error:         null,
   lastRefreshed: null,
@@ -421,16 +488,20 @@ async function fetchAllData() {
   hideError();
 
   try {
-    const [compliance, healthSummary, riskRanking] = await Promise.all([
+    const [compliance, healthSummary, riskRanking, slaRows, slaSummary] = await Promise.all([
       apiFetch('v_etax_compliance_dashboard?select=*&order=org_id.asc').catch(e => { console.warn('compliance:', e); return []; }),
       apiFetch('v_etax_full_health_summary?select=*&order=health_score.asc').catch(e => { console.warn('health:', e); return []; }),
       rpcFetch('rpc_etax_org_risk_ranking_admin', { p_limit: 200 }).catch(() =>
         apiFetch('v_etax_org_risk_ranking?select=*&order=risk_rank.asc').catch(e => { console.warn('ranking:', e); return []; })
       ),
+      rpcFetch('rpc_etax_submission_sla_cached', {}).catch(e => { console.warn('sla_cached:', e); return []; }),
+      rpcFetch('rpc_etax_sla_summary', {}).catch(e => { console.warn('sla_summary:', e); return null; }),
     ]);
 
     state.compliance    = compliance    || [];
     state.healthSummary = healthSummary || [];
+    state.slaRows       = Array.isArray(slaRows) ? slaRows : [];
+    state.slaSummary    = Array.isArray(slaSummary) ? (slaSummary[0] || null) : slaSummary;
     state.riskRanking   = Array.isArray(riskRanking) ? riskRanking : [];
     state.lastRefreshed = new Date();
     state.error         = null;
@@ -455,6 +526,79 @@ function renderAll() {
   renderCriticalOrgs();
   renderRankingTable();
   renderDetailTable();
+  renderSlaTab();
+}
+
+// ── SLA Monitor Tab ──────────────────────────────────────────────────────────
+
+const TIER_CLASSES = {
+  CRITICAL: 'bg-red-100 text-red-800',
+  WARNING:  'bg-orange-100 text-orange-800',
+  ELEVATED: 'bg-yellow-100 text-yellow-800',
+  NORMAL:   'bg-blue-100 text-blue-800',
+  HEALTHY:  'bg-green-100 text-green-800',
+};
+
+function tierBadge(tier) {
+  const cls = TIER_CLASSES[tier] || 'bg-slate-100 text-slate-700';
+  return `<span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cls}">${tier || '–'}</span>`;
+}
+
+function renderSlaTab() {
+  // ── Summary card
+  const s = state.slaSummary;
+  if (s) {
+    const rate = s.breach_rate != null ? (Number(s.breach_rate) * 100).toFixed(1) + '%' : '–';
+    document.getElementById('sla-total-submissions').textContent = s.total_submissions ?? '–';
+    document.getElementById('sla-breach-count').textContent      = s.breach_count      ?? '–';
+    document.getElementById('sla-breach-rate').textContent       = rate;
+    document.getElementById('sla-worst-type').textContent        = s.worst_document_type ?? '–';
+    document.getElementById('sla-threshold').textContent         = s.sla_threshold_hours ?? '24';
+    const tierEl = document.getElementById('sla-summary-tier');
+    const tierCls = TIER_CLASSES[s.severity_tier] || 'bg-slate-100 text-slate-700';
+    tierEl.className = `inline-block px-3 py-1 rounded-full text-sm font-semibold ${tierCls}`;
+    tierEl.textContent = s.severity_tier || '–';
+  }
+  applySlaFilter();
+}
+
+function applySlaFilter() {
+  const sevFilter = document.getElementById('sla-filter-severity')?.value || '';
+  const docFilter = document.getElementById('sla-filter-doctype')?.value || '';
+
+  const rows = state.slaRows.filter(r => {
+    if (sevFilter && r.severity_tier !== sevFilter) return false;
+    if (docFilter && r.document_type !== docFilter) return false;
+    return true;
+  });
+
+  const tbody = document.getElementById('sla-tbody');
+  const countEl = document.getElementById('sla-count');
+  if (countEl) countEl.textContent = `${rows.length} row${rows.length !== 1 ? 's' : ''}`;
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-slate-400">No SLA data available</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => {
+    const rate      = r.breach_rate != null ? (Number(r.breach_rate) * 100).toFixed(1) + '%' : '–';
+    const avgHours  = r.avg_processing_hours != null ? Number(r.avg_processing_hours).toFixed(1) : '–';
+    const breachFlag = r.sla_breach_flag
+      ? '<span class="text-red-600 font-bold">●</span> Breached'
+      : '<span class="text-green-600 font-bold">●</span> OK';
+    return `<tr class="hover:bg-slate-50 transition-colors">
+      <td class="px-4 py-3 text-slate-800">${r.org_name ?? r.org_id ?? '–'}</td>
+      <td class="px-4 py-3 text-center font-mono text-slate-700">${r.document_type ?? '–'}</td>
+      <td class="px-4 py-3 text-right tabular-nums text-slate-700">${r.total_submissions ?? 0}</td>
+      <td class="px-4 py-3 text-right tabular-nums text-red-700">${r.breach_count ?? 0}</td>
+      <td class="px-4 py-3 text-right tabular-nums">${rate}</td>
+      <td class="px-4 py-3 text-right tabular-nums text-slate-600">${avgHours}</td>
+      <td class="px-4 py-3 text-right tabular-nums text-slate-600">${r.sla_threshold_hours ?? 24}</td>
+      <td class="px-4 py-3 text-center">${tierBadge(r.severity_tier)}</td>
+      <td class="px-4 py-3 text-center text-xs">${breachFlag}</td>
+    </tr>`;
+  }).join('');
 }
 
 // ── KPI Cards ─────────────────────────────────────────────────────
@@ -736,7 +880,7 @@ let activeTab = 'overview';
 
 function switchTab(tab) {
   activeTab = tab;
-  ['overview', 'ranking', 'detail'].forEach(t => {
+  ['overview', 'ranking', 'detail', 'sla'].forEach(t => {
     document.getElementById(`panel-${t}`).classList.toggle('hidden', t !== tab);
     document.getElementById(`tab-${t}`).className =
       t === tab ? 'tab-active px-5 py-3 text-sm transition-colors'
