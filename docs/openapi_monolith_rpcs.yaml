@@ -33,7 +33,7 @@ info:
     | 422 | `unprocessable` | Business rule violation |
     | 500 | `internal_error` | Unexpected server error |
 
-  version: 15.6.0
+  version: 15.7.0
   contact:
     name: MONOLITH Platform Team
     email: platform@indetailsgroup.com
@@ -62,6 +62,8 @@ tags:
     description: Risk tier state and pg_notify events (Migration 0195)
   - name: SLA Archive
     description: Long-term SLA breach archive views and rollup RPCs (Migration 0202)
+  - name: SLA Executive
+    description: Executive SLA dashboard combining live MV data with long-term archive KPIs (Migration 0203)
   - name: Infrastructure
     description: Partition health and admin utilities (Migration 0196)
 
@@ -460,6 +462,121 @@ components:
         sla_threshold_hours:
           type: number
           description: SLA threshold in hours from platform_config (default 24).
+
+    # ── SLA Executive Summary ──────────────────────────────────────────────────
+    SlaExecutiveSummaryRow:
+      type: object
+      description: |
+        One-row-per-org executive KPI combining live mv_etax_submission_sla data
+        (Migration 0199) with long-term v_etax_sla_archive_org_rollup (Migration 0202).
+        Source view: v_etax_sla_executive_summary (Migration 0203).
+      properties:
+        org_id:
+          $ref: '#/components/schemas/OrgId'
+        org_name:
+          type: string
+          example: "บริษัท เฟอร์นิเจอร์ดี จำกัด"
+        live_total_submissions:
+          type: integer
+          format: int64
+          description: Total submissions currently in mv_etax_submission_sla for this org.
+        live_breach_count:
+          type: integer
+          format: int64
+          description: Count of breached submissions in the live MV.
+        live_breach_rate_pct:
+          type: number
+          format: float
+          description: Live breach rate as a percentage (0.0–100.0). NULL when no live data.
+          nullable: true
+        live_worst_severity:
+          type: string
+          enum: [HEALTHY, NORMAL, ELEVATED, WARNING, CRITICAL]
+          description: Worst severity tier in the live MV for this org.
+          nullable: true
+        live_avg_processing_hours:
+          type: number
+          format: float
+          description: Average processing hours across live submissions.
+          nullable: true
+        sla_threshold_hours:
+          type: number
+          description: SLA threshold in hours (from platform_config; defaults to 24).
+        live_last_submission_at:
+          type: string
+          format: date-time
+          description: Timestamp of the most recent submission in the live MV.
+          nullable: true
+        first_archived_date:
+          type: string
+          format: date
+          description: Earliest breach_date in the long-term archive for this org.
+          nullable: true
+        last_archived_date:
+          type: string
+          format: date
+          description: Most recent breach_date in the long-term archive.
+          nullable: true
+        archive_total_days:
+          type: integer
+          description: Number of distinct calendar days present in the archive (0 when no archive).
+        archive_total_created:
+          type: integer
+          format: int64
+          description: Total submissions created across all archived days.
+        archive_total_breached:
+          type: integer
+          format: int64
+          description: Total breached submissions across all archived days.
+        archive_breach_rate_pct:
+          type: number
+          format: float
+          description: |
+            Overall archive breach rate = (archive_total_breached / archive_total_created) × 100.
+            NULL when no archive data.
+          nullable: true
+        archive_worst_severity:
+          type: string
+          enum: [HEALTHY, NORMAL, ELEVATED, WARNING, CRITICAL]
+          description: Worst severity tier in the long-term archive for this org.
+          nullable: true
+        archive_peak_cumulative:
+          type: integer
+          description: Highest cumulative_breached value recorded in the archive (0 when no archive).
+        breached_document_types:
+          type: array
+          items:
+            type: string
+            enum: [T01, T02, T03, T04]
+          description: Document types that had at least one breach day in the archive.
+          nullable: true
+        last_archived_at:
+          type: string
+          format: date-time
+          description: Timestamp of the most recent archive write for this org.
+          nullable: true
+        peak_breach_rate_pct:
+          type: number
+          format: float
+          description: |
+            Maximum breach rate across both live and archive sources.
+            GREATEST(live_breach_rate_pct, archive_breach_rate_pct).
+        combined_worst_severity:
+          type: string
+          enum: [HEALTHY, NORMAL, ELEVATED, WARNING, CRITICAL]
+          description: |
+            Worst severity tier across both live and archive sources.
+            CASE rank: CRITICAL(5) > WARNING(4) > ELEVATED(3) > NORMAL(2) > HEALTHY(1).
+        requires_attention:
+          type: boolean
+          description: TRUE when combined_worst_severity is WARNING or CRITICAL.
+          nullable: true
+        has_live_data:
+          type: boolean
+          description: TRUE when this org has rows in mv_etax_submission_sla.
+        has_archive_data:
+          type: boolean
+          description: TRUE when this org has rows in v_etax_sla_archive_org_rollup.
 
 
 # ─── Security (global default) ────────────────────────────────────────────────
@@ -1073,6 +1190,74 @@ paths:
               schema: { $ref: '#/components/schemas/RpcError' }
 
 
+  /rpc_etax_sla_executive_summary:
+    post:
+      tags: [SLA Executive]
+      summary: Executive SLA dashboard — combined live + archive KPIs per org
+      operationId: rpcEtaxSlaExecutiveSummary
+      description: |
+        Returns one row per organisation combining:
+        - **Live** data aggregated from `mv_etax_submission_sla` (hourly refresh, Migration 0199)
+        - **Long-term** data from `v_etax_sla_archive_org_rollup` (daily archive, Migration 0202)
+
+        The result includes 24 columns covering identity, live KPIs, archive KPIs, and
+        combined executive signals (`combined_worst_severity`, `requires_attention`).
+
+        Results are ordered by `combined_worst_severity DESC`, `peak_breach_rate_pct DESC`.
+
+        **Access control:**
+        - `anon` role — REVOKED (HTTP 401/403).
+        - `authenticated` (non-service_role) — tenant-isolated via `get_user_org_id()`.
+        - `service_role` — full cross-tenant access.
+
+        Migration: **0203** — `v_etax_sla_executive_summary` + `rpc_etax_sla_executive_summary`
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_org_id:
+                  $ref: '#/components/schemas/OrgId'
+                  description: Filter to a specific org UUID (optional; non-service_role always filtered to own org).
+                  nullable: true
+                p_requires_attention:
+                  type: boolean
+                  description: |
+                    When true — return only orgs where combined_worst_severity is WARNING or CRITICAL.
+                    When false — return only orgs below WARNING threshold.
+                    Omit to return all orgs.
+                  nullable: true
+                p_has_archive_data:
+                  type: boolean
+                  description: |
+                    When true — return only orgs with long-term archive data.
+                    When false — return only orgs without archive data yet.
+                    Omit to return all orgs.
+                  nullable: true
+      responses:
+        '200':
+          description: One-row-per-org executive KPI combining live and archive SLA data.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SlaExecutiveSummaryRow' }
+        '401':
+          description: Unauthorized — missing or invalid JWT.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RpcError' }
+        '403':
+          description: Forbidden — anon role is REVOKED for this function.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RpcError' }
+
+
 # ─── Webhooks (pg_notify consumer) ───────────────────────────────────────────
 webhooks:
   etax_risk_rank_changed:
@@ -1118,3 +1303,4 @@ webhooks:
           description: Alert delivered.
         '4XX':
           description: Alert delivery failed.
+
