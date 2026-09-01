@@ -380,6 +380,77 @@
       </table>
     </div>
   </div>
+
+  <!-- ── Archive Org Rollup Panel ─────────────────────────────────────────── -->
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="p-4 border-b border-slate-100 flex flex-wrap items-center gap-3">
+      <div class="flex-1">
+        <h2 class="text-base font-semibold text-slate-700">Long-Term Archive — Org Rollup</h2>
+        <p class="text-xs text-slate-400 mt-0.5">Source: <code class="bg-slate-100 px-1 rounded">rpc_etax_sla_archive_org_rollup</code> (Migration 0202) — one row per org</p>
+      </div>
+      <span id="archive-rollup-count" class="text-xs text-slate-400"></span>
+    </div>
+    <div id="archive-rollup-loading" class="text-center text-slate-400 py-6 text-sm pulse">Loading archive data…</div>
+    <div id="archive-rollup-empty"   class="hidden text-center text-slate-400 py-6 text-sm">No archive data yet — run <code>fn_archive_etax_sla_breach_timeline</code> first.</div>
+    <div id="archive-rollup-wrap"    class="hidden overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
+          <tr>
+            <th class="px-4 py-3 text-left">Organisation</th>
+            <th class="px-4 py-3 text-right">Archive Days</th>
+            <th class="px-4 py-3 text-right">Total Created</th>
+            <th class="px-4 py-3 text-right">Total Breached</th>
+            <th class="px-4 py-3 text-right">Overall Breach %</th>
+            <th class="px-4 py-3 text-right">Peak Cumulative</th>
+            <th class="px-4 py-3 text-center">Worst Tier</th>
+            <th class="px-4 py-3 text-left">Breached Doc Types</th>
+            <th class="px-4 py-3 text-right">SLA (h)</th>
+          </tr>
+        </thead>
+        <tbody id="archive-rollup-tbody" class="divide-y divide-slate-100"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Archive Summary by Tier Panel ───────────────────────────────────── -->
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="p-4 border-b border-slate-100 flex flex-wrap items-center gap-3">
+      <div class="flex-1">
+        <h2 class="text-base font-semibold text-slate-700">Long-Term Archive — Summary by Severity Tier</h2>
+        <p class="text-xs text-slate-400 mt-0.5">Source: <code class="bg-slate-100 px-1 rounded">rpc_etax_sla_archive_summary</code> (Migration 0202) — grouped by (org, tier)</p>
+      </div>
+      <select id="archive-summary-filter-tier" onchange="renderSlaArchiveSummary()"
+        class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-brand-500 focus:outline-none">
+        <option value="">All Tiers</option>
+        <option value="CRITICAL">CRITICAL</option>
+        <option value="WARNING">WARNING</option>
+        <option value="ELEVATED">ELEVATED</option>
+        <option value="NORMAL">NORMAL</option>
+        <option value="HEALTHY">HEALTHY</option>
+      </select>
+      <span id="archive-summary-count" class="text-xs text-slate-400"></span>
+    </div>
+    <div id="archive-summary-loading" class="text-center text-slate-400 py-6 text-sm pulse">Loading archive summary…</div>
+    <div id="archive-summary-empty"   class="hidden text-center text-slate-400 py-6 text-sm">No archive summary data yet.</div>
+    <div id="archive-summary-wrap"    class="hidden overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
+          <tr>
+            <th class="px-4 py-3 text-left">Organisation</th>
+            <th class="px-4 py-3 text-center">Severity Tier</th>
+            <th class="px-4 py-3 text-right">Archive Days</th>
+            <th class="px-4 py-3 text-right">Total Created</th>
+            <th class="px-4 py-3 text-right">Total Breached</th>
+            <th class="px-4 py-3 text-right">Avg Breach Rate</th>
+            <th class="px-4 py-3 text-right">Max Breach Rate</th>
+            <th class="px-4 py-3 text-right">Max Cumulative</th>
+            <th class="px-4 py-3 text-right">SLA (h)</th>
+          </tr>
+        </thead>
+        <tbody id="archive-summary-tbody" class="divide-y divide-slate-100"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 </main>
@@ -464,17 +535,19 @@ function closeConfig() {
 // State
 // ═══════════════════════════════════════════════════════════════════
 let state = {
-  compliance:    [],
-  healthSummary: [],
-  riskRanking:   [],
-  slaRows:       [],
-  slaSummary:    null,
-  slaTimeline:   [],
-  loading:       false,
-  error:         null,
-  lastRefreshed: null,
-  sortCol:       'risk_rank',
-  sortDir:       'asc',
+  compliance:        [],
+  healthSummary:     [],
+  riskRanking:       [],
+  slaRows:           [],
+  slaSummary:        null,
+  slaTimeline:       [],
+  slaArchiveRollup:  [],   // rpc_etax_sla_archive_org_rollup (Migration 0202)
+  slaArchiveSummary: [],   // rpc_etax_sla_archive_summary    (Migration 0202)
+  loading:           false,
+  error:             null,
+  lastRefreshed:     null,
+  sortCol:           'risk_rank',
+  sortDir:           'asc',
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -530,7 +603,8 @@ async function fetchAllData() {
   hideError();
 
   try {
-    const [compliance, healthSummary, riskRanking, slaRows, slaSummary, slaTimeline] = await Promise.all([
+    const [compliance, healthSummary, riskRanking, slaRows, slaSummary, slaTimeline,
+           slaArchiveRollup, slaArchiveSummary] = await Promise.all([
       apiFetch('v_etax_compliance_dashboard?select=*&order=org_id.asc').catch(e => { console.warn('compliance:', e); return []; }),
       apiFetch('v_etax_full_health_summary?select=*&order=health_score.asc').catch(e => { console.warn('health:', e); return []; }),
       rpcFetch('rpc_etax_org_risk_ranking_admin', { p_limit: 200 }).catch(() =>
@@ -539,14 +613,18 @@ async function fetchAllData() {
       rpcFetch('rpc_etax_submission_sla_cached', {}).catch(e => { console.warn('sla_cached:', e); return []; }),
       rpcFetch('rpc_etax_sla_summary', {}).catch(e => { console.warn('sla_summary:', e); return null; }),
       rpcFetch('rpc_etax_sla_breach_timeline', { p_days: 30 }).catch(e => { console.warn('sla_timeline:', e); return []; }),
+      rpcFetch('rpc_etax_sla_archive_org_rollup', {}).catch(e => { console.warn('sla_archive_rollup:', e); return []; }),
+      rpcFetch('rpc_etax_sla_archive_summary', {}).catch(e => { console.warn('sla_archive_summary:', e); return []; }),
     ]);
 
-    state.compliance    = compliance    || [];
-    state.healthSummary = healthSummary || [];
-    state.slaRows       = Array.isArray(slaRows) ? slaRows : [];
-    state.slaSummary    = Array.isArray(slaSummary) ? (slaSummary[0] || null) : slaSummary;
-    state.slaTimeline   = Array.isArray(slaTimeline) ? slaTimeline : [];
-    state.riskRanking   = Array.isArray(riskRanking) ? riskRanking : [];
+    state.compliance        = compliance    || [];
+    state.healthSummary     = healthSummary || [];
+    state.slaRows           = Array.isArray(slaRows) ? slaRows : [];
+    state.slaSummary        = Array.isArray(slaSummary) ? (slaSummary[0] || null) : slaSummary;
+    state.slaTimeline       = Array.isArray(slaTimeline) ? slaTimeline : [];
+    state.riskRanking       = Array.isArray(riskRanking) ? riskRanking : [];
+    state.slaArchiveRollup  = Array.isArray(slaArchiveRollup)  ? slaArchiveRollup  : [];
+    state.slaArchiveSummary = Array.isArray(slaArchiveSummary) ? slaArchiveSummary : [];
     state.lastRefreshed = new Date();
     state.error         = null;
 
@@ -605,6 +683,94 @@ function renderSlaTab() {
   }
   applySlaFilter();
   renderSlaChart();
+  renderSlaArchiveRollup();
+  renderSlaArchiveSummary();
+}
+
+// ── Archive Org Rollup renderer ───────────────────────────────────────────────
+function renderSlaArchiveRollup() {
+  const rows    = state.slaArchiveRollup || [];
+  const loading = document.getElementById('archive-rollup-loading');
+  const empty   = document.getElementById('archive-rollup-empty');
+  const wrap    = document.getElementById('archive-rollup-wrap');
+  const tbody   = document.getElementById('archive-rollup-tbody');
+  const countEl = document.getElementById('archive-rollup-count');
+
+  if (loading) loading.classList.add('hidden');
+
+  if (!rows.length) {
+    if (empty) empty.classList.remove('hidden');
+    if (wrap)  wrap.classList.add('hidden');
+    if (countEl) countEl.textContent = '0 orgs';
+    return;
+  }
+
+  if (empty) empty.classList.add('hidden');
+  if (wrap)  wrap.classList.remove('hidden');
+  if (countEl) countEl.textContent = `${rows.length} org${rows.length !== 1 ? 's' : ''}`;
+
+  const fmt  = v => (v ?? 0).toLocaleString();
+  const pct  = v => v != null ? Number(v).toFixed(1) + '%' : '–';
+
+  tbody.innerHTML = rows.map(r => {
+    const docTypes = Array.isArray(r.breached_document_types)
+      ? r.breached_document_types.map(d =>
+          `<span class="inline-block bg-slate-100 text-slate-600 text-xs px-1.5 py-0.5 rounded mr-1">${d}</span>`
+        ).join('')
+      : '–';
+    return `<tr class="hover:bg-slate-50 transition-colors">
+      <td class="px-4 py-3 font-medium text-slate-800">${esc(r.org_name || r.org_id)}</td>
+      <td class="px-4 py-3 text-right tabular-nums text-slate-700">${fmt(r.total_archive_days)}</td>
+      <td class="px-4 py-3 text-right tabular-nums text-slate-700">${fmt(r.total_created)}</td>
+      <td class="px-4 py-3 text-right tabular-nums ${(r.total_breached||0)>0?'text-red-600 font-medium':'text-slate-400'}">${fmt(r.total_breached)}</td>
+      <td class="px-4 py-3 text-right tabular-nums ${(r.overall_breach_rate||0)>=25?'text-red-600 font-semibold':(r.overall_breach_rate||0)>=10?'text-amber-600':'text-slate-600'}">${pct(r.overall_breach_rate)}</td>
+      <td class="px-4 py-3 text-right tabular-nums text-slate-600">${fmt(r.peak_cumulative)}</td>
+      <td class="px-4 py-3 text-center">${tierBadge(r.worst_severity_tier)}</td>
+      <td class="px-4 py-3">${docTypes}</td>
+      <td class="px-4 py-3 text-right tabular-nums text-slate-500">${r.sla_threshold_hours ?? 24}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Archive Summary by Tier renderer ─────────────────────────────────────────
+function renderSlaArchiveSummary() {
+  const tierFilter = document.getElementById('archive-summary-filter-tier')?.value || '';
+  const allRows    = state.slaArchiveSummary || [];
+  const rows       = tierFilter ? allRows.filter(r => r.severity_tier === tierFilter) : allRows;
+
+  const loading = document.getElementById('archive-summary-loading');
+  const empty   = document.getElementById('archive-summary-empty');
+  const wrap    = document.getElementById('archive-summary-wrap');
+  const tbody   = document.getElementById('archive-summary-tbody');
+  const countEl = document.getElementById('archive-summary-count');
+
+  if (loading) loading.classList.add('hidden');
+
+  if (!rows.length) {
+    if (empty) empty.classList.remove('hidden');
+    if (wrap)  wrap.classList.add('hidden');
+    if (countEl) countEl.textContent = '0 rows';
+    return;
+  }
+
+  if (empty) empty.classList.add('hidden');
+  if (wrap)  wrap.classList.remove('hidden');
+  if (countEl) countEl.textContent = `${rows.length} row${rows.length !== 1 ? 's' : ''}`;
+
+  const fmt  = v => (v ?? 0).toLocaleString();
+  const rate = v => v != null ? (Number(v) * 100).toFixed(1) + '%' : '–';
+
+  tbody.innerHTML = rows.map(r => `<tr class="hover:bg-slate-50 transition-colors">
+    <td class="px-4 py-3 font-medium text-slate-800">${esc(r.org_name || r.org_id)}</td>
+    <td class="px-4 py-3 text-center">${tierBadge(r.severity_tier)}</td>
+    <td class="px-4 py-3 text-right tabular-nums text-slate-700">${fmt(r.total_archive_days)}</td>
+    <td class="px-4 py-3 text-right tabular-nums text-slate-700">${fmt(r.total_created)}</td>
+    <td class="px-4 py-3 text-right tabular-nums ${(r.total_breached||0)>0?'text-red-600 font-medium':'text-slate-400'}">${fmt(r.total_breached)}</td>
+    <td class="px-4 py-3 text-right tabular-nums text-slate-600">${rate(r.avg_breach_rate)}</td>
+    <td class="px-4 py-3 text-right tabular-nums ${(r.max_breach_rate||0)>=0.5?'text-red-600 font-semibold':(r.max_breach_rate||0)>=0.25?'text-amber-600':'text-slate-600'}">${rate(r.max_breach_rate)}</td>
+    <td class="px-4 py-3 text-right tabular-nums text-slate-600">${fmt(r.max_cumulative)}</td>
+    <td class="px-4 py-3 text-right tabular-nums text-slate-500">${r.sla_threshold_hours ?? 24}</td>
+  </tr>`).join('');
 }
 
 // ── SLA Breach Trend Chart ───────────────────────────────────────────────────
