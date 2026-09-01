@@ -195,7 +195,8 @@ if $NO_VITEST; then
   warn "Vitest suppressed via --no-vitest"
 else
   info "Running all eTax observability test suites (0186–0197) with vitest..."
-  TEST_PATTERN="src/__tests__/rls/(0186|0187|0188|0189|0190|0191|0192|0193|0194|0195|0195b|0196|0197)"
+  info "  Covers: src/__tests__/rls/ (0186-0195) and src/__tests__/migrations/ (0195b, 0196, 0197)"
+  TEST_PATTERN="src/__tests__/(rls|migrations)/(0186|0187|0188|0189|0190|0191|0192|0193|0194|0195|0195b|0196|0197)"
 
   T_VIT_START=$(date +%s)
   set +e
