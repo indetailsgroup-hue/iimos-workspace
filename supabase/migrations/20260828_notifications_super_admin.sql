@@ -7,7 +7,7 @@
 CREATE TABLE IF NOT EXISTS notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
-  user_id UUID NOT NULL, -- target user, or '*' for broadcast
+  user_id UUID NOT NULL, -- target user; use 00000000-0000-0000-0000-000000000000 as broadcast sentinel
   category TEXT NOT NULL CHECK (category IN ('job_status', 'billing', 'team', 'system', 'usage', 'export')),
   priority TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
   title TEXT NOT NULL,
@@ -90,7 +90,7 @@ ALTER TABLE super_admins ENABLE ROW LEVEL SECURITY;
 CREATE POLICY notifications_tenant_isolation ON notifications
   FOR ALL USING (
     org_id IN (SELECT org_id FROM org_members WHERE user_id = auth.uid())
-    AND (user_id = auth.uid() OR user_id = '*')
+    AND (user_id = auth.uid() OR user_id = '00000000-0000-0000-0000-000000000000')
   );
 
 -- Users can manage their own preferences
