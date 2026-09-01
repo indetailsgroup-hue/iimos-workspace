@@ -83,6 +83,12 @@ on:
       - 'packages/digital-shadow-service/**'
       - '.github/workflows/verify-digital-shadow.yml'
 
+# ── Configurable thresholds ─────────────────────────────────────────────────
+# Raise SARIF_CRITICAL_THRESHOLD to change both the 30-day artifact retention
+# override and the Job 14 GitHub issue gate in one place.
+env:
+  SARIF_CRITICAL_THRESHOLD: '10'
+
 jobs:
   # ────────────────────────────────────────────────────────────────────────────
   # Gate 1: ESLint + TypeScript type-check — fast fail before any test job runs
@@ -1523,6 +1529,7 @@ jobs:
       - upload-eslint-sarif
       - close-webhook-broken-issue
       - notify-slack-on-sarif-findings
+      - open-sarif-findings-issue
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1956,7 +1963,9 @@ jobs:
         with:
           name:              sarif-delta-summary
           path:              sarif-delta-summary.md
-          retention-days:    14
+          # Retain for 30 days when findings exceed SARIF_CRITICAL_THRESHOLD;
+          # 14 days otherwise to avoid filling artifact storage unnecessarily.
+          retention-days:    ${{ steps.sarif-delta.outputs.new-findings != '' && fromJSON(steps.sarif-delta.outputs.new-findings) > fromJSON(env.SARIF_CRITICAL_THRESHOLD) && 30 || 14 }}
           overwrite:         true
           if-no-files-found: warn
 
@@ -2077,6 +2086,36 @@ jobs:
     timeout-minutes: 3
 
     steps:
+      # ── Format rule breakdown into Slack mrkdwn bullet list ─────────────────
+      # The rule-breakdown-md output is a markdown table; Slack does not render
+      # markdown tables, so this step converts each table row to a bullet entry
+      # and outputs a single-line string (with \n escape sequences) safe for
+      # embedding directly inside a JSON string value.
+      - name: Format rule breakdown for Slack
+        id: format-rule-breakdown
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          md = os.environ.get('RULE_BREAKDOWN_MD', '')
+          rows = []
+          for line in md.strip().splitlines():
+              # Match markdown table rows: | `rule-id` | 3 |
+              hit = re.match(r'\|\s*`(.+?)`\s*\|\s*(\d+)\s*\|', line)
+              if hit:
+                  rows.append(f'\u2022 `{hit.group(1)}`: {hit.group(2)}')
+
+          text = '\\n'.join(rows) if rows else '_No rule breakdown available_'
+
+          gho = os.environ.get('GITHUB_OUTPUT', '')
+          if gho:
+              with open(gho, 'a') as f:
+                  f.write(f'slack-rule-text={text}\n')
+          print(f'slack-rule-text: {text[:120]}...' if len(text) > 120 else f'slack-rule-text: {text}')
+          PY
+        env:
+          RULE_BREAKDOWN_MD: ${{ needs.upload-eslint-sarif.outputs.rule-breakdown-md }}
+
       - name: Post Slack Block Kit message — new SARIF findings
         uses: slackapi/slack-github-action@v1.27.0
         with:
@@ -2113,6 +2152,13 @@ jobs:
                   ]
                 },
                 {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*New findings by rule:*\n${{ steps.format-rule-breakdown.outputs.slack-rule-text }}"
+                  }
+                },
+                {
                   "type": "divider"
                 },
                 {
@@ -2129,3 +2175,106 @@ jobs:
         env:
           SLACK_WEBHOOK_URL:  ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+  # ── Job 14: open-sarif-findings-issue ───────────────────────────────────────
+  # Mirrors the webhook-broken issue pattern: whenever new ESLint SARIF findings
+  # exceed SARIF_CRITICAL_THRESHOLD (default 10), this job:
+  #   1. Idempotently creates the `sarif-findings` label (colour: muted yellow).
+  #   2. Opens a GitHub issue summarising total / new / suppressed counts,
+  #      the branch, actor, and a direct link to the Actions run.
+  #
+  # The issue signals that the Code Scanning backlog has grown significantly and
+  # should be reviewed before merging.  It does NOT auto-close — a human or a
+  # future cleanup job should close it once the findings are resolved/suppressed.
+  #
+  # Condition: only runs when new-findings is set AND exceeds the threshold;
+  # `fromJSON()` coerces the string output to a number for the comparison.
+  # ────────────────────────────────────────────────────────────────────────────
+  open-sarif-findings-issue:
+    name: "Open GitHub Issue — Critical SARIF Findings"
+    needs: [upload-eslint-sarif]
+    if: >-
+      always() &&
+      needs.upload-eslint-sarif.result != 'cancelled' &&
+      needs.upload-eslint-sarif.outputs.new-findings != '' &&
+      fromJSON(needs.upload-eslint-sarif.outputs.new-findings) > fromJSON(env.SARIF_CRITICAL_THRESHOLD)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    permissions:
+      issues: write   # create label + open issue
+
+    steps:
+      - name: Ensure sarif-findings label exists
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                name:  'sarif-findings',
+              });
+              core.info("Label 'sarif-findings' already exists — skipping creation.");
+            } catch (e) {
+              if (e.status === 404) {
+                await github.rest.issues.createLabel({
+                  owner:       context.repo.owner,
+                  repo:        context.repo.repo,
+                  name:        'sarif-findings',
+                  color:       'e4e669',
+                  description: 'Auto-opened when ESLint SARIF new-findings exceeds the critical threshold',
+                });
+                core.info("Created label 'sarif-findings'.");
+              } else {
+                throw e;
+              }
+            }
+
+      - name: Open sarif-findings issue
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const newFindings = '${{ needs.upload-eslint-sarif.outputs.new-findings }}';
+            const total       = '${{ needs.upload-eslint-sarif.outputs.total-findings }}';
+            const suppressed  = '${{ needs.upload-eslint-sarif.outputs.suppressed-findings }}';
+            const branch      = '${{ github.head_ref || github.ref_name }}';
+            const threshold   = '${{ env.SARIF_CRITICAL_THRESHOLD }}';
+
+            const runUrl = [
+              process.env.GITHUB_SERVER_URL,
+              context.repo.owner,
+              context.repo.repo,
+              'actions', 'runs', context.runId,
+            ].join('/');
+
+            const body = [
+              '## ESLint SARIF: Critical Findings Threshold Exceeded',
+              '',
+              `New ESLint findings (**${newFindings}**) exceeded the critical`,
+              `threshold of **${threshold}** in run [#${context.runNumber}](${runUrl}).`,
+              '',
+              '| Metric | Count |',
+              '|---|---|',
+              `| New (vs baseline)       | ${newFindings} |`,
+              `| Total findings          | ${total}        |`,
+              `| Suppressed by baseline  | ${suppressed}   |`,
+              '',
+              `**Branch:** \`${branch}\``,
+              `**Actor:**  @${context.actor}`,
+              '',
+              '---',
+              `> Auto-opened by workflow run [#${context.runNumber}](${runUrl}).`,
+              '> Review the Security \u2192 Code Scanning tab and resolve or suppress findings.',
+            ].join('\n');
+
+            const { data: issue } = await github.rest.issues.create({
+              owner:  context.repo.owner,
+              repo:   context.repo.repo,
+              title:  `ESLint: ${newFindings} new SARIF findings on \`${branch}\` (run #${context.runNumber})`,
+              body,
+              labels: ['sarif-findings'],
+            });
+            core.info(`Opened issue #${issue.number}: ${issue.title}`);
+            core.setOutput('issue-number', String(issue.number));
