@@ -85,6 +85,31 @@ ALLOWLIST: frozenset[str] = frozenset(
         "knowledge_import",       # Per-user knowledge base imports; scoped by user_id.
         "notification",           # Per-user notification inbox; scoped by recipient_id.
         "designer_profiles",      # Per-user designer profile; scoped by user_id = auth.uid().
+        # ── Phase 2 RLS — 0188 Factory domain (org_id + tenant_isolation policy added) ──────
+        # Migration 0188 added org_id + _tenant_isolation SELECT policy to all five tables.
+        # Listed here for audit traceability; linter passes them naturally via org_id column.
+        "factory_checkins",            # 0188: org_id backfilled from site_code; policy added.
+        "factory_gate_config",         # 0188: sentinel-org backfill (no site_code); policy added.
+        "factory_job_events",          # 0188: org_id via factory_jobs FK path; policy added.
+        "factory_jobs",                # 0188: org_id backfilled from site_code; policy added.
+        "factory_station_checklists",  # 0188: org_id backfilled from site_code; policy added.
+        # ── Phase 2 RLS — 0189 LINE OA domain (org_id + tenant_isolation policy added) ───────
+        # Migration 0189 added org_id + _tenant_isolation SELECT policy to all eleven tables.
+        "line_bind_codes",             # 0189: org_id backfilled from site_code; policy added.
+        "line_groups",                 # 0189: org_id backfilled from site_code; policy added.
+        "line_group_members",          # 0189: org_id via line_groups FK path; policy added.
+        "line_oa_audit_log",           # 0189: org_id backfilled from site_code; policy added.
+        "line_oa_channels",            # 0189: org_id backfilled from site_code; policy added.
+        "line_oa_conversations",       # 0189: org_id backfilled from site_code; policy added.
+        "line_oa_customer_identity",   # 0189: org_id backfilled from site_code; policy added.
+        "line_oa_inbound_messages",    # 0189: org_id via line_oa_conversations FK; policy added.
+        "line_oa_message_templates",   # 0189: sentinel-org backfill (config table); policy added.
+        "line_oa_orders",              # 0189: org_id backfilled from site_code; policy added.
+        "line_oa_outbound_messages",   # 0189: org_id via line_oa_conversations FK; policy added.
+        # ── Phase 2 RLS — 0194 Operational Misc domain (governance-only tables) ─────────
+        # Migration 0194 replaced the SELECT policy with governance-only access.
+        # staff_bind_tokens holds sensitive login-binding tokens; no per-org user access permitted.
+        "staff_bind_tokens",           # 0194: governance-only policy (is_governance_role()); intentionally not org_id-scoped.
     }
 )
 
@@ -265,11 +290,9 @@ def main() -> None:
         for raw in args.files:
             p = Path(raw)
             if not p.is_file():
-                print(
-                    f"[ERROR] lint-rls-org-id: file not found: {p}",
-                    file=sys.stderr,
-                )
-                sys.exit(2)
+                # File was deleted (e.g. from the same commit) — skip silently.
+                print(f"[lint-rls-org-id] Skipping deleted/missing file: {p}", file=sys.stderr)
+                continue
             scope_files.append(p)
 
     print(f"[lint-rls-org-id] Scanning {migrations_dir} …")
