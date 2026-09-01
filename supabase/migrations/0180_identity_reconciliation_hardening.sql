@@ -230,30 +230,30 @@ BEGIN
     RAISE EXCEPTION 'rpc_record_payment: insufficient privileges for org %', v_org_id;
   END IF;
 
-  -- ── Scoped invoice read — will raise NO_DATA_FOUND if wrong org. ───────────
+  -- ── Scoped invoices read — will raise NO_DATA_FOUND if wrong org. ───────────
   SELECT * INTO STRICT v_invoice
-    FROM invoice
+    FROM invoices
    WHERE invoice_id = p_invoice_id
      AND org_id     = v_org_id;
 
   v_new_remaining := v_invoice.remaining_amount - p_amount;
 
-  -- ── Scoped INSERT into invoice_payment. ────────────────────────────────────
-  INSERT INTO invoice_payment (
+  -- ── Scoped INSERT into invoice_payments. ────────────────────────────────────
+  INSERT INTO invoice_payments (
     payment_id, invoice_id, org_id, amount, payment_method, reference, paid_at
   ) VALUES (
     v_payment_id, p_invoice_id, v_org_id, p_amount, p_method, p_reference, now()
   );
 
-  -- ── Scoped UPDATE on invoice. ───────────────────────────────────────────────
-  UPDATE invoice
+  -- ── Scoped UPDATE on invoices. ───────────────────────────────────────────────
+  UPDATE invoices
      SET remaining_amount = v_new_remaining,
          status = CASE WHEN v_new_remaining <= 0 THEN 'PAID' ELSE 'PARTIAL' END
    WHERE invoice_id = p_invoice_id
      AND org_id     = v_org_id;
 
-  -- ── Scoped UPDATE on job. ───────────────────────────────────────────────────
-  UPDATE job
+  -- ── Scoped UPDATE on jobs. ───────────────────────────────────────────────────
+  UPDATE jobs
      SET updated_at = now()
    WHERE job_id = v_invoice.job_id
      AND org_id = v_org_id;
@@ -267,7 +267,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.rpc_record_payment(UUID, NUMERIC, TEXT, TEXT, UUID) IS
-  'Records a payment against an invoice. '
+  'Records a payment against an invoices. '
   'Caller must be FINANCE, ADMIN, or OWNER in the resolved org. '
   'Identity reconciliation guard added in 0180 (issue #37): '
   'JWT org_id claim is verified against org_members before org resolution.';
@@ -304,8 +304,8 @@ BEGIN
         SELECT j.job_id, j.job_code, j.status, j.due_date,
                c.name AS customer_name,
                j.created_at
-          FROM job j
-          JOIN customer c ON c.customer_id = j.customer_id
+          FROM jobs j
+          JOIN customers c ON c.customer_id = j.customer_id
                           AND c.org_id     = v_org_id
          WHERE j.org_id = v_org_id
            AND (p_status IS NULL OR j.status = p_status)
@@ -318,7 +318,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.rpc_job_board(TEXT, INT, INT) IS
-  'Returns paginated job list for the caller''s org. '
+  'Returns paginated jobs list for the caller''s org. '
   'Identity reconciliation guard added in 0180 (issue #37): '
   'JWT org_id claim is verified against org_members before org resolution.';
 
@@ -359,9 +359,9 @@ BEGIN
     RAISE EXCEPTION 'Forbidden: caller is not a member of any organisation';
   END IF;
 
-  -- ── Fetch quotation scoped to caller org (SD-R3 fix) ─────────────────────
+  -- ── Fetch quotations scoped to caller org (SD-R3 fix) ─────────────────────
   SELECT * INTO v_qt
-  FROM public.quotation
+  FROM public.quotations
   WHERE quotation_id = p_quotation_id
     AND org_id = v_org_id;
 
@@ -370,20 +370,20 @@ BEGIN
   END IF;
 
   IF v_qt.status NOT IN ('DRAFT', 'SENT') THEN
-    RAISE EXCEPTION 'Cannot approve quotation in % status', v_qt.status;
+    RAISE EXCEPTION 'Cannot approve quotations in % status', v_qt.status;
   END IF;
 
-  -- ── Derive invoice code ───────────────────────────────────────────────────
+  -- ── Derive invoices code ───────────────────────────────────────────────────
   v_due    := CURRENT_DATE + p_due_days;
   v_inv_id := gen_random_uuid();
   v_inv_code := 'INV-' || EXTRACT(YEAR FROM now())::TEXT || '-' || LPAD((
     SELECT COALESCE(MAX(SUBSTRING(invoice_code FROM '[0-9]+$')::INT), 0) + 1
-    FROM public.invoice
+    FROM public.invoices
     WHERE org_id = v_org_id
   )::TEXT, 4, '0');
 
-  -- ── Update quotation status ───────────────────────────────────────────────
-  UPDATE public.quotation
+  -- ── Update quotations status ───────────────────────────────────────────────
+  UPDATE public.quotations
   SET
     status      = 'APPROVED',
     approved_at = now(),
@@ -392,8 +392,8 @@ BEGIN
   WHERE quotation_id = p_quotation_id
     AND org_id = v_org_id;
 
-  -- ── Create invoice ────────────────────────────────────────────────────────
-  INSERT INTO public.invoice (
+  -- ── Create invoices ────────────────────────────────────────────────────────
+  INSERT INTO public.invoices (
     invoice_id, invoice_code, quotation_id, job_id,
     customer_id, org_id,
     subtotal, vat_rate, vat_amount, discount,
@@ -405,9 +405,9 @@ BEGIN
     v_qt.subtotal, v_qt.vat_rate, v_qt.vat_amount, v_qt.discount,
     v_qt.total, v_qt.total, v_due, auth.uid();
 
-  -- ── Update job status if linked ───────────────────────────────────────────
+  -- ── Update jobs status if linked ───────────────────────────────────────────
   IF v_qt.job_id IS NOT NULL THEN
-    UPDATE public.job
+    UPDATE public.jobs
     SET
       status       = 'QUOTED',
       quotation_id = p_quotation_id,
@@ -428,7 +428,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.rpc_approve_quotation(UUID, INT) IS
-  'Approves a quotation and auto-creates a linked invoice. '
+  'Approves a quotations and auto-creates a linked invoices. '
   'Requires FINANCE or ADMIN role. '
   'Identity reconciliation guard added in 0180 (issue #37): '
   'JWT org_id claim is verified against org_members before org resolution.';
@@ -658,7 +658,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.get_org_usage(UUID) IS
-  'Returns job count, member count, and storage usage for p_org_id. '
+  'Returns jobs count, member count, and storage usage for p_org_id. '
   'Caller must be OWNER or ADMIN of that org, or a platform super-admin. '
   'Identity reconciliation guard + JWT claim vs parameter check added in 0180 (issue #37): '
   'non-super-admin callers may only query their own JWT org_id.';
