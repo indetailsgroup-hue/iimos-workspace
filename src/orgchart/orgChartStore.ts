@@ -228,8 +228,9 @@ export const useOrgChartStore = create<OrgChartState & OrgChartActions>(
         if (error) throw error;
         await get().fetchChart(orgId, orgPlan); // reconcile tree
       } catch (err: unknown) {
-        set({ error: (err as Error).message });
+        const errMsg = (err as Error).message;
         await get().fetchChart(orgId, orgPlan); // rollback via re-fetch
+        set({ error: errMsg }); // re-set after fetchChart clears it
       }
     },
 

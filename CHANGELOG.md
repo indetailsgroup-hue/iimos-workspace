@@ -5,6 +5,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v18.0.2] — OrgChartCanvas Stories + orgChartStore Tests + RoleNetworkCanvas UI — 2027-02-10
+
+### Added
+
+#### Stories — `src/orgchart/OrgChartCanvas.stories.tsx`
+- 10 CSF3 Storybook stories with `withOrgChartStore` decorator
+- Stories: `PlanGateWallFree`, `PlanGateWallStarter`, `EmptyState`, `WithNodes`, `NodeDragInteraction` (play: pointerdown → pointermove → pointerup on drag handle, verifies `moveNode` called), `ReportingLineToggle` (play: click toggle, assert `oc-reporting-line-toggle` checked), `NodeDetailPanel` (play: click node, assert panel visible), `AdminView`, `LoadingState`, `ErrorState`
+- `withOrgChartStore` decorator initialises store state via `useOrgChartStore.setState(...)` before each story
+- `userEvent` from `@storybook/test`; `fn()` spies for admin action handlers
+
+#### Tests — `src/orgchart/__tests__/orgChartStore.test.ts`
+- 34 Vitest unit tests — **all passing**
+- Plan gate: all 6 write actions (`moveNode`, `addReportingLine`, `removeReportingLine`, `updateLineType`, `addNode`, `deleteNode`) throw `OrgChartPlanGateError` for FREE + STARTER
+- `moveNode` — optimistic position update applied before first `await`; rollback via `fetchChart` restores original; error persists after rollback (catch block re-orders: `fetchChart` then `set({error})`)
+- `fetchChart` — parallel Supabase queries; `buildOcTree` correctly wires parent-child; resulting `nodes`/`flatNodes` populated in store
+- `deleteNode` — removes node from `nodes` map; cascades removal of all reporting lines referencing deleted node; resets `selectedNodeId` if deleted node was selected
+
+#### UI — `src/role-network/RoleNetworkCanvas.tsx`
+- `RoleNetworkCanvas` — ENTERPRISE-gated canvas; props: `{ orgId, orgPlan, isAdmin? }`
+- ENTERPRISE gate via `canAccessRoleNetwork(orgPlan)` → `data-testid="rnv-plan-gate-wall"` for non-ENTERPRISE plans
+- `fetchNetwork(orgId, orgPlan)` called in `useEffect` with deps `[orgId, orgPlan, isGated]`; skips fetch when gated
+- Layout: `SENIORITY_RANK` map (`PRINCIPAL→0 … JUNIOR→4`), `NODE_W=180`, `NODE_H=90`, `H_GAP=40`, `V_GAP=80`, `PADDING=40`, `BASE_CANVAS_W=800`
+- `computeNodePositions()` — groups roles by seniority rank, centre-aligns each row within `BASE_CANVAS_W`, stacks rows vertically
+- `computeCanvasSize()` — derives SVG/canvas dimensions from position map
+- Sub-component `RoleNodeCard` — seniority badge (`rnv-seniority-badge`) + headcount badge (`rnv-headcount-badge`); click selects role
+- Sub-component `RelationshipEdgesSvg` — SVG with `<defs>` arrowhead marker; `<line>` per relationship; dashed stroke for `DEPENDS_ON`; Thai mid-line labels from `RNV_RELATIONSHIP_TYPE_LABEL_TH`
+- Sub-component `RoleDetailPanel` — relationship list, admin add/remove controls (`rnv-add-relationship-btn`, `rnv-remove-relationship-btn`), close button (`rnv-close-detail-btn`); uses `addRelationship`/`removeRelationship`/`isRelationshipLoading` directly from store
+- All hooks unconditional (Rules of Hooks); `useEffect` skips via early `if (isGated) return`
+- State testids: `rnv-plan-gate-wall`, `rnv-loading`, `rnv-error`, `rnv-empty`, `rnv-canvas`, `rnv-canvas-area`, `rnv-edges-svg`, `rnv-role-node` + `data-role-id`
+- Named + default export
+
+### Fixed
+
+#### Store — `src/orgchart/orgChartStore.ts`
+- `moveNode` catch block re-ordered: `fetchChart` (rollback) runs first, then `set({ error })` re-sets the error — ensures error state survives the rollback re-fetch that previously cleared it via `set({ isLoading: true, error: null })`
+
+#### Tests — `src/orgchart/__tests__/orgChartStore.test.ts`
+- 4 `moveNode` call sites corrected from wrong arg order `(nodeId, x, y, plan, orgId)` to correct signature `(orgId, plan, { nodeId, parentId, position_x, position_y })`
+
+---
+
 ## [v18.0.1] — OrgChart Canvas UI + OrgChart Tests + Role Network View — 2027-02-05
 
 ### Added

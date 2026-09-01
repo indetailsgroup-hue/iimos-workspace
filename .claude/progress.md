@@ -14,10 +14,15 @@
 - `src/role-network/roleNetworkTypes.ts` — `RnvRelationshipType` (5 types) + `RnvSeniority` (5 levels); DB + app-layer types; payloads; `canAccessRoleNetwork`/`RoleNetworkPlanGateError` (ENTERPRISE only); Thai label constants; mappers
 - `src/role-network/roleNetworkStore.ts` — `useRoleNetworkStore`; 8 ENTERPRISE-gated actions; `fetchNetwork` parallel fetch; `deleteRole` immediate local cleanup (cascades relationships/employeeRoles, resets selectedRoleId)
 
-### 📋 Remaining v18.0 tasks
-- Storybook stories for `OrgChartCanvas.tsx`
-- Vitest unit tests for `orgChartStore.ts`
-- Role Network View UI component (`RoleNetworkCanvas.tsx`) — ENTERPRISE-gated
+### ✅ Completed (v18.0 — sprint 3: OrgChartCanvas stories + orgChartStore tests + RoleNetworkCanvas UI)
+- `src/orgchart/OrgChartCanvas.stories.tsx` — 10 CSF3 Storybook stories; `withOrgChartStore` decorator; stories cover plan gate, empty, node drag, reporting line toggle, node detail panel; `userEvent` play functions; `fn()` spies
+- `src/orgchart/__tests__/orgChartStore.test.ts` — 34 Vitest unit tests (**all passing**); plan gate on all 6 write actions, `moveNode` optimistic update + rollback + error persistence, `fetchChart` tree build, `deleteNode` cascade
+- `src/orgchart/orgChartStore.ts` — fix: `moveNode` catch block re-ordered (`fetchChart` → `set({error})`) to preserve error after rollback re-fetch
+- `src/role-network/RoleNetworkCanvas.tsx` — ENTERPRISE-gated canvas; `computeNodePositions`/`computeCanvasSize` layout utils; sub-components: `RoleNodeCard` (seniority + headcount badges), `RelationshipEdgesSvg` (SVG arrowheads + dashed DEPENDS_ON + Thai labels), `RoleDetailPanel` (add/remove relationship controls); all data-testids; named + default export
+
+### 📋 Remaining v18.0 tasks (sprint 4+)
+- Storybook stories for `RoleNetworkCanvas.tsx`
+- Vitest unit tests for `roleNetworkStore.ts`
 - QC Anomaly Detection module (schema + types + store + UI)
 - AI Quotation Draft module
 - Leadership Action Tracker module
@@ -87,7 +92,7 @@
 - `src/culture-metrics/CultureDashboard.stories.tsx` — 11 CSF3 Storybook stories; `withCultureStore` decorator; `activateSpy`/`closeSpy` fn() spies; play functions for ActivateSurveyAction + CloseSurveyAction
 - `src/culture-metrics/__tests__/CultureDashboard.test.tsx` — 24 Vitest tests all passing; covers plan gate, loading, error, surveys, eNPS results, org health
 
-**Last updated:** 2027-02-05
+**Last updated:** 2027-02-10
 
 ---
 
