@@ -19,10 +19,12 @@
  * /factory                     - Factory dashboard (FACTORY role)
  * /factory/jobs/:jobId         - Factory job detail (FACTORY role)
  * /finance                     - Finance screen (FINANCE role)
+ * /etax                        - eTax Compliance Dashboard (OWNER/ADMIN/FINANCE)
+ * /accounting                  - Accounting Management: Multi-book Ledger + CoA (OWNER/ADMIN/FINANCE)
  * /safety                      - Redirect to /diagnostics/safety
  * /diagnostics/safety          - Safety diagnostics (local-only, not authoritative)
  *
- * @version 0.12.6
+ * @version 0.13.0
  */
 
 import { useMemo, useEffect, useState, useCallback, Suspense, lazy, type ComponentType } from 'react';
@@ -119,6 +121,20 @@ const FinanceDashboard = lazy(() =>
         default: m.FinanceDashboard ?? m.default ?? FinanceComingSoon,
       }))
     : Promise.resolve({ default: FinanceComingSoon })
+);
+
+// v15 eTax Observability: eTax Compliance Dashboard — Migration 0186–0195
+const EtaxComplianceDashboard = lazy(() =>
+  import('../pages/EtaxComplianceDashboard').then(m => ({
+    default: m.EtaxComplianceDashboard ?? (m as any).default,
+  }))
+);
+
+// v15 Accounting Management: Multi-book Ledger + Chart of Accounts — Migration 0179
+const AccountingManagement = lazy(() =>
+  import('../pages/AccountingManagement').then(m => ({
+    default: m.AccountingManagement ?? (m as any).default,
+  }))
 );
 
 /**
@@ -1270,6 +1286,28 @@ export const router = createBrowserRouter([
       <RequireRole allow={['FINANCE', 'ADMIN']}>
         <Suspense fallback={<PageLoadingFallback message="Loading Finance…" />}>
           <FinanceDashboard />
+        </Suspense>
+      </RequireRole>
+    ),
+  },
+  // eTax Compliance Dashboard — v15 observability stack (Migrations 0186–0195)
+  {
+    path: '/etax',
+    element: (
+      <RequireRole allow={['OWNER', 'ADMIN', 'FINANCE']}>
+        <Suspense fallback={<PageLoadingFallback message="Loading eTax Dashboard…" />}>
+          <EtaxComplianceDashboard />
+        </Suspense>
+      </RequireRole>
+    ),
+  },
+  // Accounting Management — Multi-book Ledger + Chart of Accounts (Migration 0179)
+  {
+    path: '/accounting',
+    element: (
+      <RequireRole allow={['OWNER', 'ADMIN', 'FINANCE']}>
+        <Suspense fallback={<PageLoadingFallback message="Loading Accounting…" />}>
+          <AccountingManagement />
         </Suspense>
       </RequireRole>
     ),
