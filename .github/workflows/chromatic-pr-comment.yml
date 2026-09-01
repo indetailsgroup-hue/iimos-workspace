@@ -5,6 +5,24 @@ on:
     workflows: ["Chromatic Visual Regression"]
     types: [completed]
 
+  # Manual trigger for testing — supply a PR number to receive the comment
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to comment on'
+        required: true
+        type: number
+      conclusion:
+        description: 'Simulated conclusion'
+        required: false
+        default: 'success'
+        type: choice
+        options: [success, failure, cancelled]
+      build_url:
+        description: 'Chromatic build URL (optional override)'
+        required: false
+        default: ''
+
 permissions:
   pull-requests: write
   checks: read
@@ -20,27 +38,51 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const run = context.payload.workflow_run;
-            const headBranch = run.head_branch;
-            const headSha   = run.head_sha;
-            const conclusion = run.conclusion; // 'success' | 'failure' | 'cancelled' | null
+            const isManual = context.eventName === 'workflow_dispatch';
 
-            // Find the open PR for this branch
-            const { data: prs } = await github.rest.pulls.list({
-              owner: context.repo.owner,
-              repo:  context.repo.repo,
-              head:  `${context.repo.owner}:${headBranch}`,
-              state: 'open',
-            });
+            let prNumber, headSha, headBranch, conclusion, runId, runUrl;
+            let buildUrlOverride = '';
 
-            if (prs.length === 0) {
-              console.log(`No open PR found for branch: ${headBranch}`);
-              return;
+            if (isManual) {
+              // ── Manual (workflow_dispatch) path ──────────────────────────────
+              prNumber         = parseInt(context.payload.inputs.pr_number, 10);
+              conclusion       = context.payload.inputs.conclusion || 'success';
+              buildUrlOverride = context.payload.inputs.build_url  || '';
+              runId            = 'manual';
+              runUrl           = '#';
+
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                pull_number: prNumber,
+              });
+              headSha    = pr.head.sha;
+              headBranch = pr.head.ref;
+
+            } else {
+              // ── Automated (workflow_run) path ─────────────────────────────────
+              const run  = context.payload.workflow_run;
+              headBranch = run.head_branch;
+              headSha    = run.head_sha;
+              conclusion = run.conclusion;
+              runId      = run.id;
+              runUrl     = run.html_url;
+
+              const { data: prs } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                head:  `${context.repo.owner}:${headBranch}`,
+                state: 'open',
+              });
+
+              if (prs.length === 0) {
+                console.log(`No open PR found for branch: ${headBranch}`);
+                return;
+              }
+              prNumber = prs[0].number;
             }
 
-            const pr = prs[0];
-
-            // Locate the Chromatic check run to get its details_url (build link)
+            // ── Locate Chromatic check run for build URL ──────────────────────
             const { data: checkData } = await github.rest.checks.listForRef({
               owner: context.repo.owner,
               repo:  context.repo.repo,
@@ -53,16 +95,20 @@ jobs:
             );
 
             const buildUrl =
-              chromaticCheck?.details_url ??
+              buildUrlOverride ||
+              chromaticCheck?.details_url ||
               `https://www.chromatic.com/builds?appId=6a916bc5171efe1f3f09f56e`;
 
-            // Try to extract story count from check output summary
             const summary    = chromaticCheck?.output?.summary ?? '';
             const storyMatch = summary.match(/(\d+)\s+stor/i);
             const storyCount = storyMatch ? storyMatch[1] : '—';
 
             const statusEmoji = conclusion === 'success' ? '✅' : '❌';
             const statusText  = conclusion === 'success' ? 'passed' : (conclusion ?? 'unknown');
+
+            const footer = isManual
+              ? '_Triggered manually via workflow\\_dispatch_'
+              : `_Triggered by [workflow run #${runId}](${runUrl})_`;
 
             const body = [
               `## ${statusEmoji} Chromatic Visual Regression — ${statusText}`,
@@ -74,14 +120,14 @@ jobs:
               `| **Commit** | \`${headSha.slice(0, 7)}\` |`,
               `| **Stories checked** | ${storyCount} |`,
               '',
-              `_Triggered by [workflow run #${run.id}](${run.html_url})_`,
+              footer,
             ].join('\n');
 
             await github.rest.issues.createComment({
               owner:        context.repo.owner,
               repo:         context.repo.repo,
-              issue_number: pr.number,
+              issue_number: prNumber,
               body,
             });
 
-            console.log(`Comment posted on PR #${pr.number}`);
+            console.log(`Comment posted on PR #${prNumber}`);
