@@ -1,5 +1,23 @@
 # Monolith Implementation Progress
 
+## v18.0 — Interactive OrgChart, Role Network View, QC Anomaly Detection, AI Quotation Draft, Leadership Action Tracker (🔜 Active — Q2 2027)
+
+### ✅ Completed (v18.0 — sprint 1: Interactive OrgChart schema + types + store)
+- `supabase/migrations/20270201_interactive_orgchart.sql` — `org_chart_nodes`, `org_reporting_lines`, `org_chart_hierarchy_v` (recursive CTE), `oc_is_professional_plus()`, trigger, 6 indexes, 7 RLS policies, assertion block
+- `src/orgchart/orgChartTypes.ts` — `OrgNodeType`/`OcLineType` unions; DB + app-layer types; 4 payloads; `OcFilters`/`DEFAULT_OC_FILTERS`; `canAccessOrgChart`/`OrgChartPlanGateError`; Thai label constants; `mapOcNodeRow`, `mapOcReportingLineRow`, `buildOcTree`, `flattenOcTree`
+- `src/orgchart/orgChartStore.ts` — `useOrgChartStore`; 7 async actions (PROFESSIONAL+ gated writes); `moveNode` optimistic drag update; `fetchChart` parallel fetch + tree build; UI helpers: `selectNode`, `toggleExpand`, `setDragging`, `setFilters`, `clearError`
+
+### 📋 Remaining v18.0 tasks
+- `OrgChartCanvas.tsx` — PROFESSIONAL+-gated drag-and-drop canvas UI component
+- Storybook stories for `OrgChartCanvas.tsx`
+- Vitest unit tests for `orgChartTypes.ts` + `orgChartStore.ts`
+- Role Network View module (schema + types + store + UI)
+- QC Anomaly Detection module
+- AI Quotation Draft module
+- Leadership Action Tracker module
+
+---
+
 ## v17.5 — Training Tracker + Super Employee Tracker + AI Cost Estimation (✅ v17.5.0 Released 2027-01-15 | v17.5.1 Released 2027-01-20)
 
 **Tag v17.5.0:** `3a819c17` | **Tag v17.5.1:** `8a7a6be8`

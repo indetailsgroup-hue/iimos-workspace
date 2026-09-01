@@ -5,6 +5,40 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v18.0.0] — Interactive OrgChart Module — 2027-02-01
+
+### Added
+
+#### Schema — Interactive OrgChart (PROFESSIONAL+)
+- `supabase/migrations/20270201_interactive_orgchart.sql`
+  - `org_chart_nodes` — node entities (EMPLOYEE / ROLE / DEPARTMENT / TEAM), `parent_id` self-ref, `position_x`/`position_y` for canvas drag, `hierarchy_level`, `employee_id` FK (nullable), `metadata JSONB`
+  - `org_reporting_lines` — explicit dotted/matrix lines beyond parent_id tree; UNIQUE `(from_node_id, to_node_id)`
+  - `org_chart_hierarchy_v` — recursive CTE view adding `depth` and `path` columns
+  - `oc_is_professional_plus()` — plan gate function (PROFESSIONAL or ENTERPRISE)
+  - `trg_ocn_updated_at` — auto-set `updated_at` on node update
+  - 6 indexes: `idx_ocn_org_id`, `idx_ocn_parent_id`, `idx_ocn_employee_id` (partial), `idx_ocn_active`, `idx_orl_org_id`, `idx_orl_from_node`
+  - Full RLS: 4 policies on `org_chart_nodes`, 3 on `org_reporting_lines`; all scoped to `org_id` + `oc_is_professional_plus()`
+  - Assertion block: table/view existence + policy count
+
+#### Types — `src/orgchart/orgChartTypes.ts`
+- Union types: `OrgNodeType` (`EMPLOYEE | ROLE | DEPARTMENT | TEAM`), `OcLineType` (`SOLID | DOTTED`)
+- DB row types: `OcNodeRow`, `OcReportingLineRow`
+- App-layer types: `OcNode` (extends row with `children`, `depth`, `path`), `OcReportingLine`
+- Payloads: `CreateOcNodePayload`, `UpdateOcNodePayload`, `MoveOcNodePayload`, `AddReportingLinePayload`
+- Filters: `OcFilters`, `DEFAULT_OC_FILTERS`
+- Plan gate: `canAccessOrgChart(orgPlan)`, `OrgChartPlanGateError`
+- Thai label constants: `OC_NODE_TYPE_LABEL_TH`, `OC_LINE_TYPE_LABEL_TH`
+- Utilities: `mapOcNodeRow`, `mapOcReportingLineRow`, `buildOcTree` (recursive tree builder), `flattenOcTree` (depth-first flatten)
+
+#### Store — `src/orgchart/orgChartStore.ts`
+- `useOrgChartStore` — Zustand store; state: `nodes` (tree), `flatNodes`, `reportingLines`, `selectedNodeId`, `expandedNodeIds`, `isDragging`, `isLoading`, `isLineLoading`, `filters`, `error`
+- Write actions (PROFESSIONAL+ gated): `createNode`, `updateNode`, `deleteNode`, `addReportingLine`, `removeReportingLine`
+- `moveNode` — optimistic position update for drag UX; rolls back via re-fetch on error
+- `fetchChart` — parallel fetch of nodes + reporting lines; builds tree via `buildOcTree`
+- UI helpers: `selectNode`, `toggleExpand`, `setDragging`, `setFilters`, `clearError`
+
+---
+
 ## [v17.5.6] — CultureDashboard Stories & Tests — 2027-01-28
 
 ### Added
