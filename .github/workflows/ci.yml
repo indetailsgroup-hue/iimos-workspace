@@ -927,6 +927,19 @@ jobs:
           echo "  CONCURRENTLY lines remaining: $(grep -c 'CONCURRENTLY' supabase/migrations/0173_rls_isolation_hardening.sql || echo 0)"
           echo "  MIN(org_id) remaining: $(grep -c 'MIN(org_id)' supabase/migrations/0173_rls_isolation_hardening.sql || echo 0)"
 
+      # ── iter 25e: patch 0177_audit_log_insert_hardening.sql — re-include 'image' ──────
+      # 0177 preamble (statement 5) extends message_kind CHECK to ('text','flex','quick_reply')
+      # but migration 0134 already inserted rows with message_kind='image', so ADD CONSTRAINT
+      # fails with "check constraint … violated by some row".  Re-include 'image' in the local
+      # runner copy so the constraint matches existing data.  Production file is not modified.
+      - name: Patch 0177_audit — re-include 'image' in message_kind constraint
+        run: |
+          sed -i \
+            "s/CHECK (message_kind IN ('text', 'flex', 'quick_reply'))/CHECK (message_kind IN ('text', 'flex', 'image', 'quick_reply'))/" \
+            supabase/migrations/0177_audit_log_insert_hardening.sql
+          echo "Patch applied to 0177_audit:"
+          echo "  message_kind constraint: $(grep -o \"message_kind IN ([^)]*))\" supabase/migrations/0177_audit_log_insert_hardening.sql || echo not found)"
+
       # ── Iter 15: patch 0173_rollback.sql — plural table names + exception-safe
       #   publication adds.  Uses Python heredoc so $pub$ dollar signs are never
       #   expanded by the shell.
