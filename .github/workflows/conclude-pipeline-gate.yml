@@ -188,6 +188,7 @@ jobs:
     if: github.event_name == 'workflow_call'
     outputs:
       validation_passed: ${{ steps.schema-check.outputs.validation_passed }}
+      validation_errors:  ${{ steps.schema-check.outputs.validation_errors }}
     steps:
       - name: Schema-check workflow_call inputs
         id: schema-check
@@ -282,11 +283,13 @@ jobs:
             if (errors.length > 0) {
               errors.forEach(msg => core.error(msg));
               core.setOutput('validation_passed', 'false');
+              core.setOutput('validation_errors', JSON.stringify(errors));
               core.setFailed(
                 `conclude-pipeline-gate: ${errors.length} input validation error(s) — see above`
               );
             } else {
               core.setOutput('validation_passed', 'true');
+              core.setOutput('validation_errors', '[]');
               core.info(
                 `All inputs valid — overall_status=${overallStatus}, ` +
                 `sha=${commitSha.slice(0, 7)}, sarif_threshold=${process.env.SARIF_THRESHOLD}`
@@ -299,27 +302,37 @@ jobs:
         uses: actions/github-script@v7
         env:
           VALIDATION_PASSED: ${{ steps.schema-check.outputs.validation_passed }}
+          VALIDATION_ERRORS: ${{ steps.schema-check.outputs.validation_errors }}
           PR_NUMBER:         ${{ inputs.pr_number }}
           RUN_URL:           ${{ inputs.run_url }}
         with:
           script: |
-            const passed   = process.env.VALIDATION_PASSED === 'true';
-            const prNumber = parseInt(process.env.PR_NUMBER || '0', 10);
-            const runUrl   = process.env.RUN_URL || '';
-            if (!prNumber) { core.info('No valid PR number — skipping badge comment'); return; }
-            const icon   = passed ? '\u2705' : '\u274c';
-            const label  = passed ? '**passed**' : '**failed**';
-            const detail = passed
-              ? 'All `conclude-pipeline-gate` inputs passed schema validation for this run.'
-              : `\u26a0\ufe0f One or more \`conclude-pipeline-gate\` inputs failed schema validation — see [run logs](${runUrl}) for details.`;
-            const body = [
+            const passed      = process.env.VALIDATION_PASSED === 'true';
+            const errorsJson  = process.env.VALIDATION_ERRORS || '[]';
+            let parsedErrors  = [];
+            try { parsedErrors = JSON.parse(errorsJson); } catch (_) {}
+            const prNumber    = parseInt(process.env.PR_NUMBER || '0', 10);
+            const runUrl      = process.env.RUN_URL || '';
+            if (!prNumber) { core.info('No valid PR number \u2014 skipping badge comment'); return; }
+            const icon  = passed ? '\u2705' : '\u274c';
+            const label = passed ? '**passed**' : '**failed**';
+            const parts = [
               `<!-- conclude-pipeline-gate-validation -->`,
               `### ${icon} Gate Schema Validation \u2014 ${label}`,
               ``,
-              detail,
-              ``,
-              `_Updated by \`validate-inputs\` \u00b7 [View run](${runUrl})_`,
-            ].join('\n');
+            ];
+            if (passed) {
+              parts.push('All `conclude-pipeline-gate` inputs passed schema validation for this run.');
+            } else {
+              parts.push(`\u26a0\ufe0f Schema validation failed \u2014 ${parsedErrors.length} error(s):`);
+              parts.push('');
+              parts.push('| # | Error |');
+              parts.push('|---|-------|');
+              parsedErrors.forEach((e, i) => parts.push(`| ${i + 1} | ${e} |`));
+            }
+            parts.push('');
+            parts.push(`_Updated by \`validate-inputs\` \u00b7 [View run](${runUrl})_`);
+            const body   = parts.join('\n');
             const MARKER = '<!-- conclude-pipeline-gate-validation -->';
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber,
@@ -338,6 +351,40 @@ jobs:
               });
               core.info(`Created validation badge comment on PR #${prNumber}`);
             }
+
+      - name: Post commit status for schema validation
+        id: post-validation-status
+        if: always() && inputs.commit_sha != ''
+        uses: actions/github-script@v7
+        env:
+          VALIDATION_PASSED: ${{ steps.schema-check.outputs.validation_passed }}
+          COMMIT_SHA:        ${{ inputs.commit_sha }}
+          RUN_URL:           ${{ inputs.run_url }}
+        with:
+          script: |
+            const passed    = process.env.VALIDATION_PASSED === 'true';
+            const commitSha = process.env.COMMIT_SHA || '';
+            const runUrl    = process.env.RUN_URL || '';
+            if (!commitSha || commitSha.length < 40) {
+              core.warning('commit_sha invalid \u2014 skipping commit status post');
+              return;
+            }
+            await github.rest.repos.createCommitStatus({
+              owner:       context.repo.owner,
+              repo:        context.repo.repo,
+              sha:         commitSha,
+              state:       passed ? 'success' : 'failure',
+              target_url:  runUrl,
+              context:     'ci/validate-inputs-schema',
+              description: passed
+                ? 'All gate inputs passed schema validation'
+                : 'One or more gate inputs failed schema validation',
+            });
+            core.info(
+              `Posted ci/validate-inputs-schema=${
+                passed ? 'success' : 'failure'
+              } on ${commitSha.slice(0, 7)}`
+            );
 
   post-pipeline-gate:
     name: Post Pipeline Gate
@@ -816,6 +863,32 @@ jobs:
               core.info(`TC-6 PASSED — ${errors.length} error(s) detected: ${errors.join('; ')}`);
             }
 
+      - name: "TC-7: run_url missing https:// prefix"
+        id: tc7
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Payload: run_url values that do not start with 'https://'.
+            // Expected: run_url validation error → validation_passed='false'
+            const errors   = [];
+            const testUrls = [
+              'http://github.com/actions/run/123',   // wrong scheme
+              '/relative/path/to/run',                // bare path
+            ];
+            for (const url of testUrls) {
+              if (!url.startsWith('https://'))
+                errors.push(`run_url must start with 'https://'; got '${url}'`);
+            }
+            if (errors.length === 0) {
+              core.setFailed(
+                'TC-7 FAILED: expected run_url validation errors but got none ' +
+                '(validate-inputs would have incorrectly set validation_passed=true)'
+              );
+            } else {
+              core.info(`TC-7 PASSED — ${errors.length} error(s) detected: ${errors.join('; ')}`);
+            }
+
       - name: "Job summary — TC results table"
         if: always()
         env:
@@ -825,6 +898,7 @@ jobs:
           TC4_OUTCOME: ${{ steps.tc4.outcome }}
           TC5_OUTCOME: ${{ steps.tc5.outcome }}
           TC6_OUTCOME: ${{ steps.tc6.outcome }}
+          TC7_OUTCOME: ${{ steps.tc7.outcome }}
         run: |
           tc() { [ "$1" = "success" ] && printf ':white_check_mark: PASS' || printf ':x: FAIL'; }
           {
@@ -838,11 +912,12 @@ jobs:
             echo "| TC-4 | Malformed \`commit_sha\` (not 40-char hex) | SHA-1 regex | $(tc "$TC4_OUTCOME") |"
             echo "| TC-5 | \`overall_status='failure'\` + empty \`critical_failed_jobs\` | Cross-validation (reverse) | $(tc "$TC5_OUTCOME") |"
             echo "| TC-6 | \`overall_status='unknown'\` not in VALID_STATUSES | VALID_STATUSES enum | $(tc \"$TC6_OUTCOME\") |"
+            echo "| TC-7 | \`run_url\` missing \`https://\` prefix | run_url scheme check | $(tc \"$TC7_OUTCOME\") |"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
           # Fail job if any TC failed (continue-on-error masked the individual step failures)
           failed=0
-          for outcome in "$TC1_OUTCOME" "$TC2_OUTCOME" "$TC3_OUTCOME" "$TC4_OUTCOME" "$TC5_OUTCOME" "$TC6_OUTCOME"; do
+          for outcome in "$TC1_OUTCOME" "$TC2_OUTCOME" "$TC3_OUTCOME" "$TC4_OUTCOME" "$TC5_OUTCOME" "$TC6_OUTCOME" "$TC7_OUTCOME"; do
             [ "$outcome" != "success" ] && failed=1
           done
           if [ "$failed" = "1" ]; then
@@ -850,4 +925,4 @@ jobs:
             echo "_⚠️ One or more TCs failed — check step logs._" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          echo "_All 6 smoke-test TCs passed._" >> "$GITHUB_STEP_SUMMARY"
+          echo "_All 7 smoke-test TCs passed._" >> "$GITHUB_STEP_SUMMARY"
