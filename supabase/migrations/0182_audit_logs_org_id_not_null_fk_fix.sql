@@ -141,22 +141,12 @@ BEGIN
   INSERT INTO public.organizations (
     org_id,
     name,
-    slug,
-    plan,
-    status,
-    max_users,
-    max_jobs_per_month,
-    settings
+    slug
   )
   VALUES (
     '00000000-0000-0000-0000-000000000000'::UUID,
     '__sentinel_org__',
-    '__sentinel__',
-    'FREE',
-    'CANCELLED',
-    0,
-    0,
-    '{}'::jsonb
+    '__sentinel__'
   )
   ON CONFLICT (org_id) DO NOTHING;
 
