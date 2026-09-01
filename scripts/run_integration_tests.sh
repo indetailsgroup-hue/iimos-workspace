@@ -27,6 +27,7 @@
 #  18. line_oa_dispatch_worker_drain_retry_integration_test.ts           — integration
 #  19. rpc_bulk_force_close_field_purchase_request_integration_test.ts   — integration
 #  20. fn_cron_alert_dead_letter_fpr_integration_test.ts                  — integration
+#  21. e2e_smoke_test.ts                                                  — e2e
 #
 # Usage:
 #   ./run_integration_tests.sh                     # loads .env from script dir
@@ -103,6 +104,7 @@ SUITES=(
   "integration:dispatch_drain_retry |line_oa_dispatch_worker_drain_retry_integration_test.ts|1"
   "integration:bulk_force_close   |rpc_bulk_force_close_field_purchase_request_integration_test.ts|1"
   "integration:dead_letter_alert  |fn_cron_alert_dead_letter_fpr_integration_test.ts|1"
+  "e2e:smoke_test                 |e2e_smoke_test.ts|2"
 )
 
 # Parallel arrays to accumulate results (bash 3 compatible — no associative arrays)
