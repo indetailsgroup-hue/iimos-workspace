@@ -3,7 +3,7 @@
 # scripts/apply_migrations.sh
 # FPR Field-Purchase sub-system — sequential migration apply script
 #
-# Applies migrations 0176 → 0210 in numerical order against the target database.
+# Applies migrations 0176 → 0214 in numerical order against the target database.
 #
 # Usage:
 #   ./scripts/apply_migrations.sh                    # uses DATABASE_URL from env
@@ -51,7 +51,7 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Migration list (0176 → 0209, in order)
+# Migration list (0176 → 0214, in order)
 # ---------------------------------------------------------------------------
 MIGRATIONS=(
   "0176_field_purchase_core.sql"
@@ -89,6 +89,10 @@ MIGRATIONS=(
   "0208_outbound_dead_letter.sql"
   "0209_photo_refs_guard.sql"
   "0210_fpr_dead_letter_monitoring.sql"
+  "0211_fpr_receiving_confirmation.sql"
+  "0212_fpr_vendor_payment_flow.sql"
+  "0213_fpr_budget_ceiling.sql"
+  "0214_line_rich_menu_config.sql"
 )
 
 TOTAL=${#MIGRATIONS[@]}
