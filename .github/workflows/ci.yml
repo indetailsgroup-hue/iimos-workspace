@@ -27,7 +27,7 @@ jobs:
   # Job 1: Deno unit + integration tests (runs on every PR)
   # ───────────────────────────────────────────────────────────────────────────
   test:
-    name: Deno Tests (19 suites)
+    name: Deno Tests (21 suites)
     runs-on: ubuntu-latest
 
     env:
@@ -170,11 +170,23 @@ jobs:
           deno test --allow-env --allow-net --no-check \
             rpc_bulk_force_close_field_purchase_request_integration_test.ts
 
+      - name: Integration tests — dead letter alert
+        if: env.SUPABASE_URL != ''
+        run: |
+          deno test --allow-env --allow-net --no-check \
+            fpr_dead_letter_alert_integration_test.ts
+
+      - name: Integration tests — e2e smoke (remote, secrets-gated)
+        if: env.SUPABASE_URL != ''
+        run: |
+          deno test --allow-env --allow-net --no-check \
+            supabase/tests/e2e_smoke_test.ts
+
   # ───────────────────────────────────────────────────────────────────────────
   # Job 2: Apply migrations to Supabase (runs only on push to main)
   # ───────────────────────────────────────────────────────────────────────────
   migrate:
-    name: Apply Migrations (0176→0209)
+    name: Apply Migrations (0176→0214)
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -191,7 +203,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client
 
-      - name: Apply migrations 0176→0209
+      - name: Apply migrations 0176→0214
         run: |
           chmod +x scripts/apply_migrations.sh
           ./scripts/apply_migrations.sh
@@ -228,3 +240,94 @@ jobs:
             --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Job 4: E2E Smoke Tests — local Supabase via `supabase start`
+  #   Spins up a full local Postgres+Auth stack, applies all 39 migrations
+  #   (0176→0214), then runs the Deno e2e_smoke_test.ts against it.
+  #   Runs on every PR so regressions are caught before merge.
+  # ───────────────────────────────────────────────────────────────────────────
+  e2e-smoke:
+    name: E2E Smoke Tests (local Supabase)
+    runs-on: ubuntu-latest
+    # Runs in parallel with Job 1 — does not need remote secrets
+    needs: []
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Deno runtime ───────────────────────────────────────────────────────
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+
+      # ── Supabase CLI ───────────────────────────────────────────────────────
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # ── Start local Supabase stack (Docker available on ubuntu-latest) ─────
+      - name: Start local Supabase
+        run: supabase start
+
+      # ── Install psql for the migration runner ──────────────────────────────
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      # ── Apply all migrations 0176→0214 against the local DB ───────────────
+      - name: Apply migrations (0176→0214)
+        run: |
+          chmod +x scripts/apply_migrations.sh
+          ./scripts/apply_migrations.sh
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:54322/postgres"
+
+      # ── Extract local API credentials from `supabase status` ──────────────
+      - name: Export local Supabase credentials
+        id: supabase_local
+        run: |
+          STATUS=$(supabase status 2>/dev/null)
+
+          LOCAL_URL=$(echo "$STATUS"     | grep -E "^API URL"       | awk '{print $NF}')
+          LOCAL_ANON=$(echo "$STATUS"    | grep -E "^anon key"      | awk '{print $NF}')
+          LOCAL_SVC=$(echo "$STATUS"     | grep -E "^service_role"  | awk '{print $NF}')
+          LOCAL_JWT=$(echo "$STATUS"     | grep -E "^JWT secret"    | awk '{print $NF}')
+
+          # Fallback to well-known local defaults when grep finds nothing
+          LOCAL_URL="${LOCAL_URL:-http://localhost:54321}"
+          LOCAL_JWT="${LOCAL_JWT:-super-secret-jwt-token-with-at-least-32-characters-long}"
+
+          echo "local_url=$LOCAL_URL"       >> "$GITHUB_OUTPUT"
+          echo "local_anon_key=$LOCAL_ANON" >> "$GITHUB_OUTPUT"
+          echo "local_svc_key=$LOCAL_SVC"   >> "$GITHUB_OUTPUT"
+          echo "local_jwt=$LOCAL_JWT"       >> "$GITHUB_OUTPUT"
+
+      # ── Run E2E smoke tests ────────────────────────────────────────────────
+      - name: E2E smoke — submit → approve → purchased → receive → close
+        run: |
+          deno test \
+            --allow-env \
+            --allow-net \
+            --no-check \
+            --reporter=pretty \
+            supabase/tests/e2e_smoke_test.ts
+        env:
+          SUPABASE_URL:              ${{ steps.supabase_local.outputs.local_url }}
+          SUPABASE_ANON_KEY:         ${{ steps.supabase_local.outputs.local_anon_key }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ steps.supabase_local.outputs.local_svc_key }}
+          SUPABASE_JWT_SECRET:       ${{ steps.supabase_local.outputs.local_jwt }}
+          # LINE API calls in smoke test are no-op locally (no real token)
+          LINE_FPR_CHANNEL_ACCESS_TOKEN: "local-test-placeholder"
+          LINE_CHANNEL_ACCESS_TOKEN:     "local-test-placeholder"
+          LINE_API_BASE:                 "http://localhost:54321"
+          VERTICAL:                      "field_purchase"
+
+      # ── Always stop local stack to free runner ports ───────────────────────
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop
