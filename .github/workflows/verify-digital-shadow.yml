@@ -98,6 +98,12 @@ on:
           - artifact-only
         default: code-scanning
 
+      diff_lookback_runs:
+        description: 'Number of prior completed runs to look back when diffing job conclusions (1 = immediately previous run)'
+        required: false
+        type: number
+        default: 1
+
   pull_request:
     branches:
       - feat/digital-shadow-integration
@@ -119,6 +125,7 @@ env:
   SLACK_CHANNEL_OVERRIDE: "${{ github.event.inputs.slack_channel_override || '' }}"
   SARIF_RUN_MODE: "${{ github.event.inputs.sarif_run_mode || 'full' }}"
   SARIF_UPLOAD_TARGET: "${{ github.event.inputs.sarif_upload_target || 'code-scanning' }}"
+  DIFF_LOOKBACK_RUNS: "${{ github.event.inputs.diff_lookback_runs || '1' }}"
 
 jobs:
   # ────────────────────────────────────────────────────────────────────────────
@@ -2921,6 +2928,7 @@ jobs:
               `| \`SARIF_CRITICAL_THRESHOLD\` | ${{ github.event.inputs.sarif_critical_threshold || '10 (default)' }} |`,
               `| \`SLACK_CHANNEL_OVERRIDE\` | ${${{ github.event.inputs.slack_channel_override || '' }} ? '\`${{ github.event.inputs.slack_channel_override }}\`' : '_none (webhook default)_'} |`,
               `| \`SARIF_RUN_MODE\` | ${{ github.event.inputs.sarif_run_mode || 'full (default)' }} |`,
+              `| \`SARIF_UPLOAD_TARGET\` | ${{ github.event.inputs.sarif_upload_target || 'code-scanning (default)' }} |`,
               '',
               '### Job Would-Be Results',
               '',
@@ -3077,6 +3085,7 @@ jobs:
       - name: Fetch previous run summary artifact
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIFF_LOOKBACK_RUNS: ${{ env.DIFF_LOOKBACK_RUNS }}
         run: |
           python3 - <<'PYEOF'
           import os, json, zipfile, urllib.request, urllib.error
@@ -3100,18 +3109,22 @@ jobs:
           # Find the most recent prior completed run for this workflow on the same branch
           wf_name = "verify-digital-shadow.yml"
           runs_url = (f"https://api.github.com/repos/{repo}/actions/workflows/"
-                      f"{wf_name}/runs?branch={branch}&status=completed&per_page=10")
+                      f"{wf_name}/runs?branch={branch}&status=completed&per_page=50")
           try:
               runs_data = gh_get(runs_url)
           except Exception as e:
               print(f"Could not fetch workflow runs: {e}")
               raise SystemExit(0)
 
+          lookback = max(1, int(os.environ.get("DIFF_LOOKBACK_RUNS", "1") or "1"))
           prev_run_id = None
+          skip = 0
           for run in runs_data.get("workflow_runs", []):
               if str(run["id"]) != str(run_id):
-                  prev_run_id = run["id"]
-                  break
+                  skip += 1
+                  if skip >= lookback:
+                      prev_run_id = run["id"]
+                      break
 
           if not prev_run_id:
               print("No previous completed run found — skipping diff.")
@@ -3278,3 +3291,108 @@ jobs:
               });
               core.info('Created new diff comment.');
             }
+
+      - name: Notify Slack on conclusion regressions
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL:  ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_CHANNEL_OVERRIDE: ${{ env.SLACK_CHANNEL_OVERRIDE }}
+          GITHUB_SERVER_URL:  ${{ github.server_url }}
+          GITHUB_REPOSITORY:  ${{ github.repository }}
+          GITHUB_RUN_ID:      ${{ github.run_id }}
+          GITHUB_RUN_NUMBER:  ${{ github.run_number }}
+          GITHUB_REF_NAME:    ${{ github.ref_name }}
+          GITHUB_ACTOR:       ${{ github.actor }}
+          DIFF_LOOKBACK_RUNS: ${{ env.DIFF_LOOKBACK_RUNS }}
+        run: |
+          python3 - <<'PYSLACK'
+          import json, os, sys, glob, urllib.request, urllib.error
+
+          webhook = os.environ.get("SLACK_WEBHOOK_URL", "")
+          if not webhook:
+              print("SLACK_WEBHOOK_URL is not set — skipping Slack notification.")
+              sys.exit(0)
+
+          def load_summary(dir_path):
+              files = glob.glob(os.path.join(dir_path, "*.json"))
+              if not files:
+                  return None
+              with open(files[0]) as f:
+                  return json.load(f)
+
+          curr = load_summary("/tmp/current-summary")
+          prev = load_summary("/tmp/prev-summary")
+
+          if not curr or not prev:
+              print("One or both summaries unavailable — skipping Slack notification.")
+              sys.exit(0)
+
+          def to_map(summary):
+              m = {}
+              for j in summary.get("jobs", []):
+                  m[j["name"]] = j.get("conclusion", "")
+              return m
+
+          curr_map = to_map(curr)
+          prev_map = to_map(prev)
+
+          # Only alert on success → failure regressions
+          regressions = [
+              name for name in curr_map
+              if prev_map.get(name) == "success" and curr_map[name] == "failure"
+          ]
+
+          if not regressions:
+              print("No success→failure regressions — no Slack message needed.")
+              sys.exit(0)
+
+          run_url = (
+              f"{os.environ['GITHUB_SERVER_URL']}"
+              f"/{os.environ['GITHUB_REPOSITORY']}"
+              f"/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          )
+          lookback = os.environ.get("DIFF_LOOKBACK_RUNS", "1")
+          branch   = os.environ.get("GITHUB_REF_NAME", "unknown")
+          actor    = os.environ.get("GITHUB_ACTOR", "unknown")
+          run_num  = os.environ.get("GITHUB_RUN_NUMBER", "")
+
+          reg_lines = "\n".join(f"  • {name}" for name in regressions)
+
+          payload = {
+              "text": (
+                  f":rotating_light: *Job regression detected* on `{branch}` (run #{run_num})\n"
+                  f"The following jobs flipped from *success* to *failure* "
+                  f"vs. {lookback} run(s) ago:\n"
+                  f"{reg_lines}\n"
+                  f"<{run_url}|View run>"
+              ),
+              "attachments": [
+                  {
+                      "color": "#d93025",
+                      "fields": [
+                          {"title": "Regressed jobs", "value": ", ".join(regressions), "short": False},
+                          {"title": "Branch",         "value": branch,                 "short": True},
+                          {"title": "Triggered by",   "value": actor,                  "short": True},
+                      ],
+                  }
+              ],
+          }
+
+          ch_override = os.environ.get("SLACK_CHANNEL_OVERRIDE", "")
+          if ch_override:
+              payload["channel"] = ch_override
+
+          data = json.dumps(payload).encode("utf-8")
+          req = urllib.request.Request(
+              webhook,
+              data=data,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=10) as resp:
+                  print(f"Slack responded {resp.status}: {resp.read().decode()}")
+          except urllib.error.HTTPError as exc:
+              print(f"Slack HTTP error {exc.code}: {exc.read().decode()}")
+              sys.exit(1)
+          PYSLACK
