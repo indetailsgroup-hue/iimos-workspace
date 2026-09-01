@@ -330,12 +330,14 @@ jobs:
             total         numeric(12,2) NOT NULL DEFAULT 0,
             approved_at   timestamptz,
             approved_by   uuid,
+            created_by    uuid,
             updated_at    timestamptz   NOT NULL DEFAULT now()
           );
 
           CREATE TABLE IF NOT EXISTS invoice (
             invoice_id    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-            invoice_code  text NOT NULL DEFAULT ''
+            invoice_code  text NOT NULL DEFAULT '',
+            created_by    uuid
           );
 
           CREATE TABLE IF NOT EXISTS job (
@@ -343,7 +345,31 @@ jobs:
             status        text        NOT NULL DEFAULT 'open',
             quotation_id  uuid,
             invoice_id    uuid,
+            created_by    uuid,
             updated_at    timestamptz NOT NULL DEFAULT now()
+          );
+
+          -- Additional singular legacy stubs required by 0173 F1 ALTER TABLE / backfill
+          CREATE TABLE IF NOT EXISTS customer (
+            customer_id  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+            name         text        NOT NULL    DEFAULT '',
+            created_by   uuid,
+            updated_at   timestamptz             DEFAULT now()
+          );
+
+          CREATE TABLE IF NOT EXISTS job_panel (
+            panel_id  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            job_id    uuid
+          );
+
+          CREATE TABLE IF NOT EXISTS quotation_line (
+            line_id      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            quotation_id uuid
+          );
+
+          CREATE TABLE IF NOT EXISTS invoice_payment (
+            payment_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            invoice_id uuid
           );
           SQL
 
