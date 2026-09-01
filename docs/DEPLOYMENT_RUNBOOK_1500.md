@@ -1,7 +1,7 @@
 # MONOLITH Manufacturing OS — Production Deployment Runbook
 ## Release 15.0.0
 
-> **Document version:** 1.0.0
+> **Document version:** 1.1.0
 > **Release branch:** `release/15.0.0`
 > **Target tag:** `v15.0.0`
 > **PR:** [#74](https://github.com/indetailsgroup-hue/monolith-workspace/pull/74)
@@ -24,6 +24,7 @@
 10. [Rollback Procedure](#10-rollback-procedure)
 11. [Go / No-Go Decision](#11-go--no-go-decision)
 12. [Post-Launch Monitoring](#12-post-launch-monitoring)
+13. [Partition Archive Procedures](#13-partition-archive-procedures)
 
 ---
 
@@ -639,6 +640,259 @@ ORDER BY cnt DESC;
 | `attempt_count = 5` rows in etax_submissions | Any `status = 'failed'` | Review `last_error`; use `rpc_etax_requeue()` if transient |
 
 ---
+
+---
+
+## 13. Partition Archive Procedures
+
+The `scripts/etax_partition_lifecycle.sh` script manages the full lifecycle of
+`etax_submissions` monthly partitions — from identification through detach, optional
+backup, rename, and audit logging into `partition_archive_log` (Migration 0197).
+
+### 13.1 Identify Archive Candidates
+
+```sql
+-- List all partitions flagged ARCHIVE_CANDIDATE (older than 24 months)
+SELECT
+  partition_name,
+  range_start,
+  range_end,
+  row_count,
+  pg_size_pretty(size_bytes) AS size,
+  age_months,
+  retention_status
+FROM v_etax_partition_retention
+WHERE retention_status = 'ARCHIVE_CANDIDATE'
+ORDER BY range_start;
+```
+
+Alternatively, use the RPC (works via Supabase service_role):
+
+```sql
+SELECT * FROM rpc_etax_partition_health()
+WHERE retention_status = 'ARCHIVE_CANDIDATE';
+```
+
+### 13.2 Dry-Run (Safe — No Changes)
+
+Always run `--dry-run` first. The script lists candidates and prints the exact commands
+it would execute without touching the database.
+
+```bash
+./scripts/etax_partition_lifecycle.sh --dry-run
+```
+
+**Expected output:**
+
+```
+[DRY-RUN] Found 2 ARCHIVE_CANDIDATE partition(s):
+  p_2024_01  (2024-01-01 → 2024-02-01)  rows: 48,291  size: 14 MB
+  p_2024_02  (2024-02-01 → 2024-03-01)  rows: 51,004  size: 15 MB
+
+[DRY-RUN] Would execute for p_2024_01:
+  ALTER TABLE etax_submissions DETACH PARTITION p_2024_01;
+  ALTER TABLE p_2024_01 RENAME TO p_2024_01_archived_20260901;
+  INSERT INTO partition_archive_log (...) VALUES (...);
+
+[DRY-RUN] Would execute for p_2024_02:
+  ... (same pattern)
+
+[DRY-RUN] Complete. 2 partition(s) would be archived. No changes made.
+```
+
+### 13.3 Execute — Detach and Rename Only
+
+Detaches the partition from `etax_submissions` (stops new writes), renames it with
+`_archived_YYYYMMDD` suffix, and writes an audit row to `partition_archive_log`.
+
+```bash
+./scripts/etax_partition_lifecycle.sh --execute
+```
+
+**What this does:**
+
+```sql
+-- 1. Detach from parent table
+ALTER TABLE etax_submissions DETACH PARTITION p_2024_01;
+
+-- 2. Rename to archived name
+ALTER TABLE p_2024_01 RENAME TO p_2024_01_archived_20260901;
+
+-- 3. Audit log insert (action = DETACH_RENAME)
+INSERT INTO partition_archive_log (
+  partition_name, original_range_start, original_range_end,
+  row_count_at_archive, size_bytes_at_archive,
+  action, archived_name, archived_by, archived_at, script_version, hostname
+) VALUES (
+  'p_2024_01', '2024-01-01', '2024-02-01',
+  48291, 14680064,
+  'DETACH_RENAME', 'p_2024_01_archived_20260901',
+  current_user, now(), '1.0.0', inet_server_addr()::text
+);
+```
+
+**Post-execute verification:**
+
+```sql
+-- Confirm partition no longer attached to parent
+SELECT relname FROM pg_class
+WHERE relname LIKE 'p_2024_01%';
+-- Should show: p_2024_01_archived_20260901  (detached table, still exists)
+
+-- Confirm audit log entry
+SELECT partition_name, action, archived_name, archived_at
+FROM partition_archive_log
+WHERE partition_name = 'p_2024_01'
+ORDER BY archived_at DESC LIMIT 1;
+```
+
+### 13.4 Execute with pg_dump Backup
+
+Adds a `pg_dump` of the partition to a backup directory before renaming.
+Use this when you want a restorable snapshot before decommissioning.
+
+```bash
+# Set backup directory
+export PARTITION_BACKUP_DIR="/mnt/backups/etax-partitions"
+mkdir -p "$PARTITION_BACKUP_DIR"
+
+./scripts/etax_partition_lifecycle.sh --execute --backup
+```
+
+**What `--backup` adds:**
+
+```bash
+# Before rename, pg_dump the detached table
+pg_dump "$DATABASE_URL"   --table=p_2024_01   --format=custom   --compress=9   --file="${PARTITION_BACKUP_DIR}/p_2024_01_archived_20260901.pgdump"
+
+# Verify backup integrity
+pg_restore --list "${PARTITION_BACKUP_DIR}/p_2024_01_archived_20260901.pgdump"   | head -5
+```
+
+The audit row captures `backup_file_path` and `backup_size_bytes`:
+
+```sql
+-- action = DETACH_BACKUP_RENAME
+SELECT partition_name, action, backup_file_path,
+       pg_size_pretty(backup_size_bytes) AS backup_size
+FROM partition_archive_log
+WHERE partition_name = 'p_2024_01';
+```
+
+### 13.5 Execute with Drop (Destructive — Irreversible)
+
+Detaches the partition **and permanently drops it**. Only use after confirming the
+partition data is no longer needed and a backup exists.
+
+```bash
+# Requires explicit --force flag to prevent accidental drops
+./scripts/etax_partition_lifecycle.sh --execute --drop --force
+```
+
+> ⚠️ **This operation is irreversible.** The partition table is `DROP TABLE`-ed after
+> detaching. Ensure `--backup` was run first and the backup file is verified.
+
+**Safety gates enforced by the script:**
+
+1. Refuses to run `--drop` without `--force`
+2. Verifies the partition is detached before dropping
+3. Requires `backup_file_path` in `partition_archive_log` unless `--no-backup-check` is also passed
+4. Logs `action = DETACH_BACKUP_DROP` or `DETACH_DROP` in `partition_archive_log`
+
+### 13.6 Query the Archive Log
+
+```sql
+-- All archive actions ordered by date
+SELECT
+  partition_name,
+  action,
+  archived_name,
+  pg_size_pretty(size_bytes_at_archive) AS archived_size,
+  archived_by,
+  archived_at::date AS date
+FROM partition_archive_log
+ORDER BY archived_at DESC;
+
+-- Aggregate stats by action type
+SELECT * FROM rpc_partition_archive_log_stats();
+
+-- Filter log for a specific partition
+SELECT * FROM rpc_partition_archive_log(
+  p_partition_name := 'p_2024_01',
+  p_from_date      := NULL,
+  p_to_date        := NULL,
+  p_limit          := 50
+);
+
+-- View summary (one row per partition, latest action)
+SELECT * FROM v_partition_archive_summary
+ORDER BY latest_action_at DESC;
+```
+
+### 13.7 Restore an Archived Partition (Emergency)
+
+If a detached (renamed) partition must be re-attached:
+
+```sql
+-- 1. Rename back to original name
+ALTER TABLE p_2024_01_archived_20260901 RENAME TO p_2024_01;
+
+-- 2. Re-attach to parent
+ALTER TABLE etax_submissions ATTACH PARTITION p_2024_01
+  FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+
+-- 3. Log the restoration in partition_archive_log (manual)
+INSERT INTO partition_archive_log (
+  partition_name, action, notes, archived_by, archived_at
+) VALUES (
+  'p_2024_01', 'DETACH',   -- closest available action; add RESTORE if extended
+  'Re-attached for incident investigation — MONOLITH-INC-XXXX',
+  current_user, now()
+);
+```
+
+If restoring from a `pg_dump` backup (partition was dropped):
+
+```bash
+# Recreate the partition table
+psql "$DATABASE_URL" -c "
+  CREATE TABLE p_2024_01
+    (LIKE etax_submissions INCLUDING ALL)
+    PARTITION OF etax_submissions
+    FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+"
+
+# Restore data
+pg_restore   --dbname="$DATABASE_URL"   --table=p_2024_01   --data-only   "${PARTITION_BACKUP_DIR}/p_2024_01_archived_20260901.pgdump"
+```
+
+### 13.8 Recommended Monthly Runbook
+
+Run this procedure on the **1st of each month** as part of the monthly ops cycle:
+
+```bash
+# Step 1: Review candidates (read-only)
+psql "$DATABASE_URL" -c "
+  SELECT partition_name, range_start, age_months, pg_size_pretty(size_bytes)
+  FROM v_etax_partition_retention
+  WHERE retention_status = 'ARCHIVE_CANDIDATE'
+  ORDER BY range_start;"
+
+# Step 2: Dry-run to confirm scope
+./scripts/etax_partition_lifecycle.sh --dry-run
+
+# Step 3: Backup + archive
+export PARTITION_BACKUP_DIR="/mnt/backups/etax-partitions/$(date +%Y%m)"
+mkdir -p "$PARTITION_BACKUP_DIR"
+./scripts/etax_partition_lifecycle.sh --execute --backup
+
+# Step 4: Verify audit log
+psql "$DATABASE_URL" -c "SELECT * FROM rpc_partition_archive_log_stats();"
+
+# Step 5: (Optional) Drop if storage is constrained and backup verified
+# ./scripts/etax_partition_lifecycle.sh --execute --drop --force
+```
+
 
 ## Appendix A — Quick Reference Commands
 
