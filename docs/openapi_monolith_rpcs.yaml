@@ -33,7 +33,7 @@ info:
     | 422 | `unprocessable` | Business rule violation |
     | 500 | `internal_error` | Unexpected server error |
 
-  version: 15.0.0
+  version: 15.2.0
   contact:
     name: MONOLITH Platform Team
     email: platform@indetailsgroup.com
@@ -59,6 +59,8 @@ tags:
   - name: eTax Analytics
     description: Health metrics, trend views, risk ranking (Migrations 0186–0194)
   - name: Risk Intelligence
+  - name: Partition Management
+    description: APIs for querying and managing the etax_submissions partition lifecycle audit log (Migration 0197).
     description: Risk tier state and pg_notify events (Migration 0195)
   - name: Infrastructure
     description: Partition health and admin utilities (Migration 0196)
@@ -341,6 +343,196 @@ components:
         row_count:      { type: integer, format: int64 }
         size_pretty:    { type: string, example: "42 MB" }
         is_default:     { type: boolean }
+
+    PartitionArchiveLogRequest:
+      type: object
+      properties:
+        p_partition_name:
+          type: string
+          nullable: true
+          description: Partial match on partition_name (case-insensitive ILIKE).
+          example: "y2024m01"
+        p_from_date:
+          type: string
+          format: date
+          nullable: true
+          description: Filter rows where original_range_start >= this date.
+          example: "2024-01-01"
+        p_to_date:
+          type: string
+          format: date
+          nullable: true
+          description: Filter rows where original_range_end <= this date.
+          example: "2024-12-31"
+        p_limit:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 1000
+          default: 100
+          description: Maximum number of rows to return (capped at 1000 server-side).
+
+    PartitionArchiveLogRow:
+      type: object
+      required: [id, partition_name, original_range_start, original_range_end,
+                 row_count_at_archive, action, archived_by, archived_at, has_backup]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Auto-generated primary key.
+          example: 1
+        partition_name:
+          type: string
+          description: Original partition table name.
+          example: "etax_submissions_y2024m01"
+        original_range_start:
+          type: string
+          format: date
+          description: Inclusive start date of the partition range.
+          example: "2024-01-01"
+        original_range_end:
+          type: string
+          format: date
+          description: Exclusive end date of the partition range.
+          example: "2024-02-01"
+        row_count_at_archive:
+          type: integer
+          format: int64
+          description: Live row count at time of archival.
+          example: 12847
+        size_pretty:
+          type: string
+          nullable: true
+          description: Human-readable partition size (pg_size_pretty). Null if not recorded.
+          example: "142 MB"
+        action:
+          type: string
+          enum: [DETACH, DETACH_RENAME, DETACH_DROP, DETACH_BACKUP_RENAME, DETACH_BACKUP_DROP]
+          description: Archival action performed.
+          example: "DETACH_BACKUP_RENAME"
+        archived_name:
+          type: string
+          nullable: true
+          description: New table name after rename. Null if dropped.
+          example: "etax_submissions_y2024m01_archived_20260901"
+        has_backup:
+          type: boolean
+          description: True if a pg_dump backup was taken before detaching.
+          example: true
+        backup_file_path:
+          type: string
+          nullable: true
+          description: Absolute path to the pg_dump output file.
+          example: "/mnt/archive/etax_y2024m01.sql"
+        archived_by:
+          type: string
+          description: PostgreSQL current_user at time of execution.
+          example: "postgres"
+        archived_at:
+          type: string
+          format: date-time
+          description: Timestamp when the archival action was performed.
+          example: "2026-09-01T00:00:00Z"
+        days_since_archive:
+          type: number
+          format: float
+          description: Number of days elapsed since archived_at.
+          example: 30.5
+        notes:
+          type: string
+          nullable: true
+          description: Free-text notes from the lifecycle script.
+          example: "24-month retention window exceeded"
+
+    PartitionArchiveLogStats:
+      type: object
+      required: [total_archived_partitions, total_rows_archived,
+                 total_backups_taken, total_partitions_dropped]
+      properties:
+        total_archived_partitions:
+          type: integer
+          format: int64
+          description: Total number of partitions archived.
+          example: 12
+        total_rows_archived:
+          type: integer
+          format: int64
+          description: Sum of row_count_at_archive across all archived partitions.
+          example: 198450
+        total_backups_taken:
+          type: integer
+          format: int64
+          description: Archival events where a pg_dump backup was recorded.
+          example: 8
+        total_partitions_dropped:
+          type: integer
+          format: int64
+          description: Archival events where the partition was DROPped.
+          example: 4
+        earliest_archive_date:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the oldest archival event.
+          example: "2025-09-01T00:00:00Z"
+        latest_archive_date:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the most recent archival event.
+          example: "2026-09-01T00:00:00Z"
+        most_recent_partition:
+          type: string
+          nullable: true
+          description: partition_name of the most recently archived partition.
+          example: "etax_submissions_y2024m09"
+        most_recent_action:
+          type: string
+          nullable: true
+          enum: [DETACH, DETACH_RENAME, DETACH_DROP, DETACH_BACKUP_RENAME, DETACH_BACKUP_DROP]
+          description: Action taken on the most recently archived partition.
+          example: "DETACH_BACKUP_RENAME"
+
+    EtaxNotifyRequestStatusRequest:
+      type: object
+      required: [request_id]
+      properties:
+        request_id:
+          type: integer
+          format: int64
+          description: The pg_net request ID from net.http_post() in fn_check_risk_tier_changes.
+          example: 42
+
+    EtaxNotifyRequestStatusRow:
+      type: object
+      properties:
+        request_id:
+          type: integer
+          format: int64
+          description: The pg_net request ID.
+          example: 42
+        status_code:
+          type: integer
+          nullable: true
+          description: HTTP status code from etax-risk-notify. Null if still pending.
+          example: 200
+        response_body:
+          type: string
+          nullable: true
+          description: Raw response body from the edge function.
+          example: '{"results":[{"channel":"line","ok":true}]}'
+        error_msg:
+          type: string
+          nullable: true
+          description: pg_net internal error if HTTP dispatch failed.
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          description: When the pg_net request was created.
+          example: "2026-09-01T00:00:00Z"
+
 
 # ─── Security (global default) ────────────────────────────────────────────────
 security:
@@ -748,6 +940,115 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/PartitionHealthRow' }
 
+  /rpc/rpc_partition_archive_log:
+    post:
+      tags: [Partition Management]
+      operationId: rpcPartitionArchiveLog
+      summary: Query partition archival history
+      description: |
+        Returns filtered records from `partition_archive_log`, ordered by `archived_at DESC`.
+        SECURITY DEFINER — authenticated callers can query without direct table access.
+        All parameters are optional.
+
+        **Migration:** 0197
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartitionArchiveLogRequest'
+            examples:
+              no_filter:
+                summary: All records (newest first, max 100)
+                value: {}
+              by_name:
+                summary: Filter by partial partition name
+                value: { p_partition_name: "y2024m01" }
+              date_range:
+                summary: Filter by partition range dates
+                value: { p_from_date: "2024-01-01", p_to_date: "2024-12-31", p_limit: 50 }
+      responses:
+        '200':
+          description: List of archive log entries matching the filter.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PartitionArchiveLogRow' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /rpc/rpc_partition_archive_log_stats:
+    post:
+      tags: [Partition Management]
+      operationId: rpcPartitionArchiveLogStats
+      summary: Aggregate statistics over partition archival history
+      description: |
+        Returns a single-row aggregate summary of `partition_archive_log`.
+        No parameters accepted.
+
+        **Migration:** 0197
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              description: No parameters required.
+      responses:
+        '200':
+          description: Single-row aggregate statistics.
+          content:
+            application/json:
+              schema:
+                type: array
+                minItems: 1
+                maxItems: 1
+                items: { $ref: '#/components/schemas/PartitionArchiveLogStats' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /rpc/rpc_etax_notify_request_status:
+    post:
+      tags: [Risk Intelligence]
+      operationId: rpcEtaxNotifyRequestStatus
+      summary: Inspect pg_net HTTP request status for an eTax notify dispatch
+      description: |
+        Queries `net.http_response_queue` to return the status of a `pg_net` HTTP POST
+        dispatched by `fn_check_risk_tier_changes` on risk-tier transitions (Migration 0195b).
+
+        Use this to debug failed or pending `etax-risk-notify` alert deliveries.
+
+        **Migration:** 0195b
+      security:
+        - BearerAuth: []
+        - ServiceRoleKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EtaxNotifyRequestStatusRequest'
+            examples:
+              inspect:
+                summary: Check request ID 42
+                value: { request_id: 42 }
+      responses:
+        '200':
+          description: Status row(s) from net.http_response_queue.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EtaxNotifyRequestStatusRow' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+
 # ─── Webhooks (pg_notify consumer) ───────────────────────────────────────────
 webhooks:
   etax_risk_rank_changed:
@@ -793,3 +1094,4 @@ webhooks:
           description: Alert delivered.
         '4XX':
           description: Alert delivery failed.
+
