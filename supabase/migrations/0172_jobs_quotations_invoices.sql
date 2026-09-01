@@ -38,7 +38,7 @@ END $$;
 -- Customers Table
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS customer (
+CREATE TABLE IF NOT EXISTS public.customers (
   customer_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   phone TEXT,
@@ -49,17 +49,17 @@ CREATE TABLE IF NOT EXISTS customer (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_customer_name ON customer(name);
+CREATE INDEX IF NOT EXISTS idx_customer_name ON public.customers(name);
 
 -- ============================================================================
 -- Jobs Table
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS job (
+CREATE TABLE IF NOT EXISTS public.jobs (
   job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   job_code TEXT NOT NULL UNIQUE,
   title TEXT NOT NULL,
-  customer_id UUID NOT NULL REFERENCES customer(customer_id),
+  customer_id UUID NOT NULL REFERENCES public.customers(customer_id),
   status job_status NOT NULL DEFAULT 'DRAFT',
   priority job_priority NOT NULL DEFAULT 'NORMAL',
   assigned_to UUID,  -- references auth.users
@@ -75,18 +75,18 @@ CREATE TABLE IF NOT EXISTS job (
   created_by UUID NOT NULL  -- references auth.users
 );
 
-CREATE INDEX IF NOT EXISTS idx_job_status ON job(status);
-CREATE INDEX IF NOT EXISTS idx_job_customer ON job(customer_id);
-CREATE INDEX IF NOT EXISTS idx_job_code ON job(job_code);
-CREATE INDEX IF NOT EXISTS idx_job_deadline ON job(deadline);
+CREATE INDEX IF NOT EXISTS idx_job_status ON public.jobs(status);
+CREATE INDEX IF NOT EXISTS idx_job_customer ON public.jobs(customer_id);
+CREATE INDEX IF NOT EXISTS idx_job_code ON public.jobs(job_code);
+CREATE INDEX IF NOT EXISTS idx_job_deadline ON public.jobs(deadline);
 
 -- ============================================================================
 -- Job Panels Table
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS job_panel (
+CREATE TABLE IF NOT EXISTS public.job_panels (
   panel_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  job_id UUID NOT NULL REFERENCES job(job_id) ON DELETE CASCADE,
+  job_id UUID NOT NULL REFERENCES public.jobs(job_id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   material TEXT NOT NULL,
   width_mm NUMERIC(8,2) NOT NULL,
@@ -97,17 +97,17 @@ CREATE TABLE IF NOT EXISTS job_panel (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_job_panel_job ON job_panel(job_id);
+CREATE INDEX IF NOT EXISTS idx_job_panel_job ON public.job_panels(job_id);
 
 -- ============================================================================
 -- Quotations Table
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS quotation (
+CREATE TABLE IF NOT EXISTS public.quotations (
   quotation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   quotation_code TEXT NOT NULL UNIQUE,
-  job_id UUID REFERENCES job(job_id),
-  customer_id UUID NOT NULL REFERENCES customer(customer_id),
+  job_id UUID REFERENCES public.jobs(job_id),
+  customer_id UUID NOT NULL REFERENCES public.customers(customer_id),
   status quotation_status NOT NULL DEFAULT 'DRAFT',
   subtotal NUMERIC(12,2) NOT NULL DEFAULT 0,
   vat_rate NUMERIC(4,4) NOT NULL DEFAULT 0.07,
@@ -124,17 +124,17 @@ CREATE TABLE IF NOT EXISTS quotation (
   approved_by UUID
 );
 
-CREATE INDEX IF NOT EXISTS idx_quotation_status ON quotation(status);
-CREATE INDEX IF NOT EXISTS idx_quotation_customer ON quotation(customer_id);
-CREATE INDEX IF NOT EXISTS idx_quotation_job ON quotation(job_id);
+CREATE INDEX IF NOT EXISTS idx_quotation_status ON public.quotations(status);
+CREATE INDEX IF NOT EXISTS idx_quotation_customer ON public.quotations(customer_id);
+CREATE INDEX IF NOT EXISTS idx_quotation_job ON public.quotations(job_id);
 
 -- ============================================================================
 -- Quotation Line Items
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS quotation_line (
+CREATE TABLE IF NOT EXISTS public.quotation_lines (
   line_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  quotation_id UUID NOT NULL REFERENCES quotation(quotation_id) ON DELETE CASCADE,
+  quotation_id UUID NOT NULL REFERENCES public.quotations(quotation_id) ON DELETE CASCADE,
   description TEXT NOT NULL,
   material TEXT,
   dimensions TEXT,
@@ -145,18 +145,18 @@ CREATE TABLE IF NOT EXISTS quotation_line (
   sort_order INT NOT NULL DEFAULT 0
 );
 
-CREATE INDEX IF NOT EXISTS idx_quotation_line_qt ON quotation_line(quotation_id);
+CREATE INDEX IF NOT EXISTS idx_quotation_line_qt ON public.quotation_lines(quotation_id);
 
 -- ============================================================================
 -- Invoices Table
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS invoice (
+CREATE TABLE IF NOT EXISTS public.invoices (
   invoice_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   invoice_code TEXT NOT NULL UNIQUE,
-  quotation_id UUID REFERENCES quotation(quotation_id),
-  job_id UUID REFERENCES job(job_id),
-  customer_id UUID NOT NULL REFERENCES customer(customer_id),
+  quotation_id UUID REFERENCES public.quotations(quotation_id),
+  job_id UUID REFERENCES public.jobs(job_id),
+  customer_id UUID NOT NULL REFERENCES public.customers(customer_id),
   status invoice_status NOT NULL DEFAULT 'PENDING',
   subtotal NUMERIC(12,2) NOT NULL DEFAULT 0,
   vat_rate NUMERIC(4,4) NOT NULL DEFAULT 0.07,
@@ -171,25 +171,25 @@ CREATE TABLE IF NOT EXISTS invoice (
   notes TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_invoice_status ON invoice(status);
-CREATE INDEX IF NOT EXISTS idx_invoice_customer ON invoice(customer_id);
-CREATE INDEX IF NOT EXISTS idx_invoice_job ON invoice(job_id);
-CREATE INDEX IF NOT EXISTS idx_invoice_due ON invoice(due_date);
+CREATE INDEX IF NOT EXISTS idx_invoice_status ON public.invoices(status);
+CREATE INDEX IF NOT EXISTS idx_invoice_customer ON public.invoices(customer_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_job ON public.invoices(job_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_due ON public.invoices(due_date);
 
 -- ============================================================================
 -- Invoice Payments
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS invoice_payment (
+CREATE TABLE IF NOT EXISTS public.invoice_payments (
   payment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  invoice_id UUID NOT NULL REFERENCES invoice(invoice_id) ON DELETE CASCADE,
+  invoice_id UUID NOT NULL REFERENCES public.invoices(invoice_id) ON DELETE CASCADE,
   amount NUMERIC(12,2) NOT NULL,
   method payment_method NOT NULL DEFAULT 'TRANSFER',
   reference TEXT,
   paid_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_payment_invoice ON invoice_payment(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_payment_invoice ON public.invoice_payments(invoice_id);
 
 -- ============================================================================
 -- RPC: Approve Quotation (atomic: update quotation + create invoice + update job)
