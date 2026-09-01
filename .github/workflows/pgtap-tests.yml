@@ -101,31 +101,52 @@ jobs:
       #    Rename to 0172_z0x_* is NOT viable: Supabase extracts only the
       #    leading numeric portion as the version key, so any 0172_*.sql
       #    gets version=0172 — colliding with 0172_jobs_quotations_invoices.sql.
-      #    Strategy:
-      #      • PREPEND 20260828_multi_tenant_schema.sql to the top of 0172 so
-      #        that public.organizations exists before the ALTER TABLE ... ADD
-      #        COLUMN org_id REFERENCES public.organizations statements that
-      #        are already in the body of 0172.
-      #      • APPEND the remaining five 20260828_*.sql files after 0172.
-      #    All originals are deleted. This merges all content into a single
-      #    version=0172 slot and is ephemeral (CI-only).
+      #    Strategy (Fix U — split multi_tenant_schema at section boundary):
+      #      20260828_multi_tenant_schema.sql has two logical halves:
+      #        Part A  (lines 1-86):   CREATE TABLE organizations, org_members,
+      #                                org_invitations + their indexes.
+      #                                Must come BEFORE 0172 so the FK
+      #                                REFERENCES public.organizations in
+      #                                multi_tenant_schema section 4 resolves.
+      #        Part B  (lines 87-end): ALTER TABLE public.jobs/quotations/
+      #                                invoices/ledger_entries ADD COLUMN org_id
+      #                                + RLS policies + updated_at trigger.
+      #                                Must come AFTER 0172 because 0172 creates
+      #                                the jobs/quotations/invoices tables.
+      #      Build order: Part A → original 0172 → Part B → five remaining files
+      #      All originals are deleted. Ephemeral CI-only transformation.
       # -----------------------------------------------------------------------
-      - name: Merge 20260828 migrations into 0172 (prepend-schema, append-rest)
+      - name: Merge 20260828 migrations into 0172 (split-schema strategy)
         run: |
           cd supabase/migrations
 
-          # PREPEND multi_tenant_schema so organizations table is created
-          # before the ALTER TABLE ... REFERENCES public.organizations in 0172
+          # Split multi_tenant_schema.sql at the section 4 boundary (line 86/87)
+          # Part A: CREATE TABLE orgs/members/invitations + indexes (lines 1-86)
+          # Part B: ALTER TABLE org_id additions + RLS + trigger  (lines 87-end)
+          head -n 86 20260828_multi_tenant_schema.sql > mts_part_a.sql
+          tail -n +87 20260828_multi_tenant_schema.sql > mts_part_b.sql
+
+          # Build merged 0172: Part A + original 0172 + Part B
           {
             echo "-- ============================================================"
-            echo "-- Merged from: 20260828_multi_tenant_schema.sql (prepended)"
+            echo "-- Merged from: 20260828_multi_tenant_schema.sql Part A (lines 1-86)"
+            echo "-- CREATE TABLE organizations / org_members / org_invitations"
             echo "-- ============================================================"
-            cat 20260828_multi_tenant_schema.sql
+            cat mts_part_a.sql
             echo ""
+            echo "-- ============================================================"
+            echo "-- Original: 0172_jobs_quotations_invoices.sql"
+            echo "-- ============================================================"
             cat 0172_jobs_quotations_invoices.sql
+            echo ""
+            echo "-- ============================================================"
+            echo "-- Merged from: 20260828_multi_tenant_schema.sql Part B (lines 87-end)"
+            echo "-- ALTER TABLE org_id / RLS policies / updated_at trigger"
+            echo "-- ============================================================"
+            cat mts_part_b.sql
           } > 0172_merged_tmp.sql
           mv 0172_merged_tmp.sql 0172_jobs_quotations_invoices.sql
-          rm 20260828_multi_tenant_schema.sql
+          rm 20260828_multi_tenant_schema.sql mts_part_a.sql mts_part_b.sql
 
           # APPEND remaining 20260828_* files in dependency order
           for f in \
