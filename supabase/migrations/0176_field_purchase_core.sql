@@ -239,6 +239,9 @@ CREATE POLICY fpal_select ON field_purchase_audit_log
 -- Registers field_purchase_request as a capture type.
 -- cloud_allowed=false is LOCKED — the ON CONFLICT clause hard-codes it to
 -- prevent an accidental flip by a later migration (ADR-033).
+-- Add description column if not already present (column added in 0176; table from 0049)
+ALTER TABLE public.capture_type_config ADD COLUMN IF NOT EXISTS description TEXT;
+
 INSERT INTO capture_type_config (
   capture_type,
   field_schema,
@@ -555,3 +558,4 @@ GRANT EXECUTE ON FUNCTION rpc_create_field_purchase_request       TO authenticat
 GRANT EXECUTE ON FUNCTION rpc_approve_field_purchase_request      TO authenticated;
 GRANT EXECUTE ON FUNCTION rpc_reject_field_purchase_request       TO authenticated;
 GRANT EXECUTE ON FUNCTION rpc_mark_field_purchase_purchased       TO authenticated;
+
