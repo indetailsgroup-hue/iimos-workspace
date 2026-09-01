@@ -22,15 +22,15 @@
 -- ============================================================================
 
 -- job
-ALTER TABLE public.job
+ALTER TABLE public.jobs
   ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organization(org_id);
 
 -- quotation
-ALTER TABLE public.quotation
+ALTER TABLE public.quotations
   ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organization(org_id);
 
 -- invoice
-ALTER TABLE public.invoice
+ALTER TABLE public.invoices
   ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organization(org_id);
 
 -- platform_search_logs (super-admin log aggregation; stores the org context of the searcher)
@@ -43,7 +43,7 @@ ALTER TABLE public.platform_search_logs
 -- Rows with no org_members match are left NULL and quarantined below.
 -- ============================================================================
 
-UPDATE public.job j
+UPDATE public.jobs j
 SET org_id = (
   SELECT m.org_id
   FROM public.org_members m
@@ -54,7 +54,7 @@ SET org_id = (
 )
 WHERE j.org_id IS NULL;
 
-UPDATE public.quotation q
+UPDATE public.quotations q
 SET org_id = (
   SELECT m.org_id
   FROM public.org_members m
@@ -66,9 +66,9 @@ SET org_id = (
 WHERE q.org_id IS NULL;
 
 -- invoice.created_by → backfill from the linked quotation's org_id first, then fall back to member lookup
-UPDATE public.invoice i
+UPDATE public.invoices i
 SET org_id = COALESCE(
-  (SELECT q.org_id FROM public.quotation q WHERE q.quotation_id = i.quotation_id),
+  (SELECT q.org_id FROM public.quotations q WHERE q.quotation_id = i.quotation_id),
   (SELECT m.org_id FROM public.org_members m WHERE m.user_id = i.created_by AND m.is_active = true ORDER BY m.org_id LIMIT 1)
 )
 WHERE i.org_id IS NULL;
@@ -95,15 +95,15 @@ CREATE TABLE IF NOT EXISTS public._org_id_backfill_quarantine (
 );
 
 INSERT INTO public._org_id_backfill_quarantine (table_name, record_id, created_by)
-  SELECT 'job', job_id, created_by FROM public.job WHERE org_id IS NULL
+  SELECT 'job', job_id, created_by FROM public.jobs WHERE org_id IS NULL
   ON CONFLICT DO NOTHING;
 
 INSERT INTO public._org_id_backfill_quarantine (table_name, record_id, created_by)
-  SELECT 'quotation', quotation_id, created_by FROM public.quotation WHERE org_id IS NULL
+  SELECT 'quotation', quotation_id, created_by FROM public.quotations WHERE org_id IS NULL
   ON CONFLICT DO NOTHING;
 
 INSERT INTO public._org_id_backfill_quarantine (table_name, record_id, created_by)
-  SELECT 'invoice', invoice_id, created_by FROM public.invoice WHERE org_id IS NULL
+  SELECT 'invoice', invoice_id, created_by FROM public.invoices WHERE org_id IS NULL
   ON CONFLICT DO NOTHING;
 
 -- ============================================================================
@@ -127,21 +127,21 @@ BEGIN
 END;
 $$;
 
-UPDATE public.job        SET org_id = '00000000-0000-0000-0000-000000000000' WHERE org_id IS NULL;
-UPDATE public.quotation  SET org_id = '00000000-0000-0000-0000-000000000000' WHERE org_id IS NULL;
-UPDATE public.invoice    SET org_id = '00000000-0000-0000-0000-000000000000' WHERE org_id IS NULL;
+UPDATE public.jobs        SET org_id = '00000000-0000-0000-0000-000000000000' WHERE org_id IS NULL;
+UPDATE public.quotations  SET org_id = '00000000-0000-0000-0000-000000000000' WHERE org_id IS NULL;
+UPDATE public.invoices    SET org_id = '00000000-0000-0000-0000-000000000000' WHERE org_id IS NULL;
 UPDATE public.platform_search_logs SET org_id = '00000000-0000-0000-0000-000000000000' WHERE org_id IS NULL;
 
 -- Now enforce NOT NULL
-ALTER TABLE public.job               ALTER COLUMN org_id SET NOT NULL;
-ALTER TABLE public.quotation         ALTER COLUMN org_id SET NOT NULL;
-ALTER TABLE public.invoice           ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE public.jobs               ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE public.quotations         ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE public.invoices           ALTER COLUMN org_id SET NOT NULL;
 ALTER TABLE public.platform_search_logs ALTER COLUMN org_id SET NOT NULL;
 
 -- Indexes for new org_id columns
-CREATE INDEX IF NOT EXISTS idx_job_org         ON public.job(org_id);
-CREATE INDEX IF NOT EXISTS idx_quotation_org   ON public.quotation(org_id);
-CREATE INDEX IF NOT EXISTS idx_invoice_org     ON public.invoice(org_id);
+CREATE INDEX IF NOT EXISTS idx_job_org         ON public.jobs(org_id);
+CREATE INDEX IF NOT EXISTS idx_quotation_org   ON public.quotations(org_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_org     ON public.invoices(org_id);
 CREATE INDEX IF NOT EXISTS idx_search_logs_org ON public.platform_search_logs(org_id);
 
 -- ============================================================================
@@ -212,7 +212,7 @@ BEGIN
 
   -- ── Fetch quotation scoped to caller org (SD-R3 fix) ─────────────────────
   SELECT * INTO v_qt
-  FROM public.quotation
+  FROM public.quotations
   WHERE quotation_id = p_quotation_id
     AND org_id = v_org_id;          -- ← prevents cross-tenant access
 
@@ -230,12 +230,12 @@ BEGIN
   v_inv_id := gen_random_uuid();
   v_inv_code := 'INV-' || EXTRACT(YEAR FROM now())::TEXT || '-' || LPAD((
     SELECT COALESCE(MAX(SUBSTRING(invoice_code FROM '[0-9]+$')::INT), 0) + 1
-    FROM public.invoice
+    FROM public.invoices
     WHERE org_id = v_org_id          -- ← scoped sequence per-org
   )::TEXT, 4, '0');
 
   -- ── Update quotation status ───────────────────────────────────────────────
-  UPDATE public.quotation
+  UPDATE public.quotations
   SET
     status      = 'APPROVED',
     approved_at = now(),
@@ -245,7 +245,7 @@ BEGIN
     AND org_id = v_org_id;           -- ← belt-and-suspenders
 
   -- ── Create invoice (carry org_id from quotation) ──────────────────────────
-  INSERT INTO public.invoice (
+  INSERT INTO public.invoices (
     invoice_id, invoice_code, quotation_id, job_id,
     customer_id, org_id,               -- ← org_id now populated (SD-R3 fix)
     subtotal, vat_rate, vat_amount, discount,
@@ -259,7 +259,7 @@ BEGIN
 
   -- ── Update job status if linked ───────────────────────────────────────────
   IF v_qt.job_id IS NOT NULL THEN
-    UPDATE public.job
+    UPDATE public.jobs
     SET
       status       = 'QUOTED',
       quotation_id = p_quotation_id,
@@ -352,57 +352,57 @@ COMMENT ON FUNCTION public.get_search_suggestions(TEXT, INT) IS
 -- ============================================================================
 
 -- job — add org_id predicate to existing policies (idempotent re-create)
-DROP POLICY IF EXISTS "jobs_org_select" ON public.job;
-CREATE POLICY "jobs_org_select" ON public.job
+DROP POLICY IF EXISTS "jobs_org_select" ON public.jobs;
+CREATE POLICY "jobs_org_select" ON public.jobs
   FOR SELECT
   USING (org_id = public.get_user_org_id());
 
-DROP POLICY IF EXISTS "jobs_org_insert" ON public.job;
-CREATE POLICY "jobs_org_insert" ON public.job
+DROP POLICY IF EXISTS "jobs_org_insert" ON public.jobs;
+CREATE POLICY "jobs_org_insert" ON public.jobs
   FOR INSERT
   WITH CHECK (org_id = public.get_user_org_id());
 
-DROP POLICY IF EXISTS "jobs_org_update" ON public.job;
-CREATE POLICY "jobs_org_update" ON public.job
+DROP POLICY IF EXISTS "jobs_org_update" ON public.jobs;
+CREATE POLICY "jobs_org_update" ON public.jobs
   FOR UPDATE
   USING (org_id = public.get_user_org_id());
 
 -- quotation — org-scoped policies
-DROP POLICY IF EXISTS "quotations_org_select" ON public.quotation;
-CREATE POLICY "quotations_org_select" ON public.quotation
+DROP POLICY IF EXISTS "quotations_org_select" ON public.quotations;
+CREATE POLICY "quotations_org_select" ON public.quotations
   FOR SELECT
   USING (org_id = public.get_user_org_id());
 
-DROP POLICY IF EXISTS "quotations_org_insert" ON public.quotation;
-CREATE POLICY "quotations_org_insert" ON public.quotation
+DROP POLICY IF EXISTS "quotations_org_insert" ON public.quotations;
+CREATE POLICY "quotations_org_insert" ON public.quotations
   FOR INSERT
   WITH CHECK (org_id = public.get_user_org_id());
 
-DROP POLICY IF EXISTS "quotations_org_update" ON public.quotation;
-CREATE POLICY "quotations_org_update" ON public.quotation
+DROP POLICY IF EXISTS "quotations_org_update" ON public.quotations;
+CREATE POLICY "quotations_org_update" ON public.quotations
   FOR UPDATE
   USING (org_id = public.get_user_org_id());
 
 -- invoice — org-scoped policies
-DROP POLICY IF EXISTS "invoices_org_select" ON public.invoice;
-CREATE POLICY "invoices_org_select" ON public.invoice
+DROP POLICY IF EXISTS "invoices_org_select" ON public.invoices;
+CREATE POLICY "invoices_org_select" ON public.invoices
   FOR SELECT
   USING (org_id = public.get_user_org_id());
 
-DROP POLICY IF EXISTS "invoices_org_insert" ON public.invoice;
-CREATE POLICY "invoices_org_insert" ON public.invoice
+DROP POLICY IF EXISTS "invoices_org_insert" ON public.invoices;
+CREATE POLICY "invoices_org_insert" ON public.invoices
   FOR INSERT
   WITH CHECK (org_id = public.get_user_org_id());
 
-DROP POLICY IF EXISTS "invoices_org_update" ON public.invoice;
-CREATE POLICY "invoices_org_update" ON public.invoice
+DROP POLICY IF EXISTS "invoices_org_update" ON public.invoices;
+CREATE POLICY "invoices_org_update" ON public.invoices
   FOR UPDATE
   USING (org_id = public.get_user_org_id());
 
 -- Ensure RLS is enabled on all three tables
-ALTER TABLE public.job        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.quotation  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.invoice    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.jobs        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quotations  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.invoices    ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
 -- END OF MIGRATION 0174
