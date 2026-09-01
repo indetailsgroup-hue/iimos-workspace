@@ -1,0 +1,429 @@
+name: Conclude Pipeline Gate
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Reusable workflow: conclude-pipeline-gate
+#
+# Posts a PR comment with the pipeline gate result table (including SARIF delta),
+# creates a `ci/pipeline-gate` commit status, and sends a Slack alert on failure.
+#
+# Callers pass pre-computed gate values (overall_status, critical_failed_jobs,
+# SARIF counts) and the token/secrets they want used.  The workflow is designed
+# to be called from the very end of any CI pipeline that wants a unified gate.
+#
+# Minimal usage example:
+#
+#   use-pipeline-gate:
+#     needs: [lint, tests, upload-eslint-sarif]
+#     uses: ./.github/workflows/conclude-pipeline-gate.yml
+#     with:
+#       overall_status:          ${{ needs.upload-eslint-sarif.result == 'failure' && 'failure' || 'success' }}
+#       critical_failed_jobs:    ${{ join(fromJSON('["lint","tests"]'), ',') }}
+#       sarif_new_findings:      ${{ fromJSON(needs.upload-eslint-sarif.outputs.new-findings || '0') }}
+#       sarif_total_findings:    ${{ fromJSON(needs.upload-eslint-sarif.outputs.total-findings || '0') }}
+#       sarif_suppressed_findings: ${{ fromJSON(needs.upload-eslint-sarif.outputs.suppressed-findings || '0') }}
+#       sarif_threshold:         10
+#       commit_sha:              ${{ github.event.pull_request.head.sha || github.sha }}
+#       run_url:                 ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+#       run_number:              ${{ github.run_number }}
+#       repository:              ${{ github.repository }}
+#       ref_name:                ${{ github.ref_name }}
+#       actor:                   ${{ github.actor }}
+#       pr_number:               ${{ github.event.pull_request.number || 0 }}
+#     secrets:
+#       GATE_TOKEN:              ${{ secrets.GITHUB_TOKEN }}
+#       SLACK_WEBHOOK_URL:       ${{ secrets.SLACK_WEBHOOK_URL }}
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+
+      # ── Gate result ─────────────────────────────────────────────────────────
+      overall_status:
+        description: 'Pre-computed overall pipeline status (success | failure)'
+        required: true
+        type: string
+
+      critical_failed_jobs:
+        description: 'Comma-separated IDs of failed critical jobs (empty = none)'
+        required: false
+        type: string
+        default: ''
+
+      # ── SARIF metrics ────────────────────────────────────────────────────────
+      sarif_new_findings:
+        description: 'Count of new SARIF findings vs baseline'
+        required: false
+        type: number
+        default: 0
+
+      sarif_total_findings:
+        description: 'Total current SARIF findings'
+        required: false
+        type: number
+        default: 0
+
+      sarif_suppressed_findings:
+        description: 'Count of suppressed/resolved SARIF findings vs baseline'
+        required: false
+        type: number
+        default: 0
+
+      sarif_threshold:
+        description: 'SARIF critical threshold — findings above this mark as breached'
+        required: false
+        type: number
+        default: 10
+
+      # ── Dry-run / advisory mode ───────────────────────────────────────────────
+      skip_gate:
+        description: >
+          When true, posts a success commit status with an advisory note and
+          suppresses core.setFailed.  Useful for dry-run / manual workflow_dispatch
+          executions where the gate should be informational only.
+        required: false
+        type: boolean
+        default: false
+
+      # ── GitHub context (needed for PR comment + commit status) ───────────────
+      pr_number:
+        description: 'Pull request number (pass 0 or omit when not a PR event)'
+        required: false
+        type: number
+        default: 0
+
+      commit_sha:
+        description: 'Full SHA of the commit to post the status on'
+        required: true
+        type: string
+
+      run_url:
+        description: 'Full URL of the calling workflow run (for links in comment / Slack)'
+        required: true
+        type: string
+
+      run_number:
+        description: 'Workflow run number (shown in comment / Slack message)'
+        required: false
+        type: number
+        default: 0
+
+      repository:
+        description: 'owner/repo of the calling workflow (for Slack message + jobs API)'
+        required: false
+        type: string
+        default: ''
+
+      ref_name:
+        description: 'Branch or ref name (shown in Slack message)'
+        required: false
+        type: string
+        default: ''
+
+      actor:
+        description: 'GitHub actor who triggered the workflow (shown in Slack message)'
+        required: false
+        type: string
+        default: ''
+
+    secrets:
+      GATE_TOKEN:
+        description: >
+          GitHub token with pull-requests:write + statuses:write.
+          Pass secrets.GITHUB_TOKEN from the calling workflow.
+        required: true
+      SLACK_WEBHOOK_URL:
+        description: 'Slack incoming webhook URL (optional — Slack step is skipped if absent)'
+        required: false
+      SLACK_CHANNEL_OVERRIDE:
+        description: 'Override the default Slack channel (optional)'
+        required: false
+
+    outputs:
+      overall_status:
+        description: 'The overall_status input echoed back for chaining'
+        value: ${{ jobs.post-pipeline-gate.outputs.overall_status }}
+      sarif_breached:
+        description: 'true if sarifNewFindings exceeded sarifThreshold, else false'
+        value: ${{ jobs.post-pipeline-gate.outputs.sarif_breached }}
+
+# ──────────────────────────────────────────────────────────────────────────────
+jobs:
+  post-pipeline-gate:
+    name: Post Pipeline Gate
+    runs-on: ubuntu-latest
+    if: always()
+
+    permissions:
+      pull-requests: write
+      statuses:      write
+
+    outputs:
+      overall_status: ${{ steps.gate.outputs.overall_status }}
+      sarif_breached: ${{ steps.gate.outputs.sarif_breached }}
+
+    steps:
+      # ── Step 1: Post PR comment + commit status ──────────────────────────────
+      - name: Post PR comment and commit status
+        id: gate
+        uses: actions/github-script@v7
+        env:
+          OVERALL_STATUS:        ${{ inputs.overall_status }}
+          CRITICAL_FAILED_JOBS:  ${{ inputs.critical_failed_jobs }}
+          SARIF_NEW_FINDINGS:    ${{ inputs.sarif_new_findings }}
+          SARIF_TOTAL_FINDINGS:  ${{ inputs.sarif_total_findings }}
+          SARIF_SUPPRESSED:      ${{ inputs.sarif_suppressed_findings }}
+          SARIF_THRESHOLD:       ${{ inputs.sarif_threshold }}
+          SKIP_GATE:             ${{ inputs.skip_gate }}
+          PR_NUMBER:             ${{ inputs.pr_number }}
+          COMMIT_SHA:            ${{ inputs.commit_sha }}
+          RUN_URL:               ${{ inputs.run_url }}
+          RUN_NUMBER:            ${{ inputs.run_number }}
+        with:
+          github-token: ${{ secrets.GATE_TOKEN }}
+          script: |
+            // ── Parse inputs ────────────────────────────────────────────────────
+            const overallStatus   = process.env.OVERALL_STATUS   || 'failure';
+            const criticalFailed  = (process.env.CRITICAL_FAILED_JOBS || '')
+              .split(',').map(s => s.trim()).filter(Boolean);
+            const sarifNew        = parseInt(process.env.SARIF_NEW_FINDINGS   || '0', 10);
+            const sarifTotal      = parseInt(process.env.SARIF_TOTAL_FINDINGS  || '0', 10);
+            const sarifSuppressed = parseInt(process.env.SARIF_SUPPRESSED      || '0', 10);
+            const sarifUnchanged  = Math.max(0, sarifTotal - sarifNew);
+            const sarifThreshold  = parseInt(process.env.SARIF_THRESHOLD       || '10', 10);
+            const sarifBreached   = sarifNew > sarifThreshold;
+            const skipGate        = process.env.SKIP_GATE === 'true';
+            const prNumber        = parseInt(process.env.PR_NUMBER  || '0', 10);
+            const commitSha       = process.env.COMMIT_SHA;
+            const runUrl          = process.env.RUN_URL    || '';
+            const runNumber       = process.env.RUN_NUMBER || '?';
+
+            // ── Helpers ──────────────────────────────────────────────────────────
+            function icon(status) {
+              if (status === 'success')   return '✅';
+              if (status === 'failure')   return '❌';
+              if (status === 'skipped')   return '⏭️';
+              if (status === 'cancelled') return '🚫';
+              return '❓';
+            }
+
+            const overallLabel = `${icon(overallStatus)} ${overallStatus === 'success' ? 'Passed' : 'Failed'}`;
+            const summary = criticalFailed.length > 0
+              ? `Critical jobs failed: ${criticalFailed.map(j => `\`${j}\``).join(', ')}`
+              : 'All critical jobs passed.';
+
+            // ── SARIF metrics row + delta section ────────────────────────────────
+            const sarifLine    = `| SARIF new findings | ${sarifBreached ? '❌' : '✅'} ${sarifNew} _(threshold: ${sarifThreshold})_ |`;
+            const deltaSection = [
+              '### SARIF Delta',
+              '',
+              '| Metric | Count |',
+              '|--------|-------|',
+              `| ➕ Added (new)        | ${sarifNew} |`,
+              `| ➖ Removed (resolved) | ${sarifSuppressed} |`,
+              `| ✅ Unchanged          | ${sarifUnchanged} |`,
+              `| 📊 Total              | ${sarifTotal} |`,
+              '',
+            ];
+
+            // ── Failed critical jobs list ─────────────────────────────────────────
+            const failedRows = criticalFailed.length > 0
+              ? criticalFailed.map(j => `| \`${j}\` | ❌ failure _(critical)_ |`).join('\n')
+              : '_None_';
+
+            // ── Build body ────────────────────────────────────────────────────────
+            const marker    = '<!-- conclude-pipeline-gate -->';
+            const bodyParts = [
+              '## Pipeline Gate',
+              '',
+              `**Overall: ${overallLabel}** — ${summary}`,
+              '',
+              '| Metric | Value |',
+              '|--------|-------|',
+              sarifLine,
+              '',
+              ...deltaSection,
+              criticalFailed.length > 0 ? '### Failed Critical Jobs' : '',
+              criticalFailed.length > 0 ? '' : '',
+              criticalFailed.length > 0 ? '| Job | Result |' : '',
+              criticalFailed.length > 0 ? '|-----|--------|' : '',
+              criticalFailed.length > 0 ? failedRows : '',
+              '',
+            ].filter(l => l !== undefined);
+            if (skipGate) bodyParts.push('_⚠️ Dry-run mode: gate is advisory only._', '');
+            bodyParts.push(`<sub>[View run](${runUrl}) · Run \`#${runNumber}\`</sub>`);
+            const body = bodyParts.join('\n');
+
+            // ── Write status file for downstream Slack step ──────────────────────
+            const fs = require('fs');
+            fs.writeFileSync('/tmp/gate-status.json', JSON.stringify({
+              overallStatus,
+              criticalFailed,
+              sarifNew,
+              sarifThreshold,
+              sarifBreached,
+              runUrl,
+            }));
+
+            // ── Post/update PR comment ───────────────────────────────────────────
+            if (prNumber > 0) {
+              const { data: comments } = await github.rest.issues.listComments({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: prNumber,
+              });
+              const existing = comments.find(
+                c => c.user.login === 'github-actions[bot]' && c.body.includes(marker)
+              );
+              const fullBody = marker + '\n' + body;
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner:      context.repo.owner,
+                  repo:       context.repo.repo,
+                  comment_id: existing.id,
+                  body:       fullBody,
+                });
+                core.info(`Updated pipeline gate comment ${existing.id}`);
+              } else {
+                await github.rest.issues.createComment({
+                  owner:        context.repo.owner,
+                  repo:         context.repo.repo,
+                  issue_number: prNumber,
+                  body:         fullBody,
+                });
+                core.info('Created pipeline gate comment.');
+              }
+            }
+
+            // ── Create commit status ─────────────────────────────────────────────
+            const statusState = skipGate ? 'success' : overallStatus;
+            const statusDesc  = skipGate
+              ? 'Dry-run mode — gate is advisory.'
+              : summary.slice(0, 140);
+            await github.rest.repos.createCommitStatus({
+              owner:       context.repo.owner,
+              repo:        context.repo.repo,
+              sha:         commitSha,
+              state:       statusState,
+              context:     'ci/pipeline-gate',
+              description: statusDesc,
+              target_url:  runUrl,
+            });
+            core.info(`Commit status '${statusState}' posted for ${commitSha.slice(0, 7)}`);
+
+            // ── Propagate outputs ────────────────────────────────────────────────
+            core.setOutput('overall_status', overallStatus);
+            core.setOutput('sarif_breached', String(sarifBreached));
+
+            // ── Fail the job if gate is not advisory ─────────────────────────────
+            if (overallStatus === 'failure' && !skipGate) {
+              core.setFailed(`Pipeline gate failed — critical jobs: ${criticalFailed.join(', ')}`);
+            }
+
+      # ── Step 2: Slack alert on pipeline failure ──────────────────────────────
+      - name: Notify Slack on pipeline failure
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL:      ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_CHANNEL_OVERRIDE: ${{ secrets.SLACK_CHANNEL_OVERRIDE }}
+          GITHUB_TOKEN:           ${{ secrets.GATE_TOKEN }}
+          RUN_URL:                ${{ inputs.run_url }}
+          REPOSITORY:             ${{ inputs.repository }}
+          REF_NAME:               ${{ inputs.ref_name }}
+          ACTOR:                  ${{ inputs.actor }}
+          RUN_NUMBER:             ${{ inputs.run_number }}
+        run: |
+          python3 - <<'PYSLACK_GATE'
+          import json, os, sys, urllib.request
+
+          status_file = '/tmp/gate-status.json'
+          if not os.path.exists(status_file):
+              print('No gate-status.json found — skipping Slack notify.')
+              sys.exit(0)
+
+          with open(status_file) as f:
+              data = json.load(f)
+
+          if data.get('overallStatus') != 'failure':
+              print(f'overallStatus={data.get("overallStatus")} — nothing to notify.')
+              sys.exit(0)
+
+          webhook = os.environ.get('SLACK_WEBHOOK_URL', '').strip()
+          if not webhook:
+              print('SLACK_WEBHOOK_URL not set — skipping Slack notify.')
+              sys.exit(0)
+
+          channel        = os.environ.get('SLACK_CHANNEL_OVERRIDE', '').strip()
+          run_url        = os.environ.get('RUN_URL',      '')
+          repository     = os.environ.get('REPOSITORY',  '')
+          ref_name       = os.environ.get('REF_NAME',    '')
+          actor          = os.environ.get('ACTOR',       '')
+          run_number     = os.environ.get('RUN_NUMBER',  '?')
+          token          = os.environ.get('GITHUB_TOKEN', '')
+          critical_jobs  = data.get('criticalFailed', [])
+          sarif_count    = data.get('sarifNew',       0)
+          sarif_threshold = data.get('sarifThreshold', 10)
+          sarif_breached  = data.get('sarifBreached', False)
+
+          # Fetch per-job log URLs from jobs API
+          log_lines = []
+          if token and repository and run_url:
+              try:
+                  parts  = run_url.rstrip('/').split('/')
+                  run_id = parts[-1]
+                  api_url = (
+                      f'https://api.github.com/repos/{repository}'
+                      f'/actions/runs/{run_id}/jobs?per_page=50'
+                  )
+                  req = urllib.request.Request(api_url, headers={
+                      'Authorization': f'Bearer {token}',
+                      'Accept': 'application/vnd.github+json',
+                      'X-GitHub-Api-Version': '2022-11-28',
+                  })
+                  with urllib.request.urlopen(req, timeout=10) as r:
+                      jobs_data = json.loads(r.read())
+                  job_map = {
+                      j['name']: j.get('html_url', '')
+                      for j in jobs_data.get('jobs', [])
+                  }
+                  for jid in critical_jobs:
+                      url = job_map.get(jid, '')
+                      log_lines.append(f'• `{jid}` — <{url}|logs>' if url else f'• `{jid}`')
+              except Exception as e:
+                  log_lines = [f'• `{j}`' for j in critical_jobs]
+                  print(f'Jobs API error: {e}')
+          else:
+              log_lines = [f'• `{j}`' for j in critical_jobs]
+
+          sarif_note = (
+              f'\n>:bar_chart: SARIF: `{sarif_count}` new findings'
+              + (' \u274c threshold exceeded' if sarif_breached else '')
+          ) if sarif_count else ''
+
+          text = (
+              ':rotating_light: *Pipeline Gate Failed*'
+              f' \u2014 `{repository}` run `#{run_number}` on `{ref_name}`\n'
+              f'>*Actor:* {actor}\n'
+              f'>*Failed critical jobs:*\n'
+              + '\n'.join(f'>{l}' for l in log_lines)
+              + sarif_note
+              + f'\n><{run_url}|View full run>'
+          )
+
+          payload = {'text': text}
+          if channel:
+              payload['channel'] = channel
+
+          req2 = urllib.request.Request(
+              webhook,
+              data=json.dumps(payload).encode(),
+              headers={'Content-Type': 'application/json'},
+              method='POST',
+          )
+          try:
+              with urllib.request.urlopen(req2, timeout=15) as resp:
+                  print(f'Slack notified: {resp.status}')
+          except Exception as e:
+              print(f'Slack notify failed: {e}')
+              sys.exit(1)
+          PYSLACK_GATE
