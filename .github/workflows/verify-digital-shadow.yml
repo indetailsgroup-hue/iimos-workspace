@@ -1532,6 +1532,7 @@ jobs:
       - open-sarif-findings-issue
       - notify-slack-on-sarif-critical
       - close-sarif-findings-issue
+      - block-merge-on-sarif-critical
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1545,6 +1546,9 @@ jobs:
         uses: actions/github-script@v7
         env:
           SARIF_RULE_BREAKDOWN: ${{ needs.upload-eslint-sarif.outputs.rule-breakdown-md }}
+          SARIF_ISSUE_NUMBER: ${{ needs.open-sarif-findings-issue.outputs.issue-number }}
+          SARIF_ISSUE_ACTION: ${{ needs.open-sarif-findings-issue.outputs.issue-action }}
+          SARIF_CLOSED_ISSUE: ${{ needs.close-sarif-findings-issue.outputs.closed-issue-number }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -1682,6 +1686,23 @@ jobs:
                 ]
               : ['', '_ESLint SARIF upload: skipped or no findings data available._'];
 
+            const sarifIssueSection = (() => {
+              const issueNum    = process.env.SARIF_ISSUE_NUMBER;
+              const issueAction = process.env.SARIF_ISSUE_ACTION;
+              const closedIssue = process.env.SARIF_CLOSED_ISSUE;
+              if (!issueNum && !closedIssue) return [];
+              const issueBaseUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/issues`;
+              const lines = ['', '### 4⃣ SARIF Findings Issue', ''];
+              if (issueNum && issueAction === 'opened') {
+                lines.push(`🆕 **Opened** sarif-findings issue [#${issueNum}](${issueBaseUrl}/${issueNum})`);
+              } else if (issueNum && issueAction === 'updated') {
+                lines.push(`🔄 **Updated** sarif-findings issue [#${issueNum}](${issueBaseUrl}/${issueNum})`);
+              } else if (closedIssue) {
+                lines.push(`✅ **Closed** sarif-findings issue [#${closedIssue}](${issueBaseUrl}/${closedIssue}) — findings within threshold`);
+              }
+              return lines;
+            })();
+
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
             const body = [
@@ -1694,6 +1715,7 @@ jobs:
               ...rows,
               ...e2eSection,
               ...sarifSection,
+              ...sarifIssueSection,
               '',
               `---`,
               `Commit: \`${context.sha.slice(0,7)}\` · Run [#${context.runNumber}](${runUrl})`,
@@ -1958,6 +1980,97 @@ jobs:
                   else:
                       f.write('rule-breakdown-md=\n')
           PY
+
+      - name: Append SARIF trend sparkline
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 << 'PYEOF'
+          import io, json, os, re, urllib.request, zipfile
+
+          token   = os.environ['GH_TOKEN']
+          repo    = os.environ['GITHUB_REPOSITORY']
+          run_id  = os.environ['GITHUB_RUN_ID']
+          headers = {
+              'Authorization':        f'Bearer {token}',
+              'Accept':               'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+          }
+
+          def gh(url):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req) as r:
+                  return json.loads(r.read())
+
+          run_info  = gh(f'https://api.github.com/repos/{repo}/actions/runs/{run_id}')
+          wf_id     = run_info['workflow_id']
+
+          runs_resp = gh(
+              f'https://api.github.com/repos/{repo}/actions/workflows/{wf_id}/runs'
+              f'?status=completed&per_page=20'
+          )
+          past_runs = [r for r in runs_resp['workflow_runs']
+                       if str(r['id']) != str(run_id)][:7]
+
+          SPARK = '\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588'
+
+          def sparkline(vals):
+              mn, mx = min(vals), max(vals)
+              if mn == mx:
+                  return SPARK[0] * len(vals)
+              return ''.join(
+                  SPARK[round((v - mn) / (mx - mn) * (len(SPARK) - 1))]
+                  for v in vals
+              )
+
+          def fetch_findings(run):
+              arts = gh(
+                  f'https://api.github.com/repos/{repo}/actions/runs/{run["id"]}/artifacts'
+              )
+              for art in arts.get('artifacts', []):
+                  if 'sarif-delta-summary' in art['name']:
+                      req = urllib.request.Request(
+                          art['archive_download_url'], headers=headers
+                      )
+                      try:
+                          with urllib.request.urlopen(req) as r:
+                              data = r.read()
+                          with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                              for name in zf.namelist():
+                                  if name.endswith('.md'):
+                                      txt = zf.read(name).decode('utf-8', errors='replace')
+                                      m = re.search(r'New \(vs baseline\)[^\d]*(\d+)', txt)
+                                      if m:
+                                          return int(m.group(1))
+                      except Exception as exc:
+                          print(f'  [warn] run {run["id"]}: {exc}')
+              return None
+
+          current_val = None
+          summary_path = 'sarif-delta-summary.md'
+          if os.path.exists(summary_path):
+              with open(summary_path) as fh:
+                  txt = fh.read()
+              m = re.search(r'New \(vs baseline\)[^\d]*(\d+)', txt)
+              if m:
+                  current_val = int(m.group(1))
+
+          past_vals = [v for v in (fetch_findings(r) for r in past_runs) if v is not None]
+          all_vals  = past_vals + ([current_val] if current_val is not None else [])
+
+          if len(all_vals) < 2:
+              print(f'Not enough data points ({len(all_vals)}) — skipping sparkline.')
+          else:
+              spark = sparkline(all_vals)
+              trend = (
+                  f'\n\n## \U0001F4C8 SARIF Trend (last {len(all_vals)} runs)\n\n'
+                  f'`{spark}`\n'
+              )
+              with open(summary_path, 'a') as fh:
+                  fh.write(trend)
+              print(f'Appended sparkline ({len(all_vals)} pts): {spark}')
+          PYEOF
 
       - name: Upload sarif-delta-summary.md artifact
         if: always()
@@ -2317,6 +2430,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
 
+    outputs:
+      issue-number: ${{ steps.upsert-issue.outputs.issue-number }}
+      issue-action: ${{ steps.upsert-issue.outputs.issue-action }}
     permissions:
       issues: write   # create label + open issue
 
@@ -2349,6 +2465,7 @@ jobs:
             }
 
       - name: Open or update sarif-findings issue
+        id: upsert-issue
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -2404,6 +2521,7 @@ jobs:
               });
               core.info(`Commented on existing issue #${existing.number}: ${existing.title}`);
               core.setOutput('issue-number', String(existing.number));
+              core.setOutput('issue-action', 'updated');
             } else {
               // No open issue for this branch — open a new tracking issue.
               const body = [
@@ -2435,6 +2553,7 @@ jobs:
               });
               core.info(`Opened issue #${issue.number}: ${issue.title}`);
               core.setOutput('issue-number', String(issue.number));
+              core.setOutput('issue-action', 'opened');
             }
   # ── Job 15: close-sarif-findings-issue ──────────────────────────────────────
   # Mirrors the close-webhook-broken-issue pattern: whenever upload-eslint-sarif
@@ -2457,11 +2576,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
 
+    outputs:
+      closed-issue-number: ${{ steps.close-issues.outputs.closed-issue-number }}
     permissions:
       issues: write   # post closure comment + close the issue
 
     steps:
       - name: Close any open sarif-findings issues
+        id: close-issues
         uses: actions/github-script@v7
         env:
           NEW_FINDINGS: ${{ needs.upload-eslint-sarif.outputs.new-findings }}
@@ -2517,5 +2639,62 @@ jobs:
               });
 
               core.info(`Closed issue #${issue.number}: ${issue.title}`);
+              core.setOutput('closed-issue-number', String(issue.number));
             }
             core.info(`Closed ${issues.length} sarif-findings issue(s).`);
+  block-merge-on-sarif-critical:
+    name: "Block Merge — Critical SARIF Findings"
+    needs: [upload-eslint-sarif]
+    if: |
+      always() &&
+      github.event_name == 'pull_request' &&
+      needs.upload-eslint-sarif.result != 'cancelled' &&
+      needs.upload-eslint-sarif.outputs.new-findings != '' &&
+      fromJSON(needs.upload-eslint-sarif.outputs.new-findings) > fromJSON(env.SARIF_CRITICAL_THRESHOLD)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Post REQUEST_CHANGES review for critical SARIF findings
+        uses: actions/github-script@v7
+        env:
+          NEW_FINDINGS: ${{ needs.upload-eslint-sarif.outputs.new-findings }}
+          THRESHOLD: ${{ env.SARIF_CRITICAL_THRESHOLD }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const newFindings = parseInt(process.env.NEW_FINDINGS, 10);
+            const threshold   = parseInt(process.env.THRESHOLD,   10);
+            const runUrl      = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const codeScanning = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/security/code-scanning`;
+
+            const body = [
+              '## 🚨 Critical SARIF Findings — Merge Blocked',
+              '',
+              `This pull request introduces **${newFindings} new SARIF finding(s)**, which exceeds the`,
+              `critical threshold of **${threshold}**. Merge is blocked until the findings are resolved.`,
+              '',
+              '| Metric | Value |',
+              '|--------|-------|',
+              `| New findings | \`${newFindings}\` |`,
+              `| Critical threshold | \`${threshold}\` |`,
+              `| Workflow run | [View run](${runUrl}) |`,
+              `| Code Scanning | [View alerts](${codeScanning}) |`,
+              '',
+              '### How to unblock',
+              '',
+              '1. Review the [Code Scanning alerts](' + codeScanning + ') introduced by this PR.',
+              '2. Fix or suppress each new finding with an inline `eslint-disable` comment (with justification).',
+              '3. Re-push to re-run the workflow. This review will be superseded once `new-findings` drops to or below the threshold.',
+            ].join('\n');
+
+            await github.rest.pulls.createReview({
+              owner:       context.repo.owner,
+              repo:        context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              event:       'REQUEST_CHANGES',
+              body,
+            });
+
+            core.info(`Blocking review posted — ${newFindings} new findings exceed threshold ${threshold}`);
