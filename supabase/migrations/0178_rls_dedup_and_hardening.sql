@@ -78,8 +78,9 @@ CREATE INDEX IF NOT EXISTS idx_invoice_payments_org ON public.invoice_payments(o
 -- STEP 2: Fix job_code uniqueness — unique per tenant, not globally
 -- ============================================================================
 
--- Drop global unique (if exists via index)
-DROP INDEX IF EXISTS jobs_job_code_key;
+-- Drop global unique constraint (which also drops the backing index)
+-- Cannot use DROP INDEX directly when a constraint backs the index
+ALTER TABLE public.jobs DROP CONSTRAINT IF EXISTS jobs_job_code_key;
 
 -- Add composite unique per tenant
 DO $$
