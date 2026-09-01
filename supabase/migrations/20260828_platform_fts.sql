@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS platform_search_logs (
   user_id UUID NOT NULL REFERENCES auth.users(id),
   query TEXT NOT NULL,
   entity_types TEXT[] NOT NULL DEFAULT '{job,member,invoice}',
-  org_filter UUID REFERENCES organizations(id),
+  org_filter UUID REFERENCES organizations(org_id),
   result_count INT NOT NULL DEFAULT 0,
   query_time_ms INT NOT NULL DEFAULT 0,
   clicked_result_id UUID,
