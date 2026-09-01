@@ -526,6 +526,83 @@ jobs:
               EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE public.invoice';
             END IF;
           END $do$;
+
+          -- ── 20260828_platform_fts stub: platform_search_logs ────────────────
+          -- Referenced by 0173 (REVOKE), 0174 (ALTER/backfill), 0175.
+          -- auth.users FK omitted — auth schema may not be seeded in CI.
+          CREATE TABLE IF NOT EXISTS public.platform_search_logs (
+            id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id             UUID        NOT NULL,
+            query               TEXT        NOT NULL,
+            entity_types        TEXT[]      NOT NULL DEFAULT '{job,member,invoice}',
+            org_filter          UUID        REFERENCES public.organizations(org_id),
+            result_count        INT         NOT NULL DEFAULT 0,
+            query_time_ms       INT         NOT NULL DEFAULT 0,
+            clicked_result_id   UUID,
+            clicked_result_type TEXT,
+            created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+
+          -- ── 20260828_search_bookmarks_autocomplete stub: get_search_suggestions
+          -- Referenced by 0173 (REVOKE), 0174 (CREATE OR REPLACE), 0176, 0181.
+          -- 0174 replaces with full plpgsql SECURITY INVOKER implementation.
+          CREATE OR REPLACE FUNCTION public.get_search_suggestions(
+            query_prefix  TEXT,
+            result_limit  INT DEFAULT 8
+          )
+          RETURNS TABLE(query_text TEXT, frequency BIGINT, last_used TIMESTAMPTZ)
+          LANGUAGE sql STABLE SECURITY DEFINER
+          SET search_path = public
+          AS $$
+            SELECT NULL::TEXT, NULL::BIGINT, NULL::TIMESTAMPTZ WHERE FALSE;
+          $$;
+
+          -- ── 20260828_audit_log_usage_metering stub: audit_logs ──────────────
+          -- Referenced by 0176, 0177, 0182, 0183.
+          CREATE TABLE IF NOT EXISTS public.audit_logs (
+            id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id      UUID        NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
+            action      TEXT        NOT NULL,
+            actor_type  TEXT        NOT NULL CHECK (actor_type IN ('user','system','api')),
+            actor_id    TEXT        NOT NULL,
+            actor_name  TEXT,
+            actor_email TEXT,
+            target_type TEXT,
+            target_id   TEXT,
+            target_name TEXT,
+            metadata    JSONB       DEFAULT '{}',
+            ip_address  INET,
+            user_agent  TEXT,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+          );
+
+          -- ── 20260828_audit_log_usage_metering stub: get_org_usage ───────────
+          -- Referenced by 0176 (CREATE OR REPLACE replaces this stub), 0180, 0181.
+          CREATE OR REPLACE FUNCTION public.get_org_usage(p_org_id UUID)
+          RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER
+          SET search_path = public
+          AS $$
+          BEGIN
+            RETURN '{}'::JSON;
+          END;
+          $$;
+
+          -- ── 20260828_audit_log_usage_metering stub: check_job_limit ─────────
+          -- 0176 does REVOKE … IF EXISTS — safe even with stub.
+          CREATE OR REPLACE FUNCTION public.check_job_limit()
+          RETURNS TRIGGER LANGUAGE plpgsql AS $$
+          BEGIN
+            RETURN NEW;
+          END;
+          $$;
+
+          -- ── 20260828_audit_log_usage_metering stub: check_member_limit ──────
+          CREATE OR REPLACE FUNCTION public.check_member_limit()
+          RETURNS TRIGGER LANGUAGE plpgsql AS $$
+          BEGIN
+            RETURN NEW;
+          END;
+          $$;
           SQL
 
       # ── Restore Supabase Docker image cache ────────────────────────────────
