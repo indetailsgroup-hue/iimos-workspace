@@ -3,6 +3,9 @@ name: Vitest PR Summary
 on:
   pull_request:
     branches: [main]
+    paths:
+      - 'src/people/**'
+      - 'src/culture/**'
 
 permissions:
   pull-requests: write
