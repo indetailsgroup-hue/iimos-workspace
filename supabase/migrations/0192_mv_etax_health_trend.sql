@@ -69,19 +69,17 @@ SELECT
     submission_day,
     day_rank,
     daily_total,
-    daily_submitted,
+    daily_successful            AS daily_submitted,
     daily_failed,
     daily_exhausted,
-    daily_queued,
-    daily_pdf_ok,
-    daily_pdf_fail,
-    daily_pdf_pending,
+    daily_pending               AS daily_queued,
+    daily_pdfs_downloaded       AS daily_pdf_ok,
+    daily_pdfs_failed           AS daily_pdf_fail,
     retry_exhaustion_rate_pct,
     success_rate_pct,
     pdf_success_rate_pct,
     avg_attempt_count,
-    max_attempt_count,
-    p95_attempt_count
+    max_attempt_count
 FROM v_etax_health_trend
 WITH NO DATA;
 
@@ -254,13 +252,11 @@ RETURNS TABLE (
     daily_queued                BIGINT,
     daily_pdf_ok                BIGINT,
     daily_pdf_fail              BIGINT,
-    daily_pdf_pending           BIGINT,
     retry_exhaustion_rate_pct   NUMERIC,
     success_rate_pct            NUMERIC,
     pdf_success_rate_pct        NUMERIC,
     avg_attempt_count           NUMERIC,
     max_attempt_count           INTEGER,
-    p95_attempt_count           NUMERIC,
     mv_last_refreshed_at        TIMESTAMPTZ,
     mv_age_seconds              INTEGER
 )
@@ -311,13 +307,11 @@ BEGIN
         m.daily_queued,
         m.daily_pdf_ok,
         m.daily_pdf_fail,
-        m.daily_pdf_pending,
         m.retry_exhaustion_rate_pct,
         m.success_rate_pct,
         m.pdf_success_rate_pct,
         m.avg_attempt_count,
         m.max_attempt_count,
-        m.p95_attempt_count,
         v_lag.last_refreshed_at  AS mv_last_refreshed_at,
         v_lag.lag_seconds        AS mv_age_seconds
     FROM mv_etax_health_trend m
@@ -354,13 +348,11 @@ RETURNS TABLE (
     daily_queued                BIGINT,
     daily_pdf_ok                BIGINT,
     daily_pdf_fail              BIGINT,
-    daily_pdf_pending           BIGINT,
     retry_exhaustion_rate_pct   NUMERIC,
     success_rate_pct            NUMERIC,
     pdf_success_rate_pct        NUMERIC,
     avg_attempt_count           NUMERIC,
     max_attempt_count           INTEGER,
-    p95_attempt_count           NUMERIC,
     mv_last_refreshed_at        TIMESTAMPTZ,
     mv_age_seconds              INTEGER
 )
@@ -396,13 +388,11 @@ BEGIN
         m.daily_queued,
         m.daily_pdf_ok,
         m.daily_pdf_fail,
-        m.daily_pdf_pending,
         m.retry_exhaustion_rate_pct,
         m.success_rate_pct,
         m.pdf_success_rate_pct,
         m.avg_attempt_count,
         m.max_attempt_count,
-        m.p95_attempt_count,
         v_lag.last_refreshed_at  AS mv_last_refreshed_at,
         v_lag.lag_seconds        AS mv_age_seconds
     FROM mv_etax_health_trend m
