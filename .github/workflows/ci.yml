@@ -1012,6 +1012,22 @@ jobs:
              supabase/migrations/01731_rollback.sql 2>/dev/null || true
           echo "Renamed: 0173_rollback.sql → 01731_rollback.sql (version conflict fix)"
 
+      # ── iter 25f: patch 0178_rls_dedup — DROP CONSTRAINT before DROP INDEX ─────────
+      # In our E2E stub, jobs.job_code has a UNIQUE CONSTRAINT (not a bare index).
+      # PostgreSQL rejects DROP INDEX on a constraint-backed index (SQLSTATE 2BP01).
+      # Fix: prepend ALTER TABLE … DROP CONSTRAINT IF EXISTS so the index is gone
+      # before DROP INDEX runs (which becomes a no-op via IF EXISTS).
+      - name: Patch 0178_rls_dedup — drop constraint before index for jobs_job_code_key
+        run: |
+          sed -i \
+            's/DROP INDEX IF EXISTS jobs_job_code_key;/ALTER TABLE public.jobs DROP CONSTRAINT IF EXISTS jobs_job_code_key;\nDROP INDEX IF EXISTS jobs_job_code_key;/' \
+            supabase/migrations/0178_rls_dedup_and_hardening.sql
+          echo "Patch 0178_rls_dedup applied"
+          grep -c 'DROP CONSTRAINT IF EXISTS jobs_job_code_key' \
+            supabase/migrations/0178_rls_dedup_and_hardening.sql \
+            && echo "  jobs_job_code_key constraint-drop line present (OK)" \
+            || echo "  WARNING: constraint-drop line not found in 0178_rls_dedup"
+
       # ── Iter 23: Deduplicate migration version conflicts ──────────────────
       # Many migration files share the same numeric version prefix (e.g. four
       # files all named 0176_*.sql). supabase start extracts the leading digits
