@@ -1,5 +1,74 @@
 # Monolith Implementation Progress
 
+## v17.5 — Training Tracker + Super Employee Tracker + AI Cost Estimation (✅ v17.5.0 Released 2027-01-15 | v17.5.1 Released 2027-01-20)
+
+**Tag v17.5.0:** `3a819c17` | **Tag v17.5.1:** `8a7a6be8`
+**PR #76:** merged (squash `3a819c17`) | **PR #77:** merged (squash `af6f329b`)
+
+### ✅ All completed (v17.5.0 — Tasks 1–40 via PR #76 + PR #77)
+- `supabase/migrations/20270101_training_tracker.sql` — 3 tables, `tt_is_professional_plus()`, 2 triggers, 2 views, RLS, 10 seed courses
+- `src/training/trainingTypes.ts` — full type system (8 categories, 4 statuses, plan gate, all interfaces)
+- `src/training/trainingStore.ts` — Zustand store; `TrainingPlanGateError`; fetchCourses, enroll, logCompletion (optimistic), bulkEnroll, CRUD
+- `src/training/__tests__/trainingTypes.test.ts` — 50+ Vitest tests
+- `src/training/__tests__/trainingStore.test.ts` — 55 Vitest tests; plan gate FREE/STARTER/PROFESSIONAL/ENTERPRISE; optimistic rollbacks
+- `src/training/TrainingCourseList.tsx` — PROFESSIONAL+ gate, debounced search, category/stage/isActive filters, enroll button
+- `src/training/TrainingEnrollmentPanel.tsx` — bulk enroll; employee tag add/remove; due date picker; status timeline; 15 data-testids
+- `src/training/__tests__/TrainingEnrollmentPanel.test.tsx` — ~30 Vitest tests; plan gate wall, tag add/remove, bulkEnroll error path, timeline
+- `src/training/TrainingCourseList.stories.tsx` — 10 Storybook stories incl. AdminEnrollFlow interaction test
+- `src/training/superEmployeeTypes.ts` — AI Readiness types; `SuperEmployeeTrackerPlanGateError`; `STAGE_PROGRESSION_ORDER`; mappers ×5
+- `src/training/superEmployeeStore.ts` — `useSuperEmployeeStore`; 9 actions; PROFESSIONAL+ gated writes; `resolveSkillGap` optimistic update
+- `supabase/migrations/20270115_super_employee_tracker.sql` — `employee_ai_assessments`, `employee_stage_history`, `employee_skill_gaps`; 2 views; RLS; assertion block
+- `src/jobs/ProcessTemplateList.stories.tsx` — `CloneFlowInteraction` story appended (12 total)
+- `.github/ISSUE_TEMPLATE/v17-process-templates-bug.yml` — bug report template (labels: bug, v17-process-templates)
+
+### ✅ All completed (v17.5.1 — Tasks 41–45, merged PR #77 + direct to main)
+- `src/training/__tests__/superEmployeeStore.test.ts` — ~95 Vitest tests; 11 describe blocks; plan gate guard, recordStageTransition, resolveSkillGap (no pre-mutation), fetchStageHistory, fetchSkillGaps, clearError; thenable Proxy mock + auth.getUser stub
+- `src/training/SuperEmployeeProgressPanel.tsx` — 5-step stage timeline; AI Readiness badge at AI_ASSISTED+; admin resolve gap; plan gate wall; loading skeleton; 14 data-testids
+- `src/training/TrainingEnrollmentPanel.stories.tsx` — 8 CSF3 stories; `withEnrollmentStore` decorator; BulkEnrollSuccess + BulkEnrollErrorPath play interactions
+- `src/training/SuperEmployeeProgressPanel.stories.tsx` — 11 CSF3 stories; `withProgressStore` decorator; all 5 stage timeline states verified; AdminResolveInteraction play test
+- `supabase/migrations/20270120_ai_cost_estimation.sql` — 4 tables, 2 views, `ace_is_enterprise()`, full RLS, 6 indexes, assertion block (ENTERPRISE plan)
+- `src/ai-cost/aiCostEstimationTypes.ts` — complete type system; 6 union types; 6 DB row + 6 app-layer types; 5 payloads; plan gate + error; constants + utilities + 6 mappers
+- `src/ai-cost/aiCostEstimationStore.ts` — `useAiCostEstimationStore`; 16 actions across 4 domains; auto-compute cost in logUsage + createTaskEstimate; ENTERPRISE gate
+
+### ✅ All completed (v17.5.2 — AI Cost Estimation tests + dashboard + stories)
+- `src/ai-cost/__tests__/aiCostEstimationTypes.test.ts` — pure unit tests; plan gate, canAccess, computeTokenCostUsd, computeRoiPct, usdToThb, DEFAULT_AI_COST_FILTERS, label constants, all 6 mappers
+- `src/ai-cost/__tests__/aiCostEstimationStore.test.ts` — thenable Proxy mock; plan gate on all 8 write actions, clearError, setFilters, fetchCostModels, logUsage cost computation (all 5 CostUnit types), createTaskEstimate ROI, updateActuals
+- `src/ai-cost/AiCostDashboard.tsx` — ENTERPRISE-gated; summary cards, budget utilization (progress bar + over-threshold warning), monthly trend (CSS bar chart), usage-by-tool table; 20 data-testids
+- `src/ai-cost/AiCostDashboard.stories.tsx` — 8 CSF3 stories; withDashboardStore decorator; PlanGateWallFree, PlanGateWallProfessional, DashboardLoading, EmptyState, WithUsageData (play assertions), WithBudgetUtilization, BudgetOverThreshold (play assertion), AdminView, StoreError
+
+### 📋 Next (v17.5 remaining)
+- AI Production Scheduler module (schema + types + store + UI)
+- Culture Metrics Dashboard module
+
+**Last updated:** 2027-01-25
+
+---
+
+## v17.0 — Process Templates Module (✅ Released 2026-12-01)
+
+**Release tag:** v17.0.0 | **PR:** #75 (merged) | **Merge SHA:** 7d9e0467
+
+### ✅ All completed
+- `supabase/migrations/20261201_process_templates.sql` — 3 tables, 1 view, 3 fn, 12 RLS, 5 seed templates
+- `supabase/migrations/20261201_process_templates_rollback.sql` — full rollback
+- `src/jobs/processTemplateTypes.ts` — PlanGate, meetsplanGate, BottleneckSeverity, all interfaces
+- `src/jobs/processTemplateStore.ts` — Zustand store, PlanGateError, CRUD, PROFESSIONAL+ analytics
+- `src/jobs/ProcessTemplateList.tsx` — template browser (search, category, global filter, plan gate)
+- `src/jobs/BottleneckHeatmap.tsx` — PROFESSIONAL+ heatmap, severity coloring, summary bar
+- `src/jobs/__tests__/processTemplateTypes.test.ts` — 30 tests
+- `src/jobs/__tests__/processTemplateStore.test.ts` — 28 tests
+- `src/jobs/ProcessTemplateList.stories.tsx` — 11 Storybook stories
+- `src/jobs/BottleneckHeatmap.stories.tsx` — 11 Storybook stories
+- `src/jobs/__tests__/ProcessTemplateList.visual.spec.ts` — 12 Playwright visual snapshots
+- `src/jobs/__tests__/BottleneckHeatmap.visual.spec.ts` — 14 Playwright visual snapshots
+- `src/tenant/types.ts` — PLAN_LIMITS updated (process_templates + bottleneck_heatmap)
+- `CHANGELOG.md` — v17.0.0 released
+- PR #75 merged, release tag v17.0.0 published ✅
+
+---
+
+## v16.0.0 — People & Culture Foundation (✅ Released 2026-08-28)
+
 ## Completed Systems (Summary)
 
 - **Key Management v0.4–v0.10**: Ed25519 import, scope enforcement, admin override, signed revocation policy, policy precedence, auto requirePolicy in FACTORY
