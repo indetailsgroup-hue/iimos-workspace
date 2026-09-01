@@ -173,20 +173,8 @@ BEGIN
     RAISE NOTICE 'Single-org environment: fallback org_id = %', v_fallback_org_id;
   END IF;
 
-  -- ── customer ────────────────────────────────────────────────────────────────
-  UPDATE public.customers c
-     SET org_id = COALESCE(
-           (SELECT om.org_id
-              FROM public.org_members om
-             WHERE om.user_id = c.created_by
-               AND om.is_active = true
-             ORDER BY om.joined_at
-             LIMIT 1),
-           v_fallback_org_id
-         )
-   WHERE c.org_id IS NULL;
-
   -- ── job (has created_by) ────────────────────────────────────────────────────
+  -- NOTE: customers has no created_by; derive from jobs AFTER jobs are backfilled.
   UPDATE public.jobs j
      SET org_id = COALESCE(
            (SELECT om.org_id
@@ -219,6 +207,23 @@ BEGIN
            v_fallback_org_id
          )
    WHERE q.org_id IS NULL;
+
+  -- ── customers (no created_by — derive from jobs/invoices once those are backfilled)
+  UPDATE public.customers c
+     SET org_id = COALESCE(
+           (SELECT j.org_id
+              FROM public.jobs j
+             WHERE j.customer_id = c.customer_id
+               AND j.org_id IS NOT NULL
+             LIMIT 1),
+           (SELECT i.org_id
+              FROM public.invoices i
+             WHERE i.customer_id = c.customer_id
+               AND i.org_id IS NOT NULL
+             LIMIT 1),
+           v_fallback_org_id
+         )
+   WHERE c.org_id IS NULL;
 
   -- ── quotation_line (inherit from parent quotation) ──────────────────────────
   UPDATE public.quotation_lines ql
