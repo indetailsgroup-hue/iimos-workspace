@@ -80,8 +80,8 @@ ALTER TABLE public.capture_item
 -- ── 2a  work_item ← customer.org_id via primary_customer_id ──────────────────
 UPDATE public.work_item wi
 SET    org_id = c.org_id
-FROM   public.customer c
-WHERE  wi.primary_customer_id = c.id
+FROM   public.customers c
+WHERE  wi.primary_customer_id = c.customer_id
   AND  wi.org_id IS NULL;
 
 -- Sentinel for rows where primary_customer_id IS NULL or the customer row has
@@ -189,3 +189,4 @@ CREATE POLICY "capture_item_tenant_isolation"
   USING (org_id = public.get_user_org_id());
 
 COMMIT;
+
