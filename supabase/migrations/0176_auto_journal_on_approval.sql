@@ -13,6 +13,9 @@
 -- (must run OUTSIDE a transaction block — PostgreSQL constraint)
 ALTER TYPE public.invoice_status ADD VALUE IF NOT EXISTS 'approved';
 ALTER TYPE public.invoice_status ADD VALUE IF NOT EXISTS 'voided';
+ALTER TYPE public.invoice_status ADD VALUE IF NOT EXISTS 'cancelled';
+ALTER TYPE public.invoice_status ADD VALUE IF NOT EXISTS 'draft';
+ALTER TYPE public.invoice_status ADD VALUE IF NOT EXISTS 'sent';
 
 BEGIN;
 
