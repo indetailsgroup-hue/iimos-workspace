@@ -874,6 +874,14 @@ jobs:
           );
           SQL
 
+          # ── iter 25e: dedup migration — drop policies 0173 created that 0178 also creates ──
+          cat > supabase/migrations/01773_z_policy_dedup.sql << 'SQL'
+          -- iter 25e: drop policies already created by 0173_rls_isolation_hardening.sql
+          -- that 0178_notification_platform_metrics_rls.sql also attempts to CREATE,
+          -- causing "policy already exists" errors.  This file sorts between 01772 and 0178.
+          DROP POLICY IF EXISTS "digest_queue_own_user_select" ON public.notification_digest_queue;
+          SQL
+
       # ── Restore Supabase Docker image cache ────────────────────────────────
       # Cache key: SHA of supabase/config.toml (Supabase version pin).
       # Cache path: /tmp/supabase-images — saved as a single tar after first pull.
