@@ -25,8 +25,8 @@ BEGIN;
 -- ─────────────────────────────────────────────────────────────────────────────
 -- SECTION 1 — Ensure sentinel organisation row exists
 -- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO public.organizations (org_id, name)
-VALUES ('00000000-0000-0000-0000-000000000000', '__sentinel__')
+INSERT INTO public.organizations (org_id, name, slug)
+VALUES ('00000000-0000-0000-0000-000000000000', '__sentinel__', '__sentinel__')
 ON CONFLICT (org_id) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────────
