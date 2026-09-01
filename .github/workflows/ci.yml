@@ -247,7 +247,7 @@ jobs:
   # ───────────────────────────────────────────────────────────────────────────
   # Job 4: E2E Smoke Tests — local Supabase via `supabase start`
   #   Spins up a full local Postgres+Auth stack, auto-applies all migrations
-  #   in supabase/migrations/ (0000_e2e_prereqs + 0176→0215), then runs the
+  #   in supabase/migrations/ (CI prereq stubs + 0176→0215), then runs the
   #   Deno e2e_smoke_test.ts against it.
   #   Runs on every PR and workflow_dispatch so regressions are caught before merge.
   # ───────────────────────────────────────────────────────────────────────────
@@ -273,25 +273,169 @@ jobs:
         with:
           version: latest
 
-      # ── Write e2e prereq stub migration ───────────────────────────────────
-      # Creates minimal organizations + org_members tables so that
-      # 0173_rls_isolation_hardening.sql's existence check passes when
-      # supabase start auto-applies all migrations in supabase/migrations/.
-      # This file is written only to the runner's working tree; NOT committed.
-      - name: Write e2e prereq migration stub
+      # ── Write e2e prereq migration stubs ──────────────────────────────────
+      # These files are written to the runner's checkout only — NOT committed.
+      #
+      # File 1 (0000): creates organizations + org_members with exact column
+      # names expected by 0173_rls_isolation_hardening.sql's safety pre-check.
+      #
+      # File 2 (0172_z): runs just before 0173; creates all remaining platform
+      # tables (org_invitations, notification_digest_queue,
+      # platform_metrics_snapshots, super_admins); pre-adds org_id columns and
+      # creates indexes NON-concurrently on app tables so that 0173's
+      # CREATE INDEX CONCURRENTLY IF NOT EXISTS statements are silent no-ops
+      # (CONCURRENTLY cannot run inside a transaction block, but IF NOT EXISTS
+      # on a pre-existing index is always a no-op regardless).
+      - name: Write e2e prereq migration stubs
         run: |
+          # ── File 1: satisfies 0173 existence pre-checks ─────────────────────
           cat > supabase/migrations/0000_e2e_prereqs.sql << 'SQL'
-          -- E2E runner prereq stub: satisfies table-existence guards in later migrations.
-          -- Generated at CI runtime. This file is NOT stored in the repo.
+          -- E2E CI prereq stub: satisfies organizations/org_members existence
+          -- guards inside 0173_rls_isolation_hardening.sql.
+          -- Generated at CI runtime. NOT committed to the repo.
+
           CREATE TABLE IF NOT EXISTS organizations (
-            id   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-            name text NOT NULL
+            org_id    uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+            name      text        NOT NULL    DEFAULT 'E2E Test Org',
+            is_active boolean     NOT NULL    DEFAULT true
           );
+
           CREATE TABLE IF NOT EXISTS org_members (
+            id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id     uuid        NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
+            user_id    uuid        NOT NULL,
+            role       text        NOT NULL DEFAULT 'MEMBER',
+            is_active  boolean     NOT NULL DEFAULT true,
+            created_at timestamptz NOT NULL DEFAULT now()
+          );
+          SQL
+
+          # ── File 2: satisfies all remaining 0173 prerequisites ──────────────
+          cat > supabase/migrations/0172_z_e2e_platform_stub.sql << 'SQL'
+          -- E2E CI platform stub: provides all prerequisites for
+          -- 0173_rls_isolation_hardening.sql that come from the production
+          -- multi-tenant bootstrap script (not part of the numbered sequence).
+          -- Generated at CI runtime. NOT committed to the repo.
+
+          -- ── Missing platform tables ─────────────────────────────────────────
+          CREATE TABLE IF NOT EXISTS org_invitations (
+            id     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            email  text NOT NULL    DEFAULT '',
+            org_id uuid NOT NULL    REFERENCES organizations(org_id) ON DELETE CASCADE
+          );
+
+          CREATE TABLE IF NOT EXISTS notification_digest_queue (
             id      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-            org_id  uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
             user_id uuid NOT NULL
           );
+
+          CREATE TABLE IF NOT EXISTS platform_metrics_snapshots (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid()
+          );
+
+          CREATE TABLE IF NOT EXISTS super_admins (
+            id      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id uuid NOT NULL
+          );
+
+          -- ── get_user_org_id stub (called by rpc_job_board in 0173) ──────────
+          CREATE OR REPLACE FUNCTION public.get_user_org_id()
+          RETURNS uuid LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+            SELECT org_id FROM public.org_members
+             WHERE user_id = auth.uid() AND is_active = true
+             LIMIT 1;
+          $$;
+
+          -- ── Pre-add org_id to app tables and create indexes ─────────────────
+          -- Wrapped per-table so a missing table (prior migration failure) is skipped.
+          -- The CREATE INDEX IF NOT EXISTS (non-concurrent) means that when 0173 runs
+          -- CREATE INDEX CONCURRENTLY IF NOT EXISTS the index already exists → no-op.
+          DO $do$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables
+                       WHERE table_schema='public' AND table_name='customer') THEN
+              ALTER TABLE customer ADD COLUMN IF NOT EXISTS org_id uuid;
+              CREATE INDEX IF NOT EXISTS idx_customer_org ON customer(org_id);
+            END IF;
+          END $do$;
+
+          DO $do$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables
+                       WHERE table_schema='public' AND table_name='job') THEN
+              ALTER TABLE job ADD COLUMN IF NOT EXISTS org_id uuid;
+              CREATE INDEX IF NOT EXISTS idx_job_org ON job(org_id);
+            END IF;
+          END $do$;
+
+          DO $do$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables
+                       WHERE table_schema='public' AND table_name='job_panel') THEN
+              ALTER TABLE job_panel ADD COLUMN IF NOT EXISTS org_id uuid;
+              CREATE INDEX IF NOT EXISTS idx_job_panel_org ON job_panel(org_id);
+            END IF;
+          END $do$;
+
+          DO $do$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables
+                       WHERE table_schema='public' AND table_name='quotation') THEN
+              ALTER TABLE quotation ADD COLUMN IF NOT EXISTS org_id uuid;
+              CREATE INDEX IF NOT EXISTS idx_quotation_org ON quotation(org_id);
+            END IF;
+          END $do$;
+
+          DO $do$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables
+                       WHERE table_schema='public' AND table_name='quotation_line') THEN
+              ALTER TABLE quotation_line ADD COLUMN IF NOT EXISTS org_id uuid;
+              CREATE INDEX IF NOT EXISTS idx_quotation_line_org ON quotation_line(org_id);
+            END IF;
+          END $do$;
+
+          DO $do$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables
+                       WHERE table_schema='public' AND table_name='invoice') THEN
+              ALTER TABLE invoice ADD COLUMN IF NOT EXISTS org_id uuid;
+              CREATE INDEX IF NOT EXISTS idx_invoice_org ON invoice(org_id);
+            END IF;
+          END $do$;
+
+          DO $do$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables
+                       WHERE table_schema='public' AND table_name='invoice_payment') THEN
+              ALTER TABLE invoice_payment ADD COLUMN IF NOT EXISTS org_id uuid;
+              CREATE INDEX IF NOT EXISTS idx_invoice_payment_org ON invoice_payment(org_id);
+            END IF;
+          END $do$;
+
+          -- ── Ensure job + invoice are in supabase_realtime publication ────────
+          -- 0173 DROPs them from the publication; they must be members first.
+          DO $do$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_publication_tables
+                           WHERE pubname='supabase_realtime'
+                             AND schemaname='public' AND tablename='job')
+            AND EXISTS (SELECT 1 FROM information_schema.tables
+                        WHERE table_schema='public' AND table_name='job') THEN
+              EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE public.job';
+            END IF;
+          END $do$;
+
+          DO $do$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_publication_tables
+                           WHERE pubname='supabase_realtime'
+                             AND schemaname='public' AND tablename='invoice')
+            AND EXISTS (SELECT 1 FROM information_schema.tables
+                        WHERE table_schema='public' AND table_name='invoice') THEN
+              EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE public.invoice';
+            END IF;
+          END $do$;
           SQL
 
       # ── Restore Supabase Docker image cache ────────────────────────────────
@@ -311,7 +455,8 @@ jobs:
 
       # ── Start local Supabase stack (Docker available on ubuntu-latest) ─────
       # supabase start auto-applies every .sql file in supabase/migrations/
-      # in lexicographic order, so 0000_e2e_prereqs runs before 0173+.
+      # in lexicographic order:
+      #   0000_e2e_prereqs → 0001...0172 → 0172_z_e2e_platform_stub → 0173 → ... → 0215
       - name: Start local Supabase
         run: supabase start
 
