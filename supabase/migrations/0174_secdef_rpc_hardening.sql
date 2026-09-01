@@ -116,12 +116,12 @@ INSERT INTO public._org_id_backfill_quarantine (table_name, record_id, created_b
 DO $$
 BEGIN
   -- Ensure the sentinel org exists (idempotent)
-  INSERT INTO public.organizations (org_id, name, slug, is_active)
+  INSERT INTO public.organizations (org_id, name, slug, status)
   VALUES (
     '00000000-0000-0000-0000-000000000000',
     '__orphaned_backfill_sentinel__',
     '__orphaned__',
-    false
+    'CANCELLED'
   )
   ON CONFLICT (org_id) DO NOTHING;
 END;
