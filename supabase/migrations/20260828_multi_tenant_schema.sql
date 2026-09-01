@@ -100,9 +100,14 @@ CREATE INDEX IF NOT EXISTS idx_quotations_org ON public.quotations(org_id);
 ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_org ON public.invoices(org_id);
 
--- Ledger entries
-ALTER TABLE public.ledger_entries ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
-CREATE INDEX IF NOT EXISTS idx_ledger_entries_org ON public.ledger_entries(org_id);
+-- Ledger entries (guarded — table may not exist in CI baseline)
+DO $le_col$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables
+             WHERE table_schema = 'public' AND table_name = 'ledger_entries') THEN
+    EXECUTE 'ALTER TABLE public.ledger_entries ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_ledger_entries_org ON public.ledger_entries(org_id)';
+  END IF;
+END $le_col$;
 
 -- ============================================================================
 -- 5. RLS POLICIES — TENANT ISOLATION
@@ -169,14 +174,17 @@ CREATE POLICY "invoices_tenant_isolation" ON public.invoices
 CREATE POLICY "invoices_tenant_insert" ON public.invoices
   FOR INSERT WITH CHECK (org_id = public.get_user_org_id());
 
--- Ledger: tenant isolation
-ALTER TABLE public.ledger_entries ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "ledger_tenant_isolation" ON public.ledger_entries
-  USING (org_id = public.get_user_org_id());
-
-CREATE POLICY "ledger_tenant_insert" ON public.ledger_entries
-  FOR INSERT WITH CHECK (org_id = public.get_user_org_id());
+-- Ledger: tenant isolation (guarded — table may not exist in CI baseline)
+DO $le_rls$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables
+             WHERE table_schema = 'public' AND table_name = 'ledger_entries') THEN
+    EXECUTE 'ALTER TABLE public.ledger_entries ENABLE ROW LEVEL SECURITY';
+    EXECUTE $p$CREATE POLICY "ledger_tenant_isolation" ON public.ledger_entries
+      USING (org_id = public.get_user_org_id())$p$;
+    EXECUTE $p$CREATE POLICY "ledger_tenant_insert" ON public.ledger_entries
+      FOR INSERT WITH CHECK (org_id = public.get_user_org_id())$p$;
+  END IF;
+END $le_rls$;
 
 -- ============================================================================
 -- 6. UPDATED_AT TRIGGER
