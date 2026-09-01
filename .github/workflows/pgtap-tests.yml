@@ -166,6 +166,51 @@ jobs:
           echo "20260828_* files merged and removed. Final 0172 line count:"
           wc -l 0172_jobs_quotations_invoices.sql
 
+
+      # -----------------------------------------------------------------------
+      # 5b. Merge all remaining duplicate-prefix migration groups
+      #     Rationale: Supabase extracts the leading numeric portion of each
+      #     filename as the schema_migrations version key. Any two files that
+      #     share a numeric prefix (e.g. 0176_auto_journal_on_approval.sql and
+      #     0176_field_purchase_core.sql both resolve to version=0176) cause a
+      #     duplicate-key error in schema_migrations_pkey on the second file.
+      #     The 20260828_* group was already handled by step 5 above, so this
+      #     step covers all remaining groups (0176-0205, 20261001, 20270125).
+      #     Strategy: for every numeric prefix that appears on >1 .sql file,
+      #     concatenate all matching files (sorted) into the first and delete
+      #     the extras. Ephemeral CI-only transformation — not applied to prod.
+      # -----------------------------------------------------------------------
+      - name: Merge duplicate-prefix migration groups
+        run: |
+          cd supabase/migrations
+
+          PREFIXES=$(for f in *.sql; do echo "${f%%_*}"; done | sort | uniq -d)
+          if [ -z "$PREFIXES" ]; then
+            echo "No duplicate prefixes found."
+            exit 0
+          fi
+
+          for prefix in $PREFIXES; do
+            [[ "$prefix" =~ ^[0-9]+$ ]] || continue
+            target=""
+            for f in $(ls "${prefix}_"*.sql 2>/dev/null | sort); do
+              if [ -z "$target" ]; then
+                target="$f"
+                echo "Prefix $prefix -> target: $target"
+              else
+                echo "  + appending $f"
+                printf '\n-- ================================================\n' >> "$target"
+                printf '-- Merged from: %s (CI dup-prefix fix)\n' "$f" >> "$target"
+                printf '-- ================================================\n' >> "$target"
+                cat "$f" >> "$target"
+                rm "$f"
+              fi
+            done
+          done
+
+          echo "Dup-prefix merge complete."
+          wc -l 0176_auto_journal_on_approval.sql 2>/dev/null || echo "0176 first file not found"
+
       # -----------------------------------------------------------------------
       # 6. Start Supabase local stack
       #    Requires: SUPABASE_ACCESS_TOKEN repository secret
