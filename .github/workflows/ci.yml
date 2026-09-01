@@ -687,6 +687,45 @@ jobs:
             AND NOT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='invoice_payments')
             THEN ALTER TABLE public.invoice_payment RENAME TO invoice_payments; END IF;
           END $$;
+
+          -- ── Iter 18: accounting stubs required by 0176_auto_journal_on_approval ──
+          CREATE TABLE IF NOT EXISTS public.chart_of_accounts (
+            id        uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id    uuid    NOT NULL,
+            code      text    NOT NULL,
+            name      text    NOT NULL DEFAULT '',
+            UNIQUE (org_id, code)
+          );
+
+          CREATE TABLE IF NOT EXISTS public.journal_entry (
+            id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id      uuid        NOT NULL,
+            book_id     text        NOT NULL DEFAULT 'internal',
+            entry_date  date        NOT NULL DEFAULT CURRENT_DATE,
+            description text,
+            source_type text,
+            source_id   uuid,
+            created_by  text,
+            status      text        NOT NULL DEFAULT 'posted'
+          );
+
+          CREATE TABLE IF NOT EXISTS public.journal_line (
+            id               uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+            journal_entry_id uuid    NOT NULL REFERENCES public.journal_entry(id) ON DELETE CASCADE,
+            account_id       uuid,
+            debit            numeric NOT NULL DEFAULT 0,
+            credit           numeric NOT NULL DEFAULT 0,
+            description      text
+          );
+
+          CREATE TABLE IF NOT EXISTS public.invoice_line_items (
+            id         uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+            invoice_id uuid    NOT NULL,
+            description text,
+            quantity   numeric NOT NULL DEFAULT 1,
+            unit_price numeric NOT NULL DEFAULT 0,
+            amount     numeric GENERATED ALWAYS AS (quantity * unit_price) STORED
+          );
           SQL
 
       # ── Restore Supabase Docker image cache ────────────────────────────────
