@@ -150,9 +150,11 @@ drop policy if exists form_templates_sel on public.form_templates;
 alter table public.form_templates
   add column if not exists org_id uuid;
 
+alter table public.form_templates disable trigger all;
 update public.form_templates
   set org_id = '00000000-0000-0000-0000-000000000000'::uuid
   where org_id is null;
+alter table public.form_templates enable trigger all;
 alter table public.form_templates alter column org_id set not null;
 
 create policy form_templates_tenant_isolation on public.form_templates
