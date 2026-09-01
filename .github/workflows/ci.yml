@@ -308,6 +308,43 @@ jobs:
             is_active  boolean     NOT NULL DEFAULT true,
             created_at timestamptz NOT NULL DEFAULT now()
           );
+
+          -- Singular stub tables assumed pre-existing by rpc_approve_quotation
+          -- inside 0172_jobs_quotations_invoices.sql.  That function references
+          -- bare names: quotation%ROWTYPE, FROM quotation, FROM invoice,
+          -- UPDATE quotation, INSERT INTO invoice, UPDATE job.
+          -- In production these tables exist from migrations 0001–0171 (not
+          -- present in CI).  We stub them here so 0172 can compile cleanly.
+          -- NOTE: enum types quotation_status / job_status are created INSIDE
+          -- 0172, so status columns must use TEXT to avoid a circular dependency.
+
+          CREATE TABLE IF NOT EXISTS quotation (
+            quotation_id  uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
+            status        text          NOT NULL DEFAULT 'draft',
+            job_id        uuid,
+            customer_id   uuid          NOT NULL DEFAULT gen_random_uuid(),
+            subtotal      numeric(12,2) NOT NULL DEFAULT 0,
+            vat_rate      numeric(5,4)  NOT NULL DEFAULT 0,
+            vat_amount    numeric(12,2) NOT NULL DEFAULT 0,
+            discount      numeric(12,2) NOT NULL DEFAULT 0,
+            total         numeric(12,2) NOT NULL DEFAULT 0,
+            approved_at   timestamptz,
+            approved_by   uuid,
+            updated_at    timestamptz   NOT NULL DEFAULT now()
+          );
+
+          CREATE TABLE IF NOT EXISTS invoice (
+            invoice_id    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            invoice_code  text NOT NULL DEFAULT ''
+          );
+
+          CREATE TABLE IF NOT EXISTS job (
+            job_id        uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+            status        text        NOT NULL DEFAULT 'open',
+            quotation_id  uuid,
+            invoice_id    uuid,
+            updated_at    timestamptz NOT NULL DEFAULT now()
+          );
           SQL
 
           # ── File 2: satisfies all remaining 0173 prerequisites ──────────────
