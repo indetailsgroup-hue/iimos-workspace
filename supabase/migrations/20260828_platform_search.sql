@@ -1,5 +1,5 @@
 -- Platform-Wide Search RPC Functions for Super Admin
--- v16.5.0
+-- v16.5.0 (schema-corrected: job_code/invoice_code/member_id/org_id PK)
 
 -- ─── Search Jobs ─────────────────────────────────────────────────────────────
 
@@ -10,11 +10,11 @@ CREATE OR REPLACE FUNCTION platform_search_jobs(
   filter_org_id UUID DEFAULT NULL
 )
 RETURNS TABLE (
-  id UUID,
+  job_id UUID,
   org_id UUID,
   org_name TEXT,
   title TEXT,
-  job_number TEXT,
+  job_code TEXT,
   status TEXT,
   customer_name TEXT,
   match_field TEXT,
@@ -34,35 +34,36 @@ BEGIN
   RETURN QUERY
   WITH matches AS (
     SELECT
-      j.id,
+      j.job_id,
       j.org_id,
       o.name AS org_name,
       j.title,
-      j.job_number,
+      j.job_code,
       j.status::TEXT,
-      j.customer_name,
+      coalesce(c.name, '') AS customer_name,
       CASE
-        WHEN j.title ILIKE '%' || search_query || '%' THEN 'title'
-        WHEN j.job_number ILIKE '%' || search_query || '%' THEN 'job_number'
-        WHEN j.customer_name ILIKE '%' || search_query || '%' THEN 'customer_name'
-        ELSE 'description'
+        WHEN j.title    ILIKE '%' || search_query || '%' THEN 'title'
+        WHEN j.job_code ILIKE '%' || search_query || '%' THEN 'job_code'
+        WHEN c.name     ILIKE '%' || search_query || '%' THEN 'customer_name'
+        ELSE 'notes'
       END AS match_field,
       CASE
-        WHEN j.title ILIKE '%' || search_query || '%' THEN j.title
-        WHEN j.job_number ILIKE '%' || search_query || '%' THEN j.job_number
-        WHEN j.customer_name ILIKE '%' || search_query || '%' THEN j.customer_name
-        ELSE LEFT(j.description, 100)
+        WHEN j.title    ILIKE '%' || search_query || '%' THEN j.title
+        WHEN j.job_code ILIKE '%' || search_query || '%' THEN j.job_code
+        WHEN c.name     ILIKE '%' || search_query || '%' THEN c.name
+        ELSE LEFT(j.notes, 100)
       END AS match_snippet,
       j.created_at,
       COUNT(*) OVER() AS total_count
-    FROM jobs j
-    JOIN organizations o ON o.org_id = j.org_id
+    FROM public.jobs j
+    JOIN public.organizations o ON o.org_id = j.org_id
+    LEFT JOIN public.customers c ON c.customer_id = j.customer_id
     WHERE (filter_org_id IS NULL OR j.org_id = filter_org_id)
       AND (
-        j.title ILIKE '%' || search_query || '%'
-        OR j.job_number ILIKE '%' || search_query || '%'
-        OR j.customer_name ILIKE '%' || search_query || '%'
-        OR j.description ILIKE '%' || search_query || '%'
+        j.title    ILIKE '%' || search_query || '%'
+        OR j.job_code ILIKE '%' || search_query || '%'
+        OR c.name  ILIKE '%' || search_query || '%'
+        OR j.notes ILIKE '%' || search_query || '%'
       )
     ORDER BY j.created_at DESC
     LIMIT result_limit
@@ -81,7 +82,7 @@ CREATE OR REPLACE FUNCTION platform_search_members(
   filter_org_id UUID DEFAULT NULL
 )
 RETURNS TABLE (
-  id UUID,
+  member_id UUID,
   org_id UUID,
   org_name TEXT,
   display_name TEXT,
@@ -90,7 +91,6 @@ RETURNS TABLE (
   match_field TEXT,
   match_snippet TEXT,
   joined_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ,
   total_count BIGINT
 )
 LANGUAGE plpgsql
@@ -104,7 +104,7 @@ BEGIN
   RETURN QUERY
   WITH matches AS (
     SELECT
-      m.id,
+      m.member_id,
       m.org_id,
       o.name AS org_name,
       m.display_name,
@@ -112,23 +112,22 @@ BEGIN
       m.role::TEXT,
       CASE
         WHEN m.display_name ILIKE '%' || search_query || '%' THEN 'display_name'
-        WHEN m.email ILIKE '%' || search_query || '%' THEN 'email'
+        WHEN m.email        ILIKE '%' || search_query || '%' THEN 'email'
         ELSE 'role'
       END AS match_field,
       CASE
         WHEN m.display_name ILIKE '%' || search_query || '%' THEN m.display_name
-        WHEN m.email ILIKE '%' || search_query || '%' THEN m.email
+        WHEN m.email        ILIKE '%' || search_query || '%' THEN m.email
         ELSE m.role::TEXT
       END AS match_snippet,
       m.joined_at,
-      m.created_at,
       COUNT(*) OVER() AS total_count
-    FROM org_members m
-    JOIN organizations o ON o.org_id = m.org_id
+    FROM public.org_members m
+    JOIN public.organizations o ON o.org_id = m.org_id
     WHERE (filter_org_id IS NULL OR m.org_id = filter_org_id)
       AND (
         m.display_name ILIKE '%' || search_query || '%'
-        OR m.email ILIKE '%' || search_query || '%'
+        OR m.email     ILIKE '%' || search_query || '%'
         OR m.role::TEXT ILIKE '%' || search_query || '%'
       )
     ORDER BY m.joined_at DESC NULLS LAST
@@ -148,17 +147,16 @@ CREATE OR REPLACE FUNCTION platform_search_invoices(
   filter_org_id UUID DEFAULT NULL
 )
 RETURNS TABLE (
-  id UUID,
+  invoice_id UUID,
   org_id UUID,
   org_name TEXT,
-  invoice_number TEXT,
+  invoice_code TEXT,
   status TEXT,
-  total_amount NUMERIC,
+  total NUMERIC,
   customer_name TEXT,
   match_field TEXT,
   match_snippet TEXT,
   issued_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ,
   total_count BIGINT
 )
 LANGUAGE plpgsql
@@ -172,33 +170,33 @@ BEGIN
   RETURN QUERY
   WITH matches AS (
     SELECT
-      i.id,
+      i.invoice_id,
       i.org_id,
       o.name AS org_name,
-      i.invoice_number,
+      i.invoice_code,
       i.status::TEXT,
-      i.total_amount,
-      i.customer_name,
+      i.total,
+      coalesce(c.name, '') AS customer_name,
       CASE
-        WHEN i.invoice_number ILIKE '%' || search_query || '%' THEN 'invoice_number'
-        WHEN i.customer_name ILIKE '%' || search_query || '%' THEN 'customer_name'
-        ELSE 'description'
+        WHEN i.invoice_code ILIKE '%' || search_query || '%' THEN 'invoice_code'
+        WHEN c.name         ILIKE '%' || search_query || '%' THEN 'customer_name'
+        ELSE 'notes'
       END AS match_field,
       CASE
-        WHEN i.invoice_number ILIKE '%' || search_query || '%' THEN i.invoice_number
-        WHEN i.customer_name ILIKE '%' || search_query || '%' THEN i.customer_name
+        WHEN i.invoice_code ILIKE '%' || search_query || '%' THEN i.invoice_code
+        WHEN c.name         ILIKE '%' || search_query || '%' THEN c.name
         ELSE LEFT(i.notes, 100)
       END AS match_snippet,
       i.issued_at,
-      i.created_at,
       COUNT(*) OVER() AS total_count
-    FROM invoices i
-    JOIN organizations o ON o.org_id = i.org_id
+    FROM public.invoices i
+    JOIN public.organizations o ON o.org_id = i.org_id
+    LEFT JOIN public.customers c ON c.customer_id = i.customer_id
     WHERE (filter_org_id IS NULL OR i.org_id = filter_org_id)
       AND (
-        i.invoice_number ILIKE '%' || search_query || '%'
-        OR i.customer_name ILIKE '%' || search_query || '%'
-        OR i.notes ILIKE '%' || search_query || '%'
+        i.invoice_code ILIKE '%' || search_query || '%'
+        OR c.name      ILIKE '%' || search_query || '%'
+        OR i.notes     ILIKE '%' || search_query || '%'
       )
     ORDER BY i.issued_at DESC NULLS LAST
     LIMIT result_limit
@@ -216,9 +214,8 @@ GRANT EXECUTE ON FUNCTION platform_search_invoices TO authenticated;
 
 -- ─── Full-text search indexes for performance ────────────────────────────────
 
-CREATE INDEX IF NOT EXISTS idx_jobs_title_trgm ON jobs USING gin (title gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS idx_jobs_customer_trgm ON jobs USING gin (customer_name gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS idx_org_members_name_trgm ON org_members USING gin (display_name gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS idx_org_members_email_trgm ON org_members USING gin (email gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS idx_invoices_number_trgm ON invoices USING gin (invoice_number gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS idx_invoices_customer_trgm ON invoices USING gin (customer_name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_jobs_title_trgm   ON public.jobs     USING gin (title    gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_jobs_code_trgm    ON public.jobs     USING gin (job_code gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_org_members_name_trgm  ON public.org_members USING gin (display_name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_org_members_email_trgm ON public.org_members USING gin (email gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_invoices_code_trgm ON public.invoices USING gin (invoice_code gin_trgm_ops);
