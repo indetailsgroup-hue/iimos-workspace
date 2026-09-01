@@ -55,6 +55,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - RLS policies mirror training_tracker pattern; OWNER-only DELETE on stage_history for audit preservation
   - 5 indexes; ASSERTION block verifies 3 tables + 2 views + RLS enabled
 
+#### Super Employee Tracker — Tests & Components (Tasks 41–43)
+- **`src/training/__tests__/superEmployeeStore.test.ts`** — ~95 Vitest tests across 11 describe blocks
+  - `SuperEmployeeTrackerPlanGateError` guard (4 tests), `canAccessSuperEmployeeTracker` via `it.each` (4 tests), `STAGE_SCORE_MAP` constants (2 tests)
+  - Plan gate enforcement on `recordStageTransition`, `createAssessment`, `addSkillGap`, `resolveSkillGap` (9 tests)
+  - `recordStageTransition` success (5 tests) + error (1 test)
+  - `resolveSkillGap` success with state update (4 tests) + error — no pre-mutation to roll back (2 tests)
+  - `clearError` (2 tests), `fetchStageHistory` (4 tests), `fetchSkillGaps` (3 tests)
+  - Thenable Proxy mock + `supabase.auth.getUser` stub; uses `useSuperEmployeeStore.setState(INITIAL_STATE)` for reset
+- **`src/training/SuperEmployeeProgressPanel.tsx`** — stage progression timeline UI component
+  - Props: `orgId`, `orgPlan`, `employeeId`, `employeeName?`, `isAdmin?`
+  - Plan gate wall for < PROFESSIONAL; fetches `employeeReadiness`, `stageHistory`, `skillGaps` on mount
+  - 5-step stage timeline using `STAGE_PROGRESSION_ORDER` + `STAGE_SCORE_MAP` with `data-stage` + `data-status` attributes
+  - AI Readiness badge rendered at `AI_ASSISTED` threshold (score ≥ 50)
+  - Admin-only `resolve-gap-btn`; `no-gaps-message` empty state
+  - Loading skeleton (`panel-loading`); full set of 14 `data-testid` attributes
+- **`src/training/TrainingEnrollmentPanel.stories.tsx`** — 8 CSF3 Storybook stories
+  - `withEnrollmentStore` decorator injects store state via `useTrainingStore.setState()`
+  - `Default`, `PlanGateWallFree`, `PlanGateWallStarter`, `WithExistingEnrollments`, `TimelineLoading`, `StoreError`
+  - `BulkEnrollSuccess` — play interaction: type employee ID → Enter → submit → spy assertion
+  - `BulkEnrollErrorPath` — play interaction: submit with rejected mock → verify error banner text
+
 #### Storybook (Process Templates — v17.0 enhancement)
 - **`CloneFlowInteraction`** story added to `src/jobs/ProcessTemplateList.stories.tsx` (now 12 stories)
   - Interaction test: click clone button → await spy called with correct `templateId` → verify toast visible
@@ -65,6 +86,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Merged
 - **PR #76** — `feature/v17-5-training-tracker-stories` → `main` (squash merge `3a819c17`)
+- **PR #77** — `feature/v17-5-super-employee-panel` → `main` (Super Employee tests + ProgressPanel + EnrollmentPanel stories) — pending
 - **Tag:** `v17.5.0` → `3a819c17d70d1c399a6a336a1cd2df5708b9a40a`
 
 ---
