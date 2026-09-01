@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS search_bookmarks (
   label       TEXT NOT NULL,
   query       TEXT NOT NULL,
   entity_types TEXT[] NOT NULL DEFAULT ARRAY['job','member','invoice'],
-  org_filter  UUID REFERENCES organizations(id) ON DELETE SET NULL,
+  org_filter  UUID REFERENCES organizations(org_id) ON DELETE SET NULL,
   use_count   INT NOT NULL DEFAULT 0,
   last_used_at TIMESTAMPTZ DEFAULT now(),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
