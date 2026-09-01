@@ -95,40 +95,7 @@ jobs:
           pg_prove --version
 
       # -----------------------------------------------------------------------
-      # 5. Merge 20260828_* migrations into 0172 for correct sort order
-      #    Rationale: 20260828_* sorts after 0173_* lexicographically (2 > 0),
-      #    so multi_tenant_schema would run AFTER the 0173 guard and fail.
-      #    Rename to 0172_z0x_* is NOT viable: Supabase extracts only the
-      #    leading numeric portion as the version key, so any 0172_*.sql
-      #    gets version=0172 — colliding with 0172_jobs_quotations_invoices.sql.
-      #    Strategy: append each 20260828_*.sql to the end of
-      #    0172_jobs_quotations_invoices.sql (dependency order: schema first,
-      #    then dependents), then delete the originals. This merges all content
-      #    into a single version=0172 slot, ensures organizations table exists
-      #    before 0173 runs, and is ephemeral (CI-only).
-      # -----------------------------------------------------------------------
-      - name: Merge 20260828 migrations into 0172 (append-and-delete)
-        run: |
-          cd supabase/migrations
-          for f in \
-            20260828_multi_tenant_schema.sql \
-            20260828_audit_log_usage_metering.sql \
-            20260828_notifications_super_admin.sql \
-            20260828_platform_fts.sql \
-            20260828_platform_search.sql \
-            20260828_search_bookmarks_autocomplete.sql; do
-            echo "" >> 0172_jobs_quotations_invoices.sql
-            echo "-- ============================================================" >> 0172_jobs_quotations_invoices.sql
-            echo "-- Merged from: $f" >> 0172_jobs_quotations_invoices.sql
-            echo "-- ============================================================" >> 0172_jobs_quotations_invoices.sql
-            cat "$f" >> 0172_jobs_quotations_invoices.sql
-            rm "$f"
-          done
-          echo "20260828_* files merged and removed. Final 0172 line count:"
-          wc -l 0172_jobs_quotations_invoices.sql
-
-      # -----------------------------------------------------------------------
-      # 6. Start Supabase local stack
+      # 5. Start Supabase local stack
       #    Requires: SUPABASE_ACCESS_TOKEN repository secret
       #    Provision: Settings → Secrets and variables → Actions
       #    Source:    app.supabase.com → Account → Access Tokens
@@ -139,17 +106,13 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       # -----------------------------------------------------------------------
-      # 7. Apply all migrations (db reset runs migrations from scratch)
-      #    NOTE: rollback scripts live in supabase/rollbacks/ (not migrations/)
-      #    so they are NOT applied by db reset. This avoids duplicate publication
-      #    membership errors (SQLSTATE 42710) that occur when rollback SQL runs
-      #    as a forward migration in CI.
+      # 6. Apply all migrations (db reset runs migrations from scratch)
       # -----------------------------------------------------------------------
       - name: Reset database and apply migrations
         run: supabase db reset --local
 
       # -----------------------------------------------------------------------
-      # 8. Enable pgTAP extension
+      # 7. Enable pgTAP extension
       # -----------------------------------------------------------------------
       - name: Enable pgTAP extension
         run: |
@@ -159,18 +122,12 @@ jobs:
           PGPASSWORD: postgres
 
       # -----------------------------------------------------------------------
-      # 9. Run pg_prove on all test files
-      #    Runs: supabase/tests/*.sql — 511 total pgTAP assertions:
-      #      • 474  forward migration tests
+      # 8. Run pg_prove on all test files
+      #    Runs: supabase/tests/*.sql — 236 total pgTAP assertions:
+      #      • 199  forward migration tests
       #             (0179 F1: 14 · 0179 NNB: 35 · 0180: 17 · 0181: 18 · 0182: 13 · 0183: 13 ·
       #              0176 notification_preferences: 16 · 0186 critical_tables: 20 ·
-      #              0187 installation_domain: 53 · 0188 factory_domain: 25 ·
-      #              0189 line_oa_domain: 49)
-#              0190 finance_accounting_domain: 45)
-#              0191 package_sales_domain: 35)
-#              0192 capture_documents_domain: 35)
-#              0193 site_field_ops_domain: 35)
-#              0194 operational_misc_domain: 51)
+      #              0187 installation_domain: 53)
       #      •  12  rollback verification tests (0183_rollback_verification.sql)
       #      •  25  cross-tenant isolation tests (cross_tenant_isolation.sql:
       #             T01–T02 setup · T03–T08 SELECT · T09–T12 INSERT 42501 ·
@@ -189,7 +146,7 @@ jobs:
           PGPASSWORD: postgres
 
       # -----------------------------------------------------------------------
-      # 10. Stop Supabase local stack (cleanup — always runs)
+      # 9. Stop Supabase local stack (cleanup — always runs)
       # -----------------------------------------------------------------------
       - name: Stop Supabase local stack
         if: always()

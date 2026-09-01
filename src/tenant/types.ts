@@ -125,17 +125,17 @@ export const PLAN_LIMITS: Record<OrgPlan, { maxUsers: number; maxJobsPerMonth: n
   STARTER: {
     maxUsers: 5,
     maxJobsPerMonth: 50,
-    features: ['basic_design', 'manual_export', 'nesting', 'quotations', 'process_templates'],
+    features: ['basic_design', 'manual_export', 'nesting', 'quotations'],
   },
   PROFESSIONAL: {
     maxUsers: 20,
     maxJobsPerMonth: 200,
-    features: ['basic_design', 'manual_export', 'nesting', 'quotations', 'curved_panels', 'dxf_export', 'analytics', 'process_templates', 'bottleneck_heatmap'],
+    features: ['basic_design', 'manual_export', 'nesting', 'quotations', 'curved_panels', 'dxf_export', 'analytics'],
   },
   ENTERPRISE: {
     maxUsers: 999,
     maxJobsPerMonth: 9999,
-    features: ['basic_design', 'manual_export', 'nesting', 'quotations', 'curved_panels', 'dxf_export', 'analytics', 'process_templates', 'bottleneck_heatmap', 'api_access', 'sso', 'custom_branding'],
+    features: ['basic_design', 'manual_export', 'nesting', 'quotations', 'curved_panels', 'dxf_export', 'analytics', 'api_access', 'sso', 'custom_branding'],
   },
 };
 

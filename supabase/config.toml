@@ -65,3 +65,60 @@ verify_jwt = true    # Requires Bearer SERVICE_ROLE_KEY or x-invoke-key header
 #   fpr-retry-notifications      */10 * * * *   (0196) rpc_retry_fpr_notifications
 #   fpr-auto-uncancel            0    2 * * *   (0205) fn_cron_auto_uncancel_stale_fpr
 # ─────────────────────────────────────────────────────────────────────────────
+
+# ---------------------------------------------------------------------------
+# Edge Functions — Monolith eTax & Notification workers (release/15.0.0)
+# ---------------------------------------------------------------------------
+[functions.etax-submit-worker]
+verify_jwt = false
+
+[functions.notify-overdue]
+verify_jwt = false
+
+# ---------------------------------------------------------------------------
+# pg_cron scheduled jobs (release/15.0.0)
+#
+# ┌───────── minute (0-59)
+# │  ┌──────── hour (0-23)
+# │  │  ┌───── day-of-month (1-31)
+# │  │  │  ┌── month (1-12)
+# │  │  │  │  ┌─ day-of-week (0-7, 0/7=Sun)
+# │  │  │  │  │
+# job name                          schedule        description
+# ──────────────────────────────────────────────────────────────────────────
+# etax-submit-worker                */5 * * * *     poll & submit queued eTax docs
+# notify-overdue                    0 1 * * *       nightly overdue invoice alerts
+# refresh-etax-compliance-mv        */15 * * * *    refresh mv_etax_compliance_dashboard
+# check-mv-refresh-lag              */5 * * * *     alert if MV refresh > 15 min stale
+# refresh-etax-health-trend-mv      0 0 * * *       daily refresh mv_etax_health_trend
+# ---------------------------------------------------------------------------
+[cron."etax-submit-worker"]
+schedule = "*/5 * * * *"
+command  = "SELECT net.http_post(url:='http://localhost:8081/functions/v1/etax-submit-worker', headers:='{\"Content-Type\":\"application/json\"}'::jsonb, body:='{}'::jsonb);"
+
+[cron."notify-overdue"]
+schedule = "0 1 * * *"
+command  = "SELECT net.http_post(url:='http://localhost:8081/functions/v1/notify-overdue', headers:='{\"Content-Type\":\"application/json\"}'::jsonb, body:='{}'::jsonb);"
+
+[cron."refresh-etax-compliance-mv"]
+schedule = "*/15 * * * *"
+command  = "SELECT rpc_refresh_etax_compliance_mv();"
+
+[cron."check-mv-refresh-lag"]
+schedule = "*/5 * * * *"
+command  = "SELECT fn_check_mv_refresh_lag();"
+
+[cron."refresh-etax-health-trend-mv"]
+schedule = "0 0 * * *"
+command  = "SELECT rpc_refresh_etax_health_trend_mv();"
+
+
+# [6] Auto-create next month's etax_submissions partition (runs 20th of each month)
+#     Ensures the upcoming monthly partition exists before the month starts.
+[cron.jobs.auto-create-etax-partition]
+schedule = "0 0 20 * *"
+command  = "SELECT public.fn_auto_create_next_etax_partition();"
+
+[functions.etax-risk-notify]
+verify_jwt = true
+

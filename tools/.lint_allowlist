@@ -81,10 +81,3 @@ lint_claims	docs/superpowers/reports/2026-07-07-millwork-workflow-detail-complet
 lint_claims	docs/superpowers/reports/2026-07-09-interior-design-studio-system-full-project-audit-th.md	3
 lint_claims	docs/superpowers/reports/2026-07-09-interior-design-studio-system-full-project-audit.md	2
 lint_claims	docs/superpowers/specs/2026-07-21-biesse-wood-furniture-evidence-led-integration-audit-design.th.md	2
-lint_claims	docs/EDGE_FUNCTION_DEPLOYMENT.md	1
-lint_claims	docs/MONOLITH_DEEP_REVIEW.md	10
-lint_claims	docs/PRODUCTION-DEPLOYMENT-CHECKLIST.md	6
-lint_claims	docs/PR_DESCRIPTION_people_culture.md	1
-lint_claims	docs/SECURITY_REVIEW_RLS.md	6
-lint_claims	docs/pr_0188_0194_phase2_rls.md	2
-lint_claims	docs/security-posture-report.md	5

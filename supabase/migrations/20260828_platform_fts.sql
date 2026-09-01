@@ -1,6 +1,6 @@
 -- Platform Full-Text Search with ts_vector ranking
 -- Replaces ILIKE with proper FTS for performance and relevance scoring
--- v16.6.0 (schema-corrected: job_code/invoice_code/member_id/org_id PK)
+-- v16.6.0
 
 -- ─── Enable pg_trgm extension (if not already) ──────────────────────────────
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
@@ -9,53 +9,40 @@ CREATE EXTENSION IF NOT EXISTS unaccent;
 -- ─── Add tsvector columns ────────────────────────────────────────────────────
 
 -- Jobs: searchable text vector
-ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS search_vector tsvector;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS search_vector tsvector;
 
 CREATE OR REPLACE FUNCTION jobs_search_vector_update() RETURNS trigger AS $$
-DECLARE
-  v_customer_name TEXT;
 BEGIN
-  SELECT name INTO v_customer_name
-    FROM public.customers WHERE customer_id = NEW.customer_id;
-  NEW.search_vector :=
+  NEW.search_vector := 
     setweight(to_tsvector('simple', coalesce(NEW.title, '')), 'A') ||
-    setweight(to_tsvector('simple', coalesce(NEW.job_code, '')), 'A') ||
-    setweight(to_tsvector('simple', coalesce(v_customer_name, '')), 'B') ||
-    setweight(to_tsvector('simple', coalesce(NEW.notes, '')), 'C');
+    setweight(to_tsvector('simple', coalesce(NEW.job_number, '')), 'A') ||
+    setweight(to_tsvector('simple', coalesce(NEW.customer_name, '')), 'B') ||
+    setweight(to_tsvector('simple', coalesce(NEW.description, '')), 'C');
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS jobs_search_vector_trigger ON public.jobs;
+DROP TRIGGER IF EXISTS jobs_search_vector_trigger ON jobs;
 CREATE TRIGGER jobs_search_vector_trigger
-  BEFORE INSERT OR UPDATE OF title, job_code, notes
-  ON public.jobs
+  BEFORE INSERT OR UPDATE OF title, job_number, customer_name, description
+  ON jobs
   FOR EACH ROW EXECUTE FUNCTION jobs_search_vector_update();
 
 -- Backfill existing rows
-UPDATE public.jobs j SET search_vector =
-  setweight(to_tsvector('simple', coalesce(j.title, '')), 'A') ||
-  setweight(to_tsvector('simple', coalesce(j.job_code, '')), 'A') ||
-  setweight(to_tsvector('simple', coalesce(c.name, '')), 'B') ||
-  setweight(to_tsvector('simple', coalesce(j.notes, '')), 'C')
-FROM public.customers c
-WHERE c.customer_id = j.customer_id;
-
--- Rows with no customer FK
-UPDATE public.jobs SET search_vector =
+UPDATE jobs SET search_vector = 
   setweight(to_tsvector('simple', coalesce(title, '')), 'A') ||
-  setweight(to_tsvector('simple', coalesce(job_code, '')), 'A') ||
-  setweight(to_tsvector('simple', coalesce(notes, '')), 'C')
-WHERE search_vector IS NULL;
+  setweight(to_tsvector('simple', coalesce(job_number, '')), 'A') ||
+  setweight(to_tsvector('simple', coalesce(customer_name, '')), 'B') ||
+  setweight(to_tsvector('simple', coalesce(description, '')), 'C');
 
-CREATE INDEX IF NOT EXISTS idx_jobs_search_vector ON public.jobs USING gin(search_vector);
+CREATE INDEX IF NOT EXISTS idx_jobs_search_vector ON jobs USING gin(search_vector);
 
 -- Members: searchable text vector
-ALTER TABLE public.org_members ADD COLUMN IF NOT EXISTS search_vector tsvector;
+ALTER TABLE org_members ADD COLUMN IF NOT EXISTS search_vector tsvector;
 
 CREATE OR REPLACE FUNCTION members_search_vector_update() RETURNS trigger AS $$
 BEGIN
-  NEW.search_vector :=
+  NEW.search_vector := 
     setweight(to_tsvector('simple', coalesce(NEW.display_name, '')), 'A') ||
     setweight(to_tsvector('simple', coalesce(NEW.email, '')), 'A') ||
     setweight(to_tsvector('simple', coalesce(NEW.role::TEXT, '')), 'B');
@@ -63,56 +50,44 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS members_search_vector_trigger ON public.org_members;
+DROP TRIGGER IF EXISTS members_search_vector_trigger ON org_members;
 CREATE TRIGGER members_search_vector_trigger
   BEFORE INSERT OR UPDATE OF display_name, email, role
-  ON public.org_members
+  ON org_members
   FOR EACH ROW EXECUTE FUNCTION members_search_vector_update();
 
-UPDATE public.org_members SET search_vector =
+UPDATE org_members SET search_vector = 
   setweight(to_tsvector('simple', coalesce(display_name, '')), 'A') ||
   setweight(to_tsvector('simple', coalesce(email, '')), 'A') ||
   setweight(to_tsvector('simple', coalesce(role::TEXT, '')), 'B');
 
-CREATE INDEX IF NOT EXISTS idx_members_search_vector ON public.org_members USING gin(search_vector);
+CREATE INDEX IF NOT EXISTS idx_members_search_vector ON org_members USING gin(search_vector);
 
 -- Invoices: searchable text vector
-ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS search_vector tsvector;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS search_vector tsvector;
 
 CREATE OR REPLACE FUNCTION invoices_search_vector_update() RETURNS trigger AS $$
-DECLARE
-  v_customer_name TEXT;
 BEGIN
-  SELECT name INTO v_customer_name
-    FROM public.customers WHERE customer_id = NEW.customer_id;
-  NEW.search_vector :=
-    setweight(to_tsvector('simple', coalesce(NEW.invoice_code, '')), 'A') ||
-    setweight(to_tsvector('simple', coalesce(v_customer_name, '')), 'B') ||
+  NEW.search_vector := 
+    setweight(to_tsvector('simple', coalesce(NEW.invoice_number, '')), 'A') ||
+    setweight(to_tsvector('simple', coalesce(NEW.customer_name, '')), 'B') ||
     setweight(to_tsvector('simple', coalesce(NEW.notes, '')), 'C');
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS invoices_search_vector_trigger ON public.invoices;
+DROP TRIGGER IF EXISTS invoices_search_vector_trigger ON invoices;
 CREATE TRIGGER invoices_search_vector_trigger
-  BEFORE INSERT OR UPDATE OF invoice_code, notes
-  ON public.invoices
+  BEFORE INSERT OR UPDATE OF invoice_number, customer_name, notes
+  ON invoices
   FOR EACH ROW EXECUTE FUNCTION invoices_search_vector_update();
 
--- Backfill existing rows
-UPDATE public.invoices i SET search_vector =
-  setweight(to_tsvector('simple', coalesce(i.invoice_code, '')), 'A') ||
-  setweight(to_tsvector('simple', coalesce(c.name, '')), 'B') ||
-  setweight(to_tsvector('simple', coalesce(i.notes, '')), 'C')
-FROM public.customers c
-WHERE c.customer_id = i.customer_id;
+UPDATE invoices SET search_vector = 
+  setweight(to_tsvector('simple', coalesce(invoice_number, '')), 'A') ||
+  setweight(to_tsvector('simple', coalesce(customer_name, '')), 'B') ||
+  setweight(to_tsvector('simple', coalesce(notes, '')), 'C');
 
-UPDATE public.invoices SET search_vector =
-  setweight(to_tsvector('simple', coalesce(invoice_code, '')), 'A') ||
-  setweight(to_tsvector('simple', coalesce(notes, '')), 'C')
-WHERE search_vector IS NULL;
-
-CREATE INDEX IF NOT EXISTS idx_invoices_search_vector ON public.invoices USING gin(search_vector);
+CREATE INDEX IF NOT EXISTS idx_invoices_search_vector ON invoices USING gin(search_vector);
 
 -- ─── Search Analytics Table ──────────────────────────────────────────────────
 
@@ -121,7 +96,7 @@ CREATE TABLE IF NOT EXISTS platform_search_logs (
   user_id UUID NOT NULL REFERENCES auth.users(id),
   query TEXT NOT NULL,
   entity_types TEXT[] NOT NULL DEFAULT '{job,member,invoice}',
-  org_filter UUID REFERENCES public.organizations(org_id),
+  org_filter UUID REFERENCES organizations(id),
   result_count INT NOT NULL DEFAULT 0,
   query_time_ms INT NOT NULL DEFAULT 0,
   clicked_result_id UUID,
@@ -153,16 +128,95 @@ CREATE OR REPLACE FUNCTION platform_search_jobs(
   filter_org_id UUID DEFAULT NULL
 )
 RETURNS TABLE (
-  job_id UUID,
+  id UUID,
   org_id UUID,
   org_name TEXT,
   title TEXT,
-  job_code TEXT,
+  job_number TEXT,
   status TEXT,
   customer_name TEXT,
   match_field TEXT,
   match_snippet TEXT,
   rank REAL,
+  created_at TIMESTAMPTZ,
+  total_count BIGINT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  tsquery_val tsquery;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM super_admins WHERE user_id = auth.uid()) THEN
+    RAISE EXCEPTION 'Unauthorized: Super Admin access required';
+  END IF;
+
+  -- Build tsquery: split words, join with & for AND matching
+  -- Also support prefix matching with :*
+  tsquery_val := to_tsquery('simple',
+    array_to_string(
+      array(SELECT word || ':*' FROM unnest(string_to_array(trim(search_query), ' ')) AS word WHERE word <> ''),
+      ' & '
+    )
+  );
+
+  RETURN QUERY
+  WITH matches AS (
+    SELECT
+      j.id,
+      j.org_id,
+      o.name AS org_name,
+      j.title,
+      j.job_number,
+      j.status::TEXT,
+      j.customer_name,
+      CASE
+        WHEN j.title ILIKE '%' || search_query || '%' THEN 'title'
+        WHEN j.job_number ILIKE '%' || search_query || '%' THEN 'job_number'
+        WHEN j.customer_name ILIKE '%' || search_query || '%' THEN 'customer_name'
+        ELSE 'description'
+      END AS match_field,
+      ts_headline('simple', coalesce(j.title, '') || ' ' || coalesce(j.customer_name, '') || ' ' || coalesce(j.description, ''),
+        tsquery_val,
+        'StartSel=<mark>, StopSel=</mark>, MaxWords=20, MinWords=5'
+      ) AS match_snippet,
+      ts_rank_cd(j.search_vector, tsquery_val, 32) AS rank,
+      j.created_at,
+      COUNT(*) OVER() AS total_count
+    FROM jobs j
+    JOIN organizations o ON o.id = j.org_id
+    WHERE (filter_org_id IS NULL OR j.org_id = filter_org_id)
+      AND (
+        j.search_vector @@ tsquery_val
+        OR j.title ILIKE '%' || search_query || '%'
+        OR j.job_number ILIKE '%' || search_query || '%'
+        OR j.customer_name ILIKE '%' || search_query || '%'
+      )
+    ORDER BY rank DESC, j.created_at DESC
+    LIMIT result_limit
+    OFFSET result_offset
+  )
+  SELECT * FROM matches;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION platform_search_members(
+  search_query TEXT,
+  result_limit INT DEFAULT 20,
+  result_offset INT DEFAULT 0,
+  filter_org_id UUID DEFAULT NULL
+)
+RETURNS TABLE (
+  id UUID,
+  org_id UUID,
+  org_name TEXT,
+  display_name TEXT,
+  email TEXT,
+  role TEXT,
+  match_field TEXT,
+  match_snippet TEXT,
+  rank REAL,
+  joined_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ,
   total_count BIGINT
 )
@@ -186,85 +240,7 @@ BEGIN
   RETURN QUERY
   WITH matches AS (
     SELECT
-      j.job_id,
-      j.org_id,
-      o.name AS org_name,
-      j.title,
-      j.job_code,
-      j.status::TEXT,
-      coalesce(c.name, '') AS customer_name,
-      CASE
-        WHEN j.title    ILIKE '%' || search_query || '%' THEN 'title'
-        WHEN j.job_code ILIKE '%' || search_query || '%' THEN 'job_code'
-        WHEN c.name     ILIKE '%' || search_query || '%' THEN 'customer_name'
-        ELSE 'notes'
-      END AS match_field,
-      ts_headline('simple',
-        coalesce(j.title,'') || ' ' || coalesce(j.job_code,'') || ' ' || coalesce(c.name,'') || ' ' || coalesce(j.notes,''),
-        tsquery_val,
-        'StartSel=<mark>, StopSel=</mark>, MaxWords=20, MinWords=5'
-      ) AS match_snippet,
-      ts_rank_cd(j.search_vector, tsquery_val, 32) AS rank,
-      j.created_at,
-      COUNT(*) OVER() AS total_count
-    FROM public.jobs j
-    JOIN public.organizations o ON o.org_id = j.org_id
-    LEFT JOIN public.customers c ON c.customer_id = j.customer_id
-    WHERE (filter_org_id IS NULL OR j.org_id = filter_org_id)
-      AND (
-        j.search_vector @@ tsquery_val
-        OR j.title    ILIKE '%' || search_query || '%'
-        OR j.job_code ILIKE '%' || search_query || '%'
-        OR c.name     ILIKE '%' || search_query || '%'
-      )
-    ORDER BY rank DESC, j.created_at DESC
-    LIMIT result_limit
-    OFFSET result_offset
-  )
-  SELECT * FROM matches;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION platform_search_members(
-  search_query TEXT,
-  result_limit INT DEFAULT 20,
-  result_offset INT DEFAULT 0,
-  filter_org_id UUID DEFAULT NULL
-)
-RETURNS TABLE (
-  member_id UUID,
-  org_id UUID,
-  org_name TEXT,
-  display_name TEXT,
-  email TEXT,
-  role TEXT,
-  match_field TEXT,
-  match_snippet TEXT,
-  rank REAL,
-  joined_at TIMESTAMPTZ,
-  total_count BIGINT
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  tsquery_val tsquery;
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM super_admins WHERE user_id = auth.uid()) THEN
-    RAISE EXCEPTION 'Unauthorized: Super Admin access required';
-  END IF;
-
-  tsquery_val := to_tsquery('simple',
-    array_to_string(
-      array(SELECT word || ':*' FROM unnest(string_to_array(trim(search_query), ' ')) AS word WHERE word <> ''),
-      ' & '
-    )
-  );
-
-  RETURN QUERY
-  WITH matches AS (
-    SELECT
-      m.member_id,
+      m.id,
       m.org_id,
       o.name AS org_name,
       m.display_name,
@@ -272,23 +248,24 @@ BEGIN
       m.role::TEXT,
       CASE
         WHEN m.display_name ILIKE '%' || search_query || '%' THEN 'display_name'
-        WHEN m.email        ILIKE '%' || search_query || '%' THEN 'email'
+        WHEN m.email ILIKE '%' || search_query || '%' THEN 'email'
         ELSE 'role'
       END AS match_field,
-      ts_headline('simple', coalesce(m.display_name,'') || ' ' || coalesce(m.email,''),
+      ts_headline('simple', coalesce(m.display_name, '') || ' ' || coalesce(m.email, ''),
         tsquery_val,
         'StartSel=<mark>, StopSel=</mark>, MaxWords=10, MinWords=3'
       ) AS match_snippet,
       ts_rank_cd(m.search_vector, tsquery_val, 32) AS rank,
       m.joined_at,
+      m.created_at,
       COUNT(*) OVER() AS total_count
-    FROM public.org_members m
-    JOIN public.organizations o ON o.org_id = m.org_id
+    FROM org_members m
+    JOIN organizations o ON o.id = m.org_id
     WHERE (filter_org_id IS NULL OR m.org_id = filter_org_id)
       AND (
         m.search_vector @@ tsquery_val
         OR m.display_name ILIKE '%' || search_query || '%'
-        OR m.email        ILIKE '%' || search_query || '%'
+        OR m.email ILIKE '%' || search_query || '%'
       )
     ORDER BY rank DESC, m.joined_at DESC NULLS LAST
     LIMIT result_limit
@@ -305,17 +282,18 @@ CREATE OR REPLACE FUNCTION platform_search_invoices(
   filter_org_id UUID DEFAULT NULL
 )
 RETURNS TABLE (
-  invoice_id UUID,
+  id UUID,
   org_id UUID,
   org_name TEXT,
-  invoice_code TEXT,
+  invoice_number TEXT,
   status TEXT,
-  total NUMERIC,
+  total_amount NUMERIC,
   customer_name TEXT,
   match_field TEXT,
   match_snippet TEXT,
   rank REAL,
   issued_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ,
   total_count BIGINT
 )
 LANGUAGE plpgsql
@@ -338,34 +316,33 @@ BEGIN
   RETURN QUERY
   WITH matches AS (
     SELECT
-      i.invoice_id,
+      i.id,
       i.org_id,
       o.name AS org_name,
-      i.invoice_code,
+      i.invoice_number,
       i.status::TEXT,
-      i.total,
-      coalesce(c.name, '') AS customer_name,
+      i.total_amount,
+      i.customer_name,
       CASE
-        WHEN i.invoice_code ILIKE '%' || search_query || '%' THEN 'invoice_code'
-        WHEN c.name         ILIKE '%' || search_query || '%' THEN 'customer_name'
+        WHEN i.invoice_number ILIKE '%' || search_query || '%' THEN 'invoice_number'
+        WHEN i.customer_name ILIKE '%' || search_query || '%' THEN 'customer_name'
         ELSE 'notes'
       END AS match_field,
-      ts_headline('simple',
-        coalesce(i.invoice_code,'') || ' ' || coalesce(c.name,'') || ' ' || coalesce(i.notes,''),
+      ts_headline('simple', coalesce(i.invoice_number, '') || ' ' || coalesce(i.customer_name, '') || ' ' || coalesce(i.notes, ''),
         tsquery_val,
         'StartSel=<mark>, StopSel=</mark>, MaxWords=20, MinWords=5'
       ) AS match_snippet,
       ts_rank_cd(i.search_vector, tsquery_val, 32) AS rank,
       i.issued_at,
+      i.created_at,
       COUNT(*) OVER() AS total_count
-    FROM public.invoices i
-    JOIN public.organizations o ON o.org_id = i.org_id
-    LEFT JOIN public.customers c ON c.customer_id = i.customer_id
+    FROM invoices i
+    JOIN organizations o ON o.id = i.org_id
     WHERE (filter_org_id IS NULL OR i.org_id = filter_org_id)
       AND (
         i.search_vector @@ tsquery_val
-        OR i.invoice_code ILIKE '%' || search_query || '%'
-        OR c.name         ILIKE '%' || search_query || '%'
+        OR i.invoice_number ILIKE '%' || search_query || '%'
+        OR i.customer_name ILIKE '%' || search_query || '%'
       )
     ORDER BY rank DESC, i.issued_at DESC NULLS LAST
     LIMIT result_limit

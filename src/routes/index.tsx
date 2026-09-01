@@ -19,10 +19,12 @@
  * /factory                     - Factory dashboard (FACTORY role)
  * /factory/jobs/:jobId         - Factory job detail (FACTORY role)
  * /finance                     - Finance screen (FINANCE role)
+ * /etax                        - eTax Compliance Dashboard (OWNER, ADMIN, FINANCE)
+ * /accounting                  - Accounting Management UI (OWNER, ADMIN, FINANCE)
  * /safety                      - Redirect to /diagnostics/safety
  * /diagnostics/safety          - Safety diagnostics (local-only, not authoritative)
  *
- * @version 0.12.6
+ * @version 0.13.0
  */
 
 import { useMemo, useEffect, useState, useCallback, Suspense, lazy, type ComponentType } from 'react';
@@ -119,6 +121,20 @@ const FinanceDashboard = lazy(() =>
         default: m.FinanceDashboard ?? m.default ?? FinanceComingSoon,
       }))
     : Promise.resolve({ default: FinanceComingSoon })
+);
+
+// release/15.0.0: eTax Compliance Dashboard (src/pages/EtaxComplianceDashboard.tsx)
+const EtaxComplianceDashboard = lazy(() =>
+  import('../pages/EtaxComplianceDashboard').then((m) => ({
+    default: m.default ?? m.EtaxComplianceDashboard,
+  }))
+);
+
+// release/15.0.0: Accounting Management UI (src/pages/AccountingManagement.tsx)
+const AccountingManagement = lazy(() =>
+  import('../pages/AccountingManagement').then((m) => ({
+    default: m.default ?? m.AccountingManagement,
+  }))
 );
 
 /**
@@ -1270,6 +1286,28 @@ export const router = createBrowserRouter([
       <RequireRole allow={['FINANCE', 'ADMIN']}>
         <Suspense fallback={<PageLoadingFallback message="Loading Finance…" />}>
           <FinanceDashboard />
+        </Suspense>
+      </RequireRole>
+    ),
+  },
+  // release/15.0.0: eTax Compliance Dashboard (OWNER, ADMIN, FINANCE)
+  {
+    path: '/etax',
+    element: (
+      <RequireRole allow={['OWNER', 'ADMIN', 'FINANCE']}>
+        <Suspense fallback={<PageLoadingFallback message="Loading eTax Dashboard…" />}>
+          <EtaxComplianceDashboard />
+        </Suspense>
+      </RequireRole>
+    ),
+  },
+  // release/15.0.0: Accounting Management UI (OWNER, ADMIN, FINANCE)
+  {
+    path: '/accounting',
+    element: (
+      <RequireRole allow={['OWNER', 'ADMIN', 'FINANCE']}>
+        <Suspense fallback={<PageLoadingFallback message="Loading Accounting…" />}>
+          <AccountingManagement />
         </Suspense>
       </RequireRole>
     ),

@@ -80,7 +80,7 @@ ALTER TABLE public.capture_item
 -- ── 2a  work_item ← customer.org_id via primary_customer_id ──────────────────
 UPDATE public.work_item wi
 SET    org_id = c.org_id
-FROM   public.customers c
+FROM   public.customer c
 WHERE  wi.primary_customer_id = c.id
   AND  wi.org_id IS NULL;
 
