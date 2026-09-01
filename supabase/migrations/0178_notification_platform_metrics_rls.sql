@@ -77,6 +77,8 @@ END $$;
 ALTER TABLE public.notification_digest_queue ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: each user sees only their own queued digest entries
+-- DROP IF EXISTS: 0173_rls_isolation_hardening.sql also creates this policy
+DROP POLICY IF EXISTS "digest_queue_own_user_select" ON public.notification_digest_queue;
 CREATE POLICY "digest_queue_own_user_select"
   ON public.notification_digest_queue
   FOR SELECT
