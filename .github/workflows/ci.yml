@@ -603,6 +603,13 @@ jobs:
             RETURN NEW;
           END;
           $$;
+
+          -- ── Iteration 11: add missing columns referenced by 0173 backfill ─
+          ALTER TABLE IF EXISTS public.customers   ADD COLUMN IF NOT EXISTS created_by uuid;
+          ALTER TABLE IF EXISTS public.jobs        ADD COLUMN IF NOT EXISTS created_by uuid;
+          ALTER TABLE IF EXISTS public.quotations  ADD COLUMN IF NOT EXISTS created_by uuid;
+          ALTER TABLE IF EXISTS public.invoices    ADD COLUMN IF NOT EXISTS created_by uuid;
+          ALTER TABLE IF EXISTS public.org_members ADD COLUMN IF NOT EXISTS joined_at timestamptz DEFAULT now();
           SQL
 
       # ── Restore Supabase Docker image cache ────────────────────────────────
