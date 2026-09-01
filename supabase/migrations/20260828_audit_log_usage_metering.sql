@@ -8,7 +8,7 @@
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  org_id UUID NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
   action TEXT NOT NULL,
   actor_type TEXT NOT NULL CHECK (actor_type IN ('user', 'system', 'api')),
   actor_id TEXT NOT NULL,
