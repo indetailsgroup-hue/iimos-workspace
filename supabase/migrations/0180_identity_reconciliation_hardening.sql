@@ -361,7 +361,7 @@ BEGIN
 
   -- ── Fetch quotation scoped to caller org (SD-R3 fix) ─────────────────────
   SELECT * INTO v_qt
-  FROM public.quotation
+  FROM public.quotations
   WHERE quotation_id = p_quotation_id
     AND org_id = v_org_id;
 
@@ -378,12 +378,12 @@ BEGIN
   v_inv_id := gen_random_uuid();
   v_inv_code := 'INV-' || EXTRACT(YEAR FROM now())::TEXT || '-' || LPAD((
     SELECT COALESCE(MAX(SUBSTRING(invoice_code FROM '[0-9]+$')::INT), 0) + 1
-    FROM public.invoice
+    FROM public.invoices
     WHERE org_id = v_org_id
   )::TEXT, 4, '0');
 
   -- ── Update quotation status ───────────────────────────────────────────────
-  UPDATE public.quotation
+  UPDATE public.quotations
   SET
     status      = 'APPROVED',
     approved_at = now(),
@@ -393,7 +393,7 @@ BEGIN
     AND org_id = v_org_id;
 
   -- ── Create invoice ────────────────────────────────────────────────────────
-  INSERT INTO public.invoice (
+  INSERT INTO public.invoices (
     invoice_id, invoice_code, quotation_id, job_id,
     customer_id, org_id,
     subtotal, vat_rate, vat_amount, discount,
@@ -407,7 +407,7 @@ BEGIN
 
   -- ── Update job status if linked ───────────────────────────────────────────
   IF v_qt.job_id IS NOT NULL THEN
-    UPDATE public.job
+    UPDATE public.jobs
     SET
       status       = 'QUOTED',
       quotation_id = p_quotation_id,
