@@ -107,6 +107,10 @@ jobs:
 
       # -----------------------------------------------------------------------
       # 6. Apply all migrations (db reset runs migrations from scratch)
+      #    NOTE: rollback scripts live in supabase/rollbacks/ (not migrations/)
+      #    so they are NOT applied by db reset. This avoids duplicate publication
+      #    membership errors (SQLSTATE 42710) that occur when rollback SQL runs
+      #    as a forward migration in CI.
       # -----------------------------------------------------------------------
       - name: Reset database and apply migrations
         run: supabase db reset --local
