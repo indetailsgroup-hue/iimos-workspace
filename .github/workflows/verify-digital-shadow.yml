@@ -3499,18 +3499,40 @@ jobs:
               '',
             ];
 
-            // Build full table rows
+            // Fetch per-job log URLs from the Actions API for linkification
+            let jobUrlMap = {};
+            try {
+              const { data: jobsPage } = await github.rest.actions.listJobsForWorkflowRun({
+                owner:    context.repo.owner,
+                repo:     context.repo.repo,
+                run_id:   context.runId,
+                per_page: 100,
+              });
+              for (const job of jobsPage.jobs) { jobUrlMap[job.name] = job.html_url; }
+              core.info(`Fetched ${jobsPage.jobs.length} job URL(s) for linkification.`);
+            } catch (e) {
+              core.warning(`Failed to fetch job URLs (will fall back to plain text): ${e.message}`);
+            }
+
+            // jobRef: returns a markdown hyperlink for critical jobs, backtick span otherwise
+            function jobRef(id) {
+              const url = jobUrlMap[id];
+              return url ? `[${id}](${url})` : `\`${id}\``;
+            }
+
+            // Build full table rows (critical jobs are hyperlinked to their log)
             const rows = Object.entries(needs).map(([id, v]) => {
-              const r = v?.result ?? '—';
-              const flag = CRITICAL.includes(id) ? ' _(critical)_' : '';
-              return `| \`${id}\` | ${icon(r)} ${r} |${flag}`;
+              const r     = v?.result ?? '—';
+              const flag  = CRITICAL.includes(id) ? ' _(critical)_' : '';
+              const label = CRITICAL.includes(id) ? jobRef(id) : `\`${id}\``;
+              return `| ${label} | ${icon(r)} ${r} |${flag}`;
             }).join('\n');
 
             // PR comment
             const marker  = '<!-- conclude-pipeline -->';
             const runUrl  = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const summary = criticalFailed.length > 0
-              ? `Critical jobs failed: ${criticalFailed.map(j => `\`${j}\``).join(', ')}`
+              ? `Critical jobs failed: ${criticalFailed.map(j => jobRef(j)).join(', ')}`
               : 'All critical jobs passed.';
 
             const bodyParts = [

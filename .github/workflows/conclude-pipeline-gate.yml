@@ -149,10 +149,79 @@ on:
 
 # ──────────────────────────────────────────────────────────────────────────────
 jobs:
+  validate-inputs:
+    name: Validate Caller Inputs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Schema-check workflow_call inputs
+        id: schema-check
+        uses: actions/github-script@v7
+        env:
+          OVERALL_STATUS:    ${{ inputs.overall_status }}
+          COMMIT_SHA:        ${{ inputs.commit_sha }}
+          RUN_URL:           ${{ inputs.run_url }}
+          SARIF_NEW:         ${{ inputs.sarif_new_findings }}
+          SARIF_TOTAL:       ${{ inputs.sarif_total_findings }}
+          SARIF_SUPPRESSED:  ${{ inputs.sarif_suppressed_findings }}
+          SARIF_THRESHOLD:   ${{ inputs.sarif_threshold }}
+          PR_NUMBER:         ${{ inputs.pr_number }}
+          RUN_NUMBER:        ${{ inputs.run_number }}
+        with:
+          script: |
+            const errors = [];
+
+            // overall_status: required; must be a known status string
+            const VALID_STATUSES = ['success', 'failure', 'cancelled', 'skipped', 'neutral'];
+            const overallStatus  = process.env.OVERALL_STATUS || '';
+            if (!VALID_STATUSES.includes(overallStatus))
+              errors.push(
+                `overall_status '${overallStatus}' is invalid — expected one of: ${VALID_STATUSES.join(', ')}`
+              );
+
+            // commit_sha: required; must be a 40-char hex SHA-1
+            const commitSha = process.env.COMMIT_SHA || '';
+            if (!/^[0-9a-f]{40}$/i.test(commitSha))
+              errors.push(
+                `commit_sha '${commitSha.slice(0, 12)}...' is not a valid SHA-1 (expected 40 hex chars)`
+              );
+
+            // run_url: required; must be an https:// URL
+            const runUrl = process.env.RUN_URL || '';
+            if (!runUrl.startsWith('https://'))
+              errors.push(`run_url must start with 'https://'; got '${runUrl.slice(0, 40)}'`);
+
+            // numeric inputs: must parse as integers >= minVal
+            const numChecks = [
+              ['sarif_new_findings',        process.env.SARIF_NEW,       0],
+              ['sarif_total_findings',      process.env.SARIF_TOTAL,     0],
+              ['sarif_suppressed_findings', process.env.SARIF_SUPPRESSED,0],
+              ['sarif_threshold',           process.env.SARIF_THRESHOLD, 1],
+              ['pr_number',                 process.env.PR_NUMBER,       0],
+              ['run_number',                process.env.RUN_NUMBER,      0],
+            ];
+            for (const [name, raw, minVal] of numChecks) {
+              const val = parseInt(raw || '0', 10);
+              if (isNaN(val) || val < minVal)
+                errors.push(`${name} must be an integer >= ${minVal}; got '${raw}'`);
+            }
+
+            if (errors.length > 0) {
+              errors.forEach(msg => core.error(msg));
+              core.setFailed(
+                `conclude-pipeline-gate: ${errors.length} input validation error(s) — see above`
+              );
+            } else {
+              core.info(
+                `All inputs valid — overall_status=${overallStatus}, ` +
+                `sha=${commitSha.slice(0, 7)}, sarif_threshold=${process.env.SARIF_THRESHOLD}`
+              );
+            }
+
   post-pipeline-gate:
     name: Post Pipeline Gate
+    needs: [validate-inputs]
     runs-on: ubuntu-latest
-    if: always()
+    if: needs.validate-inputs.result == 'success'
 
     permissions:
       pull-requests: write
