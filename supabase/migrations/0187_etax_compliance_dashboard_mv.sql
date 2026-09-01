@@ -191,7 +191,7 @@ BEGIN
   PERFORM cron.schedule(
     'refresh-etax-compliance-mv',
     '*/15 * * * *',
-    $$SELECT fn_refresh_etax_compliance_mv('cron')$$
+    $cmd$SELECT fn_refresh_etax_compliance_mv('cron')$cmd$
   );
 END;
 $$;
