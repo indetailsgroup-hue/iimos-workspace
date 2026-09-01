@@ -661,7 +661,7 @@ BEGIN
     PERFORM cron.schedule(
       'check-overdue-invoices',
       '0 1 * * *',   -- cron: ทุกวัน 01:00 UTC
-      $$SELECT rpc_check_overdue_invoices(NULL, FALSE)$$
+      $cron$SELECT rpc_check_overdue_invoices(NULL, FALSE)$cron$
     );
 
     RAISE NOTICE 'pg_cron: check-overdue-invoices scheduled at 01:00 UTC daily';
