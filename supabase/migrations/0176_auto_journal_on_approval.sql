@@ -11,6 +11,51 @@
 
 BEGIN;
 
+-- ── Dependency DDL (added for CI compatibility) ──────────────────────────────
+CREATE TABLE IF NOT EXISTS public.chart_of_accounts (
+  id      UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id  UUID    NOT NULL REFERENCES public.organizations(org_id),
+  code    TEXT    NOT NULL,
+  name    TEXT    NOT NULL,
+  type    TEXT,
+  active  BOOLEAN NOT NULL DEFAULT TRUE,
+  UNIQUE (org_id, code)
+);
+ALTER TABLE public.chart_of_accounts ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE public.journal_entry
+  ADD COLUMN IF NOT EXISTS org_id      UUID REFERENCES public.organizations(org_id),
+  ADD COLUMN IF NOT EXISTS source_type TEXT,
+  ADD COLUMN IF NOT EXISTS source_id   UUID,
+  ADD COLUMN IF NOT EXISTS reversal_of UUID REFERENCES public.journal_entry(id);
+
+ALTER TABLE public.journal_line
+  ADD COLUMN IF NOT EXISTS account_id UUID REFERENCES public.chart_of_accounts(id);
+
+CREATE TABLE IF NOT EXISTS public.invoice_line_items (
+  id          UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id      UUID          NOT NULL REFERENCES public.organizations(org_id),
+  invoice_id  UUID          NOT NULL REFERENCES public.invoices(invoice_id),
+  description TEXT,
+  quantity    NUMERIC(12,4) NOT NULL DEFAULT 1,
+  unit_price  NUMERIC(12,2) NOT NULL DEFAULT 0,
+  amount      NUMERIC(12,2) NOT NULL DEFAULT 0,
+  created_at  TIMESTAMPTZ   NOT NULL DEFAULT now()
+);
+ALTER TABLE public.invoice_line_items ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE public.invoices
+  ADD COLUMN IF NOT EXISTS approved_at       TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS voided_at         TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS void_reason       TEXT,
+  ADD COLUMN IF NOT EXISTS etax_submitted_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS is_vat_inclusive  BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS updated_by        UUID,
+  ADD COLUMN IF NOT EXISTS issued_date       DATE,
+  ADD COLUMN IF NOT EXISTS code              TEXT,
+  ADD COLUMN IF NOT EXISTS id                UUID UNIQUE DEFAULT gen_random_uuid();
+-- ─────────────────────────────────────────────────────────────────────────────
+
 -- ---------------------------------------------------------------------------
 -- 1. เพิ่ม column tracking การ auto-post
 -- ---------------------------------------------------------------------------
