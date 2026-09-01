@@ -89,6 +89,15 @@ on:
           - diff-only
         default: full
 
+      sarif_upload_target:
+        description: "SARIF upload target: upload to GitHub Code Scanning or store as artifact only"
+        required: false
+        type: choice
+        options:
+          - code-scanning
+          - artifact-only
+        default: code-scanning
+
   pull_request:
     branches:
       - feat/digital-shadow-integration
@@ -109,6 +118,7 @@ env:
   SARIF_CRITICAL_THRESHOLD: "${{ github.event.inputs.sarif_critical_threshold || '10' }}"
   SLACK_CHANNEL_OVERRIDE: "${{ github.event.inputs.slack_channel_override || '' }}"
   SARIF_RUN_MODE: "${{ github.event.inputs.sarif_run_mode || 'full' }}"
+  SARIF_UPLOAD_TARGET: "${{ github.event.inputs.sarif_upload_target || 'code-scanning' }}"
 
 jobs:
   # ────────────────────────────────────────────────────────────────────────────
@@ -2119,6 +2129,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload SARIF to GitHub Code Scanning
+        if: env.SARIF_UPLOAD_TARGET != 'artifact-only'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: eslint-delta.sarif
@@ -3036,4 +3047,234 @@ jobs:
               .addRaw('\n```\n</details>')
               .write();
 
+            require('fs').writeFileSync('/tmp/workflow-run-summary.json', JSON.stringify(summaryJson, null, 2));
             core.info('Workflow-run step summary written.');
+
+      - name: Upload workflow-run-step-summary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-run-step-summary
+          path: /tmp/workflow-run-summary.json
+          retention-days: 30
+          overwrite: true
+
+  pr-job-conclusion-diff:
+    name: PR Job Conclusion Diff
+    needs: [workflow-run-step-summary]
+    runs-on: ubuntu-latest
+    if: always() && github.event_name == 'pull_request' && needs.workflow-run-step-summary.result != 'cancelled'
+    permissions:
+      pull-requests: write
+      actions: read
+    steps:
+      - name: Download current run summary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: workflow-run-step-summary
+          path: /tmp/current-summary/
+        continue-on-error: true
+
+      - name: Fetch previous run summary artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PYEOF'
+          import os, json, zipfile, urllib.request, urllib.error
+
+          token  = os.environ["GH_TOKEN"]
+          repo   = os.environ.get("GITHUB_REPOSITORY", "")
+          run_id = os.environ.get("GITHUB_RUN_ID", "")
+          branch = os.environ.get("GITHUB_HEAD_REF") or os.environ.get("GITHUB_REF_NAME", "")
+
+          headers = {
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+
+          def gh_get(url):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  return json.loads(r.read())
+
+          # Find the most recent prior completed run for this workflow on the same branch
+          wf_name = "verify-digital-shadow.yml"
+          runs_url = (f"https://api.github.com/repos/{repo}/actions/workflows/"
+                      f"{wf_name}/runs?branch={branch}&status=completed&per_page=10")
+          try:
+              runs_data = gh_get(runs_url)
+          except Exception as e:
+              print(f"Could not fetch workflow runs: {e}")
+              raise SystemExit(0)
+
+          prev_run_id = None
+          for run in runs_data.get("workflow_runs", []):
+              if str(run["id"]) != str(run_id):
+                  prev_run_id = run["id"]
+                  break
+
+          if not prev_run_id:
+              print("No previous completed run found — skipping diff.")
+              raise SystemExit(0)
+
+          # Find the workflow-run-step-summary artifact in that run
+          artifacts_url = f"https://api.github.com/repos/{repo}/actions/runs/{prev_run_id}/artifacts"
+          try:
+              art_data = gh_get(artifacts_url)
+          except Exception as e:
+              print(f"Could not fetch artifacts: {e}")
+              raise SystemExit(0)
+
+          artifact_id = None
+          for art in art_data.get("artifacts", []):
+              if art["name"] == "workflow-run-step-summary":
+                  artifact_id = art["id"]
+                  break
+
+          if not artifact_id:
+              print("workflow-run-step-summary artifact not found in previous run.")
+              raise SystemExit(0)
+
+          # Download the zip
+          dl_url = f"https://api.github.com/repos/{repo}/actions/artifacts/{artifact_id}/zip"
+          req = urllib.request.Request(dl_url, headers=headers)
+          zip_path = "/tmp/prev-summary.zip"
+          try:
+              with urllib.request.urlopen(req, timeout=60) as r, open(zip_path, "wb") as f:
+                  f.write(r.read())
+          except Exception as e:
+              print(f"Could not download artifact zip: {e}")
+              raise SystemExit(0)
+
+          os.makedirs("/tmp/prev-summary", exist_ok=True)
+          with zipfile.ZipFile(zip_path) as z:
+              z.extractall("/tmp/prev-summary")
+          print("Previous run summary extracted to /tmp/prev-summary")
+          PYEOF
+
+      - name: Post job conclusion diff to PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            function loadSummary(dir) {
+              try {
+                const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+                if (!files.length) return null;
+                return JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf8'));
+              } catch { return null; }
+            }
+
+            const curr = loadSummary('/tmp/current-summary');
+            const prev = loadSummary('/tmp/prev-summary');
+
+            if (!curr) {
+              core.warning('Current run summary not found — skipping diff comment.');
+              return;
+            }
+
+            // Build lookup maps: jobName -> conclusion
+            function toMap(summary) {
+              const m = {};
+              if (!summary || !Array.isArray(summary.jobs)) return m;
+              for (const j of summary.jobs) m[j.name] = j.conclusion;
+              return m;
+            }
+
+            const currMap = toMap(curr);
+            const prevMap = prev ? toMap(prev) : {};
+
+            // Compute diff
+            const allNames = Array.from(new Set([...Object.keys(currMap), ...Object.keys(prevMap)]));
+            const changed = allNames.filter(n => currMap[n] !== prevMap[n]);
+
+            function conclusionIcon(c) {
+              if (c === 'success')   return '✅';
+              if (c === 'failure')   return '❌';
+              if (c === 'skipped')   return '⏭️';
+              if (c === 'cancelled') return '🚫';
+              if (!c)               return '—';
+              return '⚠️';
+            }
+
+            // Changed-jobs section
+            let changedSection;
+            if (changed.length === 0) {
+              changedSection = '> **No conclusion changes** vs previous run.\n';
+            } else {
+              const rows = changed.map(n => {
+                const p = prevMap[n] ?? '(new)';
+                const c = currMap[n] ?? '(gone)';
+                return `| ${n} | ${conclusionIcon(prevMap[n])} ${p} | ${conclusionIcon(currMap[n])} ${c} |`;
+              }).join('\n');
+              changedSection = [
+                '| Job | Previous | Current |',
+                '|-----|----------|---------|'  ,
+                rows,
+              ].join('\n');
+            }
+
+            // All-jobs collapsed section
+            const allRows = allNames.map(n => {
+              const p = prevMap[n] ?? '—';
+              const c = currMap[n] ?? '—';
+              const marker = changed.includes(n) ? ' ← changed' : '';
+              return `| ${n} | ${conclusionIcon(prevMap[n])} ${p} | ${conclusionIcon(currMap[n])} ${c} |${marker}`;
+            }).join('\n');
+
+            const allSection = [
+              '<details>',
+              '<summary>All jobs (' + allNames.length + ')</summary>\n',
+              '| Job | Previous | Current |',
+              '|-----|----------|---------|'  ,
+              allRows,
+              '</details>',
+            ].join('\n');
+
+            const threshold = process.env.SARIF_CRITICAL_THRESHOLD || '10';
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const body = [
+              '## Job Conclusion Diff',
+              '',
+              prev ? `Comparing run **#${context.runId}** vs previous run.` : '> No previous run found — showing current run only.',
+              '',
+              changedSection,
+              '',
+              allSection,
+              '',
+              `<sub>SARIF critical threshold: ${threshold} · [View run](${runUrl})</sub>`,
+            ].join('\n');
+
+            // Find and update/create bot comment
+            const marker = '<!-- pr-job-conclusion-diff -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(
+              c => c.user.login === 'github-actions[bot]' && c.body.includes(marker)
+            );
+
+            const fullBody = marker + '\n' + body;
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner:      context.repo.owner,
+                repo:       context.repo.repo,
+                comment_id: existing.id,
+                body:       fullBody,
+              });
+              core.info(`Updated diff comment ${existing.id}`);
+            } else {
+              await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: context.issue.number,
+                body:         fullBody,
+              });
+              core.info('Created new diff comment.');
+            }
