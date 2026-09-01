@@ -464,7 +464,7 @@ DO $$
 DECLARE
   v_org RECORD;
 BEGIN
-  FOR v_org IN SELECT org_id FROM public.organizations WHERE is_active = true
+  FOR v_org IN SELECT org_id FROM public.organizations WHERE status = 'ACTIVE'
   LOOP
     INSERT INTO public.book_registry (book_id, org_id, display_name, currency, description, created_by)
     VALUES
