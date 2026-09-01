@@ -218,7 +218,7 @@ BEGIN
         PERFORM cron.schedule(
             'refresh-etax-health-trend-mv',   -- job name
             '0 0 * * *',                       -- daily at 00:00 UTC
-            $$SELECT fn_refresh_etax_health_trend_mv('pg_cron')$$
+            $cmd$SELECT fn_refresh_etax_health_trend_mv('pg_cron')$cmd$
         );
 
         RAISE NOTICE 'pg_cron job refresh-etax-health-trend-mv scheduled (0 0 * * *).';
