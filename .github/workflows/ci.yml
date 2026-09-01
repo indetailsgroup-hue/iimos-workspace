@@ -666,6 +666,16 @@ jobs:
           -- ── Iter 19b/20: add columns 0176 expects on invoices (production uses 'id'/'code'/etc.) ─
           -- 0172 creates invoice_id/invoice_code; 0176 references i.id, i.code, i.issued_date, etc.
           ALTER TABLE IF EXISTS public.invoices ADD COLUMN IF NOT EXISTS id            uuid    DEFAULT gen_random_uuid();
+          -- Fill NULLs for rows that existed before the ADD COLUMN, then add UNIQUE constraint
+          UPDATE public.invoices SET id = gen_random_uuid() WHERE id IS NULL;
+          DO $$ BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conrelid = 'public.invoices'::regclass AND conname = 'invoices_id_unique'
+            ) THEN
+              ALTER TABLE public.invoices ADD CONSTRAINT invoices_id_unique UNIQUE (id);
+            END IF;
+          END $$;
           ALTER TABLE IF EXISTS public.invoices ADD COLUMN IF NOT EXISTS code          text    DEFAULT '';
           ALTER TABLE IF EXISTS public.invoices ADD COLUMN IF NOT EXISTS issued_date   date    DEFAULT CURRENT_DATE;
           ALTER TABLE IF EXISTS public.invoices ADD COLUMN IF NOT EXISTS is_vat_inclusive boolean DEFAULT true;
