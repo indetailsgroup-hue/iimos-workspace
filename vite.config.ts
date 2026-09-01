@@ -10,10 +10,15 @@ export default defineConfig({
     },
   },
   test: {
+    // React component tests require a browser-like DOM environment.
+    // vitest.setup.ts stubs window.matchMedia, ResizeObserver, localStorage, etc.
+    environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
     // Exclude Playwright e2e specs (they import @playwright/test and must run via
     // `playwright test`, not vitest). Keep the standard vitest default excludes.
     exclude: [
+      // Playwright visual tests — run via `playwright test`, not vitest
+      '**/*.visual.spec.ts',
       '**/node_modules/**',
       '**/dist/**',
       '**/cypress/**',
