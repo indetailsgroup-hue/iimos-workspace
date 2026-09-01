@@ -159,10 +159,10 @@ BEGIN
   -- NOTE: MIN(uuid) is not universally available; use two separate queries.
   SELECT COUNT(*) INTO v_org_count
     FROM public.organizations
-    WHERE is_active = true;
+    WHERE status = 'ACTIVE';
   SELECT org_id INTO v_fallback_org_id
     FROM public.organizations
-    WHERE is_active = true
+    WHERE status = 'ACTIVE'
     LIMIT 1;
 
   IF v_org_count > 1 THEN
