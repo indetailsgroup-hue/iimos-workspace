@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v17.0.0] — Process Templates Module — 2026-12-01 🚧 In Progress
+## [v17.0.0] — Process Templates Module — 2026-12-01
 
 ### Added
 
