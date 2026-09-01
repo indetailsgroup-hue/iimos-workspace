@@ -28,7 +28,7 @@ alter table public.capture_artifact alter column org_id set not null;
 
 create policy capture_artifact_tenant_isolation on public.capture_artifact
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 2. capture_audit_log  (backfill via capture_artifact_id → capture_artifact
@@ -56,7 +56,7 @@ alter table public.capture_audit_log alter column org_id set not null;
 
 create policy capture_audit_log_tenant_isolation on public.capture_audit_log
   for select to authenticated
-  using (org_id = public.get_my_org_id()
+  using (org_id = public.get_user_org_id()
       or public.is_governance_role());
 
 -- ---------------------------------------------------------------------------
@@ -74,7 +74,7 @@ alter table public.capture_type_config alter column org_id set not null;
 
 create policy capture_type_config_tenant_isolation on public.capture_type_config
   for select to authenticated
-  using (org_id = public.get_my_org_id()
+  using (org_id = public.get_user_org_id()
       or org_id = '00000000-0000-0000-0000-000000000000'::uuid);
 
 -- ---------------------------------------------------------------------------
@@ -98,7 +98,7 @@ alter table public.contract_documents alter column org_id set not null;
 
 create policy contract_documents_tenant_isolation on public.contract_documents
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 5. customer_docs  (SENTINEL CONFIG — static content / help docs)
@@ -115,7 +115,7 @@ alter table public.customer_docs alter column org_id set not null;
 
 create policy customer_docs_tenant_isolation on public.customer_docs
   for select to authenticated
-  using (org_id = public.get_my_org_id()
+  using (org_id = public.get_user_org_id()
       or org_id = '00000000-0000-0000-0000-000000000000'::uuid);
 
 -- ---------------------------------------------------------------------------
@@ -139,7 +139,7 @@ alter table public.document_links alter column org_id set not null;
 
 create policy document_links_tenant_isolation on public.document_links
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 7. form_templates  (SENTINEL CONFIG — shared form definitions)
@@ -157,5 +157,5 @@ alter table public.form_templates alter column org_id set not null;
 
 create policy form_templates_tenant_isolation on public.form_templates
   for select to authenticated
-  using (org_id = public.get_my_org_id()
+  using (org_id = public.get_user_org_id()
       or org_id = '00000000-0000-0000-0000-000000000000'::uuid);
