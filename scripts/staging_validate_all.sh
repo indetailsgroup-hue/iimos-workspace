@@ -97,6 +97,8 @@ declare -a SCRIPT_REGISTRY=(
   "0193|${SCRIPT_DIR}/staging_validate_0193.sh"
   "0194|${SCRIPT_DIR}/staging_validate_0194.sh"
   "0195|${SCRIPT_DIR}/staging_validate_0195.sh"
+  "0195b|${SCRIPT_DIR}/staging_validate_0195b.sh"
+  "0196|${SCRIPT_DIR}/staging_validate_0196.sh"
 )
 
 # ---------------------------------------------------------------------------
@@ -287,3 +289,4 @@ fi
 
 echo ""
 exit $OVERALL_EXIT
+
