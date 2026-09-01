@@ -54,6 +54,17 @@ ALTER TABLE public.invoices
   ADD COLUMN IF NOT EXISTS issued_date       DATE,
   ADD COLUMN IF NOT EXISTS code              TEXT,
   ADD COLUMN IF NOT EXISTS id                UUID UNIQUE DEFAULT gen_random_uuid();
+
+-- RLS policies for newly created tables (required by lint-rls-org-id)
+CREATE POLICY "chart_of_accounts_tenant_isolation" ON public.chart_of_accounts
+  FOR SELECT USING (org_id = public.get_user_org_id());
+CREATE POLICY "chart_of_accounts_tenant_insert" ON public.chart_of_accounts
+  FOR INSERT WITH CHECK (org_id = public.get_user_org_id());
+
+CREATE POLICY "invoice_line_items_tenant_isolation" ON public.invoice_line_items
+  FOR SELECT USING (org_id = public.get_user_org_id());
+CREATE POLICY "invoice_line_items_tenant_insert" ON public.invoice_line_items
+  FOR INSERT WITH CHECK (org_id = public.get_user_org_id());
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- ---------------------------------------------------------------------------
