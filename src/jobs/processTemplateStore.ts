@@ -15,7 +15,7 @@
  */
 
 import { create } from 'zustand';
-import { supabase } from '../core/supabaseClient';
+import { supabase } from '../core/supabase';
 import type {
   JobTemplate,
   JobTemplateSummary,
