@@ -113,5 +113,6 @@ a graceful empty state when no archive data exists yet.
 
 | Artifact | Commit |
 |---|---|
-| Migration 0203 | _(pending push)_ |
-| Dashboard HTML update | _(pending push)_ |
+| Migration 0203 | `35ccd2514e2d` |
+| CHANGELOG 15.7.0 | `3393413b5793` |
+| Dashboard HTML update | `24a8e618ffb0` |
