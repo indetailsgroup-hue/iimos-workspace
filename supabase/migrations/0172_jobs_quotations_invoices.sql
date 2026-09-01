@@ -204,7 +204,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_qt quotation%ROWTYPE;
+  v_qt public.quotations%ROWTYPE;
   v_inv_id UUID;
   v_inv_code TEXT;
   v_due DATE;
@@ -214,7 +214,7 @@ BEGIN
     RAISE EXCEPTION 'Forbidden: requires FINANCE or ADMIN role';
   END IF;
 
-  SELECT * INTO v_qt FROM quotation WHERE quotation_id = p_quotation_id;
+  SELECT * INTO v_qt FROM public.quotations WHERE quotation_id = p_quotation_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Quotation not found';
   END IF;
@@ -226,11 +226,11 @@ BEGIN
   v_inv_id := gen_random_uuid();
   v_inv_code := 'INV-' || EXTRACT(YEAR FROM now())::TEXT || '-' || LPAD((
     SELECT COALESCE(MAX(SUBSTRING(invoice_code FROM '[0-9]+$')::INT), 0) + 1
-    FROM invoice
+    FROM public.invoices
   )::TEXT, 4, '0');
 
   -- Update quotation
-  UPDATE quotation SET
+  UPDATE public.quotations SET
     status = 'APPROVED',
     approved_at = now(),
     approved_by = auth.uid(),
@@ -238,14 +238,14 @@ BEGIN
   WHERE quotation_id = p_quotation_id;
 
   -- Create invoice
-  INSERT INTO invoice (invoice_id, invoice_code, quotation_id, job_id, customer_id, subtotal, vat_rate, vat_amount, discount, total, remaining_amount, due_date, created_by)
+  INSERT INTO public.invoices (invoice_id, invoice_code, quotation_id, job_id, customer_id, subtotal, vat_rate, vat_amount, discount, total, remaining_amount, due_date, created_by)
   SELECT v_inv_id, v_inv_code, p_quotation_id, v_qt.job_id, v_qt.customer_id, v_qt.subtotal, v_qt.vat_rate, v_qt.vat_amount, v_qt.discount, v_qt.total, v_qt.total, v_due, auth.uid();
 
   -- Copy line items to invoice (stored as quotation_line, referenced via quotation_id→invoice.quotation_id)
 
   -- Update job status if linked
   IF v_qt.job_id IS NOT NULL THEN
-    UPDATE job SET
+    UPDATE public.jobs SET
       status = 'QUOTED',
       quotation_id = p_quotation_id,
       invoice_id = v_inv_id,
@@ -277,7 +277,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_inv invoice%ROWTYPE;
+  v_inv public.invoices%ROWTYPE;
   v_new_paid NUMERIC;
   v_new_remaining NUMERIC;
   v_new_status invoice_status;
@@ -286,7 +286,7 @@ BEGIN
     RAISE EXCEPTION 'Forbidden: requires FINANCE or ADMIN role';
   END IF;
 
-  SELECT * INTO v_inv FROM invoice WHERE invoice_id = p_invoice_id;
+  SELECT * INTO v_inv FROM public.invoices WHERE invoice_id = p_invoice_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Invoice not found';
   END IF;
@@ -295,15 +295,15 @@ BEGIN
   END IF;
 
   -- Insert payment
-  INSERT INTO invoice_payment (invoice_id, amount, method, reference)
+  INSERT INTO public.invoice_payments (invoice_id, amount, method, reference)
   VALUES (p_invoice_id, p_amount, p_method, p_reference);
 
   -- Recalculate totals
-  SELECT COALESCE(SUM(amount), 0) INTO v_new_paid FROM invoice_payment WHERE invoice_id = p_invoice_id;
+  SELECT COALESCE(SUM(amount), 0) INTO v_new_paid FROM public.invoice_payments WHERE invoice_id = p_invoice_id;
   v_new_remaining := GREATEST(0, v_inv.total - v_new_paid);
   v_new_status := CASE WHEN v_new_remaining <= 0 THEN 'PAID'::invoice_status ELSE 'PARTIAL'::invoice_status END;
 
-  UPDATE invoice SET
+  UPDATE public.invoices SET
     paid_amount = v_new_paid,
     remaining_amount = v_new_remaining,
     status = v_new_status
@@ -311,7 +311,7 @@ BEGIN
 
   -- If fully paid and job linked, transition job to INVOICED
   IF v_new_status = 'PAID' AND v_inv.job_id IS NOT NULL THEN
-    UPDATE job SET status = 'INVOICED', updated_at = now()
+    UPDATE public.jobs SET status = 'INVOICED', updated_at = now()
     WHERE job_id = v_inv.job_id AND status = 'DELIVERED';
   END IF;
 
@@ -344,10 +344,10 @@ BEGIN
   RETURN (
     SELECT jsonb_agg(row_to_jsonb(j.*) ORDER BY j.updated_at DESC)
     FROM (
-      SELECT job.*, customer.name AS customer_name
-      FROM job
-      JOIN customer ON customer.customer_id = job.customer_id
-      WHERE (p_status IS NULL OR job.status = p_status)
+      SELECT jb.*, c.name AS customer_name
+      FROM public.jobs jb
+      JOIN public.customers c ON c.customer_id = jb.customer_id
+      WHERE (p_status IS NULL OR jb.status = p_status)
       LIMIT p_limit
     ) j
   );
@@ -358,45 +358,45 @@ $$;
 -- RLS Policies
 -- ============================================================================
 
-ALTER TABLE customer ENABLE ROW LEVEL SECURITY;
-ALTER TABLE job ENABLE ROW LEVEL SECURITY;
-ALTER TABLE job_panel ENABLE ROW LEVEL SECURITY;
-ALTER TABLE quotation ENABLE ROW LEVEL SECURITY;
-ALTER TABLE quotation_line ENABLE ROW LEVEL SECURITY;
-ALTER TABLE invoice ENABLE ROW LEVEL SECURITY;
-ALTER TABLE invoice_payment ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.job_panels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quotations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quotation_lines ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.invoice_payments ENABLE ROW LEVEL SECURITY;
 
 -- All authenticated users can read jobs/customers (role filtering done at app level)
-CREATE POLICY "authenticated_read_customer" ON customer FOR SELECT TO authenticated USING (true);
-CREATE POLICY "authenticated_read_job" ON job FOR SELECT TO authenticated USING (true);
-CREATE POLICY "authenticated_read_panel" ON job_panel FOR SELECT TO authenticated USING (true);
-CREATE POLICY "authenticated_read_quotation" ON quotation FOR SELECT TO authenticated USING (true);
-CREATE POLICY "authenticated_read_qt_line" ON quotation_line FOR SELECT TO authenticated USING (true);
-CREATE POLICY "authenticated_read_invoice" ON invoice FOR SELECT TO authenticated USING (true);
-CREATE POLICY "authenticated_read_payment" ON invoice_payment FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_read_customer" ON public.customers FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_read_job" ON public.jobs FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_read_panel" ON public.job_panels FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_read_quotation" ON public.quotations FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_read_qt_line" ON public.quotation_lines FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_read_invoice" ON public.invoices FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_read_payment" ON public.invoice_payments FOR SELECT TO authenticated USING (true);
 
 -- Write: only FINANCE + ADMIN + DESIGNER (for job creation)
-CREATE POLICY "write_customer" ON customer FOR ALL TO authenticated
+CREATE POLICY "write_customer" ON public.customers FOR ALL TO authenticated
   USING (has_app_role('finance') OR has_app_role('admin') OR has_app_role('designer'));
-CREATE POLICY "write_job" ON job FOR ALL TO authenticated
+CREATE POLICY "write_job" ON public.jobs FOR ALL TO authenticated
   USING (has_app_role('factory') OR has_app_role('admin') OR has_app_role('designer'));
-CREATE POLICY "write_panel" ON job_panel FOR ALL TO authenticated
+CREATE POLICY "write_panel" ON public.job_panels FOR ALL TO authenticated
   USING (has_app_role('factory') OR has_app_role('admin') OR has_app_role('designer'));
-CREATE POLICY "write_quotation" ON quotation FOR ALL TO authenticated
+CREATE POLICY "write_quotation" ON public.quotations FOR ALL TO authenticated
   USING (has_app_role('finance') OR has_app_role('admin'));
-CREATE POLICY "write_qt_line" ON quotation_line FOR ALL TO authenticated
+CREATE POLICY "write_qt_line" ON public.quotation_lines FOR ALL TO authenticated
   USING (has_app_role('finance') OR has_app_role('admin'));
-CREATE POLICY "write_invoice" ON invoice FOR ALL TO authenticated
+CREATE POLICY "write_invoice" ON public.invoices FOR ALL TO authenticated
   USING (has_app_role('finance') OR has_app_role('admin'));
-CREATE POLICY "write_payment" ON invoice_payment FOR ALL TO authenticated
+CREATE POLICY "write_payment" ON public.invoice_payments FOR ALL TO authenticated
   USING (has_app_role('finance') OR has_app_role('admin'));
 
 -- ============================================================================
 -- Realtime subscriptions (for Job Board live updates)
 -- ============================================================================
 
-ALTER PUBLICATION supabase_realtime ADD TABLE job;
-ALTER PUBLICATION supabase_realtime ADD TABLE invoice;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.jobs;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.invoices;
 
 -- ============================================================================
 -- Trigger: auto-update updated_at
@@ -410,6 +410,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER set_updated_at_customer BEFORE UPDATE ON customer FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
-CREATE TRIGGER set_updated_at_job BEFORE UPDATE ON job FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
-CREATE TRIGGER set_updated_at_quotation BEFORE UPDATE ON quotation FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+CREATE TRIGGER set_updated_at_customer BEFORE UPDATE ON public.customers FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+CREATE TRIGGER set_updated_at_job BEFORE UPDATE ON public.jobs FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+CREATE TRIGGER set_updated_at_quotation BEFORE UPDATE ON public.quotations FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
