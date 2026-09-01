@@ -7,51 +7,51 @@
 # ──────────────────────────────────────────────────────────────────
 # Default owners — all files not matched by a more specific rule
 # ──────────────────────────────────────────────────────────────────
-*                                   @indetailsgroup-hue/monolith-core
+*                                   @indetailsgroup-hue
 
 # ──────────────────────────────────────────────────────────────────
 # People & Culture Module
 # Owners: people-culture team
 # Covers: components, stores, types, tests, stories, and visual specs
 # ──────────────────────────────────────────────────────────────────
-src/people/                         @indetailsgroup-hue/people-culture
-src/culture/                        @indetailsgroup-hue/people-culture
+src/people/                         @indetailsgroup-hue
+src/culture/                        @indetailsgroup-hue
 
 # People & Culture Storybook stories
-src/people/*.stories.tsx            @indetailsgroup-hue/people-culture
-src/culture/*.stories.tsx           @indetailsgroup-hue/people-culture
+src/people/*.stories.tsx            @indetailsgroup-hue
+src/culture/*.stories.tsx           @indetailsgroup-hue
 
 # People & Culture Playwright visual specs
-src/people/__tests__/*.visual.spec.ts   @indetailsgroup-hue/people-culture
-src/culture/__tests__/*.visual.spec.ts  @indetailsgroup-hue/people-culture
+src/people/__tests__/*.visual.spec.ts   @indetailsgroup-hue
+src/culture/__tests__/*.visual.spec.ts  @indetailsgroup-hue
 
 # ──────────────────────────────────────────────────────────────────
 # Database migrations — require both core and the relevant module team
 # ──────────────────────────────────────────────────────────────────
-supabase/migrations/                @indetailsgroup-hue/monolith-core
-supabase/migrations/*people*        @indetailsgroup-hue/monolith-core @indetailsgroup-hue/people-culture
-supabase/migrations/*culture*       @indetailsgroup-hue/monolith-core @indetailsgroup-hue/people-culture
-supabase/tests/                     @indetailsgroup-hue/monolith-core
+supabase/migrations/                @indetailsgroup-hue
+supabase/migrations/*people*        @indetailsgroup-hue
+supabase/migrations/*culture*       @indetailsgroup-hue
+supabase/tests/                     @indetailsgroup-hue
 
 # ──────────────────────────────────────────────────────────────────
 # CI / Workflows — require core team sign-off on all workflow changes
 # ──────────────────────────────────────────────────────────────────
-.github/workflows/                  @indetailsgroup-hue/monolith-core
-.github/workflows/people-culture-ci.yml   @indetailsgroup-hue/monolith-core @indetailsgroup-hue/people-culture
-.github/workflows/chromatic.yml           @indetailsgroup-hue/monolith-core @indetailsgroup-hue/people-culture
+.github/workflows/                  @indetailsgroup-hue
+.github/workflows/people-culture-ci.yml   @indetailsgroup-hue
+.github/workflows/chromatic.yml           @indetailsgroup-hue
 
 # ──────────────────────────────────────────────────────────────────
 # Multi-tenant core — require core team for any tenant/RLS changes
 # ──────────────────────────────────────────────────────────────────
-src/tenant/                         @indetailsgroup-hue/monolith-core
-src/tenant/types.ts                 @indetailsgroup-hue/monolith-core
+src/tenant/                         @indetailsgroup-hue
+src/tenant/types.ts                 @indetailsgroup-hue
 
 # ──────────────────────────────────────────────────────────────────
 # Security-sensitive migration files — require core team
 # ──────────────────────────────────────────────────────────────────
-**/20260828_multi_tenant_schema.sql       @indetailsgroup-hue/monolith-core
-**/20261001_people_culture_schema.sql     @indetailsgroup-hue/monolith-core @indetailsgroup-hue/people-culture
-docs/security-posture-report.md           @indetailsgroup-hue/monolith-core
+**/20260828_multi_tenant_schema.sql       @indetailsgroup-hue
+**/20261001_people_culture_schema.sql     @indetailsgroup-hue
+docs/security-posture-report.md           @indetailsgroup-hue
 
 # ──────────────────────────────────────────────────────────────────
 # SECURITY-CRITICAL: Pinned Keysets — Dual Approval Required
@@ -92,7 +92,7 @@ docs/security-posture-report.md           @indetailsgroup-hue/monolith-core
 # (Last-match-wins: this overrides the keyset-workflow rules above
 #  for .github/CODEOWNERS itself, requiring core + dual custodians)
 # ──────────────────────────────────────────────────────────────────
-.github/CODEOWNERS                  @indetailsgroup-hue/monolith-core @security-custodian-a @security-custodian-b
-.github/dependabot.yml              @indetailsgroup-hue/monolith-core
-.github/ISSUE_TEMPLATE/             @indetailsgroup-hue/monolith-core
-CHANGELOG.md                        @indetailsgroup-hue/monolith-core
+.github/CODEOWNERS                  @indetailsgroup-hue @security-custodian-a @security-custodian-b
+.github/dependabot.yml              @indetailsgroup-hue
+.github/ISSUE_TEMPLATE/             @indetailsgroup-hue
+CHANGELOG.md                        @indetailsgroup-hue
