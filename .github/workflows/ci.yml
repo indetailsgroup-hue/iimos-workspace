@@ -1101,6 +1101,44 @@ jobs:
           print(f'Dedup complete. Total renames: {renames}')
           PYEOF
 
+      # ── iter 25h: patch 01802_overdue_invoice_detection — fix expression UNIQUE constraint ──
+      # PostgreSQL does not allow expression columns inside table-level UNIQUE constraints.
+      # CONSTRAINT uq_notification_daily uses (created_at::DATE) — invalid in CREATE TABLE.
+      # Fix: strip the constraint block from the table def; add CREATE UNIQUE INDEX after );
+      - name: Patch 01802_overdue — remove expression UNIQUE constraint (iter 25h)
+        run: |
+          python3 - <<'PYEOF'
+          import re, sys, os
+
+          mig_dir = 'supabase/migrations'
+          fname = '01802_overdue_invoice_detection.sql'
+          filepath = os.path.join(mig_dir, fname)
+
+          if not os.path.exists(filepath):
+              print(f'WARNING: {fname} not found; skipping patch')
+              sys.exit(0)
+
+          with open(filepath, 'r', encoding='utf-8') as f:
+              content = f.read()
+
+          # Match: trailing comma on updated_at + blank line + Thai comment +
+          # CONSTRAINT uq_notification_daily UNIQUE (..., (created_at::DATE)) + );
+          # Replace: drop the comma + constraint block; add CREATE UNIQUE INDEX after );
+          new_content = re.sub(
+              ',\n\n  --[^\n]*\n  CONSTRAINT uq_notification_daily\n    UNIQUE \\(invoice_id, notification_type, \\(created_at::DATE\\)\\)\n\\);',
+              '\n);\nCREATE UNIQUE INDEX IF NOT EXISTS uq_notification_daily\n  ON invoice_notifications(invoice_id, notification_type, (created_at::DATE));',
+              content
+          )
+
+          if new_content == content:
+              print(f'ERROR: CONSTRAINT uq_notification_daily pattern not found in {fname}')
+              sys.exit(1)
+
+          with open(filepath, 'w', encoding='utf-8') as f:
+              f.write(new_content)
+          print(f'Patch applied: removed expression UNIQUE constraint; added CREATE UNIQUE INDEX in {fname}')
+          PYEOF
+
       # ── Start local Supabase stack (Docker available on ubuntu-latest) ─────
       # supabase start auto-applies every .sql file in supabase/migrations/
       # in lexicographic order after all version-conflict renames above.
