@@ -59,10 +59,11 @@
 - AI Production Scheduler UI (AiSchedulerBoard stories + component tests)
 - Culture Metrics Dashboard UI (CultureDashboard.tsx)
 
-### 📋 Next (v17.5 remaining)
-- CultureDashboard stories + integration tests
+### ✅ Completed (v17.5.6) — v17.5 FULLY COMPLETE
+- `src/culture-metrics/CultureDashboard.stories.tsx` — 11 CSF3 Storybook stories; `withCultureStore` decorator; `activateSpy`/`closeSpy` fn() spies; play functions for ActivateSurveyAction + CloseSurveyAction
+- `src/culture-metrics/__tests__/CultureDashboard.test.tsx` — 24 Vitest tests all passing; covers plan gate, loading, error, surveys, eNPS results, org health
 
-**Last updated:** 2027-01-27
+**Last updated:** 2027-01-28
 
 ---
 

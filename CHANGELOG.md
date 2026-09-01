@@ -5,6 +5,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v17.5.6] — CultureDashboard Stories & Tests — 2027-01-28
+
+### Added
+
+#### Storybook Stories — Culture Metrics Dashboard
+- `src/culture-metrics/CultureDashboard.stories.tsx` — 11 CSF3 stories (PROFESSIONAL+-gated dashboard)
+  - Plan gate: `PlanGateWallFree`, `PlanGateWallStarter` — verify `plan-gate-wall` present, `culture-dashboard` absent
+  - Async states: `DashboardLoading` (isLoading=true), `EmptyState` (loaded, no data)
+  - Survey stories: `WithSurveys` (3 mixed-status cards), `AdminView` (admin=true, shows activate/close buttons)
+  - Interaction stories with module-level `fn()` spies:
+    - `ActivateSurveyAction` — DRAFT survey → click `survey-activate-btn` → `activateSpy` called with `('org-1', 'PROFESSIONAL', 'survey-draft')`
+    - `CloseSurveyAction` — ACTIVE survey → click `survey-close-btn` → `closeSpy` called with `('org-1', 'PROFESSIONAL', 'survey-active')`
+  - Data stories: `WithEnpsResults`, `WithOrgHealth`, `StoreError`
+  - Decorator: `withCultureStore` sets `useCultureMetricsStore.setState(state as any)` before each story
+
+#### Vitest Unit Tests — CultureDashboard Component
+- `src/culture-metrics/__tests__/CultureDashboard.test.tsx` — 24 tests, all passing
+  - Plan gate (4 tests): FREE/STARTER → `plan-gate-wall`; PROFESSIONAL/ENTERPRISE → `culture-dashboard` present
+  - Loading (3 tests): isLoading → `dashboard-loading`; isEnpsLoading → `dashboard-loading`; neither → `culture-dashboard`
+  - Error banner (2 tests): error string → `error-banner` shown; null → absent
+  - Surveys section (8 tests): no-surveys empty state; 3 survey-cards rendered; `survey-activate-btn` admin+DRAFT only; `survey-close-btn` admin+ACTIVE only (absent for DRAFT/CLOSED); `activateEnpsSurvey` called with `(orgId, orgPlan, surveyId)`; `closeEnpsSurvey` called with correct args
+  - eNPS results (3 tests): `nps-score-display` when totalResponses ≥ minResponses; `nps-hidden` when below threshold; both cards rendered for mixed results
+  - Org health (3 tests + 1 bonus): no-health-data empty state; 2 `health-metric-row` elements; no-health-data absent when rows present
+
+---
+
 ## [v17.5.5] — AiSchedulerBoard Stories & Tests + CultureDashboard UI — 2027-01-27
 
 ### Added
