@@ -4,7 +4,7 @@ info:
   title: MONOLITH Manufacturing OS — RPC API
   description: |
     OpenAPI specification for all PostgreSQL RPC functions exposed via Supabase PostgREST
-    in migrations **0176–0195**.
+    in migrations **0176–0202**.
 
     ## Authentication
     All endpoints require a valid Supabase JWT in the `Authorization` header:
@@ -33,7 +33,7 @@ info:
     | 422 | `unprocessable` | Business rule violation |
     | 500 | `internal_error` | Unexpected server error |
 
-  version: 15.0.0
+  version: 15.6.0
   contact:
     name: MONOLITH Platform Team
     email: platform@indetailsgroup.com
@@ -60,94 +60,10 @@ tags:
     description: Health metrics, trend views, risk ranking (Migrations 0186–0194)
   - name: Risk Intelligence
     description: Risk tier state and pg_notify events (Migration 0195)
+  - name: SLA Archive
+    description: Long-term SLA breach archive views and rollup RPCs (Migration 0202)
   - name: Infrastructure
     description: Partition health and admin utilities (Migration 0196)
-
-# ─── Reusable Components ──────────────────────────────────────────────────────
-  /rpc/rpc_etax_sla_breach_timeline:
-    post:
-      operationId: rpc_etax_sla_breach_timeline
-      summary: Daily SLA breach trend per org and document type
-      description: |
-        Returns daily SLA breach trend data for the last p_days days (default 30, max 90).
-        Uses a calendar-spine view (generate_series) so every day appears even with zero
-        submissions. cumulative_breached is a monotonically increasing running total within
-        each (org_id, document_type) partition. RLS-enforced — authenticated users see only
-        their own org. Created by Migration 0200.
-      tags: [SLA]
-      security:
-        - bearerAuth: []
-        - apiKeyAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                p_org_id:
-                  type: string
-                  format: uuid
-                  description: Filter to a specific organisation (optional; service_role can see all)
-                  nullable: true
-                p_document_type:
-                  type: string
-                  enum: [T01, T02, T03, T04]
-                  description: Filter to a specific e-Tax document type (optional)
-                  nullable: true
-                p_days:
-                  type: integer
-                  minimum: 1
-                  maximum: 90
-                  default: 30
-                  description: Lookback window in days (1–90, default 30)
-      responses:
-        '200':
-          description: Daily breach trend rows ordered by (org_id, document_type, breach_date ASC)
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    breach_date:
-                      type: string
-                      format: date
-                      description: Calendar day (UTC)
-                    org_id:
-                      type: string
-                      format: uuid
-                    org_name:
-                      type: string
-                    document_type:
-                      type: string
-                      enum: [T01, T02, T03, T04]
-                    total_created:
-                      type: integer
-                      description: Submissions created on this day
-                    breached_count:
-                      type: integer
-                      description: Submissions that exceeded the SLA threshold on this day
-                    breach_rate:
-                      type: number
-                      format: float
-                      description: breached_count / total_created (0–1); null if total_created = 0
-                      nullable: true
-                    severity_tier:
-                      type: string
-                      enum: [HEALTHY, NORMAL, ELEVATED, WARNING, CRITICAL]
-                      description: Severity tier for that day's breach_rate
-                    cumulative_breached:
-                      type: integer
-                      description: Running total of breaches up to and including breach_date
-                    sla_threshold_hours:
-                      type: number
-                      description: SLA threshold in hours from platform_config (default 24)
-        '401':
-          description: Unauthorized — missing or invalid JWT
-        '403':
-          description: Forbidden — RLS denied access
 
 components:
   securitySchemes:
@@ -426,6 +342,125 @@ components:
         row_count:      { type: integer, format: int64 }
         size_pretty:    { type: string, example: "42 MB" }
         is_default:     { type: boolean }
+
+    # ── SLA Archive ────────────────────────────────────────────────────────────
+    SlaArchiveSummaryRow:
+      type: object
+      description: Aggregated SLA breach archive data per org and severity tier.
+      properties:
+        org_id:
+          $ref: '#/components/schemas/OrgId'
+        org_name:
+          type: string
+          example: "บริษัท เฟอร์นิเจอร์ดี จำกัด"
+        severity_tier:
+          type: string
+          enum: [HEALTHY, NORMAL, ELEVATED, WARNING, CRITICAL]
+          description: Severity tier (breach-rate band) for this aggregation group.
+        first_archived_date:
+          type: string
+          format: date
+          description: Earliest breach_date present in the archive for this org/tier.
+        last_archived_date:
+          type: string
+          format: date
+          description: Most recent breach_date present in the archive for this org/tier.
+        last_archived_at:
+          type: string
+          format: date-time
+          description: Timestamp of the most recent archive write (archived_at column).
+        total_archive_days:
+          type: integer
+          description: Number of distinct calendar days in the archive for this org/tier.
+        total_created:
+          type: integer
+          format: int64
+          description: Sum of submissions created across all archived days.
+        total_breached:
+          type: integer
+          format: int64
+          description: Sum of breached submissions across all archived days.
+        avg_breach_rate:
+          type: number
+          format: float
+          description: Average daily breach_rate across archived days (0.0–1.0).
+        max_breach_rate:
+          type: number
+          format: float
+          description: Peak daily breach_rate observed for this org/tier (0.0–1.0).
+        max_cumulative:
+          type: integer
+          description: Highest cumulative_breached value observed in the archive.
+        sla_threshold_hours:
+          type: number
+          description: SLA threshold in hours from platform_config at time of archive (default 24).
+
+    SlaArchiveOrgRollupRow:
+      type: object
+      description: One-row-per-org aggregate across all severity tiers and document types.
+      properties:
+        org_id:
+          $ref: '#/components/schemas/OrgId'
+        org_name:
+          type: string
+          example: "บริษัท เฟอร์นิเจอร์ดี จำกัด"
+        first_archived_date:
+          type: string
+          format: date
+          description: Earliest breach_date in archive for this org.
+        last_archived_date:
+          type: string
+          format: date
+          description: Most recent breach_date in archive for this org.
+        last_archived_at:
+          type: string
+          format: date-time
+          description: Timestamp of the most recent archive write for this org.
+        total_archive_days:
+          type: integer
+          description: Number of distinct calendar days archived for this org.
+        total_created:
+          type: integer
+          format: int64
+          description: Total submissions created across all archived days and document types.
+        total_breached:
+          type: integer
+          format: int64
+          description: Total breached submissions across all archived days and document types.
+        overall_breach_rate:
+          type: number
+          format: float
+          description: |
+            Overall breach rate = (total_breached / total_created) × 100.
+            Expressed as a percentage (0.0–100.0). NULL when total_created = 0.
+          nullable: true
+        avg_daily_breach_rate:
+          type: number
+          format: float
+          description: Average of per-day breach_rate values (0.0–1.0 scale).
+        peak_daily_breach_rate:
+          type: number
+          format: float
+          description: Maximum single-day breach_rate observed for this org.
+        peak_cumulative:
+          type: integer
+          description: Highest cumulative_breached value across all document types.
+        worst_severity_tier:
+          type: string
+          enum: [HEALTHY, NORMAL, ELEVATED, WARNING, CRITICAL]
+          description: |
+            Worst (highest-rank) severity tier observed across all archived days.
+            Rank order: CRITICAL(5) > WARNING(4) > ELEVATED(3) > NORMAL(2) > HEALTHY(1).
+        breached_document_types:
+          type: array
+          items:
+            type: string
+            enum: [T01, T02, T03, T04]
+          description: Distinct document types that had at least one breach day in the archive.
+        sla_threshold_hours:
+          type: number
+          description: SLA threshold in hours from platform_config (default 24).
+
 
 # ─── Security (global default) ────────────────────────────────────────────────
 security:
@@ -832,6 +867,211 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/PartitionHealthRow' }
+
+  # ════════════════════════════════════════════════════════
+  # SLA BREACH TIMELINE — Migration 0200
+  # ════════════════════════════════════════════════════════
+  /rpc_etax_sla_breach_timeline:
+    post:
+      operationId: rpc_etax_sla_breach_timeline
+      summary: Daily SLA breach trend per org and document type
+      description: |
+        Returns daily SLA breach trend data for the last p_days days (default 30, max 90).
+        Uses a calendar-spine view (generate_series) so every day appears even with zero
+        submissions. cumulative_breached is a monotonically increasing running total within
+        each (org_id, document_type) partition. RLS-enforced — authenticated users see only
+        their own org. Created by Migration 0200.
+      tags: [SLA]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_org_id:
+                  type: string
+                  format: uuid
+                  description: Filter to a specific organisation (optional; service_role can see all)
+                  nullable: true
+                p_document_type:
+                  type: string
+                  enum: [T01, T02, T03, T04]
+                  description: Filter to a specific e-Tax document type (optional)
+                  nullable: true
+                p_days:
+                  type: integer
+                  minimum: 1
+                  maximum: 90
+                  default: 30
+                  description: Lookback window in days (1–90, default 30)
+      responses:
+        '200':
+          description: Daily breach trend rows ordered by (org_id, document_type, breach_date ASC)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    breach_date:
+                      type: string
+                      format: date
+                      description: Calendar day (UTC)
+                    org_id:
+                      type: string
+                      format: uuid
+                    org_name:
+                      type: string
+                    document_type:
+                      type: string
+                      enum: [T01, T02, T03, T04]
+                    total_created:
+                      type: integer
+                      description: Submissions created on this day
+                    breached_count:
+                      type: integer
+                      description: Submissions that exceeded the SLA threshold on this day
+                    breach_rate:
+                      type: number
+                      format: float
+                      description: breached_count / total_created (0–1); null if total_created = 0
+                      nullable: true
+                    severity_tier:
+                      type: string
+                      enum: [HEALTHY, NORMAL, ELEVATED, WARNING, CRITICAL]
+                      description: Severity tier for that day's breach_rate
+                    cumulative_breached:
+                      type: integer
+                      description: Running total of breaches up to and including breach_date
+                    sla_threshold_hours:
+                      type: number
+                      description: SLA threshold in hours from platform_config (default 24)
+        '401':
+          description: Unauthorized — missing or invalid JWT
+        '403':
+          description: Forbidden — RLS denied access
+
+  # ════════════════════════════════════════════════════════
+  # SLA ARCHIVE — Migration 0202
+  # ════════════════════════════════════════════════════════
+  /rpc_etax_sla_archive_summary:
+    post:
+      tags: [SLA Archive]
+      operationId: rpcEtaxSlaArchiveSummary
+      summary: Aggregated SLA archive data per org and severity tier
+      description: |
+        Returns aggregated long-term SLA breach data from `etax_sla_breach_archive`
+        grouped by `(org_id, severity_tier)`. Each row covers all archived days
+        matching the requested org and tier combination.
+
+        Supports date-range filtering via `p_from_date` / `p_to_date` and tier
+        filtering via `p_severity_tier`. RLS-enforced — authenticated users see
+        only their own org's data; service_role can query any org.
+
+        Migration: **0202** — `v_etax_sla_archive_summary` + `rpc_etax_sla_archive_summary`
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_org_id:
+                  $ref: '#/components/schemas/OrgId'
+                  description: Filter to a specific org (optional; service_role can query any org).
+                  nullable: true
+                p_severity_tier:
+                  type: string
+                  enum: [HEALTHY, NORMAL, ELEVATED, WARNING, CRITICAL]
+                  description: Filter to a specific severity tier (optional).
+                  nullable: true
+                p_from_date:
+                  type: string
+                  format: date
+                  description: Return archive data on or after this date (inclusive, optional).
+                  nullable: true
+                p_to_date:
+                  type: string
+                  format: date
+                  description: Return archive data on or before this date (inclusive, optional).
+                  nullable: true
+      responses:
+        '200':
+          description: SLA archive summary rows grouped by org and severity tier.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SlaArchiveSummaryRow' }
+        '401':
+          description: Unauthorized — missing or invalid JWT.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RpcError' }
+        '403':
+          description: Forbidden — RLS denied access.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RpcError' }
+
+  /rpc_etax_sla_archive_org_rollup:
+    post:
+      tags: [SLA Archive]
+      operationId: rpcEtaxSlaArchiveOrgRollup
+      summary: One-row-per-org aggregate across all archived SLA breach data
+      description: |
+        Returns a single aggregate row per organisation summarising all archived
+        SLA breach history from `etax_sla_breach_archive`. Includes `overall_breach_rate`,
+        `worst_severity_tier`, `peak_cumulative`, and `breached_document_types` for
+        high-level executive dashboards and compliance reporting.
+
+        Supports date-range filtering via `p_from_date` / `p_to_date`. RLS-enforced —
+        authenticated users see only their own org; service_role can query any org.
+
+        Migration: **0202** — `v_etax_sla_archive_org_rollup` + `rpc_etax_sla_archive_org_rollup`
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_org_id:
+                  $ref: '#/components/schemas/OrgId'
+                  description: Filter to a specific org (optional; service_role can query any org).
+                  nullable: true
+                p_from_date:
+                  type: string
+                  format: date
+                  description: Include archive rows on or after this date (inclusive, optional).
+                  nullable: true
+                p_to_date:
+                  type: string
+                  format: date
+                  description: Include archive rows on or before this date (inclusive, optional).
+                  nullable: true
+      responses:
+        '200':
+          description: One-row-per-org rollup of long-term SLA archive data.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SlaArchiveOrgRollupRow' }
+        '401':
+          description: Unauthorized — missing or invalid JWT.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RpcError' }
+        '403':
+          description: Forbidden — RLS denied access.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RpcError' }
+
 
 # ─── Webhooks (pg_notify consumer) ───────────────────────────────────────────
 webhooks:
