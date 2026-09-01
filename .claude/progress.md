@@ -13,10 +13,12 @@
 - `src/training/__tests__/trainingTypes.test.ts` — 50+ Vitest tests: canAccessTrainingTracker, all 8 categories, all 4 statuses, defaults, interface satisfies, SuperEmployeeStage linkage
 - `src/training/TrainingCourseList.tsx` — PROFESSIONAL+ gate wall, debounced search (300ms), category + stage + isActive filters, course cards with stage badge/enroll btn, loading skeleton, empty state, error banner
 
+### ✅ Written this session (to be committed)
+- `src/training/__tests__/trainingStore.test.ts` — 55 Vitest tests; thenable Proxy mock; TrainingPlanGateError, plan gate FREE/STARTER/PROFESSIONAL/ENTERPRISE, fetchCourses, logCompletion optimistic, cancelEnrollment optimistic, deleteCourse optimistic
+- `src/training/TrainingEnrollmentPanel.tsx` — bulk enroll panel; employee ID tag input (Enter/click); due date picker; notes textarea; status timeline (enrolledAt, dueDate, status badge); plan gate wall; all 15 data-testids
+- `src/training/TrainingCourseList.stories.tsx` — 10 Storybook stories; Default, PlanGateWallFree, PlanGateWallStarter, LoadingSkeleton, EmptyStateNoResults, EmptyStateFirstRun, ProfessionalPlanAdmin, CategoryFilterAiLiteracy, StageFilterPreset, AdminEnrollFlow (play fn + module-level enrollSpy)
+
 ### 🔜 Pending
-- [ ] `src/training/TrainingEnrollmentPanel.tsx` — enrollment UI
-- [ ] Vitest unit tests for `trainingStore.ts`
-- [ ] Storybook stories for Training Tracker components
 - [ ] Merge PR #76 → main + release tag v17.5.0
 
 ---
@@ -69,4 +71,4 @@
 - [ ] Multi-signature release approval
 - [ ] Push to GitHub (auth pending)
 
-*Last updated: 2026-02-16*
+*Last updated: 2027-01-01*
