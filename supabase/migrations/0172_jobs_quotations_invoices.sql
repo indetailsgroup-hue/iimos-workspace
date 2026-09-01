@@ -38,7 +38,7 @@ END $$;
 -- Customers Table
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS customer (
+CREATE TABLE IF NOT EXISTS public.customers (
   customer_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   phone TEXT,
@@ -49,17 +49,17 @@ CREATE TABLE IF NOT EXISTS customer (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_customer_name ON customer(name);
+CREATE INDEX IF NOT EXISTS idx_customer_name ON public.customers(name);
 
 -- ============================================================================
 -- Jobs Table
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS job (
+CREATE TABLE IF NOT EXISTS public.jobs (
   job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   job_code TEXT NOT NULL UNIQUE,
   title TEXT NOT NULL,
-  customer_id UUID NOT NULL REFERENCES customer(customer_id),
+  customer_id UUID NOT NULL REFERENCES public.customers(customer_id),
   status job_status NOT NULL DEFAULT 'DRAFT',
   priority job_priority NOT NULL DEFAULT 'NORMAL',
   assigned_to UUID,  -- references auth.users
@@ -75,18 +75,18 @@ CREATE TABLE IF NOT EXISTS job (
   created_by UUID NOT NULL  -- references auth.users
 );
 
-CREATE INDEX IF NOT EXISTS idx_job_status ON job(status);
-CREATE INDEX IF NOT EXISTS idx_job_customer ON job(customer_id);
-CREATE INDEX IF NOT EXISTS idx_job_code ON job(job_code);
-CREATE INDEX IF NOT EXISTS idx_job_deadline ON job(deadline);
+CREATE INDEX IF NOT EXISTS idx_job_status ON public.jobs(status);
+CREATE INDEX IF NOT EXISTS idx_job_customer ON public.jobs(customer_id);
+CREATE INDEX IF NOT EXISTS idx_job_code ON public.jobs(job_code);
+CREATE INDEX IF NOT EXISTS idx_job_deadline ON public.jobs(deadline);
 
 -- ============================================================================
 -- Job Panels Table
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS job_panel (
+CREATE TABLE IF NOT EXISTS public.job_panels (
   panel_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  job_id UUID NOT NULL REFERENCES job(job_id) ON DELETE CASCADE,
+  job_id UUID NOT NULL REFERENCES public.jobs(job_id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   material TEXT NOT NULL,
   width_mm NUMERIC(8,2) NOT NULL,
@@ -97,17 +97,17 @@ CREATE TABLE IF NOT EXISTS job_panel (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_job_panel_job ON job_panel(job_id);
+CREATE INDEX IF NOT EXISTS idx_job_panel_job ON public.job_panels(job_id);
 
 -- ============================================================================
 -- Quotations Table
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS quotation (
+CREATE TABLE IF NOT EXISTS public.quotations (
   quotation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   quotation_code TEXT NOT NULL UNIQUE,
-  job_id UUID REFERENCES job(job_id),
-  customer_id UUID NOT NULL REFERENCES customer(customer_id),
+  job_id UUID REFERENCES public.jobs(job_id),
+  customer_id UUID NOT NULL REFERENCES public.customers(customer_id),
   status quotation_status NOT NULL DEFAULT 'DRAFT',
   subtotal NUMERIC(12,2) NOT NULL DEFAULT 0,
   vat_rate NUMERIC(4,4) NOT NULL DEFAULT 0.07,
@@ -124,17 +124,17 @@ CREATE TABLE IF NOT EXISTS quotation (
   approved_by UUID
 );
 
-CREATE INDEX IF NOT EXISTS idx_quotation_status ON quotation(status);
-CREATE INDEX IF NOT EXISTS idx_quotation_customer ON quotation(customer_id);
-CREATE INDEX IF NOT EXISTS idx_quotation_job ON quotation(job_id);
+CREATE INDEX IF NOT EXISTS idx_quotation_status ON public.quotations(status);
+CREATE INDEX IF NOT EXISTS idx_quotation_customer ON public.quotations(customer_id);
+CREATE INDEX IF NOT EXISTS idx_quotation_job ON public.quotations(job_id);
 
 -- ============================================================================
 -- Quotation Line Items
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS quotation_line (
+CREATE TABLE IF NOT EXISTS public.quotation_lines (
   line_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  quotation_id UUID NOT NULL REFERENCES quotation(quotation_id) ON DELETE CASCADE,
+  quotation_id UUID NOT NULL REFERENCES public.quotations(quotation_id) ON DELETE CASCADE,
   description TEXT NOT NULL,
   material TEXT,
   dimensions TEXT,
@@ -145,18 +145,18 @@ CREATE TABLE IF NOT EXISTS quotation_line (
   sort_order INT NOT NULL DEFAULT 0
 );
 
-CREATE INDEX IF NOT EXISTS idx_quotation_line_qt ON quotation_line(quotation_id);
+CREATE INDEX IF NOT EXISTS idx_quotation_line_qt ON public.quotation_lines(quotation_id);
 
 -- ============================================================================
 -- Invoices Table
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS invoice (
+CREATE TABLE IF NOT EXISTS public.invoices (
   invoice_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   invoice_code TEXT NOT NULL UNIQUE,
-  quotation_id UUID REFERENCES quotation(quotation_id),
-  job_id UUID REFERENCES job(job_id),
-  customer_id UUID NOT NULL REFERENCES customer(customer_id),
+  quotation_id UUID REFERENCES public.quotations(quotation_id),
+  job_id UUID REFERENCES public.jobs(job_id),
+  customer_id UUID NOT NULL REFERENCES public.customers(customer_id),
   status invoice_status NOT NULL DEFAULT 'PENDING',
   subtotal NUMERIC(12,2) NOT NULL DEFAULT 0,
   vat_rate NUMERIC(4,4) NOT NULL DEFAULT 0.07,
@@ -171,25 +171,25 @@ CREATE TABLE IF NOT EXISTS invoice (
   notes TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_invoice_status ON invoice(status);
-CREATE INDEX IF NOT EXISTS idx_invoice_customer ON invoice(customer_id);
-CREATE INDEX IF NOT EXISTS idx_invoice_job ON invoice(job_id);
-CREATE INDEX IF NOT EXISTS idx_invoice_due ON invoice(due_date);
+CREATE INDEX IF NOT EXISTS idx_invoice_status ON public.invoices(status);
+CREATE INDEX IF NOT EXISTS idx_invoice_customer ON public.invoices(customer_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_job ON public.invoices(job_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_due ON public.invoices(due_date);
 
 -- ============================================================================
 -- Invoice Payments
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS invoice_payment (
+CREATE TABLE IF NOT EXISTS public.invoice_payments (
   payment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  invoice_id UUID NOT NULL REFERENCES invoice(invoice_id) ON DELETE CASCADE,
+  invoice_id UUID NOT NULL REFERENCES public.invoices(invoice_id) ON DELETE CASCADE,
   amount NUMERIC(12,2) NOT NULL,
   method payment_method NOT NULL DEFAULT 'TRANSFER',
   reference TEXT,
   paid_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_payment_invoice ON invoice_payment(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_payment_invoice ON public.invoice_payments(invoice_id);
 
 -- ============================================================================
 -- RPC: Approve Quotation (atomic: update quotation + create invoice + update job)
@@ -204,7 +204,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_qt quotation%ROWTYPE;
+  v_qt public.quotations%ROWTYPE;
   v_inv_id UUID;
   v_inv_code TEXT;
   v_due DATE;
@@ -214,7 +214,7 @@ BEGIN
     RAISE EXCEPTION 'Forbidden: requires FINANCE or ADMIN role';
   END IF;
 
-  SELECT * INTO v_qt FROM quotation WHERE quotation_id = p_quotation_id;
+  SELECT * INTO v_qt FROM public.quotations WHERE quotation_id = p_quotation_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Quotation not found';
   END IF;
@@ -226,11 +226,11 @@ BEGIN
   v_inv_id := gen_random_uuid();
   v_inv_code := 'INV-' || EXTRACT(YEAR FROM now())::TEXT || '-' || LPAD((
     SELECT COALESCE(MAX(SUBSTRING(invoice_code FROM '[0-9]+$')::INT), 0) + 1
-    FROM invoice
+    FROM public.invoices
   )::TEXT, 4, '0');
 
   -- Update quotation
-  UPDATE quotation SET
+  UPDATE public.quotations SET
     status = 'APPROVED',
     approved_at = now(),
     approved_by = auth.uid(),
@@ -238,14 +238,14 @@ BEGIN
   WHERE quotation_id = p_quotation_id;
 
   -- Create invoice
-  INSERT INTO invoice (invoice_id, invoice_code, quotation_id, job_id, customer_id, subtotal, vat_rate, vat_amount, discount, total, remaining_amount, due_date, created_by)
+  INSERT INTO public.invoices (invoice_id, invoice_code, quotation_id, job_id, customer_id, subtotal, vat_rate, vat_amount, discount, total, remaining_amount, due_date, created_by)
   SELECT v_inv_id, v_inv_code, p_quotation_id, v_qt.job_id, v_qt.customer_id, v_qt.subtotal, v_qt.vat_rate, v_qt.vat_amount, v_qt.discount, v_qt.total, v_qt.total, v_due, auth.uid();
 
   -- Copy line items to invoice (stored as quotation_line, referenced via quotation_id→invoice.quotation_id)
 
   -- Update job status if linked
   IF v_qt.job_id IS NOT NULL THEN
-    UPDATE job SET
+    UPDATE public.jobs SET
       status = 'QUOTED',
       quotation_id = p_quotation_id,
       invoice_id = v_inv_id,
@@ -277,7 +277,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_inv invoice%ROWTYPE;
+  v_inv public.invoices%ROWTYPE;
   v_new_paid NUMERIC;
   v_new_remaining NUMERIC;
   v_new_status invoice_status;
@@ -286,7 +286,7 @@ BEGIN
     RAISE EXCEPTION 'Forbidden: requires FINANCE or ADMIN role';
   END IF;
 
-  SELECT * INTO v_inv FROM invoice WHERE invoice_id = p_invoice_id;
+  SELECT * INTO v_inv FROM public.invoices WHERE invoice_id = p_invoice_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Invoice not found';
   END IF;
@@ -295,15 +295,15 @@ BEGIN
   END IF;
 
   -- Insert payment
-  INSERT INTO invoice_payment (invoice_id, amount, method, reference)
+  INSERT INTO public.invoice_payments (invoice_id, amount, method, reference)
   VALUES (p_invoice_id, p_amount, p_method, p_reference);
 
   -- Recalculate totals
-  SELECT COALESCE(SUM(amount), 0) INTO v_new_paid FROM invoice_payment WHERE invoice_id = p_invoice_id;
+  SELECT COALESCE(SUM(amount), 0) INTO v_new_paid FROM public.invoice_payments WHERE invoice_id = p_invoice_id;
   v_new_remaining := GREATEST(0, v_inv.total - v_new_paid);
   v_new_status := CASE WHEN v_new_remaining <= 0 THEN 'PAID'::invoice_status ELSE 'PARTIAL'::invoice_status END;
 
-  UPDATE invoice SET
+  UPDATE public.invoices SET
     paid_amount = v_new_paid,
     remaining_amount = v_new_remaining,
     status = v_new_status
@@ -311,7 +311,7 @@ BEGIN
 
   -- If fully paid and job linked, transition job to INVOICED
   IF v_new_status = 'PAID' AND v_inv.job_id IS NOT NULL THEN
-    UPDATE job SET status = 'INVOICED', updated_at = now()
+    UPDATE public.jobs SET status = 'INVOICED', updated_at = now()
     WHERE job_id = v_inv.job_id AND status = 'DELIVERED';
   END IF;
 
@@ -344,10 +344,10 @@ BEGIN
   RETURN (
     SELECT jsonb_agg(row_to_jsonb(j.*) ORDER BY j.updated_at DESC)
     FROM (
-      SELECT job.*, customer.name AS customer_name
-      FROM job
-      JOIN customer ON customer.customer_id = job.customer_id
-      WHERE (p_status IS NULL OR job.status = p_status)
+      SELECT jb.*, c.name AS customer_name
+      FROM public.jobs jb
+      JOIN public.customers c ON c.customer_id = jb.customer_id
+      WHERE (p_status IS NULL OR jb.status = p_status)
       LIMIT p_limit
     ) j
   );
@@ -358,45 +358,45 @@ $$;
 -- RLS Policies
 -- ============================================================================
 
-ALTER TABLE customer ENABLE ROW LEVEL SECURITY;
-ALTER TABLE job ENABLE ROW LEVEL SECURITY;
-ALTER TABLE job_panel ENABLE ROW LEVEL SECURITY;
-ALTER TABLE quotation ENABLE ROW LEVEL SECURITY;
-ALTER TABLE quotation_line ENABLE ROW LEVEL SECURITY;
-ALTER TABLE invoice ENABLE ROW LEVEL SECURITY;
-ALTER TABLE invoice_payment ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.job_panels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quotations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quotation_lines ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.invoice_payments ENABLE ROW LEVEL SECURITY;
 
 -- All authenticated users can read jobs/customers (role filtering done at app level)
-CREATE POLICY "authenticated_read_customer" ON customer FOR SELECT TO authenticated USING (true);
-CREATE POLICY "authenticated_read_job" ON job FOR SELECT TO authenticated USING (true);
-CREATE POLICY "authenticated_read_panel" ON job_panel FOR SELECT TO authenticated USING (true);
-CREATE POLICY "authenticated_read_quotation" ON quotation FOR SELECT TO authenticated USING (true);
-CREATE POLICY "authenticated_read_qt_line" ON quotation_line FOR SELECT TO authenticated USING (true);
-CREATE POLICY "authenticated_read_invoice" ON invoice FOR SELECT TO authenticated USING (true);
-CREATE POLICY "authenticated_read_payment" ON invoice_payment FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_read_customer" ON public.customers FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_read_job" ON public.jobs FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_read_panel" ON public.job_panels FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_read_quotation" ON public.quotations FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_read_qt_line" ON public.quotation_lines FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_read_invoice" ON public.invoices FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_read_payment" ON public.invoice_payments FOR SELECT TO authenticated USING (true);
 
 -- Write: only FINANCE + ADMIN + DESIGNER (for job creation)
-CREATE POLICY "write_customer" ON customer FOR ALL TO authenticated
+CREATE POLICY "write_customer" ON public.customers FOR ALL TO authenticated
   USING (has_app_role('finance') OR has_app_role('admin') OR has_app_role('designer'));
-CREATE POLICY "write_job" ON job FOR ALL TO authenticated
+CREATE POLICY "write_job" ON public.jobs FOR ALL TO authenticated
   USING (has_app_role('factory') OR has_app_role('admin') OR has_app_role('designer'));
-CREATE POLICY "write_panel" ON job_panel FOR ALL TO authenticated
+CREATE POLICY "write_panel" ON public.job_panels FOR ALL TO authenticated
   USING (has_app_role('factory') OR has_app_role('admin') OR has_app_role('designer'));
-CREATE POLICY "write_quotation" ON quotation FOR ALL TO authenticated
+CREATE POLICY "write_quotation" ON public.quotations FOR ALL TO authenticated
   USING (has_app_role('finance') OR has_app_role('admin'));
-CREATE POLICY "write_qt_line" ON quotation_line FOR ALL TO authenticated
+CREATE POLICY "write_qt_line" ON public.quotation_lines FOR ALL TO authenticated
   USING (has_app_role('finance') OR has_app_role('admin'));
-CREATE POLICY "write_invoice" ON invoice FOR ALL TO authenticated
+CREATE POLICY "write_invoice" ON public.invoices FOR ALL TO authenticated
   USING (has_app_role('finance') OR has_app_role('admin'));
-CREATE POLICY "write_payment" ON invoice_payment FOR ALL TO authenticated
+CREATE POLICY "write_payment" ON public.invoice_payments FOR ALL TO authenticated
   USING (has_app_role('finance') OR has_app_role('admin'));
 
 -- ============================================================================
 -- Realtime subscriptions (for Job Board live updates)
 -- ============================================================================
 
-ALTER PUBLICATION supabase_realtime ADD TABLE job;
-ALTER PUBLICATION supabase_realtime ADD TABLE invoice;
+DO $pub$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.jobs; EXCEPTION WHEN OTHERS THEN NULL; END $pub$;
+DO $pub$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.invoices; EXCEPTION WHEN OTHERS THEN NULL; END $pub$;
 
 -- ============================================================================
 -- Trigger: auto-update updated_at
@@ -410,6 +410,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER set_updated_at_customer BEFORE UPDATE ON customer FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
-CREATE TRIGGER set_updated_at_job BEFORE UPDATE ON job FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
-CREATE TRIGGER set_updated_at_quotation BEFORE UPDATE ON quotation FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+CREATE TRIGGER set_updated_at_customer BEFORE UPDATE ON public.customers FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+CREATE TRIGGER set_updated_at_job BEFORE UPDATE ON public.jobs FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+CREATE TRIGGER set_updated_at_quotation BEFORE UPDATE ON public.quotations FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
