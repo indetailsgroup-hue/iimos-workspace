@@ -229,10 +229,11 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 | `supabase/tests/0183_baseline_org_id_not_null.sql` | 0183 | T-0183-01 → T-0183-13 (13 tests) | NOT NULL on jobs/quotations/invoices/ledger_entries, sentinel backfill, FK constraints, zero NULL rows |
 | `supabase/tests/cross_tenant_isolation.sql` | Integration (0173–0183) | T01–T25 (25 tests) | SELECT/INSERT/UPDATE/DELETE cross-tenant isolation, own-org access, row integrity |
 | `supabase/tests/0176_notification_preferences_rls.sql` | 0176 | T-0176-01 → T-0176-16 (16 tests) | SELECT/INSERT/UPDATE/DELETE cross-tenant isolation + own-org access on `notification_preferences`; prefs_own_only OR semantics; structural RLS-enabled + relrowsecurity checks |
+| `supabase/tests/0186_critical_tables_rls.sql` | 0186 | T-0186-01 → T-0186-20 (20 tests) | `org_id` column + NOT NULL + `relrowsecurity` on 4 CRITICAL tables; `<table>_tenant_isolation` policy existence; cross-tenant SELECT isolation on `work_item` + `approval_request`; own-org access on `work_item` |
 
-**Total pgTAP tests authored (forward migrations):** 14 + 35 + 17 + 18 + 13 + 13 + 16 = **126 tests** (0179 F1: 14, 0179 NNB: 35, 0180: 17, 0181: 18, 0182: 13, 0183: 13, 0176 notification_preferences: 16)
+**Total pgTAP tests authored (forward migrations):** 14 + 35 + 17 + 18 + 13 + 13 + 16 + 20 = **146 tests** (0179 F1: 14, 0179 NNB: 35, 0180: 17, 0181: 18, 0182: 13, 0183: 13, 0176 notification_preferences: 16, 0186 critical_tables: 20)
 
-**Grand total pgTAP assertions (pg_prove SQL suites):** 126 (forward) + 12 (rollback) + 25 (cross-tenant) = **163 tests**
+**Grand total pgTAP assertions (pg_prove SQL suites):** 146 (forward) + 12 (rollback) + 25 (cross-tenant) = **183 tests**
 
 **Rollback verification suites (CI forward-and-back only, not counted in production total):**
 
