@@ -70,11 +70,11 @@ RPC from migrations **0176–0204**.
 
 | File | SHA |
 |---|---|
-| `scripts/staging_validate_0204.sh` | _TBD after push_ |
+| `scripts/staging_validate_0204.sh` | `d9a958a5c577` |
 | `scripts/staging_validate_all.sh` (20 entries) | _TBD after push_ |
-| `supabase/migrations/0205_openapi_update.sql` | _TBD after push_ |
+| `supabase/migrations/0205_openapi_update.sql` | `ae39ca40f7cf` |
 | `docs/openapi_monolith_rpcs.yaml` v15.9.0 | _TBD after push_ |
-| `docs/CHANGELOG_1590.md` | _TBD after push_ |
+| `docs/CHANGELOG_1590.md` | `45723a6ccaa8` |
 
 ---
 
