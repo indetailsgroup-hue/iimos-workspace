@@ -1,6 +1,6 @@
 # .github/workflows/verify-digital-shadow.yml
 #
-# Twelve CI jobs for the Digital Shadow Service backend, triggered on every PR
+# Thirteen CI jobs for the Digital Shadow Service backend, triggered on every PR
 # and direct push to `feat/digital-shadow-integration`:
 #
 #   lint                            — ESLint + TypeScript type-check; fails fast before
@@ -16,6 +16,7 @@
 #   notify-success-pipeline-failure — Slack alert + GitHub issue when notify-slack-on-success itself fails
 #   post-workflow-summary           — Upserts a sticky PR comment table (backend + Playwright legs) on the PR
 #   upload-eslint-sarif             — Re-runs ESLint with SARIF formatter; uploads to Code Scanning tab
+#   close-webhook-broken-issue      — Auto-closes the webhook-broken issue when notify-slack-on-success succeeds
 #
 # Job dependency graph:
 #   lint ──► integration-tests ──► e2e-backend-gate ──► notify-slack-on-failure (on failure)
@@ -26,10 +27,12 @@
 #        └─► feature-cache-coverage ──► post-coverage-badge ──► notify-coverage-badge-failure (on failure)
 #                               └──────► notify-slack-on-success (on all pass)
 #
-#   post-workflow-summary (needs: all 11 jobs, if: always() && pull_request)
-#     └─► upserts <!-- workflow-summary-comment --> (backend + playwright-e2e sections)
+#   post-workflow-summary (needs: all 12 jobs, if: always() && pull_request)
+#     └─► upserts <!-- workflow-summary-comment --> (backend + playwright-e2e + SARIF sections)
 #   upload-eslint-sarif (needs: lint, if: not cancelled)
-#     └─► uploads eslint.sarif to Security → Code Scanning
+#     └─► uploads eslint-delta.sarif (new findings only) to Security → Code Scanning
+#   close-webhook-broken-issue (needs: notify-slack-on-success, if: result == success)
+#     └─► posts recovery comment + closes open webhook-broken GitHub issues
 #
 # Concurrency:
 #   A `concurrency` group keyed on workflow + ref cancels the in-progress run
@@ -1518,6 +1521,7 @@ jobs:
       - create-webhook-broken-label
       - notify-success-pipeline-failure
       - upload-eslint-sarif
+      - close-webhook-broken-issue
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1648,6 +1652,22 @@ jobs:
               core.warning(`Could not fetch playwright-e2e jobs: ${e2eErr.message}`);
             }
 
+            // ── 2c. Build ESLint SARIF section ──────────────────────────
+            const sarifTotal      = '${{ needs.upload-eslint-sarif.outputs.total-findings }}';
+            const sarifNew        = '${{ needs.upload-eslint-sarif.outputs.new-findings }}';
+            const sarifSuppressed = '${{ needs.upload-eslint-sarif.outputs.suppressed-findings }}';
+            const sarifSection = (sarifTotal !== '' || sarifNew !== '' || sarifSuppressed !== '')
+              ? [
+                  '',
+                  '### ESLint Code Scanning (SARIF)',
+                  '| Metric | Count |',
+                  '|---|---|',
+                  `| Total findings          | ${sarifTotal      !== '' ? sarifTotal      : '—'} |`,
+                  `| New (vs baseline)       | ${sarifNew        !== '' ? sarifNew        : '—'} |`,
+                  `| Suppressed by baseline  | ${sarifSuppressed !== '' ? sarifSuppressed : '—'} |`,
+                ]
+              : ['', '_ESLint SARIF upload: skipped or no findings data available._'];
+
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
             const body = [
@@ -1659,6 +1679,7 @@ jobs:
               `|---|---|---|`,
               ...rows,
               ...e2eSection,
+              ...sarifSection,
               '',
               `---`,
               `Commit: \`${context.sha.slice(0,7)}\` · Run [#${context.runNumber}](${runUrl})`,
@@ -1714,9 +1735,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
 
+    outputs:
+      total-findings:      ${{ steps.sarif-delta.outputs.total }}
+      new-findings:        ${{ steps.sarif-delta.outputs.new }}
+      suppressed-findings: ${{ steps.sarif-delta.outputs.suppressed }}
+
     permissions:
       security-events: write   # required by upload-sarif action
       contents:        read    # checkout
+      actions:         read    # list / download baseline SARIF artifact
 
     steps:
       - name: Checkout repository
@@ -1748,11 +1775,222 @@ jobs:
         env:
           CI: 'true'
 
+      - name: Download previous SARIF baseline
+        env:
+          GITHUB_TOKEN:      ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID:     ${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import os, sys, zipfile, io, json, urllib.request
+
+          token   = os.environ['GITHUB_TOKEN']
+          repo    = os.environ['GITHUB_REPOSITORY']
+          run_id  = os.environ['GITHUB_RUN_ID']
+          api_url = (
+              f'https://api.github.com/repos/{repo}/actions/artifacts'
+              f'?name=eslint-sarif-baseline&per_page=100'
+          )
+
+          def api_get(url):
+              req = urllib.request.Request(url, headers={
+                  'Authorization': f'Bearer {token}',
+                  'Accept': 'application/vnd.github+json',
+                  'X-GitHub-Api-Version': '2022-11-28',
+              })
+              with urllib.request.urlopen(req) as r:
+                  return json.loads(r.read())
+
+          data = api_get(api_url)
+          candidates = [
+              a for a in data['artifacts']
+              if not a['expired']
+              and str(a['workflow_run']['id']) != run_id
+          ]
+          candidates.sort(key=lambda a: a['created_at'], reverse=True)
+
+          if not candidates:
+              print('No previous baseline artifact found; all current findings treated as new.')
+              sys.exit(0)
+
+          artifact = candidates[0]
+          print(f'Downloading baseline artifact id={artifact["id"]} created={artifact["created_at"]}')
+
+          dl_url = (
+              f'https://api.github.com/repos/{repo}'
+              f'/actions/artifacts/{artifact["id"]}/zip'
+          )
+          req2 = urllib.request.Request(dl_url, headers={
+              'Authorization': f'Bearer {token}',
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+          })
+          with urllib.request.urlopen(req2) as r:
+              zdata = r.read()
+
+          with zipfile.ZipFile(io.BytesIO(zdata)) as zf:
+              names = zf.namelist()
+              sarif_name = next((n for n in names if n.endswith('.sarif')), None)
+              if not sarif_name:
+                  print(f'No .sarif entry in artifact zip ({names}); treating all as new.')
+                  sys.exit(0)
+              with zf.open(sarif_name) as sf:
+                  open('baseline.sarif', 'wb').write(sf.read())
+
+          print('baseline.sarif written.')
+          PY
+
+      - name: Compute SARIF delta (new findings vs baseline)
+        id: sarif-delta
+        run: |
+          python3 - <<'PY'
+          import json, os
+
+          def fingerprints(path):
+              try:
+                  sarif = json.load(open(path))
+              except FileNotFoundError:
+                  return set()
+              fps = set()
+              for run in sarif.get('runs', []):
+                  for result in run.get('results', []):
+                      rule_id = result.get('ruleId', '')
+                      for loc in result.get('locations', [{}]):
+                          phys = loc.get('physicalLocation', {})
+                          uri  = phys.get('artifactLocation', {}).get('uri', '')
+                          reg  = phys.get('region', {})
+                          fps.add((rule_id, uri,
+                                   reg.get('startLine', 0),
+                                   reg.get('startColumn', 0)))
+              return fps
+
+          baseline_fps = fingerprints('baseline.sarif')
+          current_fps  = fingerprints('eslint.sarif')
+          new_fps      = current_fps - baseline_fps
+          supp_fps     = baseline_fps - current_fps
+          total      = len(current_fps)
+          new        = len(new_fps)
+          suppressed = len(supp_fps)
+          print(f'Total={total}  New={new}  Suppressed={suppressed}')
+
+          # Build delta SARIF (only new findings go to Code Scanning)
+          sarif = json.load(open('eslint.sarif'))
+          for run in sarif.get('runs', []):
+              filtered = []
+              for result in run.get('results', []):
+                  rule_id = result.get('ruleId', '')
+                  locs = result.get('locations', [{}])
+                  phys = (locs[0] if locs else {}).get('physicalLocation', {})
+                  uri  = phys.get('artifactLocation', {}).get('uri', '')
+                  reg  = phys.get('region', {})
+                  fp   = (rule_id, uri,
+                          reg.get('startLine', 0),
+                          reg.get('startColumn', 0))
+                  if fp in new_fps:
+                      filtered.append(result)
+              run['results'] = filtered
+          json.dump(sarif, open('eslint-delta.sarif', 'w'), indent=2)
+          print(f'Wrote eslint-delta.sarif ({new} new finding(s)).')
+
+          gho = os.environ.get('GITHUB_OUTPUT', '')
+          if gho:
+              with open(gho, 'a') as f:
+                  f.write(f'total={total}\n')
+                  f.write(f'new={new}\n')
+                  f.write(f'suppressed={suppressed}\n')
+          PY
+
       - name: Upload SARIF to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: eslint.sarif
+          sarif_file: eslint-delta.sarif
           category:   eslint
           # wait-for-processing keeps the job log informative; remove if
           # the step blocks too long in the presence of many findings.
           wait-for-processing: true
+
+      - name: Save current SARIF as baseline for next run
+        uses: actions/upload-artifact@v4
+        with:
+          name:           eslint-sarif-baseline
+          path:           eslint.sarif
+          retention-days: 30
+          # Overwrite the previous baseline so the next run always diffs
+          # against the most recent complete findings set.
+          overwrite: true
+
+  # ── Job 12: close-webhook-broken-issue ──────────────────────────────────────
+  # Runs only when notify-slack-on-success succeeds, proving the Slack webhook
+  # is healthy again.  Finds every open GitHub issue carrying the label
+  # `webhook-broken`, posts a recovery comment with the run URL, then closes it
+  # with state_reason=completed so it appears in the "closed" tab.
+  #
+  # If no open issues are found the job logs a note and exits cleanly — this is
+  # the normal steady-state when the webhook has never been broken or when a
+  # previous recovery already closed all issues.
+  # ────────────────────────────────────────────────────────────────────────────
+  close-webhook-broken-issue:
+    name: Close webhook-broken Issue on Recovery
+    needs: [notify-slack-on-success]
+    if: always() && needs.notify-slack-on-success.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    permissions:
+      issues: write   # post closure comment + close the issue
+
+    steps:
+      - name: Close any open webhook-broken issues
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner:    context.repo.owner,
+              repo:     context.repo.repo,
+              labels:   'webhook-broken',
+              state:    'open',
+              per_page: 50,
+            });
+
+            if (issues.length === 0) {
+              core.info('No open webhook-broken issues found — nothing to close.');
+              return;
+            }
+
+            const runUrl = [
+              process.env.GITHUB_SERVER_URL,
+              context.repo.owner,
+              context.repo.repo,
+              'actions', 'runs', context.runId,
+            ].join('/');
+
+            for (const issue of issues) {
+              // Post a recovery comment before closing
+              await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: issue.number,
+                body: [
+                  '### Slack webhook recovered \u2705',
+                  '',
+                  `The \`notify-slack-on-success\` job succeeded in`,
+                  `run [#${context.runNumber}](${runUrl}),`,
+                  'confirming the Slack incoming webhook is healthy again.',
+                  'Auto-closing this issue.',
+                  '',
+                  `> Resolved by workflow run [#${context.runNumber}](${runUrl})`,
+                ].join('\n'),
+              });
+
+              await github.rest.issues.update({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: issue.number,
+                state:        'closed',
+                state_reason: 'completed',
+              });
+
+              core.info(`Closed issue #${issue.number}: ${issue.title}`);
+            }
+            core.info(`Closed ${issues.length} webhook-broken issue(s).`);
