@@ -52,9 +52,9 @@ SELECT
   fpr.updated_at,
   -- ── Journal Entry (written by rpc_mark_field_purchase_purchased) ────────
   je.id                     AS journal_entry_id,
-  je.ref_code               AS journal_ref_code,
+  je.source_ref->>'ref_code' AS journal_ref_code,
   je.description            AS journal_description,
-  je.posted_at              AS journal_posted_at,
+  je.created_at             AS journal_posted_at,
   -- ── Debit line: account 5050 ค่าวัสดุสิ้นเปลือง (expense) ────────────
   jl_dr.account_code        AS debit_account_code,
   la_dr.name                AS debit_account_name,
@@ -68,8 +68,8 @@ FROM public.field_purchase_request fpr
 
 -- Journal entry linked by source_table / source_id (0066 ledger_engine pattern)
 LEFT JOIN public.journal_entry je
-       ON je.source_table = 'field_purchase_request'
-      AND je.source_id    = fpr.id::text
+       ON je.source_ref->>'source_table' = 'field_purchase_request'
+      AND je.source_ref->>'source_id'   = fpr.id::text
 
 -- Debit side of the double-entry
 LEFT JOIN public.journal_line jl_dr
