@@ -731,9 +731,11 @@ jobs:
       - name: Patch 0173_rollback — plural names + exception-safe publication adds
         run: |
           python3 - <<'PYEOF'
-          import re, sys
-
+          import re, sys, os
           path = 'supabase/migrations/0173_rollback.sql'
+          if not os.path.exists(path):
+              print(f"{path} not present in migrations/ — skipping patch (already in rollbacks/ only).")
+              sys.exit(0)
           with open(path) as f:
               txt = f.read()
 
