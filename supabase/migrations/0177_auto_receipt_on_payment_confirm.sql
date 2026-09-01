@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS payment_receipt (
   id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          UUID         NOT NULL,                        -- multi-tenant isolation
   invoice_id      UUID         NOT NULL
-                    REFERENCES invoices(id) ON DELETE RESTRICT, -- ห้ามลบ invoice ที่มีรับชำระแล้ว
+                    REFERENCES invoices(invoice_id) ON DELETE RESTRICT, -- ห้ามลบ invoice ที่มีรับชำระแล้ว
   amount          NUMERIC(12,2) NOT NULL
                     CONSTRAINT chk_receipt_amount_positive CHECK (amount > 0),
   method          payment_method NOT NULL DEFAULT 'TRANSFER',
@@ -91,22 +91,22 @@ DECLARE
   v_entry_id          UUID;
   v_new_paid          NUMERIC(12,2);
   v_new_remaining     NUMERIC(12,2);
-  v_new_status        TEXT;
+  v_new_status        invoice_status;
   v_desc              TEXT;
   v_total_debit       NUMERIC(12,2);
   v_total_credit      NUMERIC(12,2);
 BEGIN
   -- ── 3.1 ดึง invoice ────────────────────────────────────────────────────────
-  SELECT * INTO v_inv FROM invoices WHERE id = NEW.invoice_id;
+  SELECT * INTO v_inv FROM invoices WHERE invoice_id = NEW.invoice_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'payment_receipt trigger: invoice % not found', NEW.invoice_id;
   END IF;
 
   -- ── 3.2 ตรวจสถานะ invoice ──────────────────────────────────────────────────
-  IF v_inv.status NOT IN ('approved', 'partial') THEN
+  IF v_inv.status IN ('PAID'::invoice_status, 'CANCELLED'::invoice_status) THEN
     RAISE EXCEPTION
-      'Cannot record payment: invoice % has status %. Must be approved or partial.',
-      v_inv.id, v_inv.status;
+      'Cannot record payment: invoice % has status %. Must be PENDING or PARTIAL.',
+      v_inv.invoice_id, v_inv.status;
   END IF;
 
   -- ── 3.3 กำหนด org_id และ book_id ──────────────────────────────────────────
@@ -138,7 +138,7 @@ BEGIN
   -- ── 3.5 สร้าง Journal Entry header ────────────────────────────────────────
   v_desc := format(
     'Auto-journal: Payment receipt for invoice %s (amount %s THB, method %s)',
-    v_inv.code,
+    v_inv.invoice_code,
     NEW.amount,
     NEW.method
   );
@@ -184,7 +184,7 @@ BEGIN
     v_cash_account_id,
     NEW.amount,
     0,
-    format('Cash received: Invoice %s', v_inv.code)
+    format('Cash received: Invoice %s', v_inv.invoice_code)
   );
 
   -- Line 2: CR Accounts Receivable
@@ -200,7 +200,7 @@ BEGIN
     v_ar_account_id,
     0,
     NEW.amount,
-    format('AR cleared: Invoice %s', v_inv.code)
+    format('AR cleared: Invoice %s', v_inv.invoice_code)
   );
 
   -- ── 3.7 ตรวจสอบ double-entry balance ──────────────────────────────────────
@@ -229,8 +229,8 @@ BEGIN
   v_new_remaining := GREATEST(0, COALESCE(v_inv.total, 0) - v_new_paid);
 
   v_new_status := CASE
-    WHEN v_new_remaining <= 0.005 THEN 'paid'       -- ชำระครบ (tolerance 0.5 สตางค์)
-    WHEN v_new_paid > 0           THEN 'partial'    -- ชำระบางส่วน
+    WHEN v_new_remaining <= 0.005 THEN 'PAID'::invoice_status       -- ชำระครบ (tolerance 0.5 สตางค์)
+    WHEN v_new_paid > 0           THEN 'PARTIAL'::invoice_status    -- ชำระบางส่วน
     ELSE v_inv.status
   END;
 
@@ -238,9 +238,9 @@ BEGIN
     paid_amount      = v_new_paid,
     remaining_amount = v_new_remaining,
     status           = v_new_status,
-    paid_at          = CASE WHEN v_new_status = 'paid' THEN now() ELSE NULL END,
+    paid_at          = CASE WHEN v_new_status = 'PAID'::invoice_status THEN now() ELSE NULL END,
     updated_at       = now()
-  WHERE id = NEW.invoice_id;
+  WHERE invoice_id = NEW.invoice_id;
 
   RAISE LOG
     'payment_receipt: posted journal=% invoice=% amount=% new_status=%',
@@ -326,7 +326,7 @@ DECLARE
   v_receipt_id    UUID;
   v_new_paid      NUMERIC(12,2);
   v_new_remaining NUMERIC(12,2);
-  v_new_status    TEXT;
+  v_new_status    invoice_status;
 BEGIN
   -- ── 6.1 Authorization ──────────────────────────────────────────────────────
   IF NOT (
@@ -346,16 +346,16 @@ BEGIN
   -- ── 6.3 ตรวจสอบ invoice ────────────────────────────────────────────────────
   SELECT * INTO v_inv
   FROM   invoices
-  WHERE  id     = p_invoice_id
-    AND  org_id = v_org_id;
+  WHERE  invoice_id = p_invoice_id
+    AND  org_id     = v_org_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Invoice % not found or access denied', p_invoice_id;
   END IF;
 
-  IF v_inv.status NOT IN ('approved', 'partial') THEN
+  IF v_inv.status IN ('PAID'::invoice_status, 'CANCELLED'::invoice_status) THEN
     RAISE EXCEPTION
-      'Cannot confirm payment: invoice % has status %. Expected: approved or partial.',
+      'Cannot confirm payment: invoice % has status %. Expected: PENDING or PARTIAL.',
       p_invoice_id, v_inv.status;
   END IF;
 
@@ -399,13 +399,13 @@ BEGIN
   SELECT paid_amount, remaining_amount, status
   INTO   v_new_paid, v_new_remaining, v_new_status
   FROM   invoices
-  WHERE  id = p_invoice_id;
+  WHERE  invoice_id = p_invoice_id;
 
   -- ── 6.7 Return result ──────────────────────────────────────────────────────
   RETURN jsonb_build_object(
     'receipt_id',        v_receipt_id,
     'invoice_id',        p_invoice_id,
-    'invoice_code',      v_inv.code,
+    'invoice_code',      v_inv.invoice_code,
     'amount_paid',       p_amount,
     'total_paid',        v_new_paid,
     'remaining_amount',  v_new_remaining,
@@ -458,7 +458,7 @@ BEGIN
   -- ตรวจว่า invoice อยู่ใน org ของ user
   IF NOT EXISTS (
     SELECT 1 FROM invoices
-    WHERE id = p_invoice_id AND org_id = v_org_id
+    WHERE invoice_id = p_invoice_id AND org_id = v_org_id
   ) THEN
     RAISE EXCEPTION 'Invoice % not found or access denied', p_invoice_id;
   END IF;
@@ -511,7 +511,7 @@ DECLARE
   v_reversal_id   UUID;
   v_new_paid      NUMERIC(12,2);
   v_new_remaining NUMERIC(12,2);
-  v_new_status    TEXT;
+  v_new_status    invoice_status;
 BEGIN
   -- Authorization: Admin only สำหรับ void
   IF NOT (has_app_role('admin') OR is_governance_role()) THEN
@@ -535,7 +535,7 @@ BEGIN
   END IF;
 
   -- ดึง invoice
-  SELECT * INTO v_inv FROM invoices WHERE id = v_receipt.invoice_id;
+  SELECT * INTO v_inv FROM invoices WHERE invoice_id = v_receipt.invoice_id;
 
   -- สร้าง reversal journal entry (สลับ debit/credit)
   INSERT INTO journal_entry (
@@ -588,8 +588,8 @@ BEGIN
   v_new_remaining := GREATEST(0, COALESCE(v_inv.total, 0) - v_new_paid);
 
   v_new_status := CASE
-    WHEN v_new_paid <= 0             THEN 'approved'   -- กลับไป approved
-    WHEN v_new_remaining > 0.005     THEN 'partial'    -- ยังค้างอยู่
+    WHEN v_new_paid <= 0             THEN 'PENDING'::invoice_status    -- กลับไป PENDING
+    WHEN v_new_remaining > 0.005     THEN 'PARTIAL'::invoice_status    -- ยังค้างอยู่
     ELSE v_inv.status
   END;
 
@@ -599,7 +599,7 @@ BEGIN
     status           = v_new_status,
     paid_at          = NULL,
     updated_at       = now()
-  WHERE id = v_receipt.invoice_id;
+  WHERE invoice_id = v_receipt.invoice_id;
 
   RETURN jsonb_build_object(
     'voided_receipt_id',  p_receipt_id,
@@ -623,8 +623,8 @@ COMMENT ON FUNCTION rpc_void_payment_receipt(UUID, TEXT) IS
 
 CREATE OR REPLACE VIEW v_invoice_payment_status AS
 SELECT
-  i.id                                              AS invoice_id,
-  i.code                                            AS invoice_code,
+  i.invoice_id,
+  i.invoice_code,
   i.org_id,
   i.status                                          AS invoice_status,
   COALESCE(i.total, 0)                              AS total_amount,
@@ -634,10 +634,10 @@ SELECT
   i.due_date,
   i.paid_at,
   CASE
-    WHEN i.status = 'paid'                          THEN 'FULLY_PAID'
+    WHEN i.status = 'PAID'                          THEN 'FULLY_PAID'
     WHEN COALESCE(i.paid_amount, 0) > 0             THEN 'PARTIAL'
     WHEN i.due_date < CURRENT_DATE
-      AND i.status NOT IN ('paid', 'cancelled')     THEN 'OVERDUE'
+      AND i.status NOT IN ('PAID', 'CANCELLED')     THEN 'OVERDUE'
     ELSE 'PENDING'
   END                                               AS payment_state,
   COUNT(pr.id)::INT                                 AS receipt_count,
@@ -645,13 +645,13 @@ SELECT
 
 FROM invoices i
 LEFT JOIN payment_receipt pr
-  ON pr.invoice_id = i.id
+  ON pr.invoice_id = i.invoice_id
  AND pr.org_id     = i.org_id
 
 WHERE i.org_id = get_user_org_id()   -- RLS ผ่าน view
 
 GROUP BY
-  i.id, i.code, i.org_id, i.status,
+  i.invoice_id, i.invoice_code, i.org_id, i.status,
   i.total, i.paid_amount, i.remaining_amount,
   i.due_date, i.paid_at;
 
@@ -683,7 +683,7 @@ CREATE INDEX IF NOT EXISTS idx_invoices_paid_amount
 
 CREATE INDEX IF NOT EXISTS idx_invoices_due_unpaid
   ON invoices(due_date, status)
-  WHERE status NOT IN ('paid', 'cancelled');
+  WHERE status NOT IN ('PAID', 'CANCELLED');
 
 -- ============================================================================
 -- END OF MIGRATION 0177
