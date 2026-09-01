@@ -56,7 +56,7 @@ BEGIN
       j.created_at,
       COUNT(*) OVER() AS total_count
     FROM jobs j
-    JOIN organizations o ON o.id = j.org_id
+    JOIN organizations o ON o.org_id = j.org_id
     WHERE (filter_org_id IS NULL OR j.org_id = filter_org_id)
       AND (
         j.title ILIKE '%' || search_query || '%'
@@ -124,7 +124,7 @@ BEGIN
       m.created_at,
       COUNT(*) OVER() AS total_count
     FROM org_members m
-    JOIN organizations o ON o.id = m.org_id
+    JOIN organizations o ON o.org_id = m.org_id
     WHERE (filter_org_id IS NULL OR m.org_id = filter_org_id)
       AND (
         m.display_name ILIKE '%' || search_query || '%'
@@ -193,7 +193,7 @@ BEGIN
       i.created_at,
       COUNT(*) OVER() AS total_count
     FROM invoices i
-    JOIN organizations o ON o.id = i.org_id
+    JOIN organizations o ON o.org_id = i.org_id
     WHERE (filter_org_id IS NULL OR i.org_id = filter_org_id)
       AND (
         i.invoice_number ILIKE '%' || search_query || '%'
