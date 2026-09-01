@@ -101,17 +101,34 @@ jobs:
       #    Rename to 0172_z0x_* is NOT viable: Supabase extracts only the
       #    leading numeric portion as the version key, so any 0172_*.sql
       #    gets version=0172 — colliding with 0172_jobs_quotations_invoices.sql.
-      #    Strategy: append each 20260828_*.sql to the end of
-      #    0172_jobs_quotations_invoices.sql (dependency order: schema first,
-      #    then dependents), then delete the originals. This merges all content
-      #    into a single version=0172 slot, ensures organizations table exists
-      #    before 0173 runs, and is ephemeral (CI-only).
+      #    Strategy:
+      #      • PREPEND 20260828_multi_tenant_schema.sql to the top of 0172 so
+      #        that public.organizations exists before the ALTER TABLE ... ADD
+      #        COLUMN org_id REFERENCES public.organizations statements that
+      #        are already in the body of 0172.
+      #      • APPEND the remaining five 20260828_*.sql files after 0172.
+      #    All originals are deleted. This merges all content into a single
+      #    version=0172 slot and is ephemeral (CI-only).
       # -----------------------------------------------------------------------
-      - name: Merge 20260828 migrations into 0172 (append-and-delete)
+      - name: Merge 20260828 migrations into 0172 (prepend-schema, append-rest)
         run: |
           cd supabase/migrations
+
+          # PREPEND multi_tenant_schema so organizations table is created
+          # before the ALTER TABLE ... REFERENCES public.organizations in 0172
+          {
+            echo "-- ============================================================"
+            echo "-- Merged from: 20260828_multi_tenant_schema.sql (prepended)"
+            echo "-- ============================================================"
+            cat 20260828_multi_tenant_schema.sql
+            echo ""
+            cat 0172_jobs_quotations_invoices.sql
+          } > 0172_merged_tmp.sql
+          mv 0172_merged_tmp.sql 0172_jobs_quotations_invoices.sql
+          rm 20260828_multi_tenant_schema.sql
+
+          # APPEND remaining 20260828_* files in dependency order
           for f in \
-            20260828_multi_tenant_schema.sql \
             20260828_audit_log_usage_metering.sql \
             20260828_notifications_super_admin.sql \
             20260828_platform_fts.sql \
@@ -124,6 +141,7 @@ jobs:
             cat "$f" >> 0172_jobs_quotations_invoices.sql
             rm "$f"
           done
+
           echo "20260828_* files merged and removed. Final 0172 line count:"
           wc -l 0172_jobs_quotations_invoices.sql
 
