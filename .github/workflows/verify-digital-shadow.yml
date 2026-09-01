@@ -75,6 +75,11 @@ on:
         required: false
         type: string
         default: ''
+      slack_channel_override:
+        description: 'Override Slack notification channel (e.g. #alerts-staging). Leave blank to use the webhook default.'
+        required: false
+        type: string
+        default: ''
 
   pull_request:
     branches:
@@ -94,6 +99,7 @@ on:
 # override and the Job 14 GitHub issue gate in one place.
 env:
   SARIF_CRITICAL_THRESHOLD: "${{ github.event.inputs.sarif_critical_threshold || '10' }}"
+  SLACK_CHANNEL_OVERRIDE: "${{ github.event.inputs.slack_channel_override || '' }}"
 
 jobs:
   # ────────────────────────────────────────────────────────────────────────────
@@ -838,6 +844,9 @@ jobs:
               ]
           }
 
+          ch_override = os.environ.get("SLACK_CHANNEL_OVERRIDE", "")
+          if ch_override:
+              payload["channel"] = ch_override
           data = json.dumps(payload).encode("utf-8")
           req = urllib.request.Request(
               webhook,
@@ -1040,6 +1049,9 @@ jobs:
               ]
           }
 
+          ch_override = os.environ.get("SLACK_CHANNEL_OVERRIDE", "")
+          if ch_override:
+              payload["channel"] = ch_override
           data = json.dumps(payload).encode("utf-8")
           req = urllib.request.Request(
               webhook,
@@ -1204,6 +1216,9 @@ jobs:
               ]
           }
 
+          ch_override = os.environ.get("SLACK_CHANNEL_OVERRIDE", "")
+          if ch_override:
+              payload["channel"] = ch_override
           data = json.dumps(payload).encode("utf-8")
           req = urllib.request.Request(
               webhook,
@@ -1429,6 +1444,9 @@ jobs:
               ]
           }
 
+          ch_override = os.environ.get("SLACK_CHANNEL_OVERRIDE", "")
+          if ch_override:
+              payload["channel"] = ch_override
           data = json.dumps(payload).encode("utf-8")
           req = urllib.request.Request(
               webhook,
@@ -2790,3 +2808,101 @@ jobs:
 
             await github.rest.pulls.update({ owner, repo, pull_number: prNumber, body });
             core.info('PR description updated with SARIF summary.');
+
+      - name: Comment on PR when SARIF findings exceed threshold
+        if: >-
+          steps.download.outcome == 'success' &&
+          fromJSON(needs.upload-eslint-sarif.outputs.new-findings) > fromJSON(env.SARIF_CRITICAL_THRESHOLD)
+        uses: actions/github-script@v7
+        env:
+          SUMMARY_PATH: /tmp/sarif-summary/
+          SARIF_CRITICAL_THRESHOLD: ${{ env.SARIF_CRITICAL_THRESHOLD }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs   = require('fs');
+            const path = require('path');
+            const summaryDir = process.env.SUMMARY_PATH;
+            const files = fs.readdirSync(summaryDir).filter(f => f.endsWith('.md'));
+            const summaryMd = files.length
+              ? fs.readFileSync(path.join(summaryDir, files[0]), 'utf8')
+              : '_No SARIF summary file found._';
+            const threshold = process.env.SARIF_CRITICAL_THRESHOLD;
+            const findings  = '${{ needs.upload-eslint-sarif.outputs.new-findings }}';
+            const body = [
+              '## \u26a0\ufe0f SARIF Critical Threshold Exceeded',
+              '',
+              `**${findings} new finding(s)** detected \u2014 threshold is **${threshold}**.`,
+              'Merge is blocked until findings drop below the threshold.',
+              '',
+              '<details>',
+              '<summary>\ud83d\udd0d SARIF Delta Summary</summary>',
+              '',
+              summaryMd,
+              '',
+              '</details>',
+            ].join('\n');
+            const prNumber = context.payload.pull_request.number;
+            const { owner, repo } = context.repo;
+            await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
+            core.info(`Posted SARIF threshold-breach comment on PR #${prNumber}.`);
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 20: Dry-run summary — posts a comment to PR #44 on manual trigger
+  #         listing all 19 job would-be results without executing them.
+  dry-run-summary:
+    name: "Dry-Run Summary \u2014 Manual Trigger"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Post dry-run summary comment to PR #44
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const jobs = [
+              { id: 'lint',                             name: 'ESLint + TypeScript type-check' },
+              { id: 'integration-tests',                name: 'Integration Tests' },
+              { id: 'feature-cache-coverage',           name: 'Feature Cache Unit Tests (coverage)' },
+              { id: 'post-coverage-badge',              name: 'Post Coverage Badge' },
+              { id: 'e2e-backend-gate',                 name: 'Playwright e2e — backend gate' },
+              { id: 'notify-slack-on-failure',          name: 'Slack — workflow failure' },
+              { id: 'notify-slack-on-success',          name: 'Slack — workflow success' },
+              { id: 'notify-coverage-badge-failure',    name: 'Slack — coverage badge failure' },
+              { id: 'create-webhook-broken-label',      name: 'Create webhook-broken label' },
+              { id: 'notify-success-pipeline-failure',  name: 'Slack — pipeline failure + issue' },
+              { id: 'post-workflow-summary',            name: 'Post Workflow Summary PR comment' },
+              { id: 'upload-eslint-sarif',              name: 'Upload ESLint SARIF + delta analysis' },
+              { id: 'close-webhook-broken-issue',       name: 'Close webhook-broken issue on success' },
+              { id: 'notify-slack-on-sarif-findings',   name: 'Slack — SARIF findings' },
+              { id: 'notify-slack-on-sarif-critical',   name: 'Slack — SARIF critical threshold' },
+              { id: 'open-sarif-findings-issue',        name: 'Open SARIF findings issue' },
+              { id: 'close-sarif-findings-issue',       name: 'Close SARIF findings issue on pass' },
+              { id: 'block-merge-on-sarif-critical',    name: 'Block merge on SARIF critical findings' },
+              { id: 'post-sarif-pr-description',        name: 'Post SARIF Summary in PR Description' },
+            ];
+            const rows = jobs
+              .map(j => `| \`${j.id}\` | ${j.name} | \u23ed\ufe0f skipped (dry-run) |`)
+              .join('\n');
+            const body = [
+              '## \u2139\ufe0f Dry-Run Summary \u2014 Manual Trigger',
+              '',
+              'This workflow was triggered via **workflow_dispatch**.',
+              'The following table shows what each job *would* have done on a real push.',
+              '',
+              '| Job ID | Job Name | Would-be Status |',
+              '|--------|----------|-----------------|',
+              rows,
+              '',
+              `> _Generated at ${new Date().toISOString()} by run \`${{ github.run_id }}\`._`,
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: 44,
+              body,
+            });
+            core.info('Dry-run summary comment posted to PR #44.');
