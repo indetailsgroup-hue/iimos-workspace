@@ -111,3 +111,14 @@ command  = "SELECT fn_check_mv_refresh_lag();"
 [cron."refresh-etax-health-trend-mv"]
 schedule = "0 0 * * *"
 command  = "SELECT rpc_refresh_etax_health_trend_mv();"
+
+
+# [6] Auto-create next month's etax_submissions partition (runs 20th of each month)
+#     Ensures the upcoming monthly partition exists before the month starts.
+[cron.jobs.auto-create-etax-partition]
+schedule = "0 0 20 * *"
+command  = "SELECT public.fn_auto_create_next_etax_partition();"
+
+[functions.etax-risk-notify]
+verify_jwt = true
+
