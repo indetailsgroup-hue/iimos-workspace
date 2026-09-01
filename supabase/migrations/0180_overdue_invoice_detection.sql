@@ -60,7 +60,7 @@ $$;
 CREATE TABLE IF NOT EXISTS invoice_notifications (
   id                UUID              PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id            UUID              NOT NULL,
-  invoice_id        UUID              NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  invoice_id        UUID              NOT NULL REFERENCES invoices(invoice_id) ON DELETE CASCADE,
   notification_type notification_type NOT NULL,
   status            notification_status NOT NULL DEFAULT 'pending',
 
@@ -209,7 +209,7 @@ BEGIN
       -- ยังไม่ได้จ่าย
       AND i.remaining_amount > 0
       -- สถานะที่ต้อง track
-      AND i.status NOT IN ('paid', 'cancelled', 'void', 'draft')
+      AND i.status NOT IN ('PAID', 'CANCELLED')
       -- overdue หรือ due-soon (7 วัน)
       AND (
         i.due_date < v_today                         -- overdue
@@ -218,7 +218,7 @@ BEGIN
       -- ไม่ดึง invoice ที่ snoozed อยู่
       AND NOT EXISTS (
         SELECT 1 FROM invoice_notifications n
-        WHERE n.invoice_id = i.id
+        WHERE n.invoice_id = i.invoice_id
           AND n.status      = 'snoozed'
           AND n.snoozed_until >= v_today
       )
@@ -231,8 +231,8 @@ BEGIN
     IF p_dry_run THEN
       -- แค่เก็บผลลัพธ์ ไม่ insert
       v_dry_results := v_dry_results || jsonb_build_object(
-        'invoice_id',       v_invoice.id,
-        'invoice_code',     v_invoice.code,
+        'invoice_id',       v_invoice.invoice_id,
+        'invoice_code',     v_invoice.invoice_code,
         'org_id',           v_invoice.org_id,
         'customer_name',    v_invoice.customer_name,
         'due_date',         v_invoice.due_date,
@@ -258,12 +258,12 @@ BEGIN
       )
       VALUES (
         v_invoice.org_id,
-        v_invoice.id,
+        v_invoice.invoice_id,
         v_notif_type,
         'pending',
         v_days_overdue,
         v_invoice.remaining_amount,
-        v_invoice.code,
+        v_invoice.invoice_code,
         v_invoice.customer_name
       );
       v_inserted := v_inserted + 1;
@@ -303,7 +303,7 @@ DECLARE
   v_notif_type   notification_type;
 BEGIN
   -- ตรวจเฉพาะ invoices ที่มี remaining_amount > 0 และเลยกำหนด
-  IF NEW.remaining_amount <= 0 OR NEW.status IN ('paid', 'cancelled', 'void') THEN
+  IF NEW.remaining_amount <= 0 OR NEW.status IN ('PAID', 'CANCELLED') THEN
     RETURN NEW;
   END IF;
 
@@ -356,7 +356,7 @@ CREATE TRIGGER trg_check_invoice_overdue
   FOR EACH ROW
   WHEN (
     NEW.remaining_amount > 0
-    AND NEW.status NOT IN ('paid', 'cancelled', 'void', 'draft')
+    AND NEW.status NOT IN ('PAID', 'CANCELLED')
   )
   EXECUTE FUNCTION fn_check_invoice_overdue_on_update();
 
@@ -396,8 +396,8 @@ BEGIN
   INTO   v_result
   FROM (
     SELECT jsonb_build_object(
-      'invoice_id',        i.id,
-      'invoice_code',      i.code,
+      'invoice_id',        i.invoice_id,
+      'invoice_code',      i.invoice_code,
       'customer_name',     COALESCE(c.name, 'Unknown'),
       'due_date',          i.due_date,
       'days_overdue',      (v_today - i.due_date::DATE)::INT,
@@ -410,7 +410,7 @@ BEGIN
       'invoice_status',    i.status,
       'notification_count', (
         SELECT COUNT(*) FROM invoice_notifications n
-        WHERE n.invoice_id = i.id AND n.org_id = i.org_id
+        WHERE n.invoice_id = i.invoice_id AND n.org_id = i.org_id
       ),
       'last_notification', (
         SELECT jsonb_build_object(
@@ -419,7 +419,7 @@ BEGIN
           'created_at', n2.created_at
         )
         FROM invoice_notifications n2
-        WHERE n2.invoice_id = i.id
+        WHERE n2.invoice_id = i.invoice_id
         ORDER BY n2.created_at DESC
         LIMIT 1
       )
@@ -430,7 +430,7 @@ BEGIN
     WHERE
       i.org_id          = v_org_id
       AND i.remaining_amount > 0
-      AND i.status NOT IN ('paid', 'cancelled', 'void', 'draft')
+      AND i.status NOT IN ('PAID', 'CANCELLED')
       AND (
         i.due_date < v_today
         OR (p_include_due_soon AND i.due_date BETWEEN v_today AND v_today + 7)
@@ -556,8 +556,8 @@ COMMENT ON FUNCTION rpc_snooze_notification(UUID, INT) IS
 
 CREATE OR REPLACE VIEW v_overdue_invoices AS
 SELECT
-  i.id                                    AS invoice_id,
-  i.code                                  AS invoice_code,
+  i.invoice_id                            AS invoice_id,
+  i.invoice_code                          AS invoice_code,
   i.org_id,
   i.status,
   COALESCE(c.name, 'Unknown')             AS customer_name,
@@ -587,12 +587,12 @@ SELECT
   -- Notification summary
   (
     SELECT COUNT(*) FROM invoice_notifications n
-    WHERE n.invoice_id = i.id AND n.status = 'pending'
+    WHERE n.invoice_id = i.invoice_id AND n.status = 'pending'
   )                                       AS pending_notifications,
 
   (
     SELECT MAX(n.created_at) FROM invoice_notifications n
-    WHERE n.invoice_id = i.id
+    WHERE n.invoice_id = i.invoice_id
   )                                       AS last_notified_at
 
 FROM invoices i
@@ -600,7 +600,7 @@ LEFT JOIN customers c ON c.customer_id = i.customer_id
 WHERE
   i.org_id           = get_user_org_id()   -- RLS ผ่าน view
   AND i.remaining_amount > 0
-  AND i.status NOT IN ('paid', 'cancelled', 'void', 'draft')
+  AND i.status NOT IN ('PAID', 'CANCELLED')
   AND i.due_date IS NOT NULL;
 
 COMMENT ON VIEW v_overdue_invoices IS
@@ -691,7 +691,7 @@ GRANT SELECT ON v_overdue_aging_summary TO authenticated;
 CREATE INDEX IF NOT EXISTS idx_invoices_overdue
   ON invoices(due_date, remaining_amount, status, org_id)
   WHERE remaining_amount > 0
-    AND status NOT IN ('paid', 'cancelled', 'void', 'draft');
+    AND status NOT IN ('PAID', 'CANCELLED');
 
 CREATE INDEX IF NOT EXISTS idx_notif_invoice_type_date
   ON invoice_notifications(invoice_id, notification_type, (created_at::DATE));
