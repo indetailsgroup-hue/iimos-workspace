@@ -1530,6 +1530,8 @@ jobs:
       - close-webhook-broken-issue
       - notify-slack-on-sarif-findings
       - open-sarif-findings-issue
+      - notify-slack-on-sarif-critical
+      - close-sarif-findings-issue
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -2081,7 +2083,8 @@ jobs:
       always() &&
       needs.upload-eslint-sarif.result != 'cancelled' &&
       needs.upload-eslint-sarif.outputs.new-findings != '' &&
-      fromJSON(needs.upload-eslint-sarif.outputs.new-findings) > 0
+      fromJSON(needs.upload-eslint-sarif.outputs.new-findings) > 0 &&
+      fromJSON(needs.upload-eslint-sarif.outputs.new-findings) <= fromJSON(env.SARIF_CRITICAL_THRESHOLD)
     runs-on: ubuntu-latest
     timeout-minutes: 3
 
@@ -2175,6 +2178,120 @@ jobs:
         env:
           SLACK_WEBHOOK_URL:  ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+  # ── Job 13b: notify-slack-on-sarif-critical ──────────────────────────────────────
+  # Posts a distinct 🚨 Slack alert when new ESLint SARIF findings exceed
+  # SARIF_CRITICAL_THRESHOLD.  Runs in parallel with open-sarif-findings-issue
+  # (both gate on the same condition).  Uses a 🚨 header and an explicit
+  # threshold-exceeded banner to distinguish it from the normal findings alert.
+  # ────────────────────────────────────────────────────────────────────────────
+  notify-slack-on-sarif-critical:
+    name: "Slack — Critical ESLint SARIF Findings"
+    needs: [upload-eslint-sarif]
+    if: >-
+      always() &&
+      needs.upload-eslint-sarif.result != 'cancelled' &&
+      needs.upload-eslint-sarif.outputs.new-findings != '' &&
+      fromJSON(needs.upload-eslint-sarif.outputs.new-findings) > fromJSON(env.SARIF_CRITICAL_THRESHOLD)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      # ── Format rule breakdown into Slack mrkdwn bullet list ─────────────────
+      # The rule-breakdown-md output is a markdown table; Slack does not render
+      # markdown tables, so this step converts each table row to a bullet entry
+      # and outputs a single-line string (with \n escape sequences) safe for
+      # embedding directly inside a JSON string value.
+      - name: Format rule breakdown for Slack
+        id: format-rule-breakdown
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          md = os.environ.get('RULE_BREAKDOWN_MD', '')
+          rows = []
+          for line in md.strip().splitlines():
+              # Match markdown table rows: | `rule-id` | 3 |
+              hit = re.match(r'\|\s*`(.+?)`\s*\|\s*(\d+)\s*\|', line)
+              if hit:
+                  rows.append(f'\u2022 `{hit.group(1)}`: {hit.group(2)}')
+
+          text = '\\n'.join(rows) if rows else '_No rule breakdown available_'
+
+          gho = os.environ.get('GITHUB_OUTPUT', '')
+          if gho:
+              with open(gho, 'a') as f:
+                  f.write(f'slack-rule-text={text}\n')
+          print(f'slack-rule-text: {text[:120]}...' if len(text) > 120 else f'slack-rule-text: {text}')
+          PY
+        env:
+          RULE_BREAKDOWN_MD: ${{ needs.upload-eslint-sarif.outputs.rule-breakdown-md }}
+
+      - name: Post Slack Block Kit message — CRITICAL SARIF findings
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🚨 ESLint: CRITICAL — Findings Threshold Exceeded",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ":rotating_light: *${{ needs.upload-eslint-sarif.outputs.new-findings }}* new findings exceed the critical threshold of *${{ env.SARIF_CRITICAL_THRESHOLD }}*. A tracking issue has been opened automatically."
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*New findings:*\n${{ needs.upload-eslint-sarif.outputs.new-findings }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Total findings:*\n${{ needs.upload-eslint-sarif.outputs.total-findings }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Suppressed by baseline:*\n${{ needs.upload-eslint-sarif.outputs.suppressed-findings }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Branch:*\n${{ github.head_ref || github.ref_name }}"
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*New findings by rule:*\n${{ steps.format-rule-breakdown.outputs.slack-rule-text }}"
+                  }
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "Actor: *${{ github.actor }}* · <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run #${{ github.run_number }}>"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL:  ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
   # ── Job 14: open-sarif-findings-issue ───────────────────────────────────────
   # Mirrors the webhook-broken issue pattern: whenever new ESLint SARIF findings
   # exceed SARIF_CRITICAL_THRESHOLD (default 10), this job:
@@ -2231,7 +2348,7 @@ jobs:
               }
             }
 
-      - name: Open sarif-findings issue
+      - name: Open or update sarif-findings issue
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -2249,32 +2366,156 @@ jobs:
               'actions', 'runs', context.runId,
             ].join('/');
 
-            const body = [
-              '## ESLint SARIF: Critical Findings Threshold Exceeded',
-              '',
-              `New ESLint findings (**${newFindings}**) exceeded the critical`,
-              `threshold of **${threshold}** in run [#${context.runNumber}](${runUrl}).`,
-              '',
-              '| Metric | Count |',
-              '|---|---|',
-              `| New (vs baseline)       | ${newFindings} |`,
-              `| Total findings          | ${total}        |`,
-              `| Suppressed by baseline  | ${suppressed}   |`,
-              '',
-              `**Branch:** \`${branch}\``,
-              `**Actor:**  @${context.actor}`,
-              '',
-              '---',
-              `> Auto-opened by workflow run [#${context.runNumber}](${runUrl}).`,
-              '> Review the Security \u2192 Code Scanning tab and resolve or suppress findings.',
-            ].join('\n');
-
-            const { data: issue } = await github.rest.issues.create({
-              owner:  context.repo.owner,
-              repo:   context.repo.repo,
-              title:  `ESLint: ${newFindings} new SARIF findings on \`${branch}\` (run #${context.runNumber})`,
-              body,
-              labels: ['sarif-findings'],
+            // Check for an existing open sarif-findings issue on this branch.
+            // Title format: "ESLint: N new SARIF findings on `branch` (run #N)"
+            // Filter by label first (cheap), then by title containing the branch.
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner:    context.repo.owner,
+              repo:     context.repo.repo,
+              labels:   'sarif-findings',
+              state:    'open',
+              per_page: 50,
             });
-            core.info(`Opened issue #${issue.number}: ${issue.title}`);
-            core.setOutput('issue-number', String(issue.number));
+
+            const existing = openIssues.find(
+              i => i.title.includes(`\`${branch}\``)  // match same branch
+            );
+
+            if (existing) {
+              // Post a follow-up comment rather than opening a duplicate issue.
+              await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: existing.number,
+                body: [
+                  '### :rotating_light: Critical findings persist in subsequent run',
+                  '',
+                  `Run [#${context.runNumber}](${runUrl}) found **${newFindings}** new findings`,
+                  `(threshold: **${threshold}**) \u2014 still above the critical threshold.`,
+                  '',
+                  '| Metric | Count |',
+                  '|---|---|',
+                  `| New (vs baseline)       | ${newFindings} |`,
+                  `| Total findings          | ${total}        |`,
+                  `| Suppressed by baseline  | ${suppressed}   |`,
+                  '',
+                  `> Auto-comment by workflow run [#${context.runNumber}](${runUrl}).`,
+                ].join('\n'),
+              });
+              core.info(`Commented on existing issue #${existing.number}: ${existing.title}`);
+              core.setOutput('issue-number', String(existing.number));
+            } else {
+              // No open issue for this branch — open a new tracking issue.
+              const body = [
+                '## ESLint SARIF: Critical Findings Threshold Exceeded',
+                '',
+                `New ESLint findings (**${newFindings}**) exceeded the critical`,
+                `threshold of **${threshold}** in run [#${context.runNumber}](${runUrl}).`,
+                '',
+                '| Metric | Count |',
+                '|---|---|',
+                `| New (vs baseline)       | ${newFindings} |`,
+                `| Total findings          | ${total}        |`,
+                `| Suppressed by baseline  | ${suppressed}   |`,
+                '',
+                `**Branch:** \`${branch}\``,
+                `**Actor:**  @${context.actor}`,
+                '',
+                '---',
+                `> Auto-opened by workflow run [#${context.runNumber}](${runUrl}).`,
+                '> Review the Security \u2192 Code Scanning tab and resolve or suppress findings.',
+              ].join('\n');
+
+              const { data: issue } = await github.rest.issues.create({
+                owner:  context.repo.owner,
+                repo:   context.repo.repo,
+                title:  `ESLint: ${newFindings} new SARIF findings on \`${branch}\` (run #${context.runNumber})`,
+                body,
+                labels: ['sarif-findings'],
+              });
+              core.info(`Opened issue #${issue.number}: ${issue.title}`);
+              core.setOutput('issue-number', String(issue.number));
+            }
+  # ── Job 15: close-sarif-findings-issue ──────────────────────────────────────
+  # Mirrors the close-webhook-broken-issue pattern: whenever upload-eslint-sarif
+  # completes with new-findings at or below SARIF_CRITICAL_THRESHOLD, this job
+  # auto-closes any open `sarif-findings` issues for the repository, posting a
+  # recovery comment first so the audit trail is preserved.
+  #
+  # Condition: runs only when new-findings is set (not '') AND is <= threshold,
+  # meaning the SARIF backlog is no longer critical.  Cancelled upstream jobs
+  # are excluded — we only close on a genuine clean run.
+  # ────────────────────────────────────────────────────────────────────────────
+  close-sarif-findings-issue:
+    name: Close sarif-findings Issue on Recovery
+    needs: [upload-eslint-sarif]
+    if: >-
+      always() &&
+      needs.upload-eslint-sarif.result != 'cancelled' &&
+      needs.upload-eslint-sarif.outputs.new-findings != '' &&
+      fromJSON(needs.upload-eslint-sarif.outputs.new-findings) <= fromJSON(env.SARIF_CRITICAL_THRESHOLD)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    permissions:
+      issues: write   # post closure comment + close the issue
+
+    steps:
+      - name: Close any open sarif-findings issues
+        uses: actions/github-script@v7
+        env:
+          NEW_FINDINGS: ${{ needs.upload-eslint-sarif.outputs.new-findings }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner:    context.repo.owner,
+              repo:     context.repo.repo,
+              labels:   'sarif-findings',
+              state:    'open',
+              per_page: 50,
+            });
+
+            if (issues.length === 0) {
+              core.info('No open sarif-findings issues found — nothing to close.');
+              return;
+            }
+
+            const newFindings = parseInt(process.env.NEW_FINDINGS, 10);
+            const runUrl = [
+              process.env.GITHUB_SERVER_URL,
+              context.repo.owner,
+              context.repo.repo,
+              'actions', 'runs', context.runId,
+            ].join('/');
+
+            for (const issue of issues) {
+              // Post a recovery comment before closing
+              await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: issue.number,
+                body: [
+                  '### ESLint SARIF findings back under threshold \u2705',
+                  '',
+                  `The \`upload-eslint-sarif\` job completed in`,
+                  `run [#${context.runNumber}](${runUrl}) with`,
+                  `**${newFindings}** new finding(s) — at or below the`,
+                  `critical threshold (\`SARIF_CRITICAL_THRESHOLD\`).`,
+                  'Auto-closing this issue.',
+                  '',
+                  `> Resolved by workflow run [#${context.runNumber}](${runUrl})`,
+                ].join('\n'),
+              });
+
+              await github.rest.issues.update({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: issue.number,
+                state:        'closed',
+                state_reason: 'completed',
+              });
+
+              core.info(`Closed issue #${issue.number}: ${issue.title}`);
+            }
+            core.info(`Closed ${issues.length} sarif-findings issue(s).`);
