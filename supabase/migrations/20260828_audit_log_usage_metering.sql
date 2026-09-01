@@ -8,7 +8,7 @@
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  org_id UUID NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
   action TEXT NOT NULL,
   actor_type TEXT NOT NULL CHECK (actor_type IN ('user', 'system', 'api')),
   actor_id TEXT NOT NULL,
@@ -80,7 +80,7 @@ BEGIN
   SELECT COUNT(*) INTO v_member_count
   FROM org_members
   WHERE org_id = p_org_id
-    AND status = 'active';
+    AND is_active = TRUE;
 
   SELECT COALESCE(SUM((metadata->>'size')::BIGINT), 0) INTO v_storage_bytes
   FROM storage.objects
@@ -112,7 +112,7 @@ BEGIN
 
   SELECT plan, max_jobs_per_month, status INTO v_org
   FROM organizations
-  WHERE id = NEW.org_id;
+  WHERE org_id = NEW.org_id;
 
   IF v_org.status = 'SUSPENDED' THEN
     RAISE EXCEPTION 'Organization is suspended';
@@ -148,7 +148,7 @@ DECLARE
 BEGIN
   SELECT plan, max_users, status INTO v_org
   FROM organizations
-  WHERE id = NEW.org_id;
+  WHERE org_id = NEW.org_id;
 
   IF v_org.status = 'SUSPENDED' THEN
     RAISE EXCEPTION 'Organization is suspended';
@@ -157,7 +157,7 @@ BEGIN
   SELECT COUNT(*) INTO v_member_count
   FROM org_members
   WHERE org_id = NEW.org_id
-    AND status = 'active';
+    AND is_active = TRUE;
 
   IF v_member_count >= v_org.max_users THEN
     RAISE EXCEPTION 'Member limit reached (% / %)', v_member_count, v_org.max_users;
