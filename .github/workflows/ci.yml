@@ -938,7 +938,9 @@ jobs:
             "s/CHECK (message_kind IN ('text', 'flex', 'quick_reply'))/CHECK (message_kind IN ('text', 'flex', 'image', 'quick_reply'))/" \
             supabase/migrations/0177_audit_log_insert_hardening.sql
           echo "Patch applied to 0177_audit:"
-          echo "  message_kind constraint: $(grep -o \"message_kind IN ([^)]*))\" supabase/migrations/0177_audit_log_insert_hardening.sql || echo not found)"
+          grep -c 'image' supabase/migrations/0177_audit_log_insert_hardening.sql \
+            && echo "  'image' present in constraint (patch OK)" \
+            || echo "  WARNING: 'image' not found after patch"
 
       # ── Iter 15: patch 0173_rollback.sql — plural table names + exception-safe
       #   publication adds.  Uses Python heredoc so $pub$ dollar signs are never
