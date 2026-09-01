@@ -293,11 +293,57 @@ jobs:
               );
             }
 
+      - name: Post validation badge PR comment
+        id: badge-comment
+        if: always() && inputs.pr_number != ''
+        uses: actions/github-script@v7
+        env:
+          VALIDATION_PASSED: ${{ steps.schema-check.outputs.validation_passed }}
+          PR_NUMBER:         ${{ inputs.pr_number }}
+          RUN_URL:           ${{ inputs.run_url }}
+        with:
+          script: |
+            const passed   = process.env.VALIDATION_PASSED === 'true';
+            const prNumber = parseInt(process.env.PR_NUMBER || '0', 10);
+            const runUrl   = process.env.RUN_URL || '';
+            if (!prNumber) { core.info('No valid PR number — skipping badge comment'); return; }
+            const icon   = passed ? '\u2705' : '\u274c';
+            const label  = passed ? '**passed**' : '**failed**';
+            const detail = passed
+              ? 'All `conclude-pipeline-gate` inputs passed schema validation for this run.'
+              : `\u26a0\ufe0f One or more \`conclude-pipeline-gate\` inputs failed schema validation — see [run logs](${runUrl}) for details.`;
+            const body = [
+              `<!-- conclude-pipeline-gate-validation -->`,
+              `### ${icon} Gate Schema Validation \u2014 ${label}`,
+              ``,
+              detail,
+              ``,
+              `_Updated by \`validate-inputs\` \u00b7 [View run](${runUrl})_`,
+            ].join('\n');
+            const MARKER = '<!-- conclude-pipeline-gate-validation -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(MARKER));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body,
+              });
+              core.info(`Updated validation badge comment #${existing.id} on PR #${prNumber}`);
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: prNumber, body,
+              });
+              core.info(`Created validation badge comment on PR #${prNumber}`);
+            }
+
   post-pipeline-gate:
     name: Post Pipeline Gate
-    needs: [validate-inputs]
+    needs: [validate-inputs, smoke-test-validate-inputs]
     runs-on: ubuntu-latest
-    if: always() && !cancelled() && github.event_name == 'workflow_call'
+    if: always() && !cancelled() && github.event_name == 'workflow_call' && needs.smoke-test-validate-inputs.result == 'success'
 
     permissions:
       pull-requests: write
@@ -745,6 +791,31 @@ jobs:
               core.info(`TC-5 PASSED — ${errors.length} error(s) detected: ${errors.join('; ')}`);
             }
 
+      - name: "TC-6: overall_status='unknown' not in VALID_STATUSES"
+        id: tc6
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Payload: overall_status='unknown' — not a member of VALID_STATUSES.
+            // Expected: invalid-status error → validation_passed='false'
+            const VALID_STATUSES = ['success', 'failure', 'cancelled', 'skipped', 'neutral'];
+            const errors         = [];
+            const overallStatus  = 'unknown';             // bad — not a valid status
+            if (!VALID_STATUSES.includes(overallStatus))
+              errors.push(
+                `overall_status '${overallStatus}' is invalid — ` +
+                `expected one of: ${VALID_STATUSES.join(', ')}`
+              );
+            if (errors.length === 0) {
+              core.setFailed(
+                'TC-6 FAILED: expected invalid-status error for overall_status="unknown" but got none ' +
+                '(validate-inputs would have incorrectly set validation_passed=true)'
+              );
+            } else {
+              core.info(`TC-6 PASSED — ${errors.length} error(s) detected: ${errors.join('; ')}`);
+            }
+
       - name: "Job summary — TC results table"
         if: always()
         env:
@@ -753,6 +824,7 @@ jobs:
           TC3_OUTCOME: ${{ steps.tc3.outcome }}
           TC4_OUTCOME: ${{ steps.tc4.outcome }}
           TC5_OUTCOME: ${{ steps.tc5.outcome }}
+          TC6_OUTCOME: ${{ steps.tc6.outcome }}
         run: |
           tc() { [ "$1" = "success" ] && printf ':white_check_mark: PASS' || printf ':x: FAIL'; }
           {
@@ -765,11 +837,12 @@ jobs:
             echo "| TC-3 | Invalid \`overall_status\` enum value | VALID_STATUSES enum | $(tc "$TC3_OUTCOME") |"
             echo "| TC-4 | Malformed \`commit_sha\` (not 40-char hex) | SHA-1 regex | $(tc "$TC4_OUTCOME") |"
             echo "| TC-5 | \`overall_status='failure'\` + empty \`critical_failed_jobs\` | Cross-validation (reverse) | $(tc "$TC5_OUTCOME") |"
+            echo "| TC-6 | \`overall_status='unknown'\` not in VALID_STATUSES | VALID_STATUSES enum | $(tc \"$TC6_OUTCOME\") |"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
           # Fail job if any TC failed (continue-on-error masked the individual step failures)
           failed=0
-          for outcome in "$TC1_OUTCOME" "$TC2_OUTCOME" "$TC3_OUTCOME" "$TC4_OUTCOME" "$TC5_OUTCOME"; do
+          for outcome in "$TC1_OUTCOME" "$TC2_OUTCOME" "$TC3_OUTCOME" "$TC4_OUTCOME" "$TC5_OUTCOME" "$TC6_OUTCOME"; do
             [ "$outcome" != "success" ] && failed=1
           done
           if [ "$failed" = "1" ]; then
@@ -777,4 +850,4 @@ jobs:
             echo "_⚠️ One or more TCs failed — check step logs._" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          echo "_All 5 smoke-test TCs passed._" >> "$GITHUB_STEP_SUMMARY"
+          echo "_All 6 smoke-test TCs passed._" >> "$GITHUB_STEP_SUMMARY"
