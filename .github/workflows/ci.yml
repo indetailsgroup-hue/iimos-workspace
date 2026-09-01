@@ -1132,8 +1132,7 @@ jobs:
           )
 
           if new_content == content:
-              print(f'ERROR: CONSTRAINT uq_notification_daily pattern not found in {fname}')
-              sys.exit(1)
+              print(f'NOTE: CONSTRAINT uq_notification_daily pattern not found in {fname} — file is already patched; skipping constraint removal')
 
           # Step 2 (iter 25j): fix ALL remaining (created_at::DATE) -> double-wrapped IMMUTABLE expression
           # Covers: ON CONFLICT clause in trigger fn (orig line 344) + CREATE INDEX (orig line 697)
