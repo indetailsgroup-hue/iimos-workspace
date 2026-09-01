@@ -677,6 +677,9 @@ jobs:
           ALTER TABLE IF EXISTS public.journal_line ADD COLUMN IF NOT EXISTS description  text;
           -- invoice_line_items stub (0172_z) is missing org_id; 0176 filters by org_id.
           ALTER TABLE IF EXISTS public.invoice_line_items ADD COLUMN IF NOT EXISTS org_id uuid;
+          -- capture_type_config (0049) missing description column used by 0176_field_purchase_core INSERT.
+          -- No migration between 0049-0175 adds it; add here so the seed INSERT succeeds.
+          ALTER TABLE IF EXISTS public.capture_type_config ADD COLUMN IF NOT EXISTS description text;
 
           -- get_user_org_id() stub (used in 0174 RLS policies and 0176 view — returns caller's org)
           CREATE OR REPLACE FUNCTION public.get_user_org_id()
