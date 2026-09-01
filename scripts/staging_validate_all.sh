@@ -2,7 +2,8 @@
 # =============================================================================
 # staging_validate_all.sh
 # Master staging validation script — chains all per-migration scripts
-# in dependency order (0186 → 0187 → 0188 → 0189 → 0190 → 0191 → 0192 → 0193)
+# in dependency order (0186 → 0187 → 0188 → 0189 → 0190 → 0191 → 0192 →
+#                      0193 → 0194 → 0195)
 # and produces a single pass/fail summary table.
 #
 # Usage:
@@ -94,6 +95,8 @@ declare -a SCRIPT_REGISTRY=(
   "0191|${SCRIPT_DIR}/staging_validate_0191.sh"
   "0192|${SCRIPT_DIR}/staging_validate_0192.sh"
   "0193|${SCRIPT_DIR}/staging_validate_0193.sh"
+  "0194|${SCRIPT_DIR}/staging_validate_0194.sh"
+  "0195|${SCRIPT_DIR}/staging_validate_0195.sh"
 )
 
 # ---------------------------------------------------------------------------
@@ -188,8 +191,8 @@ section "§3 Combined vitest run"
 if $NO_VITEST; then
   warn "Vitest suppressed via --no-vitest"
 else
-  info "Running all 0194-related test suites with vitest..."
-  TEST_PATTERN="src/__tests__/rls/(0186|0187|0188|0189|0190|0191|0192|0193|0194)"
+  info "Running all eTax observability test suites (0186–0195) with vitest..."
+  TEST_PATTERN="src/__tests__/rls/(0186|0187|0188|0189|0190|0191|0192|0193|0194|0195)"
 
   T_VIT_START=$(date +%s)
   set +e
@@ -228,7 +231,7 @@ for MIG_ID in "${ORDER[@]}"; do
   case "$MIG_ID" in
     vitest)
       LABEL="(combined vitest)"
-      SCRIPT_LABEL="npx vitest run (all 0186–0194 test suites)"
+      SCRIPT_LABEL="npx vitest run (all 0186–0195 test suites)"
       ;;
     *)
       LABEL="$MIG_ID"
