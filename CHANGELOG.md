@@ -5,6 +5,56 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v17.5.1] — SuperEmployeeProgressPanel Stories + AI Cost Estimation — 2027-01-20
+
+### Added
+
+#### Super Employee Tracker — Storybook Stories (Task 44)
+- **`src/training/SuperEmployeeProgressPanel.stories.tsx`** — 11 CSF3 Storybook stories
+  - `PlanGateWallFree` / `PlanGateWallStarter` — gate wall for FREE/STARTER plans
+  - `LoadingSkeleton` — `isLoading=true, employeeReadiness=null` → `panel-loading` shown
+  - `Default` / `StageAiAware` / `StageAiAssisted` / `StageAiPartner` / `StageSuperEmployee` — all 5 stages with correct `data-stage` + `data-status` attributes verified
+  - `StageAiAssisted` / `StageAiPartner` / `StageSuperEmployee` — AI Readiness badge assertion (score ≥ 50)
+  - `WithSkillGapsNonAdmin` — 2 open gaps visible, `isAdmin=false` → no resolve button
+  - `AdminResolveInteraction` — play: click resolve → `resolveSkillGap` spy called with `(orgId, orgPlan, gapId)` + `fetchSkillGaps` re-fetch verified
+  - `withProgressStore` decorator injects all 9 store fields via `useSuperEmployeeStore.setState()`
+
+#### AI Cost Estimation Module — Schema, Types & Store (Task 45)
+- **`supabase/migrations/20270120_ai_cost_estimation.sql`** — AI Cost Estimation schema (ENTERPRISE plan)
+  - Enum types: `ace_ai_tool` (8 values), `ace_cost_unit` (5 values), `ace_task_category` (8 values), `ace_period_type` (3 values)
+  - `ace_cost_models` — per-org AI tool cost configurations; input/output separate rates for PER_TOKEN models; THB exchange rate snapshot
+  - `ace_usage_logs` — append-only AI tool usage events; cost snapshotted at log time; no UPDATE/DELETE policies
+  - `ace_task_estimates` — pre-task cost + time estimates with actuals fill-in and ROI tracking
+  - `ace_budget_periods` — monthly/quarterly/annual AI spend budgets with configurable alert threshold
+  - `ace_usage_summary_v` — monthly aggregated cost + usage per org per tool (SECURITY INVOKER)
+  - `ace_task_roi_v` — per-task ROI view with cost variance between estimate and actual (SECURITY INVOKER)
+  - `ace_is_enterprise()` plan gate SECURITY DEFINER function (used in all RLS policies)
+  - Full RLS: employee sees own logs; ADMIN+ sees all; ADMIN+ only for cost model/budget writes; append-only log enforcement
+  - 6 indexes; `ace_set_updated_at` trigger on 3 tables; assertion block (4 tables + 2 views + RLS)
+- **`src/ai-cost/aiCostEstimationTypes.ts`** — Complete TypeScript type system
+  - Union types: `AiTool`, `CostUnit`, `AceTaskCategory`, `AcePeriodType`
+  - DB row types: `CostModelRow`, `UsageLogRow`, `TaskEstimateRow`, `BudgetPeriodRow`, `UsageSummaryRow`, `TaskRoiRow`
+  - App-layer types: `AiCostModel`, `AiUsageLog`, `AiTaskEstimate`, `AiBudgetPeriod`, `AiUsageSummary`, `AiTaskRoi`
+  - Payloads: `CreateCostModelPayload`, `LogUsagePayload`, `CreateTaskEstimatePayload`, `UpdateActualsPayload`, `CreateBudgetPeriodPayload`
+  - Plan gate: `canAccessAiCostEstimation` + `AiCostEstimationPlanGateError` (ENTERPRISE only)
+  - Constants: `AI_TOOL_LABEL_TH`, `COST_UNIT_LABEL_TH`, `TASK_CATEGORY_LABEL_TH`, `DEFAULT_THB_EXCHANGE_RATE = 35.0`
+  - Filters: `AiCostFilters`, `DEFAULT_AI_COST_FILTERS`
+  - Utilities: `computeTokenCostUsd` (separate input/output rates), `computeRoiPct`, `usdToThb`
+  - 6 mappers (DB row → app type)
+- **`src/ai-cost/aiCostEstimationStore.ts`** — `useAiCostEstimationStore` Zustand store
+  - 16 actions across 4 domains; ENTERPRISE plan gate on all write actions
+  - Cost Models: `fetchCostModels`, `createCostModel`, `updateCostModel`, `deactivateCostModel`
+  - Usage Logs: `logUsage` (auto-computes cost from active model), `fetchUsageLogs` (with filter support), `fetchUsageSummary`
+  - Task Estimates: `createTaskEstimate` (auto-computes multi-model cost + ROI), `fetchTaskEstimates`, `updateActuals`, `fetchTaskRoi`
+  - Budget Periods: `fetchBudgetPeriods`, `createBudgetPeriod`, `updateBudgetPeriod`
+  - UI: `setFilters`, `clearError`; separate loading flags per domain
+
+### Merged
+- **PR #77** — `feature/v17-5-super-employee-panel` → `main` (squash merge `af6f329b`)
+- **Tag:** `v17.5.1` → `8a7a6be8`
+
+---
+
 ## [v17.5.0] — Training Tracker + Super Employee Tracker — 2027-01-15
 
 ### Added

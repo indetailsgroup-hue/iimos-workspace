@@ -1,11 +1,11 @@
 # Monolith Implementation Progress
 
-## v17.5 — Training Tracker + Super Employee Tracker (✅ Released 2027-01-15 | Tasks 41–43 in PR #77)
+## v17.5 — Training Tracker + Super Employee Tracker + AI Cost Estimation (✅ v17.5.0 Released 2027-01-15 | v17.5.1 Released 2027-01-20)
 
-**Branch:** `feature/v17-5-training-tracker-stories` (merged) | **PR:** #76 (merged, squash `3a819c17`) | **Tag:** v17.5.0
-**PR #77:** `feature/v17-5-super-employee-panel` → main | Commit: `f685dbd6` | Status: pending merge
+**Tag v17.5.0:** `3a819c17` | **Tag v17.5.1:** `8a7a6be8`
+**PR #76:** merged (squash `3a819c17`) | **PR #77:** merged (squash `af6f329b`)
 
-### ✅ All completed (Tasks 1–40 via PR #76)
+### ✅ All completed (v17.5.0 — Tasks 1–40 via PR #76 + PR #77)
 - `supabase/migrations/20270101_training_tracker.sql` — 3 tables, `tt_is_professional_plus()`, 2 triggers, 2 views, RLS, 10 seed courses
 - `src/training/trainingTypes.ts` — full type system (8 categories, 4 statuses, plan gate, all interfaces)
 - `src/training/trainingStore.ts` — Zustand store; `TrainingPlanGateError`; fetchCourses, enroll, logCompletion (optimistic), bulkEnroll, CRUD
@@ -20,17 +20,22 @@
 - `supabase/migrations/20270115_super_employee_tracker.sql` — `employee_ai_assessments`, `employee_stage_history`, `employee_skill_gaps`; 2 views; RLS; assertion block
 - `src/jobs/ProcessTemplateList.stories.tsx` — `CloneFlowInteraction` story appended (12 total)
 - `.github/ISSUE_TEMPLATE/v17-process-templates-bug.yml` — bug report template (labels: bug, v17-process-templates)
-- `CHANGELOG.md` — v17.5.0 released entry
 
-### 🔄 In PR #77 (Tasks 41–43, committed `f685dbd6`)
+### ✅ All completed (v17.5.1 — Tasks 41–45, merged PR #77 + direct to main)
 - `src/training/__tests__/superEmployeeStore.test.ts` — ~95 Vitest tests; 11 describe blocks; plan gate guard, recordStageTransition, resolveSkillGap (no pre-mutation), fetchStageHistory, fetchSkillGaps, clearError; thenable Proxy mock + auth.getUser stub
 - `src/training/SuperEmployeeProgressPanel.tsx` — 5-step stage timeline; AI Readiness badge at AI_ASSISTED+; admin resolve gap; plan gate wall; loading skeleton; 14 data-testids
 - `src/training/TrainingEnrollmentPanel.stories.tsx` — 8 CSF3 stories; `withEnrollmentStore` decorator; BulkEnrollSuccess + BulkEnrollErrorPath play interactions
+- `src/training/SuperEmployeeProgressPanel.stories.tsx` — 11 CSF3 stories; `withProgressStore` decorator; all 5 stage timeline states verified; AdminResolveInteraction play test
+- `supabase/migrations/20270120_ai_cost_estimation.sql` — 4 tables, 2 views, `ace_is_enterprise()`, full RLS, 6 indexes, assertion block (ENTERPRISE plan)
+- `src/ai-cost/aiCostEstimationTypes.ts` — complete type system; 6 union types; 6 DB row + 6 app-layer types; 5 payloads; plan gate + error; constants + utilities + 6 mappers
+- `src/ai-cost/aiCostEstimationStore.ts` — `useAiCostEstimationStore`; 16 actions across 4 domains; auto-compute cost in logUsage + createTaskEstimate; ENTERPRISE gate
 
-### 📋 Next (optional)
-- Storybook stories for `SuperEmployeeProgressPanel.tsx` (plan gate wall, loading, stage timeline states, skill gap list with resolve)
+### 📋 Next (v17.5 remaining)
+- Vitest unit tests for `aiCostEstimationTypes.ts` + `aiCostEstimationStore.ts`
+- `AiCostDashboard.tsx` component (usage summary, ROI chart, budget utilization)
+- Storybook stories for `AiCostDashboard.tsx`
 
-**Last updated:** 2027-01-16
+**Last updated:** 2027-01-20
 
 ---
 
