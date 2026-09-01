@@ -70,10 +70,10 @@ File: `src/__tests__/integrations/0198_0203_executive_sla_pipeline.integration.t
 
 | File | SHA |
 |---|---|
-| `supabase/migrations/0204_executive_summary_tab.sql` | _TBD after push_ |
-| `public/etax-compliance-dashboard.html` | _TBD after push_ |
-| `src/__tests__/integrations/0198_0203_executive_sla_pipeline.integration.test.ts` | _TBD after push_ |
-| `docs/CHANGELOG_1580.md` | _TBD after push_ |
+| `supabase/migrations/0204_executive_summary_tab.sql` | `46e94a9f61c6` |
+| `public/etax-compliance-dashboard.html` | `e0763da58d6a` |
+| `src/__tests__/integrations/0198_0203_executive_sla_pipeline.integration.test.ts` | `3d89e035c676` |
+| `docs/CHANGELOG_1580.md` | `44e290d3756a` |
 
 ---
 
