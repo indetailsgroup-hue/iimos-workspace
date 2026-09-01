@@ -5,6 +5,92 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v17.0.0] — Process Templates Module — 2026-12-01 🚧 In Progress
+
+### Added
+
+#### Process Templates (`src/jobs/`)
+- **`ProcessTemplateList`** component — template browser with category/global filters + plan gate badges
+  - Category dropdown filter (8 categories: CABINET, DOOR, DRAWER, LABEL, SITE, CNC, QUOTATION, CUSTOM)
+  - Search input with 300ms debounce
+  - Global-only checkbox filter
+  - Template cards showing name, category icon, estimated hours, version, plan gate badge
+  - Clone global template into org-specific copy (ADMIN+)
+  - Plan gate wall for FREE plan with upgrade prompt
+  - Loading skeleton (6 cards) + empty state
+  - `data-testid` attrs: `process-template-list`, `template-card`, `template-name`, `plan-gate-badge`, `global-badge`, `apply-template-btn`, `clone-template-btn`
+- **`BottleneckHeatmap`** component — PROFESSIONAL+ stage bottleneck analytics
+  - Summary bar: overall bottleneck rate %, worst stage, total bottleneck events
+  - Heatmap table: stage × (job count, avg actual, avg expected, % of plan, bottleneck rate)
+  - Severity coloring: OK (green ≤110%), WARNING (amber 111–150%), CRITICAL (red >150%)
+  - Visual progress bar per stage row
+  - Worst-stage highlighted row with ⚠️ indicator
+  - Plan gate wall for FREE/STARTER with feature teaser
+  - Loading skeleton + empty state
+  - `data-testid` attrs: `bottleneck-heatmap`, `bottleneck-table`, `heatmap-row`, `severity-cell`, `bottleneck-summary-bar`, `worst-stage-display`
+- **`src/jobs/processTemplateTypes.ts`** — complete type system for Process Templates module
+  - `JobTemplateCategory` union (8 values) + Thai labels + emoji icons
+  - `PlanGate` type with `PLAN_GATE_RANK` ordering and `meetsplanGate()` helper
+  - `JobTemplate`, `JobTemplateStage`, `JobTemplateInput`, `JobTemplateStageInput`, `JobTemplateSummary`
+  - `TimeInStageEntry`, `StageEntryInput`, `StageExitInput`
+  - `BottleneckHeatmapRow`, `BottleneckSeverity`, `getBottleneckSeverity()`
+  - `BOTTLENECK_SEVERITY_COLORS`, `BOTTLENECK_SEVERITY_LABELS` lookup maps
+  - `BottleneckAnalysisSummary`, `JobTemplateFilters`, `DEFAULT_TEMPLATE_FILTERS`
+  - `ApplyTemplateResult`, `ProcessTemplateState`
+- **`src/jobs/processTemplateStore.ts`** — Zustand store for Process Templates
+  - `PlanGateError` class (name: `"PlanGateError"`, plan-aware message in Thai)
+  - `fetchTemplates(orgId, filters?)` — fetches org + global templates in one query
+  - `fetchTemplateById(templateId)` — with joined stages sorted by `stageOrder`
+  - `fetchBottleneckData(orgId, orgPlan, templateId?)` — PROFESSIONAL+ gated; throws `PlanGateError`
+  - `createTemplate(orgId, input)` — inserts template + stages; refreshes list
+  - `updateTemplate(templateId, updates)` — partial update + re-fetch
+  - `deleteTemplate(templateId)` — optimistic UI removal from state
+  - `cloneGlobalTemplate(templateId, orgId, overrideName?)` — deep clone to org copy
+  - `addStage`, `updateStage`, `deleteStage`, `reorderStages` — stage CRUD
+  - `applyTemplateToJob(templateId, jobId, orgId)` — logs first stage entry
+  - `logStageEntry`, `logStageExit` — PROFESSIONAL+ gated time-in-stage logging
+
+#### Database Migrations
+- **`supabase/migrations/20261201_process_templates.sql`** — Process Templates schema
+  - `job_templates` table — org_id + is_global pattern (null org_id = global seed)
+  - `job_template_stages` table — ordered stages with `expected_duration_hours`
+  - `time_in_stage_log` table — PostgreSQL generated columns for `duration_minutes` + `is_bottleneck`
+  - `bottleneck_heatmap_v` view — `SECURITY INVOKER`; aggregates pct_of_expected, bottleneck rate per stage
+  - `pt_set_updated_at()` trigger function — SECURITY INVOKER, auto-updates `updated_at`
+  - RLS policies — tenant isolation via `org_id = current_setting('app.current_org_id')`; ADMIN+ for write; global templates readable by all
+  - 5 seed global templates (ตู้ครัวมาตรฐาน, งาน CNC Batch, ประตูบานเปิด, งานติดตั้ง on-site, ป้ายงาน)
+  - Stages for ตู้ครัวมาตรฐาน (8 stages) and งาน CNC Batch (4 stages)
+  - ASSERTION block: verifies seed data row counts post-migration
+- **`supabase/migrations/20261201_process_templates_rollback.sql`** — full rollback
+  - Drops view → time_in_stage_log → job_template_stages → job_templates → trigger fn → enum type (all CASCADE)
+  - Safe to run multiple times (all IF EXISTS)
+
+#### Plan Limits Update
+- **`src/tenant/types.ts`** — `PLAN_LIMITS` updated:
+  - `STARTER+`: added `process_templates` feature
+  - `PROFESSIONAL+`: added `process_templates` + `bottleneck_heatmap` features
+  - `ENTERPRISE+`: same as PROFESSIONAL plus existing enterprise features
+
+### Tests
+- **`src/jobs/__tests__/processTemplateTypes.test.ts`** — 30 pure TypeScript tests
+  - `meetsplanGate()` — 11 cases (all plan combinations including edge/boundary)
+  - `PLAN_GATE_RANK` ordering contract
+  - `getBottleneckSeverity()` — 9 cases (OK/WARNING/CRITICAL thresholds including exact boundaries)
+  - `BOTTLENECK_SEVERITY_COLORS` / `LABELS` — completeness + hex format validation
+  - `JOB_TEMPLATE_CATEGORY_LABELS` / `ICONS` — all 8 categories covered, no extra keys
+  - `DEFAULT_TEMPLATE_FILTERS` — all defaults correct
+- **`src/jobs/__tests__/processTemplateStore.test.ts`** — 28 tests
+  - `PlanGateError` class — name, message, instanceof
+  - `fetchBottleneckData` — PlanGateError on FREE/STARTER; resolves on PROFESSIONAL/ENTERPRISE
+  - `logStageEntry` / `logStageExit` — PlanGateError on non-PROFESSIONAL
+  - `setFilters` — merge, multi-key, null-clear
+  - `clearError` — no-op + active
+  - `reset` — all state keys restored
+  - `fetchTemplates` — error state + success path + isLoading lifecycle
+  - `deleteTemplate` — optimistic removal; selectedTemplate cleared/kept
+
+---
+
 ## [v16.0.0] — People & Culture Module — 2026-08-28
 
 ### Added
