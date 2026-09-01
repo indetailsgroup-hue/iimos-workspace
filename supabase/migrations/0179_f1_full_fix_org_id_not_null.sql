@@ -7,12 +7,12 @@
 --                   UPDATE policies, dropped USING (true) SELECT policies.
 --   Phase 2 (this):
 --     §0.5  Recovery backfill — handles any rows where 0173 backfill was
---           incomplete (customer.created_by does not exist in legacy schema;
---           customer.org_id is resolved via job relationship instead).
+--           incomplete (customers.created_by does not exist in legacy schema;
+--           customers.org_id is resolved via jobs relationship instead).
 --     §1    Post-backfill NULL assertion — aborts if any org_id still NULL.
 --     §2    SET NOT NULL on org_id for all 7 legacy tables.
---     §3    Add FK constraints to child tables (job_panel, quotation_line,
---           invoice_payment) — deferred in 0173 pending backfill verification.
+--     §3    Add FK constraints to child tables (job_panels, quotation_lines,
+--           invoice_payments) — deferred in 0173 pending backfill verification.
 --     §4    Drop unscoped write_* FOR ALL policies from 0172.
 --           These combined with 0173 PERMISSIVE policies via OR-logic, allowing
 --           a role-matching user in Tenant A to INSERT/UPDATE/DELETE rows in
@@ -49,35 +49,35 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public'
-      AND table_name = 'customer'
+      AND table_name = 'customers'
       AND column_name = 'org_id'
   ) THEN
-    RAISE EXCEPTION 'ABORT: customer.org_id column not found — run 0173_rls_isolation_hardening.sql first';
+    RAISE EXCEPTION 'ABORT: customers.org_id column not found — run 0173_rls_isolation_hardening.sql first';
   END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public'
-      AND table_name = 'job_panel'
+      AND table_name = 'job_panels'
       AND column_name = 'org_id'
   ) THEN
-    RAISE EXCEPTION 'ABORT: job_panel.org_id column not found — run 0173_rls_isolation_hardening.sql first';
+    RAISE EXCEPTION 'ABORT: job_panels.org_id column not found — run 0173_rls_isolation_hardening.sql first';
   END IF;
 END $$;
 
 -- ---------------------------------------------------------------------------
 -- SECTION 0.5 — Recovery backfill
 -- Handles rows where 0173's backfill was incomplete.
--- 0173 used customer.created_by which does not exist in the 0172 schema;
--- customer.org_id rows are resolved here via the job relationship instead.
+-- 0173 used customers.created_by which does not exist in the 0172 schema;
+-- customers.org_id rows are resolved here via the jobs relationship instead.
 -- All UPDATE statements are idempotent (WHERE org_id IS NULL guard).
 -- ---------------------------------------------------------------------------
 
--- customer → resolve via first job belonging to this customer that already has org_id
-UPDATE customer c
+-- customers → resolve via first jobs belonging to this customers that already has org_id
+UPDATE customers c
    SET org_id = (
          SELECT j.org_id
-           FROM job j
+           FROM jobs j
           WHERE j.customer_id = c.customer_id
             AND j.org_id IS NOT NULL
           ORDER BY j.created_at
@@ -85,31 +85,31 @@ UPDATE customer c
        )
  WHERE c.org_id IS NULL;
 
--- job_panel → inherit from parent job (re-run in case parent was backfilled after child)
-UPDATE job_panel jp
+-- job_panels → inherit from parent jobs (re-run in case parent was backfilled after child)
+UPDATE job_panels jp
    SET org_id = (
          SELECT j.org_id
-           FROM job j
+           FROM jobs j
           WHERE j.job_id = jp.job_id
             AND j.org_id IS NOT NULL
        )
  WHERE jp.org_id IS NULL;
 
--- quotation_line → inherit from parent quotation
-UPDATE quotation_line ql
+-- quotation_lines → inherit from parent quotations
+UPDATE quotation_lines ql
    SET org_id = (
          SELECT q.org_id
-           FROM quotation q
+           FROM quotations q
           WHERE q.quotation_id = ql.quotation_id
             AND q.org_id IS NOT NULL
        )
  WHERE ql.org_id IS NULL;
 
--- invoice_payment → inherit from parent invoice
-UPDATE invoice_payment ip
+-- invoice_payments → inherit from parent invoices
+UPDATE invoice_payments ip
    SET org_id = (
          SELECT i.org_id
-           FROM invoice i
+           FROM invoices i
           WHERE i.invoice_id = ip.invoice_id
             AND i.org_id IS NOT NULL
        )
@@ -130,49 +130,49 @@ DECLARE
   v_detail       TEXT := '';
   v_tbl_count    INT;
 BEGIN
-  SELECT COUNT(*) INTO v_tbl_count FROM customer WHERE org_id IS NULL;
+  SELECT COUNT(*) INTO v_tbl_count FROM customers WHERE org_id IS NULL;
   IF v_tbl_count > 0 THEN
-    v_detail := v_detail || format('customer: %s null rows  ', v_tbl_count);
+    v_detail := v_detail || format('customers: %s null rows  ', v_tbl_count);
   END IF;
 
-  SELECT COUNT(*) INTO v_tbl_count FROM job WHERE org_id IS NULL;
+  SELECT COUNT(*) INTO v_tbl_count FROM jobs WHERE org_id IS NULL;
   IF v_tbl_count > 0 THEN
-    v_detail := v_detail || format('job: %s null rows  ', v_tbl_count);
+    v_detail := v_detail || format('jobs: %s null rows  ', v_tbl_count);
   END IF;
 
-  SELECT COUNT(*) INTO v_tbl_count FROM job_panel WHERE org_id IS NULL;
+  SELECT COUNT(*) INTO v_tbl_count FROM job_panels WHERE org_id IS NULL;
   IF v_tbl_count > 0 THEN
-    v_detail := v_detail || format('job_panel: %s null rows  ', v_tbl_count);
+    v_detail := v_detail || format('job_panels: %s null rows  ', v_tbl_count);
   END IF;
 
-  SELECT COUNT(*) INTO v_tbl_count FROM quotation WHERE org_id IS NULL;
+  SELECT COUNT(*) INTO v_tbl_count FROM quotations WHERE org_id IS NULL;
   IF v_tbl_count > 0 THEN
-    v_detail := v_detail || format('quotation: %s null rows  ', v_tbl_count);
+    v_detail := v_detail || format('quotations: %s null rows  ', v_tbl_count);
   END IF;
 
-  SELECT COUNT(*) INTO v_tbl_count FROM quotation_line WHERE org_id IS NULL;
+  SELECT COUNT(*) INTO v_tbl_count FROM quotation_lines WHERE org_id IS NULL;
   IF v_tbl_count > 0 THEN
-    v_detail := v_detail || format('quotation_line: %s null rows  ', v_tbl_count);
+    v_detail := v_detail || format('quotation_lines: %s null rows  ', v_tbl_count);
   END IF;
 
-  SELECT COUNT(*) INTO v_tbl_count FROM invoice WHERE org_id IS NULL;
+  SELECT COUNT(*) INTO v_tbl_count FROM invoices WHERE org_id IS NULL;
   IF v_tbl_count > 0 THEN
-    v_detail := v_detail || format('invoice: %s null rows  ', v_tbl_count);
+    v_detail := v_detail || format('invoices: %s null rows  ', v_tbl_count);
   END IF;
 
-  SELECT COUNT(*) INTO v_tbl_count FROM invoice_payment WHERE org_id IS NULL;
+  SELECT COUNT(*) INTO v_tbl_count FROM invoice_payments WHERE org_id IS NULL;
   IF v_tbl_count > 0 THEN
-    v_detail := v_detail || format('invoice_payment: %s null rows  ', v_tbl_count);
+    v_detail := v_detail || format('invoice_payments: %s null rows  ', v_tbl_count);
   END IF;
 
   v_null_count :=
-    (SELECT COUNT(*) FROM customer         WHERE org_id IS NULL) +
-    (SELECT COUNT(*) FROM job              WHERE org_id IS NULL) +
-    (SELECT COUNT(*) FROM job_panel        WHERE org_id IS NULL) +
-    (SELECT COUNT(*) FROM quotation        WHERE org_id IS NULL) +
-    (SELECT COUNT(*) FROM quotation_line   WHERE org_id IS NULL) +
-    (SELECT COUNT(*) FROM invoice          WHERE org_id IS NULL) +
-    (SELECT COUNT(*) FROM invoice_payment  WHERE org_id IS NULL);
+    (SELECT COUNT(*) FROM customers         WHERE org_id IS NULL) +
+    (SELECT COUNT(*) FROM jobs              WHERE org_id IS NULL) +
+    (SELECT COUNT(*) FROM job_panels        WHERE org_id IS NULL) +
+    (SELECT COUNT(*) FROM quotations        WHERE org_id IS NULL) +
+    (SELECT COUNT(*) FROM quotation_lines   WHERE org_id IS NULL) +
+    (SELECT COUNT(*) FROM invoices          WHERE org_id IS NULL) +
+    (SELECT COUNT(*) FROM invoice_payments  WHERE org_id IS NULL);
 
   IF v_null_count > 0 THEN
     RAISE EXCEPTION
@@ -190,33 +190,33 @@ END $$;
 -- Enforces at the DB constraint level; RLS alone is not sufficient since
 -- SECURITY DEFINER RPCs bypass RLS and could insert NULL org_id rows.
 -- ---------------------------------------------------------------------------
-ALTER TABLE customer         ALTER COLUMN org_id SET NOT NULL;
-ALTER TABLE job              ALTER COLUMN org_id SET NOT NULL;
-ALTER TABLE job_panel        ALTER COLUMN org_id SET NOT NULL;
-ALTER TABLE quotation        ALTER COLUMN org_id SET NOT NULL;
-ALTER TABLE quotation_line   ALTER COLUMN org_id SET NOT NULL;
-ALTER TABLE invoice          ALTER COLUMN org_id SET NOT NULL;
-ALTER TABLE invoice_payment  ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE customers         ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE jobs              ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE job_panels        ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE quotations        ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE quotation_lines   ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE invoices          ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE invoice_payments  ALTER COLUMN org_id SET NOT NULL;
 
 -- ---------------------------------------------------------------------------
 -- SECTION 3 — Add FK constraints to child tables
--- 0173 deferred FKs on job_panel, quotation_line, invoice_payment to avoid
+-- 0173 deferred FKs on job_panels, quotation_lines, invoice_payments to avoid
 -- referential integrity failures during backfill. Backfill is now verified.
 -- ON DELETE CASCADE ensures child rows are removed when the org is deleted.
 -- ---------------------------------------------------------------------------
-ALTER TABLE job_panel
+ALTER TABLE job_panels
   ADD CONSTRAINT fk_job_panel_org
   FOREIGN KEY (org_id)
   REFERENCES public.organizations(org_id)
   ON DELETE CASCADE;
 
-ALTER TABLE quotation_line
+ALTER TABLE quotation_lines
   ADD CONSTRAINT fk_quotation_line_org
   FOREIGN KEY (org_id)
   REFERENCES public.organizations(org_id)
   ON DELETE CASCADE;
 
-ALTER TABLE invoice_payment
+ALTER TABLE invoice_payments
   ADD CONSTRAINT fk_invoice_payment_org
   FOREIGN KEY (org_id)
   REFERENCES public.organizations(org_id)
@@ -239,30 +239,30 @@ ALTER TABLE invoice_payment
 -- which enforce tenant isolation for INSERT/UPDATE. DELETE policies are added
 -- in §6 below.
 -- ---------------------------------------------------------------------------
-DROP POLICY IF EXISTS "write_customer"  ON customer;
-DROP POLICY IF EXISTS "write_job"       ON job;
-DROP POLICY IF EXISTS "write_panel"     ON job_panel;
-DROP POLICY IF EXISTS "write_quotation" ON quotation;
-DROP POLICY IF EXISTS "write_qt_line"   ON quotation_line;
-DROP POLICY IF EXISTS "write_invoice"   ON invoice;
-DROP POLICY IF EXISTS "write_payment"   ON invoice_payment;
+DROP POLICY IF EXISTS "write_customer"  ON customers;
+DROP POLICY IF EXISTS "write_job"       ON jobs;
+DROP POLICY IF EXISTS "write_panel"     ON job_panels;
+DROP POLICY IF EXISTS "write_quotation" ON quotations;
+DROP POLICY IF EXISTS "write_qt_line"   ON quotation_lines;
+DROP POLICY IF EXISTS "write_invoice"   ON invoices;
+DROP POLICY IF EXISTS "write_payment"   ON invoice_payments;
 
 -- ---------------------------------------------------------------------------
 -- SECTION 5 — Add org-scoped UPDATE policies for child tables
--- 0173 added UPDATE for customer, job, quotation, invoice.
--- job_panel, quotation_line, invoice_payment were not covered.
+-- 0173 added UPDATE for customers, jobs, quotations, invoices.
+-- job_panels, quotation_lines, invoice_payments were not covered.
 -- ---------------------------------------------------------------------------
-CREATE POLICY "job_panel_tenant_update" ON job_panel
+CREATE POLICY "job_panel_tenant_update" ON job_panels
   FOR UPDATE
   USING (org_id = public.get_user_org_id())
   WITH CHECK (org_id = public.get_user_org_id());
 
-CREATE POLICY "quotation_line_tenant_update" ON quotation_line
+CREATE POLICY "quotation_line_tenant_update" ON quotation_lines
   FOR UPDATE
   USING (org_id = public.get_user_org_id())
   WITH CHECK (org_id = public.get_user_org_id());
 
-CREATE POLICY "invoice_payment_tenant_update" ON invoice_payment
+CREATE POLICY "invoice_payment_tenant_update" ON invoice_payments
   FOR UPDATE
   USING (org_id = public.get_user_org_id())
   WITH CHECK (org_id = public.get_user_org_id());
@@ -274,54 +274,54 @@ CREATE POLICY "invoice_payment_tenant_update" ON invoice_payment
 -- be DENIED after §4 drops the write_* FOR ALL policies.
 -- These policies allow direct authenticated DELETEs scoped to the caller's org
 -- with appropriate role restrictions.
--- Note: ON DELETE CASCADE FKs (e.g. job_panel → job) handle cascading deletes;
+-- Note: ON DELETE CASCADE FKs (e.g. job_panels → jobs) handle cascading deletes;
 --       these policies cover the case of direct DELETE on the parent table.
 -- ---------------------------------------------------------------------------
 
--- customer: ADMIN or governance role only
-CREATE POLICY "customer_tenant_delete" ON customer
+-- customers: ADMIN or governance role only
+CREATE POLICY "customer_tenant_delete" ON customers
   FOR DELETE USING (
     org_id = public.get_user_org_id()
     AND (has_app_role('admin') OR is_governance_role())
   );
 
--- job: ADMIN, FACTORY, DESIGNER can remove draft/cancelled jobs
-CREATE POLICY "job_tenant_delete" ON job
+-- jobs: ADMIN, FACTORY, DESIGNER can remove draft/cancelled jobs
+CREATE POLICY "job_tenant_delete" ON jobs
   FOR DELETE USING (
     org_id = public.get_user_org_id()
     AND (has_app_role('admin') OR has_app_role('factory') OR has_app_role('designer') OR is_governance_role())
   );
 
--- job_panel: ADMIN, FACTORY, DESIGNER (panel-level edits during production)
-CREATE POLICY "job_panel_tenant_delete" ON job_panel
+-- job_panels: ADMIN, FACTORY, DESIGNER (panel-level edits during production)
+CREATE POLICY "job_panel_tenant_delete" ON job_panels
   FOR DELETE USING (
     org_id = public.get_user_org_id()
     AND (has_app_role('admin') OR has_app_role('factory') OR has_app_role('designer') OR is_governance_role())
   );
 
--- quotation: FINANCE or ADMIN (draft cleanup / expired quotation removal)
-CREATE POLICY "quotation_tenant_delete" ON quotation
+-- quotations: FINANCE or ADMIN (draft cleanup / expired quotations removal)
+CREATE POLICY "quotation_tenant_delete" ON quotations
   FOR DELETE USING (
     org_id = public.get_user_org_id()
     AND (has_app_role('finance') OR has_app_role('admin') OR is_governance_role())
   );
 
--- quotation_line: cascades from quotation; FINANCE or ADMIN
-CREATE POLICY "quotation_line_tenant_delete" ON quotation_line
+-- quotation_lines: cascades from quotations; FINANCE or ADMIN
+CREATE POLICY "quotation_line_tenant_delete" ON quotation_lines
   FOR DELETE USING (
     org_id = public.get_user_org_id()
     AND (has_app_role('finance') OR has_app_role('admin') OR is_governance_role())
   );
 
--- invoice: FINANCE or ADMIN (cancellation / void use-case)
-CREATE POLICY "invoice_tenant_delete" ON invoice
+-- invoices: FINANCE or ADMIN (cancellation / void use-case)
+CREATE POLICY "invoice_tenant_delete" ON invoices
   FOR DELETE USING (
     org_id = public.get_user_org_id()
     AND (has_app_role('finance') OR has_app_role('admin') OR is_governance_role())
   );
 
--- invoice_payment: cascades from invoice; FINANCE or ADMIN
-CREATE POLICY "invoice_payment_tenant_delete" ON invoice_payment
+-- invoice_payments: cascades from invoices; FINANCE or ADMIN
+CREATE POLICY "invoice_payment_tenant_delete" ON invoice_payments
   FOR DELETE USING (
     org_id = public.get_user_org_id()
     AND (has_app_role('finance') OR has_app_role('admin') OR is_governance_role())
@@ -339,7 +339,7 @@ BEGIN
   SELECT COUNT(*) INTO v_count
     FROM information_schema.columns
    WHERE table_schema = 'public'
-     AND table_name IN ('customer','job','job_panel','quotation','quotation_line','invoice','invoice_payment')
+     AND table_name IN ('customers','jobs','job_panels','quotations','quotation_lines','invoices','invoice_payments')
      AND column_name  = 'org_id'
      AND is_nullable  = 'YES';
   IF v_count > 0 THEN
@@ -356,11 +356,11 @@ BEGIN
     v_issues := v_issues || format('%s unscoped write_* policy(ies) still exist. ', v_count);
   END IF;
 
-  -- 7.3  Check org-scoped SELECT policy exists on customer (canary for 0173)
+  -- 7.3  Check org-scoped SELECT policy exists on customers (canary for 0173)
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies
      WHERE schemaname = 'public'
-       AND tablename  = 'customer'
+       AND tablename  = 'customers'
        AND policyname = 'customer_tenant_isolation'
   ) THEN
     v_issues := v_issues || 'Missing customer_tenant_isolation SELECT policy. ';
@@ -369,14 +369,14 @@ BEGIN
   -- 7.4  Check new delete policies exist (spot-check 3 tables)
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies
-     WHERE schemaname = 'public' AND tablename = 'customer' AND policyname = 'customer_tenant_delete'
+     WHERE schemaname = 'public' AND tablename = 'customers' AND policyname = 'customer_tenant_delete'
   ) THEN
     v_issues := v_issues || 'Missing customer_tenant_delete policy. ';
   END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies
-     WHERE schemaname = 'public' AND tablename = 'invoice' AND policyname = 'invoice_tenant_delete'
+     WHERE schemaname = 'public' AND tablename = 'invoices' AND policyname = 'invoice_tenant_delete'
   ) THEN
     v_issues := v_issues || 'Missing invoice_tenant_delete policy. ';
   END IF;
@@ -385,7 +385,7 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.table_constraints
      WHERE table_schema      = 'public'
-       AND table_name        = 'job_panel'
+       AND table_name        = 'job_panels'
        AND constraint_name   = 'fk_job_panel_org'
        AND constraint_type   = 'FOREIGN KEY'
   ) THEN
