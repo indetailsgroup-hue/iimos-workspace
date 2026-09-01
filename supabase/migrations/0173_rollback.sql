@@ -14,8 +14,8 @@ BEGIN;
 
 -- ── F6: Restore Realtime publication (removed by 0173 pending 0174 channel
 --   policies — re-add here so CI state is deterministic between runs) ──────────
-ALTER PUBLICATION supabase_realtime ADD TABLE job;
-ALTER PUBLICATION supabase_realtime ADD TABLE invoice;
+ALTER PUBLICATION supabase_realtime ADD TABLE jobs;
+ALTER PUBLICATION supabase_realtime ADD TABLE invoices;
 
 -- ── F2: Drop org_invitations policies, disable RLS ───────────────────────────
 DROP POLICY IF EXISTS "invitations_view_by_email" ON public.org_invitations;
@@ -42,28 +42,28 @@ DROP FUNCTION IF EXISTS public.rpc_job_board(TEXT, INT, INT);
 -- ── F1: Drop org-scoped RLS policies on all seven tables ─────────────────────
 
 -- UPDATE policies
-DROP POLICY IF EXISTS "customer_tenant_update"           ON customer;
-DROP POLICY IF EXISTS "job_tenant_update"                ON job;
-DROP POLICY IF EXISTS "quotation_tenant_update"          ON quotation;
-DROP POLICY IF EXISTS "invoice_tenant_update"            ON invoice;
+DROP POLICY IF EXISTS "customer_tenant_update"           ON customers;
+DROP POLICY IF EXISTS "job_tenant_update"                ON jobs;
+DROP POLICY IF EXISTS "quotation_tenant_update"          ON quotations;
+DROP POLICY IF EXISTS "invoice_tenant_update"            ON invoices;
 
 -- INSERT policies
-DROP POLICY IF EXISTS "customer_tenant_insert"           ON customer;
-DROP POLICY IF EXISTS "job_tenant_insert"                ON job;
-DROP POLICY IF EXISTS "job_panel_tenant_insert"          ON job_panel;
-DROP POLICY IF EXISTS "quotation_tenant_insert"          ON quotation;
-DROP POLICY IF EXISTS "quotation_line_tenant_insert"     ON quotation_line;
-DROP POLICY IF EXISTS "invoice_tenant_insert"            ON invoice;
-DROP POLICY IF EXISTS "invoice_payment_tenant_insert"    ON invoice_payment;
+DROP POLICY IF EXISTS "customer_tenant_insert"           ON customers;
+DROP POLICY IF EXISTS "job_tenant_insert"                ON jobs;
+DROP POLICY IF EXISTS "job_panel_tenant_insert"          ON job_panels;
+DROP POLICY IF EXISTS "quotation_tenant_insert"          ON quotations;
+DROP POLICY IF EXISTS "quotation_line_tenant_insert"     ON quotation_lines;
+DROP POLICY IF EXISTS "invoice_tenant_insert"            ON invoices;
+DROP POLICY IF EXISTS "invoice_payment_tenant_insert"    ON invoice_payments;
 
 -- SELECT (tenant isolation) policies
-DROP POLICY IF EXISTS "customer_tenant_isolation"        ON customer;
-DROP POLICY IF EXISTS "job_tenant_isolation"             ON job;
-DROP POLICY IF EXISTS "job_panel_tenant_isolation"       ON job_panel;
-DROP POLICY IF EXISTS "quotation_tenant_isolation"       ON quotation;
-DROP POLICY IF EXISTS "quotation_line_tenant_isolation"  ON quotation_line;
-DROP POLICY IF EXISTS "invoice_tenant_isolation"         ON invoice;
-DROP POLICY IF EXISTS "invoice_payment_tenant_isolation" ON invoice_payment;
+DROP POLICY IF EXISTS "customer_tenant_isolation"        ON customers;
+DROP POLICY IF EXISTS "job_tenant_isolation"             ON jobs;
+DROP POLICY IF EXISTS "job_panel_tenant_isolation"       ON job_panels;
+DROP POLICY IF EXISTS "quotation_tenant_isolation"       ON quotations;
+DROP POLICY IF EXISTS "quotation_line_tenant_isolation"  ON quotation_lines;
+DROP POLICY IF EXISTS "invoice_tenant_isolation"         ON invoices;
+DROP POLICY IF EXISTS "invoice_payment_tenant_isolation" ON invoice_payments;
 
 -- ── F1: Drop org_id indexes ───────────────────────────────────────────────────
 -- CONCURRENTLY cannot run inside a transaction block; use plain DROP here
@@ -79,13 +79,13 @@ DROP INDEX IF EXISTS idx_invoice_payment_org;
 -- ── F1: Drop org_id columns (safe: CI fresh-database context) ─────────────────
 -- CASCADE is required for columns that have dependent FK constraints created
 -- by 0173 (the ADD COLUMN ... REFERENCES organizations(org_id) form).
-ALTER TABLE customer        DROP COLUMN IF EXISTS org_id CASCADE;
-ALTER TABLE job             DROP COLUMN IF EXISTS org_id CASCADE;
-ALTER TABLE job_panel       DROP COLUMN IF EXISTS org_id CASCADE;
-ALTER TABLE quotation       DROP COLUMN IF EXISTS org_id CASCADE;
-ALTER TABLE quotation_line  DROP COLUMN IF EXISTS org_id CASCADE;
-ALTER TABLE invoice         DROP COLUMN IF EXISTS org_id CASCADE;
-ALTER TABLE invoice_payment DROP COLUMN IF EXISTS org_id CASCADE;
+ALTER TABLE customers        DROP COLUMN IF EXISTS org_id CASCADE;
+ALTER TABLE jobs             DROP COLUMN IF EXISTS org_id CASCADE;
+ALTER TABLE job_panels       DROP COLUMN IF EXISTS org_id CASCADE;
+ALTER TABLE quotations       DROP COLUMN IF EXISTS org_id CASCADE;
+ALTER TABLE quotation_lines  DROP COLUMN IF EXISTS org_id CASCADE;
+ALTER TABLE invoices         DROP COLUMN IF EXISTS org_id CASCADE;
+ALTER TABLE invoice_payments DROP COLUMN IF EXISTS org_id CASCADE;
 
 COMMIT;
 
