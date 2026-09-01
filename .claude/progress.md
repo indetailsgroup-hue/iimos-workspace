@@ -7,12 +7,18 @@
 - `src/orgchart/orgChartTypes.ts` — `OrgNodeType`/`OcLineType` unions; DB + app-layer types; 4 payloads; `OcFilters`/`DEFAULT_OC_FILTERS`; `canAccessOrgChart`/`OrgChartPlanGateError`; Thai label constants; `mapOcNodeRow`, `mapOcReportingLineRow`, `buildOcTree`, `flattenOcTree`
 - `src/orgchart/orgChartStore.ts` — `useOrgChartStore`; 7 async actions (PROFESSIONAL+ gated writes); `moveNode` optimistic drag update; `fetchChart` parallel fetch + tree build; UI helpers: `selectNode`, `toggleExpand`, `setDragging`, `setFilters`, `clearError`
 
+### ✅ Completed (v18.0 — sprint 2: OrgChartCanvas UI + orgChartTypes tests + Role Network View schema/types/store)
+- `src/orgchart/OrgChartCanvas.tsx` — PROFESSIONAL+-gated canvas; `NodeCard`/`ReportingLinesSvg`/`NodeDetailPanel` sub-components; pointer-event drag with `dragState` useRef; `moveNode` on pointerUp; reporting line toggle; node detail panel with line type swap
+- `src/orgchart/__tests__/orgChartTypes.test.ts` — 42 Vitest unit tests (all passing); 8 describe blocks: `canAccessOrgChart` plan gate, `buildOcTree` parent-child wiring, `flattenOcTree` depth-first order, `mapOcNodeRow` depth/path fields, and mappers/payloads/constants
+- `supabase/migrations/20270205_role_network_view.sql` — `rnv_roles`, `rnv_role_relationships`, `rnv_employee_roles`; `rnv_role_network_v` view (current_headcount + relationship_count); `rnv_is_enterprise()` gate; full RLS; 8 indexes; assertion block
+- `src/role-network/roleNetworkTypes.ts` — `RnvRelationshipType` (5 types) + `RnvSeniority` (5 levels); DB + app-layer types; payloads; `canAccessRoleNetwork`/`RoleNetworkPlanGateError` (ENTERPRISE only); Thai label constants; mappers
+- `src/role-network/roleNetworkStore.ts` — `useRoleNetworkStore`; 8 ENTERPRISE-gated actions; `fetchNetwork` parallel fetch; `deleteRole` immediate local cleanup (cascades relationships/employeeRoles, resets selectedRoleId)
+
 ### 📋 Remaining v18.0 tasks
-- `OrgChartCanvas.tsx` — PROFESSIONAL+-gated drag-and-drop canvas UI component
 - Storybook stories for `OrgChartCanvas.tsx`
-- Vitest unit tests for `orgChartTypes.ts` + `orgChartStore.ts`
-- Role Network View module (schema + types + store + UI)
-- QC Anomaly Detection module
+- Vitest unit tests for `orgChartStore.ts`
+- Role Network View UI component (`RoleNetworkCanvas.tsx`) — ENTERPRISE-gated
+- QC Anomaly Detection module (schema + types + store + UI)
 - AI Quotation Draft module
 - Leadership Action Tracker module
 
@@ -81,7 +87,7 @@
 - `src/culture-metrics/CultureDashboard.stories.tsx` — 11 CSF3 Storybook stories; `withCultureStore` decorator; `activateSpy`/`closeSpy` fn() spies; play functions for ActivateSurveyAction + CloseSurveyAction
 - `src/culture-metrics/__tests__/CultureDashboard.test.tsx` — 24 Vitest tests all passing; covers plan gate, loading, error, surveys, eNPS results, org health
 
-**Last updated:** 2027-01-28
+**Last updated:** 2027-02-05
 
 ---
 

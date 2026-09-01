@@ -5,6 +5,54 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v18.0.1] — OrgChart Canvas UI + OrgChart Tests + Role Network View — 2027-02-05
+
+### Added
+
+#### UI — `src/orgchart/OrgChartCanvas.tsx`
+- `OrgChartCanvas` — PROFESSIONAL+-gated canvas component; `plan-gate-wall` early return for FREE/STARTER plans
+- Sub-component `NodeCard` — absolute-positioned draggable card with `orgchart-node` + `data-node-id` testids, `node-drag-handle`, `node-delete-btn` (admin only)
+- Sub-component `ReportingLinesSvg` — SVG overlay (`orgchart-lines-svg`); renders tree parent→child lines (grey solid) + explicit reporting lines (amber; dotted if DOTTED)
+- Sub-component `NodeDetailPanel` (`node-detail-panel`) — edit title, add/remove reporting lines, toggle line type (SOLID↔DOTTED), delete node
+- Drag-and-drop via pointer events on `orgchart-canvas-area`; `dragState` useRef avoids React re-renders during drag; DOM manipulation in `handlePointerMove`; `moveNode` called only on `pointerUp`
+- State testids: `orgchart-loading`, `orgchart-error`, `orgchart-empty`
+- Toolbar: `reporting-line-toggle` checkbox to show/hide matrix lines; `node-add-line-btn` / `reporting-line-toggle` in detail panel for ADMIN
+
+#### Tests — `src/orgchart/__tests__/orgChartTypes.test.ts`
+- 42 Vitest unit tests — all passing
+- Suites: `canAccessOrgChart` (4 plans), `OrgChartPlanGateError` (name/message/instanceof), `mapOcNodeRow` (children/depth/path/fields), `buildOcTree` (10 cases: empty/root/child/depth/path/multiple-roots/orphan/siblings/grandchild/deep), `flattenOcTree` (7 cases: empty/single/depth-first/deep/count/multi-root/sibling-order), `DEFAULT_OC_FILTERS`, `OC_NODE_TYPE_LABEL_TH`, `OC_LINE_TYPE_LABEL_TH`
+
+#### Schema — Role Network View (ENTERPRISE)
+- `supabase/migrations/20270205_role_network_view.sql`
+  - Enum types: `rnv_relationship_type` (`COLLABORATES_WITH | DEPENDS_ON | MENTORS | REVIEWS | ESCALATES_TO`), `rnv_seniority` (`JUNIOR | MID | SENIOR | LEAD | PRINCIPAL`)
+  - `rnv_roles` — role catalogue; `seniority`, `is_active`, `metadata JSONB`
+  - `rnv_role_relationships` — directed cross-functional edges; UNIQUE `(org_id, from_role_id, to_role_id, relationship_type)`
+  - `rnv_employee_roles` — employee↔role assignments; `is_primary`, `started_at`, `ended_at`; UNIQUE `(org_id, employee_id, role_id)`
+  - `rnv_role_network_v` — view with `current_headcount` + `relationship_count` via LEFT JOINs
+  - `rnv_is_enterprise(p_org_id)` — ENTERPRISE plan gate; `rnv_set_updated_at()` trigger
+  - 8 indexes on org_id, role, employee, relationship columns
+  - Full RLS: SELECT = ENTERPRISE members; INSERT/UPDATE/DELETE = ENTERPRISE + ADMIN+ (hierarchy_level ≥ 80)
+  - Assertion block verifying 3 tables + 1 view
+
+#### Types — `src/role-network/roleNetworkTypes.ts`
+- Union types: `RnvRelationshipType`, `RnvSeniority`
+- DB row types: `RnvRoleRow`, `RnvRoleRelationshipRow`, `RnvEmployeeRoleRow`, `RnvRoleNetworkRow` (view)
+- App-layer types: `RnvRole` (view row + enriched `relationships[]` + `employeeRoles[]`)
+- Payloads: `CreateRnvRolePayload`, `UpdateRnvRolePayload`, `AddRnvRelationshipPayload`, `AssignRnvEmployeeRolePayload`
+- Filters: `RnvFilters`, `DEFAULT_RNV_FILTERS`
+- Plan gate: `canAccessRoleNetwork(orgPlan)` (ENTERPRISE only), `RoleNetworkPlanGateError`
+- Thai label constants: `RNV_RELATIONSHIP_TYPE_LABEL_TH`, `RNV_SENIORITY_LABEL_TH`
+- Mappers: `mapRnvRoleRow`, `mapRnvRelationshipRow`, `mapRnvEmployeeRoleRow`
+
+#### Store — `src/role-network/roleNetworkStore.ts`
+- `useRoleNetworkStore` — Zustand store; state: `roles`, `relationships`, `employeeRoles`, `selectedRoleId`, `isLoading`, `isRelationshipLoading`, `filters`, `error`
+- `fetchNetwork` — parallel fetch (roles via view, relationships, employee_roles); enriches each role with related records
+- Write actions (ENTERPRISE gated): `createRole`, `updateRole`, `deleteRole`, `addRelationship`, `removeRelationship`, `assignEmployeeRole`, `unassignEmployeeRole`
+- `deleteRole` — immediate local cleanup of cascaded records + selectedRoleId reset
+- UI helpers: `selectRole`, `setFilters`, `clearError`
+
+---
+
 ## [v18.0.0] — Interactive OrgChart Module — 2027-02-01
 
 ### Added
