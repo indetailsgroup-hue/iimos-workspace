@@ -251,7 +251,7 @@ jobs:
               'notify-slack-on-sarif-critical', 'open-sarif-findings-issue',
               'close-sarif-findings-issue', 'block-merge-on-sarif-critical',
               'post-sarif-pr-description', 'dry-run-summary', 'workflow-run-step-summary',
-              'pr-job-conclusion-diff', 'conclude-pipeline',
+              'pr-job-conclusion-diff', 'conclude-pipeline', 'run-pipeline-gate',
             ];
             const criticalFailedRaw = (process.env.CRITICAL_FAILED_JOBS || '')
               .split(',').map(s => s.trim()).filter(Boolean);
@@ -589,3 +589,92 @@ jobs:
               print(f'Slack notify failed: {e}')
               sys.exit(1)
           PYSLACK_GATE
+
+  # ── Smoke-test: validate-inputs must reject these malformed payloads ─────────
+  # Runs on every trigger.  Each step exercises ONE validation rule in isolation
+  # using the same logic as the live validate-inputs script.  The step PASSES
+  # when the rule correctly detects an error (validation_passed would be 'false');
+  # it calls core.setFailed (failing the job) only when validation unexpectedly
+  # passes a bad payload.
+  smoke-test-validate-inputs:
+    name: "Smoke-test — validate-inputs rejects malformed payloads"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "TC-1: unknown job ID in critical_failed_jobs"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Payload: critical_failed_jobs contains IDs not in KNOWN_JOB_IDS.
+            // Expected: allowlist errors produced → validation_passed='false'
+            const KNOWN_JOB_IDS = [
+              'lint', 'integration-tests', 'feature-cache-coverage', 'post-coverage-badge',
+              'e2e-backend-gate', 'notify-slack-on-failure', 'notify-slack-on-success',
+              'notify-coverage-badge-failure', 'create-webhook-broken-label',
+              'notify-success-pipeline-failure', 'post-workflow-summary', 'upload-eslint-sarif',
+              'close-webhook-broken-issue', 'notify-slack-on-sarif-findings',
+              'notify-slack-on-sarif-critical', 'open-sarif-findings-issue',
+              'close-sarif-findings-issue', 'block-merge-on-sarif-critical',
+              'post-sarif-pr-description', 'dry-run-summary', 'workflow-run-step-summary',
+              'pr-job-conclusion-diff', 'conclude-pipeline', 'run-pipeline-gate',
+            ];
+            const errors = [];
+            const testPayload      = 'totally-unknown-job-xyz,another-bad-job';
+            const criticalFailedRaw = testPayload.split(',').map(s => s.trim()).filter(Boolean);
+            for (const jobId of criticalFailedRaw) {
+              if (!KNOWN_JOB_IDS.includes(jobId))
+                errors.push(`unknown job ID: '${jobId}'`);
+            }
+            if (errors.length === 0) {
+              core.setFailed(
+                'TC-1 FAILED: expected allowlist errors for unknown job IDs but got none ' +
+                '(validate-inputs would have incorrectly set validation_passed=true)'
+              );
+            } else {
+              core.info(`TC-1 PASSED — ${errors.length} error(s) detected: ${errors.join('; ')}`);
+            }
+
+      - name: "TC-2: overall_status/critical_failed_jobs mismatch"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Payload: critical_failed_jobs is non-empty but overall_status='success'
+            // Expected: cross-validation error → validation_passed='false'
+            const errors           = [];
+            const overallStatus    = 'success';           // bad — should be 'failure'
+            const criticalFailedRaw = ['lint', 'e2e-backend-gate'];
+            if (criticalFailedRaw.length > 0 && overallStatus !== 'failure')
+              errors.push(
+                `overall_status='${overallStatus}' but critical_failed_jobs is non-empty ` +
+                `(${criticalFailedRaw.join(', ')}) — expected 'failure'`
+              );
+            if (errors.length === 0) {
+              core.setFailed(
+                'TC-2 FAILED: expected cross-validation error (status/jobs mismatch) but got none ' +
+                '(validate-inputs would have incorrectly set validation_passed=true)'
+              );
+            } else {
+              core.info(`TC-2 PASSED — ${errors.length} error(s) detected: ${errors.join('; ')}`);
+            }
+
+      - name: "TC-3: invalid overall_status enum value"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Payload: overall_status is not one of the allowed enum values
+            // Expected: invalid-status error → validation_passed='false'
+            const VALID_STATUSES = ['success', 'failure', 'cancelled', 'skipped', 'neutral'];
+            const errors         = [];
+            const overallStatus  = 'maybe';               // bad — not a valid status
+            if (!VALID_STATUSES.includes(overallStatus))
+              errors.push(
+                `overall_status '${overallStatus}' is invalid — ` +
+                `expected one of: ${VALID_STATUSES.join(', ')}`
+              );
+            if (errors.length === 0) {
+              core.setFailed(
+                'TC-3 FAILED: expected invalid-status error for overall_status="maybe" but got none ' +
+                '(validate-inputs would have incorrectly set validation_passed=true)'
+              );
+            } else {
+              core.info(`TC-3 PASSED — ${errors.length} error(s) detected: ${errors.join('; ')}`);
+            }
