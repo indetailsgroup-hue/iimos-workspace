@@ -123,12 +123,17 @@ jobs:
 
       # -----------------------------------------------------------------------
       # 8. Run pg_prove on all test files
-      #    Runs: supabase/tests/*.sql — 310 total pgTAP assertions:
-      #      • 273  forward migration tests
+      #    Runs: supabase/tests/*.sql — 511 total pgTAP assertions:
+      #      • 474  forward migration tests
       #             (0179 F1: 14 · 0179 NNB: 35 · 0180: 17 · 0181: 18 · 0182: 13 · 0183: 13 ·
       #              0176 notification_preferences: 16 · 0186 critical_tables: 20 ·
       #              0187 installation_domain: 53 · 0188 factory_domain: 25 ·
       #              0189 line_oa_domain: 49)
+#              0190 finance_accounting_domain: 45)
+#              0191 package_sales_domain: 35)
+#              0192 capture_documents_domain: 35)
+#              0193 site_field_ops_domain: 35)
+#              0194 operational_misc_domain: 51)
       #      •  12  rollback verification tests (0183_rollback_verification.sql)
       #      •  25  cross-tenant isolation tests (cross_tenant_isolation.sql:
       #             T01–T02 setup · T03–T08 SELECT · T09–T12 INSERT 42501 ·
