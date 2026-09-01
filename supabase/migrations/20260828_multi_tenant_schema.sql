@@ -100,9 +100,6 @@ CREATE INDEX IF NOT EXISTS idx_quotations_org ON public.quotations(org_id);
 ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_org ON public.invoices(org_id);
 
--- Ledger entries
-ALTER TABLE public.ledger_entries ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
-CREATE INDEX IF NOT EXISTS idx_ledger_entries_org ON public.ledger_entries(org_id);
 
 -- ============================================================================
 -- 5. RLS POLICIES — TENANT ISOLATION
@@ -169,14 +166,6 @@ CREATE POLICY "invoices_tenant_isolation" ON public.invoices
 CREATE POLICY "invoices_tenant_insert" ON public.invoices
   FOR INSERT WITH CHECK (org_id = public.get_user_org_id());
 
--- Ledger: tenant isolation
-ALTER TABLE public.ledger_entries ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "ledger_tenant_isolation" ON public.ledger_entries
-  USING (org_id = public.get_user_org_id());
-
-CREATE POLICY "ledger_tenant_insert" ON public.ledger_entries
-  FOR INSERT WITH CHECK (org_id = public.get_user_org_id());
 
 -- ============================================================================
 -- 6. UPDATED_AT TRIGGER
