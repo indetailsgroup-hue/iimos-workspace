@@ -95,25 +95,37 @@ jobs:
           pg_prove --version
 
       # -----------------------------------------------------------------------
-      # 5. Rename 20260828_* migrations to 0172_z0x_* for correct sort order
+      # 5. Merge 20260828_* migrations into 0172 for correct sort order
       #    Rationale: 20260828_* sorts after 0173_* lexicographically (2 > 0),
-      #    which means multi_tenant_schema runs AFTER 0173 guard and fails.
-      #    Renaming to 0172_z0x_* ensures:
-      #      • All six files run BEFORE 0173_rls_isolation_hardening.sql
-      #      • multi_tenant_schema (z00) runs first within the group
-      #      • Remaining five run in dependency order (z01–z05)
+      #    so multi_tenant_schema would run AFTER the 0173 guard and fail.
+      #    Rename to 0172_z0x_* is NOT viable: Supabase extracts only the
+      #    leading numeric portion as the version key, so any 0172_*.sql
+      #    gets version=0172 — colliding with 0172_jobs_quotations_invoices.sql.
+      #    Strategy: append each 20260828_*.sql to the end of
+      #    0172_jobs_quotations_invoices.sql (dependency order: schema first,
+      #    then dependents), then delete the originals. This merges all content
+      #    into a single version=0172 slot, ensures organizations table exists
+      #    before 0173 runs, and is ephemeral (CI-only).
       # -----------------------------------------------------------------------
-      - name: Reorder 20260828 migrations to 0172_z0x prefix
+      - name: Merge 20260828 migrations into 0172 (append-and-delete)
         run: |
           cd supabase/migrations
-          mv 20260828_multi_tenant_schema.sql        0172_z00_multi_tenant_schema.sql
-          mv 20260828_audit_log_usage_metering.sql   0172_z01_audit_log_usage_metering.sql
-          mv 20260828_notifications_super_admin.sql  0172_z02_notifications_super_admin.sql
-          mv 20260828_platform_fts.sql               0172_z03_platform_fts.sql
-          mv 20260828_platform_search.sql            0172_z04_platform_search.sql
-          mv 20260828_search_bookmarks_autocomplete.sql 0172_z05_search_bookmarks_autocomplete.sql
-          echo "Migration order after rename:"
-          ls -1 0172_z*.sql
+          for f in \
+            20260828_multi_tenant_schema.sql \
+            20260828_audit_log_usage_metering.sql \
+            20260828_notifications_super_admin.sql \
+            20260828_platform_fts.sql \
+            20260828_platform_search.sql \
+            20260828_search_bookmarks_autocomplete.sql; do
+            echo "" >> 0172_jobs_quotations_invoices.sql
+            echo "-- ============================================================" >> 0172_jobs_quotations_invoices.sql
+            echo "-- Merged from: $f" >> 0172_jobs_quotations_invoices.sql
+            echo "-- ============================================================" >> 0172_jobs_quotations_invoices.sql
+            cat "$f" >> 0172_jobs_quotations_invoices.sql
+            rm "$f"
+          done
+          echo "20260828_* files merged and removed. Final 0172 line count:"
+          wc -l 0172_jobs_quotations_invoices.sql
 
       # -----------------------------------------------------------------------
       # 6. Start Supabase local stack
