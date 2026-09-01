@@ -79,6 +79,7 @@ ALLOWLIST: frozenset[str] = frozenset(
         "platform_metrics_snapshots",  # Aggregated platform health snapshots; no org_id.
         "platform_search_logs",        # Platform-level search telemetry; org_filter is optional.
         "etax_compliance_mv_refresh_log",  # Platform-level MV refresh audit log; records cron/manual refresh events for mv_etax_compliance_dashboard; no tenant scope — system-wide; no org_id column by design.
+        "etax_health_trend_mv_refresh_log",  # Platform-level MV refresh audit log; records cron/manual refresh events for mv_etax_health_trend; no tenant scope — system-wide; no org_id column by design.
         # ── User-scoped tables (scoped by user_id, not org_id) ────────────
         "identity_binding",       # User identity federation; scoped by user_id = auth.uid().
         "delegation",             # Per-user delegation grants; scoped by delegator_id.
