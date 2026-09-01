@@ -1,5 +1,25 @@
 # Monolith Implementation Progress
 
+## v17.5 — Training Tracker Module (🚧 In Progress — Q1 2027)
+
+**Branch:** `feature/v17-5-training-tracker-stories` | **PR:** #76 (open) | **Commit:** d7a56e91
+
+### ✅ Committed to branch
+- `supabase/migrations/20270101_training_tracker.sql` — 3 tables (`training_courses`, `training_enrollments`, `training_completions`), `tt_is_professional_plus()` plan gate helper, 2 triggers, 2 views, RLS, 10 global seed courses
+- `src/training/trainingTypes.ts` — full type system: `TrainingCourseCategory` (8), `TrainingStatus` (4), `TRAINING_PLAN_GATE`, all interfaces + filters + `TrainingTrackerState`
+- `src/jobs/ProcessTemplateList.stories.tsx` — appended `CloneFlowInteraction` story (now 12 stories); module-level `cloneGlobalTemplateSpy = fn(...)`
+- `.github/ISSUE_TEMPLATE/v17-process-templates-bug.yml` — bug report template; labels: `bug`, `v17-process-templates`
+
+### 🔜 Pending
+- [ ] `src/training/trainingStore.ts` — Zustand store
+- [ ] `src/training/TrainingCourseList.tsx` — course browser UI
+- [ ] `src/training/TrainingEnrollmentPanel.tsx` — enrollment UI
+- [ ] Vitest unit tests for trainingTypes + trainingStore
+- [ ] Storybook stories for Training Tracker components
+- [ ] Merge PR #76 → main + release tag v17.5.0
+
+---
+
 ## v17.0 — Process Templates Module (✅ Released 2026-12-01)
 
 **Release tag:** v17.0.0 | **PR:** #75 (merged) | **Merge SHA:** 7d9e0467
