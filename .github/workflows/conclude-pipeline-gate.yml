@@ -65,6 +65,11 @@ on:
         required: false
         default: ''
         type: string
+      critical_failed_jobs:
+        description: 'JSON array of failed job IDs for manual validation testing'
+        required: false
+        default: '[]'
+        type: string
   workflow_call:
     inputs:
 
@@ -185,7 +190,7 @@ jobs:
   validate-inputs:
     name: Validate Caller Inputs
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_call'
+    if: github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch'
     outputs:
       validation_passed: ${{ steps.schema-check.outputs.validation_passed }}
       validation_errors:  ${{ steps.schema-check.outputs.validation_errors }}
@@ -419,7 +424,7 @@ jobs:
     needs: validate-inputs
     runs-on: ubuntu-latest
     if: >-
-      always() && github.event_name == 'workflow_call' &&
+      always() && (github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch') &&
       needs.validate-inputs.outputs.validation_passed == 'false'
 
     permissions:
@@ -448,6 +453,26 @@ jobs:
             core.setFailed(
               `${errors.length} gate input validation error(s) \u2014 see annotations above`
             );
+
+      - name: "Write validation errors to step summary"
+        if: always()
+        env:
+          VALIDATION_ERRORS: ${{ needs.validate-inputs.outputs.validation_errors }}
+        run: |
+          python3 - <<'PYSUM'
+          import json, os, sys
+          errors_raw = os.environ.get('VALIDATION_ERRORS', '[]')
+          errors = json.loads(errors_raw) if errors_raw else []
+          summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
+          if not summary_path:
+              sys.exit(0)
+          with open(summary_path, 'a') as fh:
+              fh.write('## Validate-Inputs Errors\n\n')
+              fh.write('| # | Validation Error |\n')
+              fh.write('|---|-----------------|\n')
+              for i, err in enumerate(errors, 1):
+                  fh.write(f'| {i} | {err} |\n')
+          PYSUM
 
 
   post-pipeline-gate:
@@ -989,6 +1014,30 @@ jobs:
               core.info(`TC-8 PASSED \u2014 ${errors.length} error(s): ${errors.join("; ")}`);
             }
 
+      - name: "TC-9: overall_status=failure with empty critical_failed_jobs"
+        id: tc9
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Payload: overall_status='failure' with empty critical_failed_jobs.
+            // Cross-validation rule (reverse): failure status requires at least one failed job.
+            // Expected: cross-validation error → validation_passed='false'
+            const overallStatus = 'failure';
+            const criticalFailedJobs = [];
+            const errors = [];
+            if (overallStatus === 'failure' && criticalFailedJobs.length === 0) {
+              errors.push("overall_status is 'failure' but critical_failed_jobs is empty");
+            }
+            if (errors.length === 0) {
+              core.setFailed(
+                'TC-9 FAILED: expected cross-validation error for failure+empty but none raised ' +
+                '(validate-inputs would have incorrectly set validation_passed=true)'
+              );
+            } else {
+              core.info(`TC-9 PASSED — ${errors.length} error(s): ${errors.join("; ")}`);
+            }
+
       - name: "Job summary — TC results table"
         if: always()
         env:
@@ -1000,6 +1049,7 @@ jobs:
           TC6_OUTCOME: ${{ steps.tc6.outcome }}
           TC7_OUTCOME: ${{ steps.tc7.outcome }}
           TC8_OUTCOME: ${{ steps.tc8.outcome }}
+          TC9_OUTCOME: ${{ steps.tc9.outcome }}
         run: |
           tc() { [ "$1" = "success" ] && printf ':white_check_mark: PASS' || printf ':x: FAIL'; }
           {
@@ -1015,11 +1065,12 @@ jobs:
             echo "| TC-6 | \`overall_status='unknown'\` not in VALID_STATUSES | VALID_STATUSES enum | $(tc \"$TC6_OUTCOME\") |"
             echo "| TC-7 | \`run_url\` missing \`https://\` prefix | run_url scheme check | $(tc \"$TC7_OUTCOME\") |"
             echo "| TC-8 | \`critical_failed_jobs\` contains unknown job ID | KNOWN_JOB_IDS allowlist | $(tc \"$TC8_OUTCOME\") |"
+            echo "| TC-9 | \`overall_status='failure'\` + empty \`critical_failed_jobs\` | Cross-validation (reverse) | $(tc \"$TC9_OUTCOME\") |"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
           # Fail job if any TC failed (continue-on-error masked the individual step failures)
           failed=0
-          for outcome in "$TC1_OUTCOME" "$TC2_OUTCOME" "$TC3_OUTCOME" "$TC4_OUTCOME" "$TC5_OUTCOME" "$TC6_OUTCOME" "$TC7_OUTCOME" "$TC8_OUTCOME"; do
+          for outcome in "$TC1_OUTCOME" "$TC2_OUTCOME" "$TC3_OUTCOME" "$TC4_OUTCOME" "$TC5_OUTCOME" "$TC6_OUTCOME" "$TC7_OUTCOME" "$TC8_OUTCOME" "$TC9_OUTCOME"; do
             [ "$outcome" != "success" ] && failed=1
           done
           if [ "$failed" = "1" ]; then
@@ -1027,4 +1078,4 @@ jobs:
             echo "_⚠️ One or more TCs failed — check step logs._" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          echo "_All 8 smoke-test TCs passed._" >> "$GITHUB_STEP_SUMMARY"
+          echo "_All 9 smoke-test TCs passed._" >> "$GITHUB_STEP_SUMMARY"
