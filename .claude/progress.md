@@ -1,24 +1,25 @@
 # Monolith Implementation Progress
 
-## v17.0 — Process Templates Module (🚧 In Progress — Q4 2026)
+## v17.0 — Process Templates Module (✅ Released 2026-12-01)
 
-### ✅ Completed this session
-- `supabase/migrations/20261201_process_templates.sql` — schema: job_templates, job_template_stages, time_in_stage_log, bottleneck_heatmap_v view, RLS, 5 global seed templates
-- `supabase/migrations/20261201_process_templates_rollback.sql` — full rollback (IF EXISTS, CASCADE)
-- `src/jobs/processTemplateTypes.ts` — full TypeScript type system (PlanGate, meetsplanGate, BottleneckSeverity, etc.)
-- `src/jobs/processTemplateStore.ts` — Zustand store with PlanGateError, CRUD, bottleneck analytics (PROFESSIONAL+ gated)
-- `src/jobs/ProcessTemplateList.tsx` — template browser UI with category filter, plan gate badge, clone action
-- `src/jobs/BottleneckHeatmap.tsx` — PROFESSIONAL+ heatmap with severity coloring, summary bar
-- `src/jobs/__tests__/processTemplateTypes.test.ts` — 30 pure TS tests
-- `src/jobs/__tests__/processTemplateStore.test.ts` — 28 Vitest tests (PlanGateError + store actions)
-- `src/tenant/types.ts` — PLAN_LIMITS updated: process_templates (STARTER+), bottleneck_heatmap (PROFESSIONAL+)
-- `CHANGELOG.md` — v17.0.0 section added
+**Release tag:** v17.0.0 | **PR:** #75 (merged) | **Merge SHA:** 7d9e0467
 
-### 🔜 Remaining v17.0
-- [ ] Storybook stories for ProcessTemplateList + BottleneckHeatmap
-- [ ] E2E / Playwright tests for ProcessTemplateList
-- [ ] supabase-db-lint CI green on 20261201_process_templates.sql
-- [ ] PR + merge to main + release tag v17.0.0
+### ✅ All completed
+- `supabase/migrations/20261201_process_templates.sql` — 3 tables, 1 view, 3 fn, 12 RLS, 5 seed templates
+- `supabase/migrations/20261201_process_templates_rollback.sql` — full rollback
+- `src/jobs/processTemplateTypes.ts` — PlanGate, meetsplanGate, BottleneckSeverity, all interfaces
+- `src/jobs/processTemplateStore.ts` — Zustand store, PlanGateError, CRUD, PROFESSIONAL+ analytics
+- `src/jobs/ProcessTemplateList.tsx` — template browser (search, category, global filter, plan gate)
+- `src/jobs/BottleneckHeatmap.tsx` — PROFESSIONAL+ heatmap, severity coloring, summary bar
+- `src/jobs/__tests__/processTemplateTypes.test.ts` — 30 tests
+- `src/jobs/__tests__/processTemplateStore.test.ts` — 28 tests
+- `src/jobs/ProcessTemplateList.stories.tsx` — 11 Storybook stories
+- `src/jobs/BottleneckHeatmap.stories.tsx` — 11 Storybook stories
+- `src/jobs/__tests__/ProcessTemplateList.visual.spec.ts` — 12 Playwright visual snapshots
+- `src/jobs/__tests__/BottleneckHeatmap.visual.spec.ts` — 14 Playwright visual snapshots
+- `src/tenant/types.ts` — PLAN_LIMITS updated (process_templates + bottleneck_heatmap)
+- `CHANGELOG.md` — v17.0.0 released
+- PR #75 merged, release tag v17.0.0 published ✅
 
 ---
 
