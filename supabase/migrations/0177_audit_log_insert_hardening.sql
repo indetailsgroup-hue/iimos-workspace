@@ -27,6 +27,12 @@
 --            Repair Operations G-0 = DISABLED. Do NOT apply directly to prod.
 -- ============================================================================
 
+-- Enum preamble (outside transaction) — add lowercase invoice_status values
+-- needed by the 0177 migration group before the merged body runs.
+ALTER TYPE public.invoice_status ADD VALUE IF NOT EXISTS 'paid';
+ALTER TYPE public.invoice_status ADD VALUE IF NOT EXISTS 'partial';
+ALTER TYPE public.invoice_status ADD VALUE IF NOT EXISTS 'pending';
+
 BEGIN;
 
 -- ============================================================================
