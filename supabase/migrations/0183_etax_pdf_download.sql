@@ -238,8 +238,9 @@ DECLARE
   v_role    TEXT;
 BEGIN
   -- Verify the caller belongs to the org that owns this submission
-  SELECT es.*, om.role
-  INTO   v_row, v_role
+  -- (split SELECT to avoid record-variable in multi-item INTO, which PostgreSQL forbids)
+  SELECT es.*
+  INTO   v_row
   FROM   public.etax_submissions es
   JOIN   public.org_members      om ON om.org_id = es.org_id
                                    AND om.user_id = v_user_id
@@ -248,6 +249,12 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Submission not found or access denied';
   END IF;
+
+  SELECT om.role
+  INTO   v_role
+  FROM   public.org_members om
+  WHERE  om.org_id = v_row.org_id
+    AND  om.user_id = v_user_id;
 
   IF v_role NOT IN ('OWNER','ADMIN') THEN
     RAISE EXCEPTION 'Only OWNER or ADMIN may retry PDF downloads';
