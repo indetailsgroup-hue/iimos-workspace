@@ -543,6 +543,25 @@ jobs:
         if: steps.cache-supabase-images.outputs.cache-hit == 'true'
         run: docker load --input /tmp/supabase-images/supabase-images.tar
 
+      # ── Patch 0173 for local Supabase compatibility ────────────────────────
+      # supabase/postgres:15.8.1.085 raises an error on
+      # CREATE INDEX CONCURRENTLY IF NOT EXISTS inside a transaction block even
+      # when the index already exists (the CONCURRENTLY guard fires BEFORE the
+      # IF NOT EXISTS existence check in this PG fork).
+      # Pre-creating the indexes in 0000/0172_z does NOT help — confirmed in
+      # CI iterations 6 and 7.
+      # The only reliable fix: strip CONCURRENTLY from 0173's 7 org-index
+      # lines in the runner's working copy only.  The committed file is
+      # unchanged; production migrations are not affected.
+      - name: Patch 0173 — strip CONCURRENTLY for local CI
+        run: |
+          sed -i \
+            's/CREATE INDEX CONCURRENTLY IF NOT EXISTS/CREATE INDEX IF NOT EXISTS/g' \
+            supabase/migrations/0173_rls_isolation_hardening.sql
+          echo "Patch applied — CONCURRENTLY removed from 0173 local copy:"
+          grep -n 'CREATE INDEX' supabase/migrations/0173_rls_isolation_hardening.sql \
+            | grep -i 'idx.*org' || echo "(grep found nothing — check line numbers)"
+
       # ── Start local Supabase stack (Docker available on ubuntu-latest) ─────
       # supabase start auto-applies every .sql file in supabase/migrations/
       # in lexicographic order:
