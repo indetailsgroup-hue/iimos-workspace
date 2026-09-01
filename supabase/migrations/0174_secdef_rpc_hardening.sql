@@ -189,7 +189,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_qt     quotation%ROWTYPE;
+  v_qt     quotations%ROWTYPE;
   v_inv_id UUID;
   v_inv_code TEXT;
   v_due    DATE;
