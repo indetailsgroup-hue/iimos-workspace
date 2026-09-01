@@ -464,12 +464,12 @@ DO $$
 DECLARE
   v_org RECORD;
 BEGIN
-  FOR v_org IN SELECT id FROM public.organizations WHERE is_active = true
+  FOR v_org IN SELECT org_id FROM public.organizations WHERE is_active = true
   LOOP
     INSERT INTO public.book_registry (book_id, org_id, display_name, currency, description, created_by)
     VALUES
-      ('internal', v_org.id, 'บัญชีภายใน (Internal)',  'THB', 'Default internal book — รายการภายในองค์กร', 'system'),
-      ('external', v_org.id, 'บัญชีภายนอก (External)', 'THB', 'Default external book — รายการภายนอก/ลูกค้า',  'system')
+      ('internal', v_org.org_id, 'บัญชีภายใน (Internal)',  'THB', 'Default internal book — รายการภายในองค์กร', 'system'),
+      ('external', v_org.org_id, 'บัญชีภายนอก (External)', 'THB', 'Default external book — รายการภายนอก/ลูกค้า',  'system')
     ON CONFLICT (org_id, book_id) DO NOTHING;
   END LOOP;
 END;
