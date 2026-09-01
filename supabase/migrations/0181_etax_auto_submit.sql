@@ -223,11 +223,11 @@ BEGIN
   -- ── ดึงข้อมูลลูกค้า ────────────────────────────────────────────────────────
   SELECT
     c.name,
-    c.tax_id   -- ถ้า customer table มีคอลัมน์ tax_id
+    c.tax_id   -- ถ้า customers table มีคอลัมน์ tax_id
   INTO
     v_buyer_name,
     v_buyer_tax_id
-  FROM customer c
+  FROM customers c
   WHERE c.customer_id = NEW.customer_id;
 
   -- ── Insert etax_submissions (idempotent via ON CONFLICT) ──────────────────
@@ -345,7 +345,7 @@ BEGIN
   -- ── ดึง buyer info ─────────────────────────────────────────────────────────
   SELECT c.name, c.tax_id
   INTO   v_buyer_name, v_buyer_tax
-  FROM   customer c
+  FROM customers c
   WHERE  c.customer_id = v_invoice.customer_id;
 
   -- ── Insert / return existing ────────────────────────────────────────────────
@@ -761,7 +761,7 @@ BEGIN
       i.updated_by,
       c.name AS buyer_name
     FROM invoices i
-    LEFT JOIN customer c ON c.customer_id = i.customer_id
+    LEFT JOIN customers c ON c.customer_id = i.customer_id
     WHERE i.status = 'paid'
       -- ยังไม่มี submission (หรือ ON CONFLICT จะ skip)
       AND NOT EXISTS (
