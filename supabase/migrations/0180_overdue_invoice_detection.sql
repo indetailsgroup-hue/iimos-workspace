@@ -80,12 +80,12 @@ CREATE TABLE IF NOT EXISTS invoice_notifications (
   acknowledged_by   UUID,
 
   created_at        TIMESTAMPTZ       NOT NULL DEFAULT now(),
-  updated_at        TIMESTAMPTZ       NOT NULL DEFAULT now(),
-
-  -- ป้องกัน spam: notification type เดียวกัน ต่อ invoice ต่อวัน
-  CONSTRAINT uq_notification_daily
-    UNIQUE (invoice_id, notification_type, (created_at::DATE))
+  updated_at        TIMESTAMPTZ       NOT NULL DEFAULT now()
 );
+
+-- ป้องกัน spam: notification type เดียวกัน ต่อ invoice ต่อวัน (expression index, not inline constraint)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_daily
+  ON invoice_notifications(invoice_id, notification_type, (created_at::DATE));
 
 CREATE INDEX IF NOT EXISTS idx_notif_invoice   ON invoice_notifications(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_notif_org       ON invoice_notifications(org_id);
@@ -193,9 +193,9 @@ BEGIN
   -- ── Scan invoices ──────────────────────────────────────────────────────────
   FOR v_invoice IN
     SELECT
-      i.id,
+      i.invoice_id,
       i.org_id,
-      i.code,
+      i.invoice_code,
       i.due_date,
       i.remaining_amount,
       i.status,
@@ -332,12 +332,12 @@ BEGIN
   )
   SELECT
     NEW.org_id,
-    NEW.id,
+    NEW.invoice_id,
     v_notif_type,
     'pending',
     v_days_overdue,
     NEW.remaining_amount,
-    NEW.code,
+    NEW.invoice_code,
     c.name
   FROM customers c
   WHERE c.customer_id = NEW.customer_id
