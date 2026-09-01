@@ -26,7 +26,7 @@ alter table public.appointments alter column org_id set not null;
 
 create policy appointments_tenant_isolation on public.appointments
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 2. daily_reports  (project_id → installation_projects.org_id)
@@ -49,7 +49,7 @@ alter table public.daily_reports alter column org_id set not null;
 
 create policy daily_reports_tenant_isolation on public.daily_reports
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 3. qc_inspections  (project_id → installation_projects.org_id)
@@ -72,7 +72,7 @@ alter table public.qc_inspections alter column org_id set not null;
 
 create policy qc_inspections_tenant_isolation on public.qc_inspections
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 4. site_checkins  (project_id → installation_projects.org_id)
@@ -95,7 +95,7 @@ alter table public.site_checkins alter column org_id set not null;
 
 create policy site_checkins_tenant_isolation on public.site_checkins
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 5. site_survey_zone  (site_code → installation_projects.org_id)
@@ -120,7 +120,7 @@ alter table public.site_survey_zone alter column org_id set not null;
 
 create policy site_survey_zone_tenant_isolation on public.site_survey_zone
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 6. variation_orders  (project_id → installation_projects.org_id)
@@ -143,7 +143,7 @@ alter table public.variation_orders alter column org_id set not null;
 
 create policy variation_orders_tenant_isolation on public.variation_orders
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
 
 -- ---------------------------------------------------------------------------
 -- 7. work_packages  (project_id → installation_projects.org_id)
@@ -166,4 +166,4 @@ alter table public.work_packages alter column org_id set not null;
 
 create policy work_packages_tenant_isolation on public.work_packages
   for select to authenticated
-  using (org_id = public.get_my_org_id());
+  using (org_id = public.get_user_org_id());
