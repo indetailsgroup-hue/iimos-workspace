@@ -208,6 +208,7 @@ WHERE routine_schema = 'public'
 | `0180` | Identity reconciliation hardening | Issue #37 — `fn_verify_org_claim` + 6 RPCs |
 | `0181` | REVOKE EXECUTE FROM PUBLIC sweep | Systemic gap — 14 functions |
 | `0182` | `audit_logs` org_id NOT NULL + FK/trigger/RLS correctness (D1/D2/D3) | F5 defects in 0177: broken FK target, RLS WITH CHECK `o.id`, trigger `o.id` |
+| `0185` | Open audit findings — site_code-scoped tables (tracking record) | 74 operational tables missing org_id-scoped RLS policy; 4 CRITICAL (no RLS at all): `approval_decision`, `approval_request`, `capture_item`, `work_item`; remediation: Phase 2 RLS epic (migrations 0186–0188) |
 
 All migrations have corresponding rollback files (`*_rollback.sql`) for CI forward-and-back idempotency testing. Rollback files are for CI only — **never apply to production.**
 
@@ -227,10 +228,11 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 | `supabase/tests/0182_audit_logs_org_id_hardening.sql` | 0182 | T-0182-01 → T-0182-13 (13 tests) | NOT NULL, FK→`org_id` (D1), trigger `o.org_id` (D3), RLS WITH CHECK `o.org_id` (D2), spoofed org rejection, service_role OK, anon rejection |
 | `supabase/tests/0183_baseline_org_id_not_null.sql` | 0183 | T-0183-01 → T-0183-13 (13 tests) | NOT NULL on jobs/quotations/invoices/ledger_entries, sentinel backfill, FK constraints, zero NULL rows |
 | `supabase/tests/cross_tenant_isolation.sql` | Integration (0173–0183) | T01–T25 (25 tests) | SELECT/INSERT/UPDATE/DELETE cross-tenant isolation, own-org access, row integrity |
+| `supabase/tests/0176_notification_preferences_rls.sql` | 0176 | T-0176-01 → T-0176-16 (16 tests) | SELECT/INSERT/UPDATE/DELETE cross-tenant isolation + own-org access on `notification_preferences`; prefs_own_only OR semantics; structural RLS-enabled + relrowsecurity checks |
 
-**Total pgTAP tests authored (forward migrations):** 14 + 35 + 17 + 18 + 13 + 13 = **110 tests** (0179 F1: 14, 0179 NNB: 35, 0180: 17, 0181: 18, 0182: 13, 0183: 13)
+**Total pgTAP tests authored (forward migrations):** 14 + 35 + 17 + 18 + 13 + 13 + 16 = **126 tests** (0179 F1: 14, 0179 NNB: 35, 0180: 17, 0181: 18, 0182: 13, 0183: 13, 0176 notification_preferences: 16)
 
-**Grand total pgTAP assertions (pg_prove SQL suites):** 110 (forward) + 12 (rollback) + 25 (cross-tenant) = **147 tests**
+**Grand total pgTAP assertions (pg_prove SQL suites):** 126 (forward) + 12 (rollback) + 25 (cross-tenant) = **163 tests**
 
 **Rollback verification suites (CI forward-and-back only, not counted in production total):**
 
@@ -287,4 +289,4 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 
 *Generated: 2026-08-28 · Monolith Workspace security audit cycle*  
 *This document is the authoritative security status record for the v16.8.0 audit cycle.*  
-*Last updated: 2026-09-01 — pgTAP SQL total 147 (forward 110 + rollback 12 + cross-tenant 25); cross-tenant isolation suite T01–T25 live on main (commit `b63d0cd7`); CI workflow live (commit `ed53e4fb10`); lint-rls-org-id.py delta mode live (commit `383bb9aca8`); issue #56 fully closed — A1 ✅ (`383bb9aca8`), A3 ✅ (`1fba55bd`), A4 ✅ (SUPABASE_ACCESS_TOKEN provisioned via Secrets API, key_id `3380204578043523366`); migration 0176_notification_preferences_rls added — 4 tenant-isolation policies on `notification_preferences` (commit `ae1bbd2b19`); 0176_rollback.sql added (commit `88c1759ffb`); lint-rls-org-id.py ALLOWLIST expanded from 8 → 30 entries — 22 platform-level/user-scoped tables allowlisted (commit `f159edb994`); withSuperAdminGuard test suite T-SG-01–T-SG-12 — T-SG-12 added (JWT expiry PGRST301 mid-RPC, commit `2696bbca4c`); npm audit 0 vulnerabilities confirmed.*
+*Last updated: 2026-09-01 — pgTAP SQL total 163 (forward 126 + rollback 12 + cross-tenant 25); 0176_notification_preferences_rls.sql added — 16 pgTAP tests (T-0176-01–T-0176-16) covering SELECT/INSERT/UPDATE/DELETE cross-tenant isolation on `notification_preferences` (pushed this session); 0185_open_audit_findings_site_code_tables.sql added — pure tracking record, 74 site_code-scoped operational tables missing org_id-scoped RLS policy, 4 CRITICAL (no RLS enabled): `approval_decision`, `approval_request`, `capture_item`, `work_item`; 0185_rollback.sql added — intentional no-op (no DDL to reverse); lint-rls-org-id.py full-corpus result: 74 flagged tables — all site_code-scoped operational tables, ALLOWLIST expansion correctly cleared all platform/user-scoped tables; previous session: pgTAP SQL total 147, migration 0176_notification_preferences_rls added (commit `ae1bbd2b19`), 0176_rollback.sql (commit `88c1759ffb`), lint-rls-org-id.py ALLOWLIST 8 → 30 (commit `f159edb994`), withSuperAdminGuard T-SG-12 (commit `2696bbca4c`), npm audit 0 vulnerabilities confirmed.*
