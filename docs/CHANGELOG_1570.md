@@ -114,5 +114,9 @@ a graceful empty state when no archive data exists yet.
 | Artifact | Commit |
 |---|---|
 | Migration 0203 | `35ccd2514e2d` |
-| CHANGELOG 15.7.0 | `3393413b5793` |
+| CHANGELOG 15.7.0 (final) | `fe7fa0a50978` |
 | Dashboard HTML update | `24a8e618ffb0` |
+| Test suite 0203 | `d5d822e02030` |
+| `staging_validate_0203.sh` | `3ced1b56e2b2` |
+| `staging_validate_all.sh` (entry 19) | `dc28f6856fde` |
+| OpenAPI spec v15.7.0 | `5e9f86baab8c` |
