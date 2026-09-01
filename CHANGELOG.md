@@ -5,11 +5,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v17.5.0] — Training Tracker Module — 🚧 In Progress (Q1 2027)
+## [v17.5.0] — Training Tracker + Super Employee Tracker — 2027-01-15
 
 ### Added
 
-#### Training Tracker (`src/training/`)
+#### Training Tracker — Types & Schema (`src/training/`, `supabase/migrations/`)
 - **`src/training/trainingTypes.ts`** — complete TypeScript type system for Training Tracker module
   - `TrainingCourseCategory` union (8 values): `AI_LITERACY`, `SAFETY`, `QUALITY`, `MACHINE_OPERATION`, `SOFT_SKILLS`, `COMPLIANCE`, `LEADERSHIP`, `TECHNICAL`
   - `TrainingStatus` union (4 values): `NOT_STARTED`, `IN_PROGRESS`, `COMPLETED`, `EXPIRED`
@@ -17,38 +17,55 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - `TrainingCourse`, `TrainingEnrollment`, `TrainingCompletion` interfaces
   - `TrainingCourseFilters`, `DEFAULT_TRAINING_FILTERS`, `TrainingTrackerState`
   - `SuperEmployeeStage`-linked seed courses (AI Literacy ×3 covering AI_UNAWARE → SUPER_EMPLOYEE progression)
-
-#### Database Migrations
 - **`supabase/migrations/20270101_training_tracker.sql`** — Training Tracker schema
-  - `training_courses` table — global + org-specific courses; `required_for_stage` links to `SuperEmployeeStage`
-  - `training_enrollments` table — per-employee enrollment with `status` and `progress_pct`
-  - `training_completions` table — completion records with `score` and `is_passed` (trigger-computed vs `passing_score`)
-  - `tt_is_professional_plus()` plan gate helper — delegates to `pt_current_org_plan()` from process templates migration
-  - `tt_set_completion_passed` trigger — sets `is_passed` by joining `training_courses.passing_score`
-  - `tt_sync_enrollment_completed` trigger — auto-sets enrollment `status = COMPLETED` on completion insert
-  - `training_progress_v` view — per-employee completion stats with `SECURITY INVOKER`
-  - `org_training_summary_v` view — org-level aggregates (completion rate, avg score, enrolled count)
-  - RLS policies — tenant isolation; ADMIN+ for course creation; employees see own enrollments/completions
+  - `training_courses`, `training_enrollments`, `training_completions` tables
+  - `tt_is_professional_plus()` plan gate helper, `tt_set_completion_passed` + `tt_sync_enrollment_completed` triggers
+  - `training_progress_v` + `org_training_summary_v` views (SECURITY INVOKER)
+  - RLS policies — tenant isolation; ADMIN+ for course management; employees see own records
   - 10 global seed courses (AI Literacy ×3 mapped to SuperEmployeeStage progression)
+
+#### Training Tracker — Store & Components
+- **`src/training/trainingStore.ts`** — Zustand store with `fetchCourses`, `enroll`, `logCompletion`, `bulkEnroll` actions
+  - `TrainingPlanGateError` class — thrown when org plan < PROFESSIONAL
+  - `logCompletion` — optimistic update reverted on error
+- **`src/training/TrainingCourseList.tsx`** — course list UI with PROFESSIONAL+ plan gate wall, `SuperEmployeeStage` filter, isAdmin enroll button
+- **`src/training/TrainingEnrollmentPanel.tsx`** — bulk enrollment panel with employee tag add/remove, due date picker, status timeline, and error banner
+  - 15 `data-testid` attributes for full test coverage
+
+#### Training Tracker — Tests & Stories
+- **`src/training/__tests__/trainingTypes.test.ts`** — type system unit tests
+- **`src/training/__tests__/trainingStore.test.ts`** — 55 Vitest tests covering all actions, `TrainingPlanGateError` guard, and `logCompletion` optimistic update rollback
+- **`src/training/__tests__/TrainingEnrollmentPanel.test.tsx`** — ~30 Vitest tests across 6 describe blocks: plan gate wall, employee tag add, employee tag remove, submit button disabled state, bulkEnroll error path, enrollment timeline
+- **`src/training/TrainingCourseList.stories.tsx`** — 10 Storybook stories: plan gate wall, loading, empty, PROFESSIONAL plan, isAdmin enroll flow, stage filter states
+
+#### Super Employee Tracker — Types, Store & Schema
+- **`src/training/superEmployeeTypes.ts`** — TypeScript types for AI Readiness stage progression
+  - DB row interfaces: `AiAssessmentRow`, `StageHistoryRow`, `SkillGapRow`, `EmployeeReadinessRow`, `OrgReadinessSummaryRow`
+  - App-layer interfaces: `AiAssessment`, `StageHistoryEntry`, `SkillGap`, `EmployeeAiReadiness`, `OrgAiReadinessSummary`
+  - Plan gate: `canAccessSuperEmployeeTracker`, `SuperEmployeeTrackerPlanGateError`
+  - Constants: `STAGE_SCORE_MAP`, `STAGE_PROGRESSION_ORDER`, `AI_READINESS_THRESHOLD_STAGE` = `AI_ASSISTED`, `AI_READINESS_SCORE_THRESHOLD` = 50
+  - Utilities: `getNextStage`, `isStageAdvancement`; mappers for all 5 row types
+- **`src/training/superEmployeeStore.ts`** — Zustand store `useSuperEmployeeStore` with 9 actions
+  - `fetchStageHistory`, `fetchAssessments`, `fetchSkillGaps`, `fetchEmployeeReadiness`, `fetchOrgReadiness`
+  - `recordStageTransition`, `createAssessment`, `addSkillGap`, `resolveSkillGap` — PROFESSIONAL+ gated, optimistic updates
+  - `clearError`
+- **`supabase/migrations/20270115_super_employee_tracker.sql`** — Super Employee Tracker schema
+  - `employee_ai_assessments`, `employee_stage_history` (append-only), `employee_skill_gaps` tables
+  - `employee_ai_readiness_v` (DISTINCT ON latest stage per employee) + `org_ai_readiness_summary_v` (stage distribution + AI readiness rate) views
+  - RLS policies mirror training_tracker pattern; OWNER-only DELETE on stage_history for audit preservation
+  - 5 indexes; ASSERTION block verifies 3 tables + 2 views + RLS enabled
 
 #### Storybook (Process Templates — v17.0 enhancement)
 - **`CloneFlowInteraction`** story added to `src/jobs/ProcessTemplateList.stories.tsx` (now 12 stories)
-  - Uses `cloneGlobalTemplateSpy = fn(...)` module-level spy + `mockClear()` in decorator for idempotent play()
-  - Interaction test: click clone button → await spy called with correct templateId → verify toast visible
+  - Interaction test: click clone button → await spy called with correct `templateId` → verify toast visible
 
 #### GitHub Issue Templates
 - **`.github/ISSUE_TEMPLATE/v17-process-templates-bug.yml`** — bug report template for v17.0 Process Templates
-  - Labels: `bug`, `v17-process-templates`
-  - 8 fields: title, environment, plan tier, affected component (ProcessTemplateList / BottleneckHeatmap / Both), steps to reproduce, expected/actual behavior, logs
+  - Labels: `bug`, `v17-process-templates`; 8 fields including affected component (ProcessTemplateList / BottleneckHeatmap / Both)
 
-### In Progress
-- `src/training/trainingStore.ts` — Zustand store (pending)
-- `src/training/TrainingCourseList.tsx` — UI component (pending)
-- `src/training/TrainingEnrollmentPanel.tsx` — UI component (pending)
-- Vitest unit tests for trainingTypes + trainingStore (pending)
-- Storybook stories for Training Tracker components (pending)
-
-**Branch:** `feature/v17-5-training-tracker-stories` | **PR:** #76 (open)
+### Merged
+- **PR #76** — `feature/v17-5-training-tracker-stories` → `main` (squash merge `3a819c17`)
+- **Tag:** `v17.5.0` → `3a819c17d70d1c399a6a336a1cd2df5708b9a40a`
 
 ---
 
