@@ -2,19 +2,20 @@
 
 ## v17.5 — Training Tracker Module (🚧 In Progress — Q1 2027)
 
-**Branch:** `feature/v17-5-training-tracker-stories` | **PR:** #76 (open) | **Commit:** d7a56e91
+**Branch:** `feature/v17-5-training-tracker-stories` | **PR:** #76 (open) | **Commit:** 1cd41b27
 
 ### ✅ Committed to branch
 - `supabase/migrations/20270101_training_tracker.sql` — 3 tables (`training_courses`, `training_enrollments`, `training_completions`), `tt_is_professional_plus()` plan gate helper, 2 triggers, 2 views, RLS, 10 global seed courses
 - `src/training/trainingTypes.ts` — full type system: `TrainingCourseCategory` (8), `TrainingStatus` (4), `TRAINING_PLAN_GATE`, all interfaces + filters + `TrainingTrackerState`
 - `src/jobs/ProcessTemplateList.stories.tsx` — appended `CloneFlowInteraction` story (now 12 stories); module-level `cloneGlobalTemplateSpy = fn(...)`
 - `.github/ISSUE_TEMPLATE/v17-process-templates-bug.yml` — bug report template; labels: `bug`, `v17-process-templates`
+- `src/training/trainingStore.ts` — Zustand store; `TrainingPlanGateError` class; fetchCourses, enroll, logCompletion + all CRUD + analytics; all writes PROFESSIONAL+ gated
+- `src/training/__tests__/trainingTypes.test.ts` — 50+ Vitest tests: canAccessTrainingTracker, all 8 categories, all 4 statuses, defaults, interface satisfies, SuperEmployeeStage linkage
+- `src/training/TrainingCourseList.tsx` — PROFESSIONAL+ gate wall, debounced search (300ms), category + stage + isActive filters, course cards with stage badge/enroll btn, loading skeleton, empty state, error banner
 
 ### 🔜 Pending
-- [ ] `src/training/trainingStore.ts` — Zustand store
-- [ ] `src/training/TrainingCourseList.tsx` — course browser UI
 - [ ] `src/training/TrainingEnrollmentPanel.tsx` — enrollment UI
-- [ ] Vitest unit tests for trainingTypes + trainingStore
+- [ ] Vitest unit tests for `trainingStore.ts`
 - [ ] Storybook stories for Training Tracker components
 - [ ] Merge PR #76 → main + release tag v17.5.0
 
