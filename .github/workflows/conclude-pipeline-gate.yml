@@ -190,6 +190,35 @@ jobs:
       validation_passed: ${{ steps.schema-check.outputs.validation_passed }}
       validation_errors:  ${{ steps.schema-check.outputs.validation_errors }}
     steps:
+      - name: Post pending commit status
+        id: post-pending-status
+        if: inputs.commit_sha != ''
+        uses: actions/github-script@v7
+        env:
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+          RUN_URL:    ${{ inputs.run_url }}
+        with:
+          script: |
+            // Post ci/validate-inputs-schema=pending immediately so the check
+            // appears in the PR UI as soon as the workflow triggers, before
+            // schema-check completes.
+            const commitSha = process.env.COMMIT_SHA || '';
+            const runUrl    = process.env.RUN_URL    || '';
+            if (!commitSha || commitSha.length < 40) {
+              core.info('commit_sha not yet available \u2014 skipping pending status');
+              return;
+            }
+            await github.rest.repos.createCommitStatus({
+              owner:       context.repo.owner,
+              repo:        context.repo.repo,
+              sha:         commitSha,
+              state:       'pending',
+              target_url:  runUrl,
+              context:     'ci/validate-inputs-schema',
+              description: 'Schema validation in progress\u2026',
+            });
+            core.info(`Posted ci/validate-inputs-schema=pending on ${commitSha.slice(0, 7)}`);
+
       - name: Schema-check workflow_call inputs
         id: schema-check
         uses: actions/github-script@v7
@@ -385,6 +414,41 @@ jobs:
                 passed ? 'success' : 'failure'
               } on ${commitSha.slice(0, 7)}`
             );
+  annotate-validation-errors:
+    name: Annotate Validation Errors
+    needs: validate-inputs
+    runs-on: ubuntu-latest
+    if: >-
+      always() && github.event_name == 'workflow_call' &&
+      needs.validate-inputs.outputs.validation_passed == 'false'
+
+    permissions:
+      pull-requests: read
+      statuses:      read
+
+    steps:
+      - name: Surface validation errors as annotations
+        uses: actions/github-script@v7
+        env:
+          VALIDATION_ERRORS: ${{ needs.validate-inputs.outputs.validation_errors }}
+        with:
+          script: |
+            // Parse the JSON-stringified error array from validate-inputs output.
+            // Each entry is emitted as core.error() — annotations appear in the
+            // Actions UI summary panel and in PR check detail views.
+            const errorsJson = process.env.VALIDATION_ERRORS || '[]';
+            let errors = [];
+            try { errors = JSON.parse(errorsJson); } catch (_) {}
+            if (errors.length === 0) { core.info('No validation errors to annotate.'); return; }
+            for (const msg of errors) {
+              core.error(`Gate schema validation: ${msg}`, {
+                title: 'conclude-pipeline-gate \u2014 Input Validation Error',
+              });
+            }
+            core.setFailed(
+              `${errors.length} gate input validation error(s) \u2014 see annotations above`
+            );
+
 
   post-pipeline-gate:
     name: Post Pipeline Gate
@@ -889,6 +953,42 @@ jobs:
               core.info(`TC-7 PASSED — ${errors.length} error(s) detected: ${errors.join('; ')}`);
             }
 
+      - name: "TC-8: critical_failed_jobs contains unknown job ID"
+        id: tc8
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Payload: critical_failed_jobs list containing 'unknown-job' and 'also-unknown',
+            // neither of which appears in the KNOWN_JOB_IDS allowlist.
+            // Expected: allowlist validation error → validation_passed='false'
+            const KNOWN_JOB_IDS = [
+              'lint', 'integration-tests', 'feature-cache-coverage', 'post-coverage-badge',
+              'e2e-backend-gate', 'notify-slack-on-failure', 'notify-slack-on-success',
+              'notify-coverage-badge-failure', 'create-webhook-broken-label',
+              'notify-success-pipeline-failure', 'post-workflow-summary', 'upload-eslint-sarif',
+              'close-webhook-broken-issue', 'notify-slack-on-sarif-findings',
+              'notify-slack-on-sarif-critical', 'open-sarif-findings-issue',
+              'close-sarif-findings-issue', 'block-merge-on-sarif-critical',
+              'post-sarif-pr-description', 'dry-run-summary', 'workflow-run-step-summary',
+              'pr-job-conclusion-diff', 'conclude-pipeline', 'run-pipeline-gate',
+            ];
+            // Mix of a valid ID and two unknown IDs — partial lists must be caught too
+            const testJobs = ['lint', 'unknown-job', 'also-unknown'];
+            const errors   = [];
+            for (const jobId of testJobs) {
+              if (!KNOWN_JOB_IDS.includes(jobId))
+                errors.push(`critical_failed_jobs contains unknown job ID: '${jobId}'`);
+            }
+            if (errors.length === 0) {
+              core.setFailed(
+                'TC-8 FAILED: expected allowlist errors for unknown job IDs but got none ' +
+                '(validate-inputs would have incorrectly set validation_passed=true)'
+              );
+            } else {
+              core.info(`TC-8 PASSED \u2014 ${errors.length} error(s): ${errors.join("; ")}`);
+            }
+
       - name: "Job summary — TC results table"
         if: always()
         env:
@@ -899,6 +999,7 @@ jobs:
           TC5_OUTCOME: ${{ steps.tc5.outcome }}
           TC6_OUTCOME: ${{ steps.tc6.outcome }}
           TC7_OUTCOME: ${{ steps.tc7.outcome }}
+          TC8_OUTCOME: ${{ steps.tc8.outcome }}
         run: |
           tc() { [ "$1" = "success" ] && printf ':white_check_mark: PASS' || printf ':x: FAIL'; }
           {
@@ -913,11 +1014,12 @@ jobs:
             echo "| TC-5 | \`overall_status='failure'\` + empty \`critical_failed_jobs\` | Cross-validation (reverse) | $(tc "$TC5_OUTCOME") |"
             echo "| TC-6 | \`overall_status='unknown'\` not in VALID_STATUSES | VALID_STATUSES enum | $(tc \"$TC6_OUTCOME\") |"
             echo "| TC-7 | \`run_url\` missing \`https://\` prefix | run_url scheme check | $(tc \"$TC7_OUTCOME\") |"
+            echo "| TC-8 | \`critical_failed_jobs\` contains unknown job ID | KNOWN_JOB_IDS allowlist | $(tc \"$TC8_OUTCOME\") |"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
           # Fail job if any TC failed (continue-on-error masked the individual step failures)
           failed=0
-          for outcome in "$TC1_OUTCOME" "$TC2_OUTCOME" "$TC3_OUTCOME" "$TC4_OUTCOME" "$TC5_OUTCOME" "$TC6_OUTCOME" "$TC7_OUTCOME"; do
+          for outcome in "$TC1_OUTCOME" "$TC2_OUTCOME" "$TC3_OUTCOME" "$TC4_OUTCOME" "$TC5_OUTCOME" "$TC6_OUTCOME" "$TC7_OUTCOME" "$TC8_OUTCOME"; do
             [ "$outcome" != "success" ] && failed=1
           done
           if [ "$failed" = "1" ]; then
@@ -925,4 +1027,4 @@ jobs:
             echo "_⚠️ One or more TCs failed — check step logs._" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          echo "_All 7 smoke-test TCs passed._" >> "$GITHUB_STEP_SUMMARY"
+          echo "_All 8 smoke-test TCs passed._" >> "$GITHUB_STEP_SUMMARY"
