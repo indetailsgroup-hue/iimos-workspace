@@ -88,7 +88,7 @@ CREATE POLICY "audit_logs_service_role_insert_validated"
   WITH CHECK (
     -- org_id must reference an existing organisation row
     EXISTS (
-      SELECT 1 FROM public.organizations o WHERE o.id = org_id
+      SELECT 1 FROM public.organizations o WHERE o.org_id = org_id
     )
   );
 
@@ -112,7 +112,7 @@ BEGIN
   -- ── org_id check ─────────────────────────────────────────────────────────
   -- Belt-and-suspenders on top of the FK constraint; explicit message aids forensics.
   IF NOT EXISTS (
-    SELECT 1 FROM public.organizations o WHERE o.id = NEW.org_id
+    SELECT 1 FROM public.organizations o WHERE o.org_id = NEW.org_id
   ) THEN
     RAISE EXCEPTION
       'audit_log_insert_validate: org_id % does not exist in public.organizations — possible spoofed tenant write',
