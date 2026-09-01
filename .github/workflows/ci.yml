@@ -13,6 +13,9 @@ on:
     branches: ["main"]
     paths:
       - "*.sql"
+      - "supabase/migrations/**"
+  workflow_dispatch:
+    # Allows manual trigger from the GitHub Actions tab (e.g. after direct pushes to main)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -246,7 +249,7 @@ jobs:
   #   Spins up a full local Postgres+Auth stack, auto-applies all migrations
   #   in supabase/migrations/ (0000_e2e_prereqs + 0176→0215), then runs the
   #   Deno e2e_smoke_test.ts against it.
-  #   Runs on every PR so regressions are caught before merge.
+  #   Runs on every PR and workflow_dispatch so regressions are caught before merge.
   # ───────────────────────────────────────────────────────────────────────────
   e2e-smoke:
     name: E2E Smoke Tests (local Supabase)
