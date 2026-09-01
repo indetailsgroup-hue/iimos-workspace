@@ -886,10 +886,53 @@ jobs:
              supabase/migrations/01731_rollback.sql 2>/dev/null || true
           echo "Renamed: 0173_rollback.sql → 01731_rollback.sql (version conflict fix)"
 
+      # ── Iter 23: Deduplicate migration version conflicts ──────────────────
+      # Many migration files share the same numeric version prefix (e.g. four
+      # files all named 0176_*.sql). supabase start extracts the leading digits
+      # as the version key and INSERTs into schema_migrations_pkey which requires
+      # uniqueness — causing a duplicate-key error on the 2nd file in each group.
+      # Fix: for each group of N files sharing the same prefix, rename the 2nd,
+      # 3rd, … files to {prefix}{1}, {prefix}{2}, … ensuring unique version keys.
+      - name: Dedup migration version conflicts (iter 23)
+        run: |
+          python3 - <<'PYEOF'
+          import os, re, sys
+          from collections import defaultdict
+
+          mig_dir = 'supabase/migrations'
+          files = sorted(f for f in os.listdir(mig_dir) if f.endswith('.sql'))
+
+          groups = defaultdict(list)
+          for fname in files:
+              m = re.match(r'^(\d+)', fname)
+              if m:
+                  groups[m.group(1)].append(fname)
+
+          renames = 0
+          for prefix, group in sorted(groups.items()):
+              if len(group) <= 1:
+                  continue
+              # Keep first file as-is; rename 2nd, 3rd, … with unique numeric prefix
+              for i, fname in enumerate(group[1:], start=1):
+                  new_prefix = prefix + str(i)
+                  # Strip the old numeric prefix and leading underscore
+                  rest = re.sub(r'^\d+_?', '', fname, count=1)
+                  new_name = new_prefix + '_' + rest
+                  src = os.path.join(mig_dir, fname)
+                  dst = os.path.join(mig_dir, new_name)
+                  if not os.path.exists(dst):
+                      os.rename(src, dst)
+                      print(f'  Renamed: {fname} → {new_name}')
+                      renames += 1
+                  else:
+                      print(f'  Skip (dst exists): {fname} → {new_name}')
+
+          print(f'Dedup complete. Total renames: {renames}')
+          PYEOF
+
       # ── Start local Supabase stack (Docker available on ubuntu-latest) ─────
       # supabase start auto-applies every .sql file in supabase/migrations/
-      # in lexicographic order:
-      #   0000_e2e_prereqs → 0001...0172 → 0172_z_e2e_platform_stub → 0173 → 01731 → ... → 0215
+      # in lexicographic order after all version-conflict renames above.
       - name: Start local Supabase
         run: supabase start
 
