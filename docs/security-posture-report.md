@@ -280,6 +280,8 @@ All migrations have corresponding rollback files (`*_rollback.sql`) for CI forwa
 | #53 | Issue | Migration 0179 retrospective | `security`, `P1`, `database`, `retrospective` | Open |
 | #54 | PR | Identity reconciliation hardening + REVOKE sweep (0180+0181) | `security`, `P1`, `identity-security`, `database` | Open — closes #37 |
 | #56 | Issue | Post-mortem v16.8.0 — RLS linter CI gate + cross-tenant pgTAP suite | `security`, `audit`, `P1` | A1 ✅ Closed (`383bb9aca8`), A3 ✅ Closed (`1fba55bd`), A4 ✅ Closed (SUPABASE_ACCESS_TOKEN provisioned via Secrets API) |
+| #73 | Issue | Phase 2 RLS epic (0186–0194) — 74 operational tables, 7 domains | `security`, `P1`, `database` | ✅ **Closed** (2026-09-01 — migrations 0186–0194 pushed, 511 pgTAP tests, 0 linter violations, `import_map.json` CI fix applied) |
+| — | Push (main) | Phase 2 RLS batch 0188–0194 direct push — 7 migrations + rollbacks + pgTAP suites | `security`, `database` | ✅ **Merged** to `main` 2026-09-01 via Contents API (15 files); CI lint ✅; `supabase start` fix: `supabase/import_map.json` added (sha `f6ca8454c563`); full 511-assertion CI run pending |
 
 ---
 
