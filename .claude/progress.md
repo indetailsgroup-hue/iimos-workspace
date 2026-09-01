@@ -27,10 +27,19 @@
 - `src/qc-anomaly/qcAnomalyTypes.ts` — 4 enum types; DB row + app-layer types; payloads; `DEFAULT_QCA_FILTERS`; `canAccessQcAnomaly`/`QcAnomalyPlanGateError`; Thai label constants × 4 + getters × 4 + mappers × 4
 - `src/qc-anomaly/qcAnomalyStore.ts` — `useQcAnomalyStore`; 8 ENTERPRISE-gated actions (fetchThresholds, createThreshold, updateThreshold, deleteThreshold, fetchAnomalies, acknowledgeAnomaly, resolveAnomaly, submitMeasurement); 3 UI helpers
 
-### 📋 Remaining v18.0 tasks (sprint 5+)
-- QC Anomaly Detection UI component (`QcAnomalyDashboard.tsx`)
-- AI Quotation Draft module
+### ✅ Completed (v18.0 — sprint 5: QcAnomalyDashboard + qcAnomalyStore tests + AI Quotation Draft module)
+- `src/qc-anomaly/QcAnomalyDashboard.tsx` — ENTERPRISE-gated dashboard; ThresholdConfigPanel (inline CRUD), AnomalyEventList (severity badges, acknowledge/resolve), SummaryMetricCards, QcaFilters bar
+- `src/qc-anomaly/__tests__/qcAnomalyStore.test.ts` — **57 Vitest unit tests, all passing**; plan gate (32), fetchAnomalies (5), acknowledgeAnomaly (4), resolveAnomaly (4), submitMeasurement (6), fetchThresholds (3), threshold CRUD (3); loading-state tests use `useQcAnomalyStore.subscribe` pattern (React 18 batch-safe)
+- `supabase/migrations/20270215_ai_quotation_draft.sql` — 2 enums, 3 tables (with GENERATED column), view, 3 functions+triggers, RLS (ENTERPRISE+hierarchy≥80 for writes), 8 indexes, assertion block
+- `src/ai-quotation/aiQuotationDraftTypes.ts` — full type system; AqdDraftStatus/AqdLineItemType enums; DB + app-layer types; payloads; `canAccessAiQuotation`/`AiQuotationPlanGateError`; Thai labels; mappers; `AqdFilters`/`DEFAULT_AQD_FILTERS`
+- `src/ai-quotation/aiQuotationDraftStore.ts` — `useAiQuotationDraftStore`; 10 ENTERPRISE-gated actions; optimistic rollback on submitForReview/approveDraft/rejectDraft; UI helpers
+
+### 📋 Remaining v18.0 tasks (sprint 6+)
+- AI Quotation Draft UI component (`AiQuotationDraftBoard.tsx` or similar)
 - Leadership Action Tracker module
+- QC Anomaly Detection Storybook stories + additional tests
+
+**Last updated:** 2027-02-15
 
 ---
 

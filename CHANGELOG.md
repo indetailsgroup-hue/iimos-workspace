@@ -5,6 +5,56 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v18.0.4] — QcAnomalyDashboard + qcAnomalyStore Tests + AI Quotation Draft Module — 2027-02-15
+
+### Added
+
+#### UI — src/qc-anomaly/QcAnomalyDashboard.tsx
+- ENTERPRISE-gated dashboard with plan gate wall for FREE/STARTER/PROFESSIONAL
+- ThresholdConfigPanel: inline create/edit/delete for QcaThresholdConfigRow with metric key selector, threshold type selector (MIN/MAX/RANGE/ZSCORE), and active toggle
+- AnomalyEventList: sortable table with severity badges (LOW/MEDIUM/HIGH/CRITICAL color-coded), status chips (OPEN/ACKNOWLEDGED/RESOLVED), acknowledge and resolve action buttons with optimistic UI
+- SummaryMetricCards: displays open/acknowledged/resolved counts and critical anomaly rate from QcaAnomalySummaryRow
+- QcaFilters bar: metricKey, severity, status dropdowns wired to store setFilters
+
+#### Tests — src/qc-anomaly/__tests__/qcAnomalyStore.test.ts
+- **57 Vitest unit tests — all passing**
+- Plan gate (32): describe.each(ACTIONS × NON_ENTERPRISE) rejects; ENTERPRISE pass for all 8 actions
+- fetchAnomalies (5): parallel fetch Promise.all, error propagation via anomalyResult.error ?? summaryResult.error, isLoading subscribe pattern
+- acknowledgeAnomaly (4): optimistic status update, rollback on error, no-op if event not found, plain update chain
+- resolveAnomaly (4): same pattern as acknowledgeAnomaly
+- submitMeasurement (6): isMeasurementLoading subscribe pattern, prepend + slice 50, re-fetch call, error path
+- fetchThresholds (3): table name qca_threshold_configs, isLoading subscribe pattern, error path
+- createThreshold / updateThreshold / deleteThreshold (3): append/update/filter state, error paths
+- Loading-state tests use `useQcAnomalyStore.subscribe` (not renderHook) — correct for React 18 batch semantics
+
+#### AI Quotation Draft — supabase/migrations/20270215_ai_quotation_draft.sql
+- Enums: aqd_draft_status (DRAFT/PENDING_REVIEW/APPROVED/REJECTED), aqd_line_item_type (PRODUCT/SERVICE/MATERIAL/LABOR/DISCOUNT/CUSTOM)
+- Tables: aqd_quotation_drafts, aqd_draft_line_items (with GENERATED total_price column), aqd_generation_logs
+- View: aqd_draft_summary_v (draft + aggregated line item counts/totals)
+- Functions/triggers: aqd_is_enterprise(), aqd_set_updated_at(), aqd_recalculate_draft_totals() AFTER INSERT/UPDATE/DELETE on aqd_draft_line_items
+- RLS: SELECT = ENTERPRISE plan; INSERT/UPDATE/DELETE = ENTERPRISE + hierarchy ≥ 80
+- 8 indexes on FK columns, status, and org_id + created_at composite
+- Assertion block validates enum cardinality and table existence
+
+#### Types — src/ai-quotation/aiQuotationDraftTypes.ts
+- AqdDraftStatus, AqdLineItemType enums (TypeScript)
+- DB row types: AqdQuotationDraftRow, AqdDraftLineItemRow, AqdGenerationLogRow, AqdDraftSummaryRow
+- App aliases with camelCase dates: AqdQuotationDraft, AqdDraftLineItem, AqdGenerationLog, AqdDraftSummary
+- Payloads: CreateAqdDraftPayload, UpdateAqdDraftPayload, AddAqdLineItemPayload, UpdateAqdLineItemPayload
+- canAccessAiQuotation plan gate (ENTERPRISE only), AiQuotationPlanGateError
+- Thai labels (DRAFT_STATUS_LABELS, LINE_ITEM_TYPE_LABELS), getters, mappers, AqdFilters, DEFAULT_AQD_FILTERS
+
+#### Store — src/ai-quotation/aiQuotationDraftStore.ts
+- useAiQuotationDraftStore (Zustand) — 10 ENTERPRISE-gated actions
+- fetchDrafts: Promise.all(drafts + summaries), merges into drafts array
+- createDraft / updateDraft / deleteDraft: full CRUD with optimistic delete rollback
+- addLineItem / updateLineItem / removeLineItem: line item management per draft
+- submitForReview: optimistic PENDING_REVIEW → rollback to prevStatus on error
+- approveDraft / rejectDraft: optimistic APPROVED/REJECTED → rollback on error
+- UI helpers: selectDraft, setFilters, clearError
+
+---
+
 ## [v18.0.3] — RoleNetworkCanvas Stories + roleNetworkStore Tests + QC Anomaly Detection Module — 2027-02-10
 
 ### Added
