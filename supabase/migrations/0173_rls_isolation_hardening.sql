@@ -111,8 +111,8 @@ CREATE POLICY "platform_metrics_super_admin_write" ON platform_metrics_snapshots
 -- Realtime channel policies (Supabase Realtime RLS, available ≥ v2.28).
 -- =============================================================================
 
-ALTER PUBLICATION supabase_realtime DROP TABLE job;
-ALTER PUBLICATION supabase_realtime DROP TABLE invoice;
+DO $pub$ BEGIN ALTER PUBLICATION supabase_realtime DROP TABLE public.jobs; EXCEPTION WHEN OTHERS THEN NULL; END $pub$;
+DO $pub$ BEGIN ALTER PUBLICATION supabase_realtime DROP TABLE public.invoices; EXCEPTION WHEN OTHERS THEN NULL; END $pub$;
 
 -- =============================================================================
 -- F1 (CRITICAL): Legacy tables — no org_id, USING (true) SELECT policies
@@ -122,22 +122,22 @@ ALTER PUBLICATION supabase_realtime DROP TABLE invoice;
 
 -- ── 1. ADD COLUMNS ───────────────────────────────────────────────────────────
 
-ALTER TABLE customer       ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
-ALTER TABLE job            ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
-ALTER TABLE job_panel      ADD COLUMN IF NOT EXISTS org_id UUID;   -- FK added after backfill confirms referential integrity
-ALTER TABLE quotation      ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
-ALTER TABLE quotation_line ADD COLUMN IF NOT EXISTS org_id UUID;   -- derived from parent quotation
-ALTER TABLE invoice        ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
-ALTER TABLE invoice_payment ADD COLUMN IF NOT EXISTS org_id UUID;  -- derived from parent invoice
+ALTER TABLE public.customers       ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
+ALTER TABLE public.jobs            ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
+ALTER TABLE public.job_panels      ADD COLUMN IF NOT EXISTS org_id UUID;   -- FK added after backfill confirms referential integrity
+ALTER TABLE public.quotations      ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
+ALTER TABLE public.quotation_lines ADD COLUMN IF NOT EXISTS org_id UUID;   -- derived from parent quotation
+ALTER TABLE public.invoices        ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES public.organizations(org_id);
+ALTER TABLE public.invoice_payments ADD COLUMN IF NOT EXISTS org_id UUID;  -- derived from parent invoice
 
 -- Add indexes so org-scoped queries remain fast after the column is populated.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_customer_org       ON customer(org_id);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_job_org            ON job(org_id);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_job_panel_org      ON job_panel(org_id);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_quotation_org      ON quotation(org_id);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_quotation_line_org ON quotation_line(org_id);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_invoice_org        ON invoice(org_id);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_invoice_payment_org ON invoice_payment(org_id);
+CREATE INDEX IF NOT EXISTS idx_customer_org       ON public.customers(org_id);
+CREATE INDEX IF NOT EXISTS idx_job_org            ON public.jobs(org_id);
+CREATE INDEX IF NOT EXISTS idx_job_panel_org      ON public.job_panels(org_id);
+CREATE INDEX IF NOT EXISTS idx_quotation_org      ON public.quotations(org_id);
+CREATE INDEX IF NOT EXISTS idx_quotation_line_org ON public.quotation_lines(org_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_org        ON public.invoices(org_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_payment_org ON public.invoice_payments(org_id);
 
 -- ── 2. BACKFILL ──────────────────────────────────────────────────────────────
 -- Strategy: resolve org_id for each row via the row's created_by user →
@@ -170,77 +170,77 @@ BEGIN
   END IF;
 
   -- ── customer ────────────────────────────────────────────────────────────────
-  UPDATE customer c
+  UPDATE public.customers c
      SET org_id = COALESCE(
            (SELECT om.org_id
               FROM public.org_members om
              WHERE om.user_id = c.created_by
                AND om.is_active = true
-             ORDER BY om.created_at
+             ORDER BY om.joined_at
              LIMIT 1),
            v_fallback_org_id
          )
    WHERE c.org_id IS NULL;
 
   -- ── job (has created_by) ────────────────────────────────────────────────────
-  UPDATE job j
+  UPDATE public.jobs j
      SET org_id = COALESCE(
            (SELECT om.org_id
               FROM public.org_members om
              WHERE om.user_id = j.created_by
                AND om.is_active = true
-             ORDER BY om.created_at
+             ORDER BY om.joined_at
              LIMIT 1),
            v_fallback_org_id
          )
    WHERE j.org_id IS NULL;
 
   -- ── job_panel (no created_by — inherit from parent job) ────────────────────
-  UPDATE job_panel jp
+  UPDATE public.job_panels jp
      SET org_id = COALESCE(
-           (SELECT j.org_id FROM job j WHERE j.job_id = jp.job_id),
+           (SELECT j.org_id FROM public.jobs j WHERE j.job_id = jp.job_id),
            v_fallback_org_id
          )
    WHERE jp.org_id IS NULL;
 
   -- ── quotation (has created_by) ──────────────────────────────────────────────
-  UPDATE quotation q
+  UPDATE public.quotations q
      SET org_id = COALESCE(
            (SELECT om.org_id
               FROM public.org_members om
              WHERE om.user_id = q.created_by
                AND om.is_active = true
-             ORDER BY om.created_at
+             ORDER BY om.joined_at
              LIMIT 1),
            v_fallback_org_id
          )
    WHERE q.org_id IS NULL;
 
   -- ── quotation_line (inherit from parent quotation) ──────────────────────────
-  UPDATE quotation_line ql
+  UPDATE public.quotation_lines ql
      SET org_id = COALESCE(
-           (SELECT q.org_id FROM quotation q WHERE q.quotation_id = ql.quotation_id),
+           (SELECT q.org_id FROM public.quotations q WHERE q.quotation_id = ql.quotation_id),
            v_fallback_org_id
          )
    WHERE ql.org_id IS NULL;
 
   -- ── invoice (has created_by) ────────────────────────────────────────────────
-  UPDATE invoice i
+  UPDATE public.invoices i
      SET org_id = COALESCE(
            (SELECT om.org_id
               FROM public.org_members om
              WHERE om.user_id = i.created_by
                AND om.is_active = true
-             ORDER BY om.created_at
+             ORDER BY om.joined_at
              LIMIT 1),
            v_fallback_org_id
          )
    WHERE i.org_id IS NULL;
 
   -- ── invoice_payment (inherit from parent invoice) ───────────────────────────
-  UPDATE invoice_payment ip
+  UPDATE public.invoice_payments ip
      SET org_id = COALESCE(
-           (SELECT i.org_id FROM invoice i WHERE i.invoice_id = ip.invoice_id),
+           (SELECT i.org_id FROM public.invoices i WHERE i.invoice_id = ip.invoice_id),
            v_fallback_org_id
          )
    WHERE ip.org_id IS NULL;
@@ -270,75 +270,75 @@ END $$;
 -- ── 4. REPLACE OPEN POLICIES ─────────────────────────────────────────────────
 
 -- Drop the wide-open USING(true) SELECT policies from 0172.
-DROP POLICY IF EXISTS "authenticated_read_customer"  ON customer;
-DROP POLICY IF EXISTS "authenticated_read_job"        ON job;
-DROP POLICY IF EXISTS "authenticated_read_panel"      ON job_panel;
-DROP POLICY IF EXISTS "authenticated_read_quotation"  ON quotation;
-DROP POLICY IF EXISTS "authenticated_read_qt_line"    ON quotation_line;
-DROP POLICY IF EXISTS "authenticated_read_invoice"    ON invoice;
-DROP POLICY IF EXISTS "authenticated_read_payment"    ON invoice_payment;
+DROP POLICY IF EXISTS "authenticated_read_customer"  ON public.customers;
+DROP POLICY IF EXISTS "authenticated_read_job"        ON public.jobs;
+DROP POLICY IF EXISTS "authenticated_read_panel"      ON public.job_panels;
+DROP POLICY IF EXISTS "authenticated_read_quotation"  ON public.quotations;
+DROP POLICY IF EXISTS "authenticated_read_qt_line"    ON public.quotation_lines;
+DROP POLICY IF EXISTS "authenticated_read_invoice"    ON public.invoices;
+DROP POLICY IF EXISTS "authenticated_read_payment"    ON public.invoice_payments;
 
 -- Note: if the policy names in 0172 differ from above, use the exact names
 -- from \dp customer; in psql.  The IF EXISTS guard makes this safe either way.
 
 -- Org-scoped SELECT (reads)
-CREATE POLICY "customer_tenant_isolation"       ON customer
+CREATE POLICY "customer_tenant_isolation"       ON public.customers
   FOR SELECT USING (org_id = public.get_user_org_id());
 
-CREATE POLICY "job_tenant_isolation"            ON job
+CREATE POLICY "job_tenant_isolation"            ON public.jobs
   FOR SELECT USING (org_id = public.get_user_org_id());
 
-CREATE POLICY "job_panel_tenant_isolation"      ON job_panel
+CREATE POLICY "job_panel_tenant_isolation"      ON public.job_panels
   FOR SELECT USING (org_id = public.get_user_org_id());
 
-CREATE POLICY "quotation_tenant_isolation"      ON quotation
+CREATE POLICY "quotation_tenant_isolation"      ON public.quotations
   FOR SELECT USING (org_id = public.get_user_org_id());
 
-CREATE POLICY "quotation_line_tenant_isolation" ON quotation_line
+CREATE POLICY "quotation_line_tenant_isolation" ON public.quotation_lines
   FOR SELECT USING (org_id = public.get_user_org_id());
 
-CREATE POLICY "invoice_tenant_isolation"        ON invoice
+CREATE POLICY "invoice_tenant_isolation"        ON public.invoices
   FOR SELECT USING (org_id = public.get_user_org_id());
 
-CREATE POLICY "invoice_payment_tenant_isolation" ON invoice_payment
+CREATE POLICY "invoice_payment_tenant_isolation" ON public.invoice_payments
   FOR SELECT USING (org_id = public.get_user_org_id());
 
 -- Org-scoped INSERT guards (prevent cross-tenant writes)
-CREATE POLICY "customer_tenant_insert"          ON customer
+CREATE POLICY "customer_tenant_insert"          ON public.customers
   FOR INSERT WITH CHECK (org_id = public.get_user_org_id());
 
-CREATE POLICY "job_tenant_insert"               ON job
+CREATE POLICY "job_tenant_insert"               ON public.jobs
   FOR INSERT WITH CHECK (org_id = public.get_user_org_id());
 
-CREATE POLICY "job_panel_tenant_insert"         ON job_panel
+CREATE POLICY "job_panel_tenant_insert"         ON public.job_panels
   FOR INSERT WITH CHECK (org_id = public.get_user_org_id());
 
-CREATE POLICY "quotation_tenant_insert"         ON quotation
+CREATE POLICY "quotation_tenant_insert"         ON public.quotations
   FOR INSERT WITH CHECK (org_id = public.get_user_org_id());
 
-CREATE POLICY "quotation_line_tenant_insert"    ON quotation_line
+CREATE POLICY "quotation_line_tenant_insert"    ON public.quotation_lines
   FOR INSERT WITH CHECK (org_id = public.get_user_org_id());
 
-CREATE POLICY "invoice_tenant_insert"           ON invoice
+CREATE POLICY "invoice_tenant_insert"           ON public.invoices
   FOR INSERT WITH CHECK (org_id = public.get_user_org_id());
 
-CREATE POLICY "invoice_payment_tenant_insert"   ON invoice_payment
+CREATE POLICY "invoice_payment_tenant_insert"   ON public.invoice_payments
   FOR INSERT WITH CHECK (org_id = public.get_user_org_id());
 
 -- Org-scoped UPDATE guards
-CREATE POLICY "customer_tenant_update"          ON customer
+CREATE POLICY "customer_tenant_update"          ON public.customers
   FOR UPDATE USING (org_id = public.get_user_org_id())
   WITH CHECK (org_id = public.get_user_org_id());
 
-CREATE POLICY "job_tenant_update"               ON job
+CREATE POLICY "job_tenant_update"               ON public.jobs
   FOR UPDATE USING (org_id = public.get_user_org_id())
   WITH CHECK (org_id = public.get_user_org_id());
 
-CREATE POLICY "quotation_tenant_update"         ON quotation
+CREATE POLICY "quotation_tenant_update"         ON public.quotations
   FOR UPDATE USING (org_id = public.get_user_org_id())
   WITH CHECK (org_id = public.get_user_org_id());
 
-CREATE POLICY "invoice_tenant_update"           ON invoice
+CREATE POLICY "invoice_tenant_update"           ON public.invoices
   FOR UPDATE USING (org_id = public.get_user_org_id())
   WITH CHECK (org_id = public.get_user_org_id());
 
@@ -367,7 +367,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_org_id      UUID;
-  v_invoice     invoice%ROWTYPE;
+  v_invoice     invoices%ROWTYPE;
   v_new_remaining NUMERIC;
   v_payment_id  UUID := gen_random_uuid();
 BEGIN
@@ -391,28 +391,28 @@ BEGIN
 
   -- Scoped invoice read — will raise NO_DATA_FOUND if wrong org.
   SELECT * INTO STRICT v_invoice
-    FROM invoice
+    FROM public.invoices
    WHERE invoice_id = p_invoice_id
      AND org_id     = v_org_id;
 
   v_new_remaining := v_invoice.remaining_amount - p_amount;
 
   -- Scoped INSERT into invoice_payment.
-  INSERT INTO invoice_payment (
+  INSERT INTO public.invoice_payments (
     payment_id, invoice_id, org_id, amount, payment_method, reference, paid_at
   ) VALUES (
     v_payment_id, p_invoice_id, v_org_id, p_amount, p_method, p_reference, now()
   );
 
   -- Scoped UPDATE on invoice.
-  UPDATE invoice
+  UPDATE public.invoices
      SET remaining_amount = v_new_remaining,
          status = CASE WHEN v_new_remaining <= 0 THEN 'PAID' ELSE 'PARTIAL' END
    WHERE invoice_id = p_invoice_id
      AND org_id     = v_org_id;
 
   -- Scoped UPDATE on job.
-  UPDATE job
+  UPDATE public.jobs
      SET updated_at = now()
    WHERE job_id = v_invoice.job_id
      AND org_id = v_org_id;
@@ -457,8 +457,8 @@ BEGIN
         SELECT j.job_id, j.job_code, j.status, j.due_date,
                c.name AS customer_name,
                j.created_at
-          FROM job j
-          JOIN customer c ON c.customer_id = j.customer_id
+          FROM public.jobs j
+          JOIN public.customers c ON c.customer_id = j.customer_id
                           AND c.org_id     = v_org_id   -- explicit org scope on join
          WHERE j.org_id = v_org_id                      -- explicit org scope on job
            AND (p_status IS NULL OR j.status = p_status)
@@ -499,17 +499,17 @@ COMMIT;
 -- =============================================================================
 -- BEGIN;
 --   -- Re-enable Realtime (temporary until 0174)
---   ALTER PUBLICATION supabase_realtime ADD TABLE job;
---   ALTER PUBLICATION supabase_realtime ADD TABLE invoice;
+--   ALTER PUBLICATION supabase_realtime ADD TABLE public.jobs;
+--   ALTER PUBLICATION supabase_realtime ADD TABLE public.invoices;
 --
 --   -- Remove F1 policies (restores USING true state until hotfix)
---   DROP POLICY IF EXISTS "customer_tenant_isolation"       ON customer;
---   DROP POLICY IF EXISTS "job_tenant_isolation"            ON job;
---   DROP POLICY IF EXISTS "job_panel_tenant_isolation"      ON job_panel;
---   DROP POLICY IF EXISTS "quotation_tenant_isolation"      ON quotation;
---   DROP POLICY IF EXISTS "quotation_line_tenant_isolation" ON quotation_line;
---   DROP POLICY IF EXISTS "invoice_tenant_isolation"        ON invoice;
---   DROP POLICY IF EXISTS "invoice_payment_tenant_isolation" ON invoice_payment;
+--   DROP POLICY IF EXISTS "customer_tenant_isolation"       ON public.customers;
+--   DROP POLICY IF EXISTS "job_tenant_isolation"            ON public.jobs;
+--   DROP POLICY IF EXISTS "job_panel_tenant_isolation"      ON public.job_panels;
+--   DROP POLICY IF EXISTS "quotation_tenant_isolation"      ON public.quotations;
+--   DROP POLICY IF EXISTS "quotation_line_tenant_isolation" ON public.quotation_lines;
+--   DROP POLICY IF EXISTS "invoice_tenant_isolation"        ON public.invoices;
+--   DROP POLICY IF EXISTS "invoice_payment_tenant_isolation" ON public.invoice_payments;
 --   -- Re-add open policies (only if production cannot tolerate a lockout)
 --   -- CREATE POLICY "authenticated_read_customer" ON customer FOR SELECT USING (true);
 --   -- ... (repeat for each table)
