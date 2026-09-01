@@ -5,6 +5,52 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v17.5.5] — AiSchedulerBoard Stories & Tests + CultureDashboard UI — 2027-01-27
+
+### Added
+
+#### Storybook Stories — AI Scheduler Board
+- `src/ai-scheduler/AiSchedulerBoard.stories.tsx` — 12 CSF3 stories (ENTERPRISE-gated board)
+  - Plan gate: `PlanGateWallFree`, `PlanGateWallProfessional` — verify `plan-gate-wall` present, `aps-board` absent
+  - Empty state: `EmptyRuns` — ENTERPRISE plan, loaded, no runs → `no-runs` placeholder
+  - RunStatusTimeline (8 stories): `TimelineDraft`, `TimelineGenerating`, `TimelineReady`, `TimelineApproved`, `TimelineInProgress`, `TimelineCompleted`, `TimelineCancelled`, `TimelineFailed`
+    - Play functions: click run-card to select → assert `data-active`/`data-done` on `timeline-step` elements
+    - Terminal statuses (CANCELLED, FAILED): single step, `data-active="true"`
+  - Interaction stories with module-level `fn()` spies:
+    - `WithApproveAction` — READY run → click `run-approve-btn` → `approveRunSpy` called with `(orgId, orgPlan, runId)`
+    - `WithCancelAction` — READY run → click `run-cancel-btn` → `cancelRunSpy` called with `(orgId, orgPlan, runId)`
+
+#### Vitest Unit Tests — AiSchedulerBoard Component
+- `src/ai-scheduler/__tests__/AiSchedulerBoard.test.tsx` — 16 tests, all passing
+  - Plan gate wall: FREE / PROFESSIONAL / STARTER → `plan-gate-wall` present; ENTERPRISE → `aps-board` present
+  - `RunStatusTimeline` attribute assertions (`data-active`, `data-done`) for: DRAFT, GENERATING, APPROVED, CANCELLED, FAILED
+  - `run-approve-btn` absent for DRAFT / APPROVED / IN_PROGRESS / COMPLETED / CANCELLED / FAILED runs
+  - `run-approve-btn` present for READY run
+  - Mock pattern: `vi.mock('../aiSchedulerStore')` auto-mock + `vi.mocked(useAiSchedulerStore).mockReturnValue(makeStore() as any)` per test; `fireEvent.click(runCard)` to select run and render right-panel timeline
+
+#### UI Component — Culture Metrics Dashboard
+- `src/culture-metrics/CultureDashboard.tsx` — PROFESSIONAL+-gated org-culture dashboard
+  - Plan gate: `canAccessCultureMetrics(orgPlan)` — FREE / STARTER → `plan-gate-wall`; admin users see upgrade CTA
+  - On mount: `fetchEnpsSurveys`, `fetchEnpsResults`, `fetchOrgHealth` called with `orgId`
+  - Loading state: `dashboard-loading` skeleton (isLoading || isEnpsLoading)
+  - Error banner: `error-banner` with clearError dismiss button
+  - **Section 1 — eNPS Surveys** (`surveys-section`):
+    - `survey-card` per survey with `survey-status-badge` (DRAFT/ACTIVE/CLOSED, Thai labels)
+    - Admin-only `survey-activate-btn` (DRAFT surveys) → calls `activateEnpsSurvey`
+    - Admin-only `survey-close-btn` (ACTIVE surveys) → calls `closeEnpsSurvey`
+    - Empty state: `no-surveys` placeholder (admin sees create hint)
+  - **Section 2 — eNPS Results** (`enps-results-section`):
+    - `enps-result-card` per result row from `cmd_enps_results_v`
+    - `nps-score-display`: NPS score + category breakdown (Promoter/Passive/Detractor) shown when `totalResponses >= minResponses`
+    - `nps-hidden`: threshold message shown when below `minResponses`
+  - **Section 3 — Org Health** (`org-health-section`):
+    - `health-metric-row` per metric with health-status badge (Thai labels, Tailwind colour classes from `CMD_HEALTH_STATUS_COLOR`)
+    - Empty state: `no-health-data` placeholder
+  - Props: `{ orgId: string, orgPlan: OrgPlan, isAdmin?: boolean }`
+  - Sub-components: `SurveyCard`, `EnpsResultCard`, `HealthMetricRow`
+
+---
+
 ## [v17.5.4] — AiSchedulerBoard UI + APS Store Tests + Culture Metrics Store Tests — 2027-01-26
 
 ### Added

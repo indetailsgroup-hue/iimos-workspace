@@ -36,6 +36,11 @@
 - `src/ai-cost/AiCostDashboard.tsx` — ENTERPRISE-gated; summary cards, budget utilization (progress bar + over-threshold warning), monthly trend (CSS bar chart), usage-by-tool table; 20 data-testids
 - `src/ai-cost/AiCostDashboard.stories.tsx` — 8 CSF3 stories; withDashboardStore decorator; PlanGateWallFree, PlanGateWallProfessional, DashboardLoading, EmptyState, WithUsageData (play assertions), WithBudgetUtilization, BudgetOverThreshold (play assertion), AdminView, StoreError
 
+### ✅ All completed (v17.5.5 — AiSchedulerBoard Stories & Tests + CultureDashboard UI)
+- `src/ai-scheduler/AiSchedulerBoard.stories.tsx` — 12 CSF3 stories: PlanGateWallFree, PlanGateWallProfessional, EmptyRuns, 8×Timeline (all statuses), WithApproveAction, WithCancelAction; fn() spies; play functions with userEvent.click + dataset assertions
+- `src/ai-scheduler/__tests__/AiSchedulerBoard.test.tsx` — 16 tests (plan gate ×4, timeline attributes ×5, approve btn ×7); all passing; vi.mock auto-mock + fireEvent pattern
+- `src/culture-metrics/CultureDashboard.tsx` — PROFESSIONAL+-gated dashboard; surveys/eNPS-results/org-health sections; SurveyCard/EnpsResultCard/HealthMetricRow sub-components; 13 data-testids
+
 ### ✅ All completed (v17.5.4 — AiSchedulerBoard + APS Store Tests + Culture Metrics Store Tests)
 - `src/ai-scheduler/AiSchedulerBoard.tsx` — ENTERPRISE-gated board; two-panel layout; `RunCard` with approve/cancel; `RunStatusTimeline` (6 steps + terminal CANCELLED/FAILED branch); items table + override badge; 20 data-testids
 - `src/ai-scheduler/__tests__/aiSchedulerStore.test.ts` — 33 tests (plan gate ×27, auto-sequence ×4, approveRun auth write ×3, updateItemStatus is_overridden ×3, setFilters ×2, clearError ×2); all passing
@@ -50,11 +55,14 @@
 - `src/culture-metrics/cultureMetricsStore.ts` — `useCultureMetricsStore`; 14 actions; PROFESSIONAL+ gate on writes; `submitEnpsResponse` exempt (anonymous survey); queries 4 tables + 2 views
 - `src/ai-cost/__tests__/AiCostDashboard.test.tsx` — 10 Vitest tests: plan gate (FREE/PROFESSIONAL), loading, empty states, 4 summary cards, budget over-threshold (90% ≥ 80%), budget under-threshold, 3 trend bars, error banner, admin upgrade copy
 
-### 📋 Next (v17.5 remaining)
-- AI Production Scheduler UI (AiSchedulerBoard stories + full integration tests)
-- Culture Metrics Dashboard UI (CultureDashboard.tsx + stories + tests)
+### ✅ Completed (v17.5.5)
+- AI Production Scheduler UI (AiSchedulerBoard stories + component tests)
+- Culture Metrics Dashboard UI (CultureDashboard.tsx)
 
-**Last updated:** 2027-01-26
+### 📋 Next (v17.5 remaining)
+- CultureDashboard stories + integration tests
+
+**Last updated:** 2027-01-27
 
 ---
 
