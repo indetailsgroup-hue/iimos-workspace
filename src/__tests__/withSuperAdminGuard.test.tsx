@@ -25,6 +25,7 @@ jest.mock('../../core/auth/supabaseClient', () => ({
       getUser: jest.fn(),
     },
     from: jest.fn(),
+    rpc:  jest.fn(),
   },
 }));
 
@@ -35,6 +36,8 @@ import { supabase } from '../../core/auth/supabaseClient';
 const mockGetUser = supabase.auth.getUser as jest.MockedFunction<
   typeof supabase.auth.getUser
 >;
+
+const mockRpc = supabase.rpc as jest.MockedFunction<typeof supabase.rpc>;
 
 /**
  * Configures `supabase.from('super_admins').select(...).eq(...).maybeSingle()`
@@ -272,4 +275,185 @@ describe('SuperAdminDenied component', () => {
       screen.queryByTestId('super-admin-denied-reason'),
     ).not.toBeInTheDocument();
   });
+});
+
+// ─── get_search_suggestions SECURITY INVOKER path ────────────────────────────
+//
+// These tests verify that withSuperAdminGuard correctly gates a component that
+// calls get_search_suggestions via supabase.rpc, and that the SECURITY INVOKER
+// backend guard (ERRCODE 42501) is handled gracefully by the wrapped component.
+
+/**
+ * Minimal panel that calls get_search_suggestions through supabase.rpc.
+ * Mirrors real usage: guard wraps a component; the component fires the RPC
+ * only after the HOC confirms super-admin status.
+ */
+interface SearchSuggestion {
+  query_text: string;
+  frequency: number;
+  last_used: string;
+}
+
+interface SearchSuggestionsPanelProps {
+  queryPrefix: string;
+  limit?: number;
+}
+
+function SearchSuggestionsPanel({
+  queryPrefix,
+  limit = 8,
+}: SearchSuggestionsPanelProps): React.ReactElement {
+  const [suggestions, setSuggestions] = React.useState<SearchSuggestion[]>([]);
+  const [rpcError, setRpcError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    void (supabase.rpc as jest.Mock)(
+      'get_search_suggestions',
+      { query_prefix: queryPrefix, result_limit: limit },
+    ).then(
+      ({ data, error }: { data: SearchSuggestion[] | null; error: { message: string; code?: string } | null }) => {
+        if (error) { setRpcError(error.message); return; }
+        setSuggestions(data ?? []);
+      },
+    );
+  }, [queryPrefix, limit]);
+
+  if (rpcError) {
+    return <div data-testid="rpc-error">{rpcError}</div>;
+  }
+
+  return (
+    <ul data-testid="suggestions-list">
+      {suggestions.map((s) => (
+        <li key={s.query_text} data-testid="suggestion-item">
+          {s.query_text}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const GuardedSearchPanel = withSuperAdminGuard(SearchSuggestionsPanel);
+
+describe('withSuperAdminGuard + get_search_suggestions (SECURITY INVOKER)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  // ── T-SG-08 ──────────────────────────────────────────────────────────────
+  it(
+    'T-SG-08: super-admin passes guard and get_search_suggestions RPC returns results',
+    async () => {
+      mockGetUser.mockResolvedValue({
+        data: { user: { id: 'sa-001' } },
+        error: null,
+      } as never);
+      mockSuperAdminsQuery({ data: { user_id: 'sa-001' }, error: null });
+
+      mockRpc.mockResolvedValue({
+        data: [
+          { query_text: 'laser cut',     frequency: 42, last_used: '2026-08-28T10:00:00Z' },
+          { query_text: 'laser engrave', frequency: 17, last_used: '2026-08-27T09:00:00Z' },
+        ],
+        error: null,
+      } as never);
+
+      render(<GuardedSearchPanel queryPrefix="laser" limit={8} />);
+
+      // Guard loading → resolves → wrapped component renders
+      await waitFor(() => {
+        expect(screen.getByTestId('suggestions-list')).toBeInTheDocument();
+      });
+
+      const items = screen.getAllByTestId('suggestion-item');
+      expect(items).toHaveLength(2);
+      expect(items[0]).toHaveTextContent('laser cut');
+      expect(items[1]).toHaveTextContent('laser engrave');
+
+      // RPC was called exactly once with the correct parameters
+      expect(mockRpc).toHaveBeenCalledTimes(1);
+      expect(mockRpc).toHaveBeenCalledWith('get_search_suggestions', {
+        query_prefix: 'laser',
+        result_limit: 8,
+      });
+    },
+  );
+
+  // ── T-SG-09 ──────────────────────────────────────────────────────────────
+  it(
+    'T-SG-09: non-super-admin is blocked by guard; get_search_suggestions RPC is never called',
+    async () => {
+      mockGetUser.mockResolvedValue({
+        data: { user: { id: 'user-regular-002' } },
+        error: null,
+      } as never);
+      mockSuperAdminsQuery({ data: null, error: null });
+
+      render(<GuardedSearchPanel queryPrefix="laser" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('super-admin-denied')).toBeInTheDocument();
+      });
+
+      // Wrapped component was never mounted — RPC must never have been called
+      expect(mockRpc).not.toHaveBeenCalled();
+    },
+  );
+
+  // ── T-SG-10 ──────────────────────────────────────────────────────────────
+  it(
+    'T-SG-10: super-admin passes UI guard but RPC returns insufficient_privilege (42501) — component shows error',
+    async () => {
+      mockGetUser.mockResolvedValue({
+        data: { user: { id: 'sa-002' } },
+        error: null,
+      } as never);
+      mockSuperAdminsQuery({ data: { user_id: 'sa-002' }, error: null });
+
+      // Simulate the SECURITY INVOKER backend guard raising ERRCODE 42501
+      mockRpc.mockResolvedValue({
+        data: null,
+        error: {
+          message:
+            'Forbidden: get_search_suggestions is restricted to platform super-administrators',
+          code: '42501',
+        },
+      } as never);
+
+      render(<GuardedSearchPanel queryPrefix="material" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('rpc-error')).toBeInTheDocument();
+      });
+
+      expect(screen.getByTestId('rpc-error')).toHaveTextContent(
+        'Forbidden: get_search_suggestions is restricted to platform super-administrators',
+      );
+      expect(screen.queryByTestId('suggestions-list')).not.toBeInTheDocument();
+    },
+  );
+
+  // ── T-SG-11 ──────────────────────────────────────────────────────────────
+  it(
+    'T-SG-11: forwards custom result_limit prop to the get_search_suggestions RPC call',
+    async () => {
+      mockGetUser.mockResolvedValue({
+        data: { user: { id: 'sa-003' } },
+        error: null,
+      } as never);
+      mockSuperAdminsQuery({ data: { user_id: 'sa-003' }, error: null });
+      mockRpc.mockResolvedValue({ data: [], error: null } as never);
+
+      render(<GuardedSearchPanel queryPrefix="cut" limit={5} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('suggestions-list')).toBeInTheDocument();
+      });
+
+      expect(mockRpc).toHaveBeenCalledWith('get_search_suggestions', {
+        query_prefix: 'cut',
+        result_limit: 5,
+      });
+    },
+  );
 });

@@ -1,0 +1,151 @@
+name: pgTAP Tests
+
+# =============================================================================
+# REQUIRED SECRETS
+# =============================================================================
+# Secret name          | Where to get it                          | Scope
+# ---------------------|------------------------------------------|------------------
+# SUPABASE_ACCESS_TOKEN | app.supabase.com → Account → Access     | Repo secret
+#                       | Tokens → "Generate new token"           | (all environments)
+#
+# HOW TO PROVISION (one-time per repo / environment):
+#   GitHub UI:  Settings → Secrets and variables → Actions → New repository secret
+#   GitHub CLI: gh secret set SUPABASE_ACCESS_TOKEN --body "<token>"
+#
+# The Supabase CLI uses this token to pull project config when starting the
+# local stack in CI. Without it, `supabase start` will fail with auth error.
+# See docs/ci-secrets.md for full provisioning guide.
+# =============================================================================
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  pgtap:
+    name: Run pgTAP suites against fresh Supabase DB
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Checkout repository
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # 2. Lint RLS org_id coverage (delta mode — scoped to changed files)
+      #    Runs BEFORE any Supabase infra to fail fast on static analysis.
+      #    On pull_request: diffs against origin/<base_ref>.
+      #    On push to main:  diffs most recent commit (HEAD~1..HEAD).
+      #    Skips gracefully when no migration files were touched.
+      # -----------------------------------------------------------------------
+      - name: Lint RLS org_id coverage
+        run: |
+          # Fetch enough history for an accurate diff (shallow clone only has HEAD)
+          git fetch --depth=50 origin "${{ github.base_ref || 'main' }}" 2>/dev/null || true
+
+          # Collect non-rollback migration files changed in this event
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED=$(git diff --name-only \
+              "origin/${{ github.base_ref }}...HEAD" \
+              -- 'supabase/migrations/*.sql' \
+              | grep -v '_rollback' || true)
+          else
+            # push to main: scope to files in the most recent commit
+            CHANGED=$(git diff --name-only HEAD~1 HEAD \
+              -- 'supabase/migrations/*.sql' \
+              | grep -v '_rollback' || true)
+          fi
+
+          if [ -z "$CHANGED" ]; then
+            echo "[lint-rls-org-id] No migration files changed — skipping lint."
+            exit 0
+          fi
+
+          echo "[lint-rls-org-id] Linting changed files:"
+          printf '  %s\n' $CHANGED
+
+          # Pass changed files as positional args (delta mode)
+          python3 scripts/lint-rls-org-id.py $CHANGED
+
+      # -----------------------------------------------------------------------
+      # 3. Set up Supabase CLI
+      # -----------------------------------------------------------------------
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # -----------------------------------------------------------------------
+      # 4. Install pg_prove (TAP::Parser::SourceHandler::pgTAP)
+      # -----------------------------------------------------------------------
+      - name: Install pg_prove and pgTAP
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            postgresql-client \
+            libtap-parser-sourcehandler-pgtap-perl
+          # pg_prove is provided by the perl package above
+          pg_prove --version
+
+      # -----------------------------------------------------------------------
+      # 5. Start Supabase local stack
+      #    Requires: SUPABASE_ACCESS_TOKEN repository secret
+      #    Provision: Settings → Secrets and variables → Actions
+      #    Source:    app.supabase.com → Account → Access Tokens
+      # -----------------------------------------------------------------------
+      - name: Start Supabase local stack
+        run: supabase start
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # 6. Apply all migrations (db reset runs migrations from scratch)
+      # -----------------------------------------------------------------------
+      - name: Reset database and apply migrations
+        run: supabase db reset --local
+
+      # -----------------------------------------------------------------------
+      # 7. Enable pgTAP extension
+      # -----------------------------------------------------------------------
+      - name: Enable pgTAP extension
+        run: |
+          DB_URL=$(supabase status --output env | grep DB_URL | cut -d= -f2-)
+          psql "$DB_URL" -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
+        env:
+          PGPASSWORD: postgres
+
+      # -----------------------------------------------------------------------
+      # 8. Run pg_prove on all test files
+      #    Runs: supabase/tests/*.sql — 147 total pgTAP assertions:
+      #      • 110  forward migration tests
+      #             (0179 F1: 14 · 0179 NNB: 35 · 0180: 17 · 0181: 18 · 0182: 13 · 0183: 13)
+      #      •  12  rollback verification tests (0183_rollback_verification.sql)
+      #      •  25  cross-tenant isolation tests (cross_tenant_isolation.sql:
+      #             T01–T02 setup · T03–T08 SELECT · T09–T12 INSERT 42501 ·
+      #             T13–T14 UPDATE · T23–T25 DELETE · T15–T17 own-org · T18–T22 integrity)
+      #    Fails the job if any TAP assertion fails.
+      # -----------------------------------------------------------------------
+      - name: Run pg_prove on supabase/tests/*.sql
+        run: |
+          DB_URL=$(supabase status --output env | grep DB_URL | cut -d= -f2-)
+          pg_prove \
+            --dbname "$DB_URL" \
+            --recursive \
+            --verbose \
+            supabase/tests/*.sql
+        env:
+          PGPASSWORD: postgres
+
+      # -----------------------------------------------------------------------
+      # 9. Stop Supabase local stack (cleanup — always runs)
+      # -----------------------------------------------------------------------
+      - name: Stop Supabase local stack
+        if: always()
+        run: supabase stop
