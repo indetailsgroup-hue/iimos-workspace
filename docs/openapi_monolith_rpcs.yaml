@@ -4,7 +4,7 @@ info:
   title: MONOLITH Manufacturing OS — RPC API
   description: |
     OpenAPI specification for all PostgreSQL RPC functions exposed via Supabase PostgREST
-    in migrations **0176–0202**.
+    in migrations **0176–0204**.
 
     ## Authentication
     All endpoints require a valid Supabase JWT in the `Authorization` header:
@@ -33,7 +33,7 @@ info:
     | 422 | `unprocessable` | Business rule violation |
     | 500 | `internal_error` | Unexpected server error |
 
-  version: 15.7.0
+  version: '15.9.0'
   contact:
     name: MONOLITH Platform Team
     email: platform@indetailsgroup.com
@@ -66,6 +66,8 @@ tags:
     description: Executive SLA dashboard combining live MV data with long-term archive KPIs (Migration 0203)
   - name: Infrastructure
     description: Partition health and admin utilities (Migration 0196)
+  - name: SLA Executive KPI
+    description: Global single-row executive KPI banner aggregating all-org SLA data (Migration 0204)
 
 components:
   securitySchemes:
@@ -464,7 +466,60 @@ components:
           description: SLA threshold in hours from platform_config (default 24).
 
     # ── SLA Executive Summary ──────────────────────────────────────────────────
-    SlaExecutiveSummaryRow:
+    ExecutiveKpiBannerRow:
+      type: object
+      description: Single-row global KPI banner returned by rpc_etax_executive_kpi_banner.
+      properties:
+        total_orgs:
+          type: integer
+          description: Total distinct orgs with any live or archive SLA data.
+          example: 12
+        orgs_requiring_attention:
+          type: integer
+          description: Count of orgs where combined_worst_severity is WARNING or CRITICAL.
+          example: 3
+        orgs_with_live_data:
+          type: integer
+          description: Orgs that have rows in mv_etax_submission_sla.
+          example: 10
+        orgs_with_archive_data:
+          type: integer
+          description: Orgs that have rows in etax_sla_breach_archive.
+          example: 8
+        global_worst_severity:
+          type: string
+          enum: [CRITICAL, WARNING, ELEVATED, NORMAL, HEALTHY]
+          nullable: true
+          description: Highest severity tier across all orgs (CRITICAL > WARNING > ELEVATED > NORMAL > HEALTHY).
+          example: WARNING
+        global_peak_breach_rate_pct:
+          type: number
+          format: float
+          nullable: true
+          description: Maximum peak_breach_rate_pct across all orgs.
+          example: 35.7
+        live_total_submissions:
+          type: integer
+          description: Sum of live_total_submissions across all orgs.
+          example: 4820
+        live_total_breached:
+          type: integer
+          description: Sum of live_breach_count across all orgs.
+          example: 312
+        archive_total_created:
+          type: integer
+          description: Sum of archive_total_created across all orgs.
+          example: 18450
+        archive_total_breached:
+          type: integer
+          description: Sum of archive_total_breached across all orgs.
+          example: 1200
+        sla_threshold_hours:
+          type: integer
+          description: SLA threshold in hours from platform_config (default 24).
+          example: 24
+
+    SlaExecutiveSummaryRow::
       type: object
       description: |
         One-row-per-org executive KPI combining live mv_etax_submission_sla data
@@ -1258,6 +1313,68 @@ paths:
               schema: { $ref: '#/components/schemas/RpcError' }
 
 
+  /rpc_etax_executive_kpi_banner:
+    post:
+      tags: [SLA Executive KPI]
+      summary: Executive KPI banner — single-row global aggregate
+      operationId: rpcEtaxExecutiveKpiBanner
+      description: |
+        Returns a **single row** aggregating platform-wide SLA KPIs across every organisation
+        in `v_etax_sla_executive_summary`.
+
+        Combines live data from `mv_etax_submission_sla` and long-term archive data from
+        `etax_sla_breach_archive` into 11 global summary metrics intended for an executive
+        dashboard banner or alert card.
+
+        **Key aggregations:**
+        - `total_orgs` — count of distinct orgs with any data (live or archive).
+        - `orgs_requiring_attention` — orgs where `requires_attention = true`.
+        - `global_worst_severity` — highest severity tier across all orgs
+          (precedence: CRITICAL > WARNING > ELEVATED > NORMAL > HEALTHY).
+        - `global_peak_breach_rate_pct` — maximum `peak_breach_rate_pct` across all orgs.
+        - Live and archive totals for submissions and breached documents.
+
+        **Access control:**
+        - `anon` role — REVOKED (HTTP 401/403).
+        - `authenticated` — returns global aggregate (not tenant-scoped, by design for banner).
+        - `service_role` — full access.
+
+        **platform_config flags set by this migration:**
+        - `executive_tab_enabled = 'true'`
+        - `migration_0204_applied = 'true'`
+
+        Migration: **0204** — `rpc_etax_executive_kpi_banner`
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              description: No parameters required — returns a single global aggregate row.
+      responses:
+        '200':
+          description: Single-row global KPI aggregate.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1
+                items:
+                  $ref: '#/components/schemas/ExecutiveKpiBannerRow'
+        '401':
+          description: Unauthorized — missing or invalid JWT.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RpcError' }
+        '403':
+          description: Forbidden — anon role is REVOKED for this function.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RpcError' }
+
+
 # ─── Webhooks (pg_notify consumer) ───────────────────────────────────────────
 webhooks:
   etax_risk_rank_changed:
@@ -1303,4 +1420,5 @@ webhooks:
           description: Alert delivered.
         '4XX':
           description: Alert delivery failed.
+
 
