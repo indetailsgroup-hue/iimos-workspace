@@ -1522,6 +1522,7 @@ jobs:
       - notify-success-pipeline-failure
       - upload-eslint-sarif
       - close-webhook-broken-issue
+      - notify-slack-on-sarif-findings
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1533,6 +1534,8 @@ jobs:
     steps:
       - name: Build and upsert workflow-summary PR comment
         uses: actions/github-script@v7
+        env:
+          SARIF_RULE_BREAKDOWN: ${{ needs.upload-eslint-sarif.outputs.rule-breakdown-md }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -1653,9 +1656,10 @@ jobs:
             }
 
             // ── 2c. Build ESLint SARIF section ──────────────────────────
-            const sarifTotal      = '${{ needs.upload-eslint-sarif.outputs.total-findings }}';
+                        const sarifTotal      = '${{ needs.upload-eslint-sarif.outputs.total-findings }}';
             const sarifNew        = '${{ needs.upload-eslint-sarif.outputs.new-findings }}';
             const sarifSuppressed = '${{ needs.upload-eslint-sarif.outputs.suppressed-findings }}';
+            const ruleBreakdownMd  = process.env.SARIF_RULE_BREAKDOWN || '';
             const sarifSection = (sarifTotal !== '' || sarifNew !== '' || sarifSuppressed !== '')
               ? [
                   '',
@@ -1665,6 +1669,7 @@ jobs:
                   `| Total findings          | ${sarifTotal      !== '' ? sarifTotal      : '—'} |`,
                   `| New (vs baseline)       | ${sarifNew        !== '' ? sarifNew        : '—'} |`,
                   `| Suppressed by baseline  | ${sarifSuppressed !== '' ? sarifSuppressed : '—'} |`,
+                  ...(ruleBreakdownMd ? ['', ruleBreakdownMd] : []),
                 ]
               : ['', '_ESLint SARIF upload: skipped or no findings data available._'];
 
@@ -1739,6 +1744,7 @@ jobs:
       total-findings:      ${{ steps.sarif-delta.outputs.total }}
       new-findings:        ${{ steps.sarif-delta.outputs.new }}
       suppressed-findings: ${{ steps.sarif-delta.outputs.suppressed }}
+      rule-breakdown-md:   ${{ steps.sarif-delta.outputs.rule-breakdown-md }}
 
     permissions:
       security-events: write   # required by upload-sarif action
@@ -1845,6 +1851,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import json, os
+          from collections import defaultdict
 
           def fingerprints(path):
               try:
@@ -1892,13 +1899,66 @@ jobs:
           json.dump(sarif, open('eslint-delta.sarif', 'w'), indent=2)
           print(f'Wrote eslint-delta.sarif ({new} new finding(s)).')
 
+          # Group new findings by ruleId
+          rule_counts = defaultdict(int)
+          for (rule_id, *_) in new_fps:
+              rule_counts[rule_id] += 1
+
+          # Write markdown summary artifact
+          md_lines = [
+              '# ESLint SARIF Delta Summary',
+              '',
+              '| Metric | Count |',
+              '|---|---|',
+              f'| Total findings         | {total} |',
+              f'| New (vs baseline)      | {new} |',
+              f'| Suppressed by baseline | {suppressed} |',
+              '',
+          ]
+          if rule_counts:
+              md_lines += [
+                  '## New Findings by Rule',
+                  '',
+                  '| Rule ID | New Findings |',
+                  '|---|---|',
+              ]
+              for rule_id, count in sorted(rule_counts.items(), key=lambda x: -x[1]):
+                  md_lines.append(f'| `{rule_id}` | {count} |')
+              md_lines.append('')
+          with open('sarif-delta-summary.md', 'w') as mf:
+              mf.write('\n'.join(md_lines))
+          print('Wrote sarif-delta-summary.md.')
+
+          # Build compact rule breakdown for PR comment
+          if rule_counts:
+              rb_rows = ['#### New Findings by Rule', '', '| Rule | Count |', '|---|---|']
+              for rule_id, count in sorted(rule_counts.items(), key=lambda x: -x[1]):
+                  rb_rows.append(f'| `{rule_id}` | {count} |')
+              rule_breakdown_md = '\n'.join(rb_rows)
+          else:
+              rule_breakdown_md = ''
+
           gho = os.environ.get('GITHUB_OUTPUT', '')
           if gho:
               with open(gho, 'a') as f:
                   f.write(f'total={total}\n')
                   f.write(f'new={new}\n')
                   f.write(f'suppressed={suppressed}\n')
+                  if rule_breakdown_md:
+                      f.write(f'rule-breakdown-md<<BREAKDOWN_EOF\n{rule_breakdown_md}\nBREAKDOWN_EOF\n')
+                  else:
+                      f.write('rule-breakdown-md=\n')
           PY
+
+      - name: Upload sarif-delta-summary.md artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name:              sarif-delta-summary
+          path:              sarif-delta-summary.md
+          retention-days:    14
+          overwrite:         true
+          if-no-files-found: warn
 
       - name: Upload SARIF to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v3
@@ -1994,3 +2054,78 @@ jobs:
               core.info(`Closed issue #${issue.number}: ${issue.title}`);
             }
             core.info(`Closed ${issues.length} webhook-broken issue(s).`);
+  # ── Job 13: notify-slack-on-sarif-findings ──────────────────────────────────
+  # Posts a Slack Block Kit message whenever the upload-eslint-sarif job
+  # finishes with one or more *new* findings (i.e. findings not present in the
+  # previous run's baseline).  The message summarises total / new / suppressed
+  # counts and includes a direct link to the Actions run so reviewers can jump
+  # straight to the Code Scanning results.
+  #
+  # Condition: only runs when new-findings > 0 (parsed via fromJSON to avoid
+  # string comparison).  The `!= ''` guard prevents a JSON-parse error when the
+  # upstream job was skipped or failed before writing any outputs.
+  # ────────────────────────────────────────────────────────────────────────────
+  notify-slack-on-sarif-findings:
+    name: "Slack \u2014 New ESLint SARIF Findings"
+    needs: [upload-eslint-sarif]
+    if: >-
+      always() &&
+      needs.upload-eslint-sarif.result != 'cancelled' &&
+      needs.upload-eslint-sarif.outputs.new-findings != '' &&
+      fromJSON(needs.upload-eslint-sarif.outputs.new-findings) > 0
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Post Slack Block Kit message — new SARIF findings
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "\ud83d\udd0d ESLint: New Code Scanning Findings",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*New findings:*\n${{ needs.upload-eslint-sarif.outputs.new-findings }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Total findings:*\n${{ needs.upload-eslint-sarif.outputs.total-findings }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Suppressed by baseline:*\n${{ needs.upload-eslint-sarif.outputs.suppressed-findings }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Branch:*\n${{ github.head_ref || github.ref_name }}"
+                    }
+                  ]
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "Actor: *${{ github.actor }}* \u00b7 <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run #${{ github.run_number }}>"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL:  ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

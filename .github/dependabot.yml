@@ -54,6 +54,12 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # Keep the upload-sarif step pinned at github/codeql-action v3.
+      # Major version bumps (v3 → v4+) may change the SARIF upload API
+      # and require explicit migration testing before adoption.
+      - dependency-name: "github/codeql-action"
+        update-types: ["version-update:semver-major"]
 
   # ── 2. npm — packages/digital-shadow-service ──────────────────────────────
   - package-ecosystem: "npm"
