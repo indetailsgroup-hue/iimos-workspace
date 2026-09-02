@@ -210,10 +210,9 @@ DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
         -- Remove stale schedule if re-running migration
-        PERFORM cron.unschedule('refresh-etax-health-trend-mv')
-        WHERE EXISTS (
-            SELECT 1 FROM cron.job WHERE jobname = 'refresh-etax-health-trend-mv'
-        );
+        IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'refresh-etax-health-trend-mv') THEN
+          PERFORM cron.unschedule('refresh-etax-health-trend-mv');
+        END IF;
 
         PERFORM cron.schedule(
             'refresh-etax-health-trend-mv',   -- job name
