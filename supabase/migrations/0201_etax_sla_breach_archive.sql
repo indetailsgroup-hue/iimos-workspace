@@ -287,7 +287,7 @@ BEGIN
     PERFORM cron.schedule(
       'archive-etax-sla-breach-daily',  -- job name
       '15 0 * * *',                     -- 00:15 UTC every day
-      $$SELECT public.fn_archive_etax_sla_breach_timeline();$$
+      'SELECT public.fn_archive_etax_sla_breach_timeline();'
     );
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'pg_cron not available — skipping job registration: %', SQLERRM;
