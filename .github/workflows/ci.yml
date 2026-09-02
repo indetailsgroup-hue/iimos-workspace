@@ -1395,19 +1395,47 @@ jobs:
             --output /tmp/supabase-images/supabase-images.tar
 
       # ── Extract local API credentials from `supabase status` ──────────────
+      # Supports both Supabase CLI v1 (plain text) and v2 (box/table format)
       - name: Export local Supabase credentials
         id: supabase_local
         run: |
-          STATUS=$(supabase status 2>/dev/null)
+          # Primary: try --output env (available in CLI v2)
+          ENV_STATUS=$(supabase status --output env 2>/dev/null || true)
+          # Secondary: plain/box status output
+          BOX_STATUS=$(supabase status 2>/dev/null || true)
 
-          LOCAL_URL=$(echo "$STATUS"     | grep -E "^API URL"       | awk '{print $NF}')
-          LOCAL_ANON=$(echo "$STATUS"    | grep -E "^anon key"      | awk '{print $NF}')
-          LOCAL_SVC=$(echo "$STATUS"     | grep -E "^service_role"  | awk '{print $NF}')
-          LOCAL_JWT=$(echo "$STATUS"     | grep -E "^JWT secret"    | awk '{print $NF}')
+          # Parse env-format output (handles both `export KEY=val` and `KEY=val`)
+          LOCAL_URL=$(echo "$ENV_STATUS"  | grep -E '^(export )?(API_URL|SUPABASE_URL)='        | head -1 | sed 's/^[^=]*=//' | tr -d "'\" ")
+          LOCAL_ANON=$(echo "$ENV_STATUS" | grep -E '^(export )?(ANON_KEY|SUPABASE_ANON_KEY)='  | head -1 | sed 's/^[^=]*=//' | tr -d "'\" ")
+          LOCAL_SVC=$(echo "$ENV_STATUS"  | grep -E '^(export )?(SERVICE_ROLE_KEY|SUPABASE_SERVICE_ROLE_KEY)=' | head -1 | sed 's/^[^=]*=//' | tr -d "'\" ")
+          LOCAL_JWT=$(echo "$ENV_STATUS"  | grep -E '^(export )?(JWT_SECRET|SUPABASE_JWT_SECRET)='             | head -1 | sed 's/^[^=]*=//' | tr -d "'\" ")
 
-          # Fallback to well-known local defaults when grep finds nothing
+          # Fallback: parse box/table format  (│ Label │ Value │)
+          if [ -z "$LOCAL_URL" ]; then
+            LOCAL_URL=$(echo "$BOX_STATUS"  | awk -F'│' '$2 ~ /Project URL/{gsub(/^[[:space:]]+|[[:space:]]+$/,"", $3); print $3; exit}')
+          fi
+          if [ -z "$LOCAL_ANON" ]; then
+            LOCAL_ANON=$(echo "$BOX_STATUS" | awk -F'│' '$2 ~ /Publishable/{gsub(/^[[:space:]]+|[[:space:]]+$/,"", $3); print $3; exit}')
+          fi
+          if [ -z "$LOCAL_SVC" ]; then
+            # Match exactly "Secret" (not "JWT secret")
+            LOCAL_SVC=$(echo "$BOX_STATUS"  | awk -F'│' '$2 ~ /^[[:space:]]*Secret[[:space:]]*$/{gsub(/^[[:space:]]+|[[:space:]]+$/,"", $3); print $3; exit}')
+          fi
+          if [ -z "$LOCAL_JWT" ]; then
+            LOCAL_JWT=$(echo "$BOX_STATUS"  | awk -F'│' '$2 ~ /JWT secret/{gsub(/^[[:space:]]+|[[:space:]]+$/,"", $3); print $3; exit}')
+          fi
+
+          # Safe defaults for non-secret values only
           LOCAL_URL="${LOCAL_URL:-http://localhost:54321}"
           LOCAL_JWT="${LOCAL_JWT:-super-secret-jwt-token-with-at-least-32-characters-long}"
+
+          # Fail fast with diagnostics if API keys are still empty
+          if [ -z "$LOCAL_ANON" ] || [ -z "$LOCAL_SVC" ]; then
+            echo "::error::Could not extract Supabase API keys — dumping status outputs for diagnosis"
+            echo "=== ENV_STATUS ===" && echo "$ENV_STATUS"
+            echo "=== BOX_STATUS ===" && echo "$BOX_STATUS"
+            exit 1
+          fi
 
           echo "local_url=$LOCAL_URL"       >> "$GITHUB_OUTPUT"
           echo "local_anon_key=$LOCAL_ANON" >> "$GITHUB_OUTPUT"
