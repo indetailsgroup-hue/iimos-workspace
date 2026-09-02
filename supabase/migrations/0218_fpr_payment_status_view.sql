@@ -7,6 +7,8 @@
 -- RLS      : security_invoker=false; role gate in WHERE clause (fail-closed).
 -- Roles    : finance, governance, managing_director, project_manager
 -- Idempotent: yes — CREATE OR REPLACE
+-- Note     : org_id sourced from fpr_payment (NULL for unpaid FPRs).
+--            field_purchase_request does not carry an org_id column.
 -- =============================================================================
 
 BEGIN;
@@ -16,7 +18,7 @@ BEGIN;
 --
 -- Columns:
 --   request_id          — FPR primary key
---   org_id              — tenant
+--   org_id              — tenant (from fpr_payment; NULL if no payment recorded)
 --   site_code           — site reference
 --   requester           — employee_id who submitted
 --   fpr_amount          — original requested amount
@@ -41,7 +43,10 @@ CREATE OR REPLACE VIEW public.v_fpr_payment_status
 AS
 SELECT
     fpr.id                      AS request_id,
-    fpr.org_id,
+
+    -- org_id lives on fpr_payment (NOT NULL there); NULL for unpaid FPRs
+    pay.org_id,
+
     fpr.site_code,
     fpr.requester,
     fpr.amount                  AS fpr_amount,
@@ -71,7 +76,7 @@ SELECT
 
 FROM public.field_purchase_request fpr
 
--- Latest paid payment for each FPR (DISTINCT ON keeps most recent paid_at)
+-- Latest paid payment for each FPR (ORDER BY paid_at DESC keeps most recent)
 LEFT JOIN LATERAL (
     SELECT *
     FROM   public.fpr_payment fp
@@ -101,7 +106,8 @@ COMMENT ON VIEW public.v_fpr_payment_status IS
   'Joins field_purchase_request, fpr_payment (latest paid row), '
   'and field_purchase_audit_log (payment_recorded timestamp). '
   'Role-gated: finance, governance, managing_director, project_manager. '
-  'security_invoker=false; role gate enforced by WHERE clause only.';
+  'security_invoker=false; role gate enforced by WHERE clause only. '
+  'org_id sourced from fpr_payment (NULL for unpaid FPRs).';
 
 -- Permissions
 REVOKE ALL ON public.v_fpr_payment_status FROM PUBLIC, anon;
