@@ -101,7 +101,7 @@ AS $$
   SELECT EXISTS (
     SELECT 1
     FROM org_members om
-    JOIN orgs o ON o.id = om.org_id
+    JOIN public.organizations o ON o.org_id = om.org_id
     WHERE om.user_id = auth.uid()
       AND o.plan = 'ENTERPRISE'
   );
@@ -113,7 +113,7 @@ $$;
 
 CREATE TABLE IF NOT EXISTS aps_machine_configs (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id            UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  org_id            UUID NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
 
   machine_type      aps_machine_type NOT NULL,
   display_name      TEXT NOT NULL,                -- e.g. "CNC-01 (Biesse Rover B)"
@@ -148,7 +148,7 @@ COMMENT ON TABLE aps_machine_configs IS
 
 CREATE TABLE IF NOT EXISTS aps_production_runs (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id            UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  org_id            UUID NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
 
   run_label         TEXT NOT NULL,               -- e.g. "Week 2027-W04 Auto Schedule"
   schedule_date     DATE NOT NULL,               -- production date the run covers
@@ -187,7 +187,7 @@ COMMENT ON TABLE aps_production_runs IS
 
 CREATE TABLE IF NOT EXISTS aps_schedule_items (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id            UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  org_id            UUID NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   run_id            UUID NOT NULL REFERENCES aps_production_runs(id) ON DELETE CASCADE,
   machine_config_id UUID REFERENCES aps_machine_configs(id),
 
@@ -232,7 +232,7 @@ COMMENT ON TABLE aps_schedule_items IS
 
 CREATE TABLE IF NOT EXISTS aps_scheduling_constraints (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id            UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  org_id            UUID NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   run_id            UUID REFERENCES aps_production_runs(id) ON DELETE SET NULL,
                                                  -- NULL = global constraint for org
 
