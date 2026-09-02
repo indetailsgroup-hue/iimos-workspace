@@ -58,10 +58,13 @@ async function getAuditLog(
 }
 
 /** Delete all test data for a given request id (best-effort). */
-async function cleanup(client: SupabaseClient, requestId: string | null) {
+async function cleanup(client: SupabaseClient, requestId: string | null, lineSuffix?: string) {
   if (!requestId) return;
   await client.from("field_purchase_audit_log").delete().eq("request_id", requestId);
   await client.from("line_oa_outbound_messages").delete().contains("slot_values", JSON.stringify({ request_id: requestId }));
+  if (lineSuffix) {
+    await client.from("line_oa_conversations").delete().like("line_user_id", `Ue2e${lineSuffix}%`);
+  }
   await client.from("field_purchase_request").delete().eq("id", requestId);
 }
 
@@ -178,17 +181,33 @@ Deno.test({
         metadata:   { source: "e2e_smoke_test" },
       });
 
-      // Enqueue a received-notification to simulate field confirmation
+      // Enqueue a received-notification to simulate field confirmation.
+      // line_oa_outbound_target_shape requires conversation_id IS NOT NULL
+      // when target_type = 'user', so we create a minimal test conversation first.
+      const lineUserId = `Ue2e${SUFFIX}`;
+      const { data: convRow, error: convErr } = await client
+        .from("line_oa_conversations")
+        .insert({
+          org_id:           "00000000-0000-0000-0000-000000000000",
+          line_user_id:     lineUserId,
+          vertical_context: "fpr",
+          site_code:        SITE,
+        })
+        .select("id")
+        .single();
+      assertEquals(convErr, null, "conversation setup should succeed");
+
       const { error: notifErr } = await client
         .from("line_oa_outbound_messages")
         .insert({
-          org_id:       "00000000-0000-0000-0000-000000000000",
-          send_type:    "flex",
-          status:       "pending",
-          template_key: "tpl_fpr_received_flex_card",
-          slot_values:  { request_id: requestId, site_code: SITE },
-          target_type:  "user",
-          target_id:    "U_e2e_test",
+          org_id:          "00000000-0000-0000-0000-000000000000",
+          conversation_id: convRow!.id,
+          send_type:       "flex",
+          status:          "pending",
+          template_key:    "tpl_fpr_received_flex_card",
+          slot_values:     { request_id: requestId, site_code: SITE },
+          target_type:     "user",
+          target_id:       lineUserId,
         });
 
       assertEquals(notifErr, null, "notification insert should succeed");
@@ -270,7 +289,7 @@ Deno.test({
       console.log(`[E2E PASS] Full happy-path flow complete. request_id=${requestId}`);
 
     } finally {
-      await cleanup(client, requestId);
+      await cleanup(client, requestId, SUFFIX);
     }
   },
   sanitizeOps: false,
@@ -370,7 +389,7 @@ Deno.test({
       console.log(`[E2E PASS] Rejection path complete. audit events: ${eventTypes.join(", ")}`);
 
     } finally {
-      await cleanup(client, requestId);
+      await cleanup(client, requestId, SUFFIX);
     }
   },
   sanitizeOps: false,
