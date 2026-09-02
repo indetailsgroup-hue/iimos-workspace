@@ -2,6 +2,7 @@
 -- Migration 0208: line_oa_outbound_messages dead-letter support
 --
 -- Changes:
+--   0. ALTER TYPE line_oa_outbound_status ADD VALUE IF NOT EXISTS 'dead' (pre-BEGIN).
 --   1. ADD COLUMN retried_count int4 DEFAULT 0 NOT NULL to line_oa_outbound_messages.
 --   2. CREATE fn_outbound_mark_failed(p_id uuid) SECURITY DEFINER:
 --        - Atomically increments retried_count.
@@ -12,6 +13,14 @@
 --
 -- Prerequisite migrations: 0196 (rpc_retry_fpr_notifications), 0197 (pg_notify trigger).
 -- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- 0. Extend enum: add 'dead' value for dead-letter status
+--    Must run OUTSIDE the main transaction block (ALTER TYPE ADD VALUE
+--    is not allowed inside a multi-statement transaction in PostgreSQL < 12,
+--    and the value must be committed before use).
+-- ---------------------------------------------------------------------------
+ALTER TYPE public.line_oa_outbound_status ADD VALUE IF NOT EXISTS 'dead';
 
 BEGIN;
 
@@ -98,14 +107,16 @@ COMMENT ON FUNCTION public.fn_outbound_mark_failed(uuid) IS
 
 -- ---------------------------------------------------------------------------
 -- 3. UPDATE rpc_retry_fpr_notifications to exclude 'dead' rows
---    Replaces the 0196 version — only the eligibility filter changes.
---    DROP first: 0196 defined p_site_code with DEFAULT NULL; PostgreSQL
---    (42P13) forbids removing a parameter default via CREATE OR REPLACE.
+--    Replaces the 0196 version — only the eligibility filter and p_older_than
+--    default change (5 min → 10 min).
+--    p_site_code retains DEFAULT NULL (matches 0196 signature; CREATE OR REPLACE
+--    cannot remove a parameter default — 42P13).
+--    DROP retained for a clean replacement in case of schema drift.
 -- ---------------------------------------------------------------------------
 DROP FUNCTION IF EXISTS public.rpc_retry_fpr_notifications(text, interval);
 
 CREATE OR REPLACE FUNCTION public.rpc_retry_fpr_notifications(
-  p_site_code  text,
+  p_site_code  text  DEFAULT NULL,
   p_older_than interval DEFAULT interval '10 minutes'
 )
 RETURNS jsonb
@@ -195,3 +206,4 @@ COMMENT ON FUNCTION public.rpc_retry_fpr_notifications(text, interval) IS
   'Migration 0208 (supersedes 0196).';
 
 COMMIT;
+
