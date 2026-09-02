@@ -41,10 +41,14 @@
 - `src/org-health/orgHealthScoreTypes.ts` — `OhsDimension`/`OhsScoreGrade`; row types + app-layer types including `OhsCurrentScore` with `dimensionMap`; Thai labels; `deriveOhsGrade`; `canAccessOrgHealthScore`/`OrgHealthScorePlanGateError`; mappers × 4; `DEFAULT_OHS_SCORING_CONFIG`
 - `src/org-health/orgHealthScoreStore.ts` — `useOrgHealthScoreStore`; 6 ENTERPRISE-gated actions (fetchLatestScore, fetchHistory, computeScore, fetchScoringConfig, updateScoringConfig, upsertScoringConfig); UI helpers (selectSnapshot, clearError)
 
-### 🔜 Pending (v18.5 — sprint 9+)
-- `OrgHealthScoreBoard.tsx` UI component
-- Vitest tests for `orgHealthScoreStore.ts`
-- QC Anomaly Detection component-level Vitest tests
+### ✅ Completed (v18.5 — sprint 9: OrgHealthScoreBoard UI + OHS Store Tests + QcAnomalyDashboard Component Tests)
+- `src/org-health/OrgHealthScoreBoard.tsx` — full ENTERPRISE-gated UI (640 lines): plan gate wall, score gauge, grade badge, 5-dimension cards with progress bars (SAFETY/SATISFACTION/PERFORMANCE/PROCESS/CULTURE), snapshot history table, inline weight config panel (per-dimension %, edit/save/cancel), compute button, error banner; all `ohs-*` testids
+- `src/org-health/__tests__/orgHealthScoreStore.test.ts` — Vitest unit tests for all 6 store actions + UI helpers; `vi.hoisted` mock with `setResult`/`setRpcResult`/`resetMock`/`makeChain` (terminalOp pattern handles upsertScoringConfig double from() call); `describe.each(PLAN_GATE_ACTIONS)` for 6-action plan gate; success/loading/error/null paths
+- `src/qc-anomaly/__tests__/QcAnomalyDashboard.test.tsx` — Vitest component tests: explicit `StoreShape` interface (resolves Zustand auto-mock unknown issue); `makeStore`/`renderBoard` helpers; plan gate · loading · summary cards · filter bar · anomaly list · acknowledge · resolve · threshold toggle · error banner
+- `src/qc-anomaly/QcAnomalyDashboard.tsx` — fixed 4 tsc errors: `METRIC_KEYS` corrected to QcaMetricKey values, `threshold_value` → `threshold_breach_detail`, `acknowledgeAnomaly`/`resolveAnomaly` 3-arg → 2-arg
+
+### 🔜 Pending (v18.5 — sprint 10+)
+- Next module TBD
 
 ### ✅ Completed (v18.0 — sprint 7: Leadership Action Board UI + Storybook Stories + LAT Tests)
 - `src/leadership-actions/LeadershipActionBoard.tsx` — ENTERPRISE-gated UI; plan-gate wall, loading state, summary bar (open/in-progress/blocked/completed counts from `actions` array), filter bar (status/priority/category), new-action form, action list with status/priority/category Thai-label badges, detail panel (complete/cancel/reassign via `window.prompt`, post-update form, updates list), error banner; all `lat-*` data-testids; zero TS errors
@@ -59,7 +63,7 @@
 - `src/leadership-actions/leadershipActionStore.ts` — `useLeadershipActionStore`; 10 ENTERPRISE-gated actions; optimistic rollback on completeAction/cancelAction; UI helpers
 - `src/ai-quotation/__tests__/aiQuotationDraftStore.test.ts` — **74 Vitest unit tests, all passing**; plan gate (10), fetchDrafts parallel (3), CRUD (9), workflow optimistic (6), line items (12), loading-state subscribe pattern
 
-**Last updated:** 2027-03-06
+**Last updated:** 2027-03-13
 
 ---
 

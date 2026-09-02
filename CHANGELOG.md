@@ -3,7 +3,18 @@
 All notable changes to the Monolith Workspace are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [18.5.0] — 2027-03-06 — Sprint 8: LAT Component Tests + Stories + 2S2P1C Org Health Score Module
+## [18.5.1] — 2027-03-13 — Sprint 9: OrgHealthScoreBoard UI + OHS Store Tests + QcAnomalyDashboard Component Tests
+
+### Added
+- `src/org-health/OrgHealthScoreBoard.tsx` — full ENTERPRISE-gated UI (640 lines): plan gate wall, score gauge, grade badge, 5-dimension cards with progress bars, snapshot history table, inline weight config panel, compute button, error banner; all testids implemented
+- `src/org-health/__tests__/orgHealthScoreStore.test.ts` — Vitest unit tests for `orgHealthScoreStore`: `vi.hoisted` mock with `setResult`/`setRpcResult`/`resetMock`/`makeChain` helpers, `describe.each(PLAN_GATE_ACTIONS)` for 6-action plan gate coverage, success/loading/error/null paths for all 6 store actions and UI helpers
+
+### Fixed
+- `src/qc-anomaly/QcAnomalyDashboard.tsx`: corrected `METRIC_KEYS` constant to match `QcaMetricKey` enum (`DEFECT_RATE`, `CYCLE_TIME`, `YIELD_RATE`, `SCRAP_RATE`, `REWORK_RATE`, `DOWNTIME`, `CUSTOM`); replaced invalid `threshold_value` reference with `threshold_breach_detail`; fixed `acknowledgeAnomaly`/`resolveAnomaly` calls from 3-arg to 2-arg store signature
+
+### Tests
+- `src/qc-anomaly/__tests__/QcAnomalyDashboard.test.tsx` — Vitest component tests for `QcAnomalyDashboard`: explicit `StoreShape` interface (resolves Zustand auto-mock `unknown` issue), `makeStore`/`renderBoard` helpers, plan gate · loading · summary cards · filter bar · anomaly list · acknowledge button · resolve button · threshold toggle · error banner describes
+
 
 ### Added
 - **2S2P1C Org Health Score module — Supabase migration** `supabase/migrations/20270227_org_health_score.sql`:

@@ -38,13 +38,13 @@ const STATUS_ACCENT: Record<string, string> = {
 };
 
 const METRIC_KEYS = [
-  'TEMPERATURE',
-  'HUMIDITY',
-  'PRESSURE',
-  'THICKNESS',
-  'WEIGHT',
-  'DIMENSION',
-  'COLOR_DELTA',
+  'DEFECT_RATE',
+  'CYCLE_TIME',
+  'YIELD_RATE',
+  'SCRAP_RATE',
+  'REWORK_RATE',
+  'DOWNTIME',
+  'CUSTOM',
 ] as const;
 
 const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
@@ -412,8 +412,9 @@ export function QcAnomalyDashboard({
                     <div style={{ color: '#6b7280', marginTop: 2, fontSize: 12 }}>
                       วัดได้:&nbsp;
                       <strong>{anomaly.measured_value}</strong>
-                      &nbsp;/&nbsp;เกณฑ์:&nbsp;
-                      <strong>{anomaly.threshold_value}</strong>
+                      {anomaly.threshold_breach_detail && (
+                        <>&nbsp;/&nbsp;เกณฑ์:&nbsp;<strong>{JSON.stringify(anomaly.threshold_breach_detail)}</strong></>
+                      )}
                     </div>
                   </div>
 
@@ -439,7 +440,7 @@ export function QcAnomalyDashboard({
                       data-testid="qca-acknowledge-btn"
                       onClick={e => {
                         e.stopPropagation();
-                        acknowledgeAnomaly(anomaly.id, orgId, orgPlan);
+                        acknowledgeAnomaly(anomaly.id, orgPlan);
                       }}
                       style={{
                         background:   '#f59e0b',
@@ -463,7 +464,7 @@ export function QcAnomalyDashboard({
                         data-testid="qca-resolve-btn"
                         onClick={e => {
                           e.stopPropagation();
-                          resolveAnomaly(anomaly.id, orgId, orgPlan);
+                          resolveAnomaly(anomaly.id, orgPlan);
                         }}
                         style={{
                           background:   '#22c55e',
