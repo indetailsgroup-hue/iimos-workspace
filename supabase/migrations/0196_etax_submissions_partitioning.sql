@@ -274,9 +274,9 @@ BEGIN
     )
     SELECT
       id, org_id, invoice_id, document_type, status, attempt_count,
-      last_attempt_at, submitted_at, error_message, etax_reference_no,
+      last_attempt_at, submitted_at, error_detail, rd_ref_no,
       pdf_status, pdf_path, pdf_downloaded_at,
-      COALESCE(metadata, '{}'),
+      '{}'::jsonb,
       created_at,
       COALESCE(updated_at, created_at)
     FROM public.etax_submissions_pre_partition;
