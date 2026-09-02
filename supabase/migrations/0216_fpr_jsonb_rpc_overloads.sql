@@ -29,6 +29,11 @@
 -- Depends on: 0176 (tables, enums, trigger), 0183, 0191, 0192, 0211
 -- =============================================================================
 
+-- ALTER TYPE ADD VALUE cannot run inside a transaction block (Postgres restriction).
+-- Run it here, before BEGIN, so it commits immediately and is visible to all
+-- subsequent statements in this migration.
+ALTER TYPE public.line_oa_send_type ADD VALUE IF NOT EXISTS 'flex';
+
 BEGIN;
 
 -- ─────────────────────────────────────────────────────────────────────────────
