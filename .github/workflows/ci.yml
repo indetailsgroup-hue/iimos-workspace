@@ -686,6 +686,15 @@ jobs:
             END IF;
           END $$;
 
+          -- ── Iter 25r: add target_type/target_id to line_oa_outbound_messages ─
+          -- 0197_line_outbound_notify_trigger.sql trigger body references NEW.target_type / NEW.target_id
+          -- 0201/0204/0206/0207 INSERT INTO line_oa_outbound_messages(..., target_type, target_id, ...)
+          -- These columns are never added by any migration; adding them here so the table schema
+          -- is complete before those migrations run.
+          ALTER TABLE IF EXISTS public.line_oa_outbound_messages
+            ADD COLUMN IF NOT EXISTS target_type TEXT,
+            ADD COLUMN IF NOT EXISTS target_id   TEXT;
+
           -- ── Iter 19: extend invoice_status enum for 0176_auto_journal_on_approval ─
           -- 0176 uses lowercase 'approved', 'voided', 'cancelled' in trigger WHEN clauses
           -- and UPDATE statements; 0172 only defines PENDING/PARTIAL/PAID/OVERDUE/CANCELLED.
