@@ -45,8 +45,9 @@ SELECT
   m.retried_count,
   m.slot_values,
   m.send_type,
-  m.target_type,
-  m.target_id,
+  NULL::text                                   AS target_type,   -- column not on line_oa_outbound_messages (iter 25t)
+  NULL::uuid                                   AS target_id,      -- column not on line_oa_outbound_messages (iter 25t)
+  NULL::text                                   AS reply_token,    -- column not on line_oa_outbound_messages (iter 25t)
   m.created_at                                 AS message_created_at,
   fpr.status                                   AS request_status,
   fpr.amount,
