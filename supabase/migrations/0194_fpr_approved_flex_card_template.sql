@@ -21,6 +21,7 @@ BEGIN;
 
 -- ─── tpl_fpr_approved_flex_card ──────────────────────────────────────────────
 INSERT INTO line_oa_message_templates (
+  org_id,
   template_key,
   vertical_context,
   body,
@@ -30,9 +31,10 @@ INSERT INTO line_oa_message_templates (
   is_active
 )
 VALUES (
+  '00000000-0000-0000-0000-000000000000',
   'tpl_fpr_approved_flex_card',
   'installation_pm',
-  '✅ อนุมัติแล้ว — ฿{{amount}} | {{site_code}} | อนุมัติโดย {{approved_by}}',
+  '',
   'flex',
   'requester',
   jsonb_build_object(
@@ -215,7 +217,6 @@ VALUES (
 )
 ON CONFLICT ON CONSTRAINT line_oa_message_templates_key_vertical_uniq
 DO UPDATE SET
-  body         = EXCLUDED.body,
   flex_payload = EXCLUDED.flex_payload,
   message_kind = EXCLUDED.message_kind,
   audience     = EXCLUDED.audience,
