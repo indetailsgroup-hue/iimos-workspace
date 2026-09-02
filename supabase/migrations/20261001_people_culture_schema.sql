@@ -220,6 +220,13 @@ CREATE TRIGGER employees_set_updated_at
   BEFORE UPDATE ON public.employees
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+-- Audit trigger: employees (moved here from 20261001_audit_log.sql — Fix Z110)
+-- Must be defined AFTER the employees table exists.
+DROP TRIGGER IF EXISTS audit_employees ON public.employees;
+CREATE TRIGGER audit_employees
+  AFTER INSERT OR UPDATE OR DELETE ON public.employees
+  FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_fn();
+
 -- RLS: employees (Fix Issue 3 — separate per DML)
 DROP POLICY IF EXISTS employees_select ON public.employees;
 DROP POLICY IF EXISTS employees_insert ON public.employees;
