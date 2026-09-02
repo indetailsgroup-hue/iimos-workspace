@@ -99,9 +99,13 @@ COMMENT ON FUNCTION public.fn_outbound_mark_failed(uuid) IS
 -- ---------------------------------------------------------------------------
 -- 3. UPDATE rpc_retry_fpr_notifications to exclude 'dead' rows
 --    Replaces the 0196 version — only the eligibility filter changes.
+--    DROP first: 0196 defined p_site_code with DEFAULT NULL; PostgreSQL
+--    (42P13) forbids removing a parameter default via CREATE OR REPLACE.
 -- ---------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.rpc_retry_fpr_notifications(text, interval);
+
 CREATE OR REPLACE FUNCTION public.rpc_retry_fpr_notifications(
-  p_site_code  text     DEFAULT NULL,
+  p_site_code  text,
   p_older_than interval DEFAULT interval '10 minutes'
 )
 RETURNS jsonb
@@ -191,4 +195,3 @@ COMMENT ON FUNCTION public.rpc_retry_fpr_notifications(text, interval) IS
   'Migration 0208 (supersedes 0196).';
 
 COMMIT;
-
