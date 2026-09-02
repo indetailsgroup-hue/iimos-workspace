@@ -144,7 +144,6 @@ joined AS (
         COALESCE(t.pdf_success_rate_pct,         0)        AS today_pdf_success_rate_pct,
         t.avg_attempt_count                                AS today_avg_attempt_count,
         t.max_attempt_count                                AS today_max_attempt_count,
-        t.p95_attempt_count                                AS today_p95_attempt_count,
 
         -- ── MV freshness metadata ────────────────────────────────────────
         cr.last_refreshed_at   AS compliance_mv_last_refreshed_at,
@@ -153,7 +152,7 @@ joined AS (
         tr.age_seconds         AS trend_mv_age_seconds
 
     FROM      mv_etax_compliance_dashboard c
-    JOIN      organizations               o  ON o.id = c.org_id
+    JOIN      organizations               o  ON o.org_id = c.org_id
     LEFT JOIN mv_etax_health_trend        t  ON t.org_id   = c.org_id
                                              AND t.day_rank = 1
     CROSS JOIN compliance_refresh         cr
@@ -260,7 +259,6 @@ RETURNS TABLE (
     today_pdf_success_rate_pct      NUMERIC,
     today_avg_attempt_count         NUMERIC,
     today_max_attempt_count         INTEGER,
-    today_p95_attempt_count         NUMERIC,
     -- MV freshness
     compliance_mv_last_refreshed_at TIMESTAMPTZ,
     compliance_mv_age_seconds       INTEGER,
@@ -327,7 +325,6 @@ BEGIN
         s.today_pdf_success_rate_pct,
         s.today_avg_attempt_count,
         s.today_max_attempt_count,
-        s.today_p95_attempt_count,
         s.compliance_mv_last_refreshed_at,
         s.compliance_mv_age_seconds,
         s.trend_mv_last_refreshed_at,
@@ -387,7 +384,6 @@ RETURNS TABLE (
     today_pdf_success_rate_pct      NUMERIC,
     today_avg_attempt_count         NUMERIC,
     today_max_attempt_count         INTEGER,
-    today_p95_attempt_count         NUMERIC,
     compliance_mv_last_refreshed_at TIMESTAMPTZ,
     compliance_mv_age_seconds       INTEGER,
     trend_mv_last_refreshed_at      TIMESTAMPTZ,
@@ -439,7 +435,6 @@ BEGIN
         s.today_pdf_success_rate_pct,
         s.today_avg_attempt_count,
         s.today_max_attempt_count,
-        s.today_p95_attempt_count,
         s.compliance_mv_last_refreshed_at,
         s.compliance_mv_age_seconds,
         s.trend_mv_last_refreshed_at,
