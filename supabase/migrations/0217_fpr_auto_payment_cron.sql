@@ -135,7 +135,7 @@ BEGIN
         PERFORM cron.schedule(
             'fpr-auto-payment-nightly',   -- job name
             '0 18 * * *',                 -- 18:00 UTC = 01:00 Asia/Bangkok
-            $$SELECT public.rpc_auto_record_fpr_payments()$$
+            'SELECT public.rpc_auto_record_fpr_payments()'
         );
         RAISE NOTICE '0217: pg_cron job "fpr-auto-payment-nightly" registered (18:00 UTC)';
     ELSE
