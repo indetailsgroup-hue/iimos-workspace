@@ -199,15 +199,16 @@ RETURNS TABLE (
 LANGUAGE sql
 SECURITY DEFINER
 AS $$
+  -- net._http_response has no 'url' column; return NULL for url
+  -- and use 'content' (pg_net's actual column) for response body
   SELECT
     r.id,
     r.status_code,
     r.timed_out,
     r.created,
-    r.url,
-    convert_from(r.response_body, 'UTF8')
+    NULL::text,
+    r.content
   FROM net._http_response r
-  WHERE r.url LIKE '%etax-risk-notify%'
   ORDER BY r.created DESC
   LIMIT p_limit;
 $$;
