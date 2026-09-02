@@ -216,8 +216,7 @@ DO UPDATE SET
   flex_payload = EXCLUDED.flex_payload,
   message_kind = EXCLUDED.message_kind,
   audience     = EXCLUDED.audience,
-  is_active    = EXCLUDED.is_active,
-  updated_at   = now();
+  is_active    = EXCLUDED.is_active;
 
 -- ─── Verify seed ────────────────────────────────────────────────────────────
 DO $$
