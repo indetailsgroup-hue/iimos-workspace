@@ -199,29 +199,29 @@ CREATE TRIGGER trg_etax_submissions_cross_partition_unique
 
 -- ─── 7. Performance indexes ───────────────────────────────────────────────────
 -- Org + status (most common query pattern in v_etax_compliance_dashboard)
-CREATE INDEX idx_etax_submissions_org_status
+CREATE INDEX IF NOT EXISTS idx_etax_submissions_org_status
   ON public.etax_submissions (org_id, status, created_at DESC);
 
 -- Invoice lookup
-CREATE INDEX idx_etax_submissions_invoice_id
+CREATE INDEX IF NOT EXISTS idx_etax_submissions_invoice_id
   ON public.etax_submissions (invoice_id, document_type);
 
 -- Retry worker queue: queued/failed rows with attempt_count < 5
-CREATE INDEX idx_etax_submissions_retry_queue
+CREATE INDEX IF NOT EXISTS idx_etax_submissions_retry_queue
   ON public.etax_submissions (status, attempt_count, last_attempt_at)
   WHERE status IN ('queued', 'failed') AND attempt_count < 5;
 
 -- PDF pipeline
-CREATE INDEX idx_etax_submissions_pdf_status
+CREATE INDEX IF NOT EXISTS idx_etax_submissions_pdf_status
   ON public.etax_submissions (org_id, pdf_status, created_at DESC)
   WHERE pdf_status IN ('pending', 'processing', 'failed');
 
 -- Health trend queries (daily aggregation over created_at)
-CREATE INDEX idx_etax_submissions_org_created
+CREATE INDEX IF NOT EXISTS idx_etax_submissions_org_created
   ON public.etax_submissions (org_id, created_at);
 
 -- GIN index on metadata JSONB
-CREATE INDEX idx_etax_submissions_metadata
+CREATE INDEX IF NOT EXISTS idx_etax_submissions_metadata
   ON public.etax_submissions USING GIN (metadata);
 
 -- ─── 8. updated_at trigger ────────────────────────────────────────────────────
