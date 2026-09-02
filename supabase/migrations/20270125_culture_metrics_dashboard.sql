@@ -81,7 +81,7 @@ AS $$
   SELECT EXISTS (
     SELECT 1
     FROM org_members om
-    JOIN orgs o ON o.id = om.org_id
+    JOIN public.organizations o ON o.org_id = om.org_id
     WHERE om.user_id = auth.uid()
       AND o.plan IN ('PROFESSIONAL', 'ENTERPRISE')
   );
@@ -93,7 +93,7 @@ $$;
 
 CREATE TABLE IF NOT EXISTS cmd_metric_definitions (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id            UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  org_id            UUID NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
 
   metric_category   cmd_metric_category NOT NULL,
   metric_source     cmd_metric_source NOT NULL,
@@ -131,7 +131,7 @@ COMMENT ON TABLE cmd_metric_definitions IS
 
 CREATE TABLE IF NOT EXISTS cmd_metric_snapshots (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id            UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  org_id            UUID NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   metric_id         UUID NOT NULL REFERENCES cmd_metric_definitions(id) ON DELETE CASCADE,
 
   period_type       cmd_snapshot_period NOT NULL,
@@ -161,7 +161,7 @@ COMMENT ON TABLE cmd_metric_snapshots IS
 
 CREATE TABLE IF NOT EXISTS cmd_enps_surveys (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id            UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  org_id            UUID NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
 
   title             TEXT NOT NULL,          -- e.g. "Q1 2027 Employee NPS Survey"
   title_th          TEXT,
@@ -198,7 +198,7 @@ COMMENT ON TABLE cmd_enps_surveys IS
 
 CREATE TABLE IF NOT EXISTS cmd_enps_responses (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id            UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  org_id            UUID NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   survey_id         UUID NOT NULL REFERENCES cmd_enps_surveys(id) ON DELETE CASCADE,
 
   -- Score: 0–10 (NPS standard)
