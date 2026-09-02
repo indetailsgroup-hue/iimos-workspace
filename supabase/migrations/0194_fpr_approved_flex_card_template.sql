@@ -21,21 +21,22 @@ BEGIN;
 
 -- ─── tpl_fpr_approved_flex_card ──────────────────────────────────────────────
 INSERT INTO line_oa_message_templates (
+  org_id,
   template_key,
   vertical_context,
   body,
   message_kind,
   audience,
   flex_payload,
-  is_active,
-  org_id
+  is_active
 )
 VALUES (
+  '00000000-0000-0000-0000-000000000000',
   'tpl_fpr_approved_flex_card',
   'installation_pm',
-  '✅ อนุมัติแล้ว — ฿{{amount}} | {{site_code}} | อนุมัติโดย {{approved_by}}',
+  '',
   'flex',
-  'requester',
+  'internal',
   jsonb_build_object(
     'type', 'bubble',
     'size', 'kilo',
@@ -212,12 +213,10 @@ VALUES (
     )
     -- No footer: this is a confirmation card, not an action card
   )::jsonb,
-  TRUE,
-  '00000000-0000-0000-0000-000000000000'   -- sentinel: shared platform template
+  TRUE
 )
 ON CONFLICT ON CONSTRAINT line_oa_message_templates_key_vertical_uniq
 DO UPDATE SET
-  body         = EXCLUDED.body,
   flex_payload = EXCLUDED.flex_payload,
   message_kind = EXCLUDED.message_kind,
   audience     = EXCLUDED.audience,
