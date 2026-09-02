@@ -181,7 +181,7 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE TABLE IF NOT EXISTS public.employees (
   id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id            UUID        NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id            UUID        NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   employee_code     TEXT,
   first_name        TEXT        NOT NULL,
   last_name         TEXT        NOT NULL,
@@ -269,7 +269,7 @@ CREATE POLICY employees_delete ON public.employees
 
 CREATE TABLE IF NOT EXISTS public.skills (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id      UUID        NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id      UUID        NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   name        TEXT        NOT NULL,
   category    TEXT,
   description TEXT,
@@ -389,7 +389,7 @@ CREATE POLICY employee_skills_delete ON public.employee_skills
 
 CREATE TABLE IF NOT EXISTS public.training_records (
   id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id          UUID        NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id          UUID        NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   employee_id     UUID        NOT NULL REFERENCES public.employees(id)     ON DELETE CASCADE,
   title           TEXT        NOT NULL,
   provider        TEXT,
@@ -455,7 +455,7 @@ CREATE POLICY training_records_delete ON public.training_records
 
 CREATE TABLE IF NOT EXISTS public.super_employee_progress (
   id          UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id      UUID            NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id      UUID            NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   employee_id UUID            NOT NULL REFERENCES public.employees(id)     ON DELETE CASCADE,
   from_stage  public.ai_stage NOT NULL,
   to_stage    public.ai_stage NOT NULL,
@@ -563,7 +563,7 @@ CREATE POLICY sep_insert ON public.super_employee_progress
 
 CREATE TABLE IF NOT EXISTS public.ps_survey_templates (
   id          UUID                  PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id      UUID                  NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id      UUID                  NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   name        TEXT                  NOT NULL,
   description TEXT,
   questions   JSONB                 NOT NULL DEFAULT '[]',
@@ -629,7 +629,7 @@ CREATE POLICY pst_delete ON public.ps_survey_templates
 
 CREATE TABLE IF NOT EXISTS public.ps_survey_responses (
   id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id           UUID        NOT NULL REFERENCES public.organizations(id)      ON DELETE CASCADE,
+  org_id           UUID        NOT NULL REFERENCES public.organizations(org_id)      ON DELETE CASCADE,
   survey_id        UUID        NOT NULL REFERENCES public.ps_survey_templates(id) ON DELETE CASCADE,
   anonymous_token  TEXT        NOT NULL,       -- opaque client device token
   period_label     TEXT        NOT NULL,       -- e.g. '2026-08', '2026-Q3'
@@ -679,7 +679,7 @@ CREATE POLICY psr_insert ON public.ps_survey_responses
 
 CREATE TABLE IF NOT EXISTS public.ps_scores (
   id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id           UUID        NOT NULL REFERENCES public.organizations(id)      ON DELETE CASCADE,
+  org_id           UUID        NOT NULL REFERENCES public.organizations(org_id)      ON DELETE CASCADE,
   survey_id        UUID        NOT NULL REFERENCES public.ps_survey_templates(id) ON DELETE CASCADE,
   period_label     TEXT        NOT NULL,
   overall_score    NUMERIC(5,2) NOT NULL CHECK (overall_score >= 0 AND overall_score <= 100),
@@ -737,7 +737,7 @@ CREATE POLICY ps_scores_delete ON public.ps_scores
 
 CREATE TABLE IF NOT EXISTS public.anonymous_feedback (
   id           UUID                     PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id       UUID                     NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id       UUID                     NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   category     public.feedback_category NOT NULL DEFAULT 'OTHER',
   content      TEXT                     NOT NULL,
   sentiment    TEXT                     CHECK (sentiment IN ('POSITIVE', 'NEUTRAL', 'NEGATIVE')),
