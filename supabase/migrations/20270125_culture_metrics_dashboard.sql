@@ -338,7 +338,8 @@ CREATE POLICY "cmd_metric_definitions_admin_write" ON cmd_metric_definitions
     AND org_id IN (
       SELECT org_id FROM org_members
       WHERE user_id = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -360,7 +361,8 @@ CREATE POLICY "cmd_metric_snapshots_admin_insert" ON cmd_metric_snapshots
     AND org_id IN (
       SELECT org_id FROM org_members
       WHERE user_id = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -381,7 +383,8 @@ CREATE POLICY "cmd_enps_surveys_admin_write" ON cmd_enps_surveys
     AND org_id IN (
       SELECT org_id FROM org_members
       WHERE user_id = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -396,7 +399,8 @@ CREATE POLICY "cmd_enps_responses_admin_select" ON cmd_enps_responses
     AND org_id IN (
       SELECT org_id FROM org_members
       WHERE user_id = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
