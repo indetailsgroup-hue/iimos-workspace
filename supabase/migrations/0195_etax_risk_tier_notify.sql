@@ -1,5 +1,3 @@
-sha: 19542b97f42506904ba4214acc54d2a14cabbc9a
-size: 13492
 -- =============================================================================
 -- Migration 0195 — eTax Risk Tier Change pg_notify Trigger
 -- Branch  : feat/accounting-rls-multibook
