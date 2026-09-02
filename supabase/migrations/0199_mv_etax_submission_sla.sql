@@ -28,14 +28,14 @@ SELECT
   org_id,
   document_type,
   total_submissions,
-  sla_breached_count,
-  breach_rate,
-  sla_breach_flag,
-  severity_tier,
+  breached_count                    AS sla_breached_count,
+  breach_rate_pct                   AS breach_rate,
+  (breached_count > 0)              AS sla_breach_flag,
+  sla_severity                      AS severity_tier,
   avg_processing_hours,
   max_processing_hours,
   sla_threshold_hours,
-  updated_at
+  snapshot_at                       AS updated_at
 FROM public.v_etax_submission_sla
 WITH DATA;
 
