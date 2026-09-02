@@ -456,24 +456,6 @@ jobs:
             org_id uuid NOT NULL    REFERENCES organizations(org_id) ON DELETE CASCADE
           );
 
-          -- ── Iter 25s: add columns expected by 20260828_multi_tenant_schema ──
-          -- CREATE TABLE IF NOT EXISTS is skipped (table already exists); add missing
-          -- columns so the subsequent CREATE INDEX statements can resolve them.
-          ALTER TABLE public.org_invitations ADD COLUMN IF NOT EXISTS
-            token text UNIQUE DEFAULT encode(gen_random_bytes(32), 'hex');
-          ALTER TABLE public.org_invitations ADD COLUMN IF NOT EXISTS
-            role text NOT NULL DEFAULT 'VIEWER';
-          ALTER TABLE public.org_invitations ADD COLUMN IF NOT EXISTS
-            status text NOT NULL DEFAULT 'PENDING';
-          ALTER TABLE public.org_invitations ADD COLUMN IF NOT EXISTS
-            expires_at timestamptz NOT NULL DEFAULT (now() + interval '7 days');
-          ALTER TABLE public.org_invitations ADD COLUMN IF NOT EXISTS
-            accepted_at timestamptz;
-          ALTER TABLE public.org_invitations ADD COLUMN IF NOT EXISTS
-            invited_by uuid;
-          ALTER TABLE public.org_invitations ADD COLUMN IF NOT EXISTS
-            invite_id uuid UNIQUE DEFAULT gen_random_uuid();
-
           CREATE TABLE IF NOT EXISTS notification_digest_queue (
             id      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
             user_id uuid NOT NULL
@@ -486,6 +468,21 @@ jobs:
           CREATE TABLE IF NOT EXISTS super_admins (
             id      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
             user_id uuid NOT NULL
+          );
+
+          -- ── tenants / tenant_members stubs (needed by 20270215_ai_quotation_draft) ──
+          CREATE TABLE IF NOT EXISTS public.tenants (
+            id        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            plan      text DEFAULT 'ENTERPRISE',
+            is_active boolean DEFAULT true
+          );
+
+          CREATE TABLE IF NOT EXISTS public.tenant_members (
+            id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id       uuid REFERENCES public.tenants(id),
+            user_id         uuid,
+            hierarchy_level int  DEFAULT 100,
+            is_active       boolean DEFAULT true
           );
 
           -- ── get_user_org_id stub (called by rpc_job_board in 0173) ──────────
@@ -703,6 +700,18 @@ jobs:
               BEGIN ALTER TYPE public.line_oa_outbound_status ADD VALUE IF NOT EXISTS 'none'; EXCEPTION WHEN duplicate_object THEN NULL; END;
             END IF;
           END $$;
+
+          -- ── Iter 25v: patch org_invitations stub for 20260828_multi_tenant_schema ─
+          -- The stub at prereqs creates org_invitations(id, email, org_id) only.
+          -- 20260828 does CREATE TABLE IF NOT EXISTS (skips), then CREATE INDEX on token/email.
+          -- token is missing → SQLSTATE 42703. Add all columns the migration assumes.
+          ALTER TABLE IF EXISTS public.org_invitations ADD COLUMN IF NOT EXISTS token       TEXT        DEFAULT encode(gen_random_bytes(32), 'hex');
+          ALTER TABLE IF EXISTS public.org_invitations ADD COLUMN IF NOT EXISTS role        TEXT        DEFAULT 'VIEWER';
+          ALTER TABLE IF EXISTS public.org_invitations ADD COLUMN IF NOT EXISTS status      TEXT        DEFAULT 'PENDING';
+          ALTER TABLE IF EXISTS public.org_invitations ADD COLUMN IF NOT EXISTS invited_by  UUID;
+          ALTER TABLE IF EXISTS public.org_invitations ADD COLUMN IF NOT EXISTS expires_at  TIMESTAMPTZ DEFAULT (now() + interval '7 days');
+          ALTER TABLE IF EXISTS public.org_invitations ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ;
+          ALTER TABLE IF EXISTS public.org_invitations ADD COLUMN IF NOT EXISTS created_at  TIMESTAMPTZ DEFAULT now();
 
           -- ── Iter 19: extend invoice_status enum for 0176_auto_journal_on_approval ─
           -- 0176 uses lowercase 'approved', 'voided', 'cancelled' in trigger WHEN clauses
