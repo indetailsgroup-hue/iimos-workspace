@@ -58,7 +58,8 @@ CREATE POLICY "audit_log_select_admin"
   FOR SELECT
   TO authenticated
   USING (
-    has_role_in_org(org_id, 80)
+    org_id = public.get_user_org_id()
+    AND has_any_app_role(ARRAY['managing_director','governance'])
   );
 
 -- INSERT: Blocked for ALL direct callers (authenticated or otherwise)
