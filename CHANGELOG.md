@@ -3,6 +3,23 @@
 All notable changes to the Monolith Workspace are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [18.0.6] — 2027-02-27 — Sprint 7: Leadership Action Board UI + Storybook Stories + LAT Tests
+
+### Added
+- **LeadershipActionBoard.tsx** — ENTERPRISE-gated UI: plan-gate wall, loading state, summary bar (open/in-progress/blocked/completed counts), filter bar (status/priority/category), new-action form, action list with status/priority/category badges, detail panel with complete/cancel/reassign/post-update workflow, error banner; all `lat-*` data-testids documented
+- **AiQuotationDraftBoard.stories.tsx** — 18 CSF3 Storybook stories: PlanGateWall (FREE + PROFESSIONAL), LoadingState, EmptyDrafts, WithDrafts, DraftSelected, ApprovedDraft, RejectedDraft, AdminPendingReview, ApproveInteraction, SubmitForReviewInteraction, DeleteDraftInteraction, NewDraftFormInteraction, NewDraftFormCancel, ErrorBanner, GenerationLogPanel, SummaryBar, FilterBar; `withAiQuotationDraftStore` decorator; `fn()` spies for all async actions; `userEvent` play functions for interactive stories
+- **QcAnomalyDashboard.stories.tsx** — 14 CSF3 Storybook stories: PlanGateWall (FREE + PROFESSIONAL), LoadingState, EmptyAnomalies, SummaryCards, AnomalyList, CriticalAnomaly, ThresholdPanel, EmptyThresholds, FilterBar, AcknowledgeInteraction, ResolveInteraction, ErrorBanner, ThresholdToggleInteraction; `withQcAnomalyStore` decorator; `fn()` spies for acknowledge/resolve/threshold actions; `userEvent` play functions
+
+### Tests
+- **leadershipActionStore.test.ts** — 70 tests, all passing: ENTERPRISE plan gate (30 reject + 10 pass), fetchActions parallel Promise.all + error propagation, createAction/updateAction/deleteAction CRUD with cascade (assignments + updates removed on delete, selectedActionId reset), addAssignment/removeAssignment, postUpdate (append-only + isUpdateLoading flag), completeAction + cancelAction (optimistic COMPLETED/CANCELLED + rollback on error), reassignOwner (owner_id in-place update), selectAction/setFilters/clearError UI helpers; loading-state tests use `useLeadershipActionStore.subscribe` pattern (React 18 batch-safe)
+
+### Fixed
+- **AiQuotationDraftBoard.stories.tsx** — removed explicit `: StoryFn` return type on decorator (TS2322 `AnnotatedStoryFn` assignability); added explicit `Story: StoryFn` parameter type
+- **QcAnomalyDashboard.stories.tsx** — added missing `last_anomaly_at` field to SUMMARIES fixtures; same decorator return-type fix
+- **leadershipActionStore.test.ts** — updated `makeActionRow`/`makeAssignmentRow`/`makeUpdateRow` helpers to return full app-layer types (`LatAction`/`LatActionAssignment`/`LatActionUpdate`) including camelCase date fields; eliminates TS type errors in test helpers
+
+---
+
 ## [18.0.5] — 2027-02-20 — Sprint 6: AI Quotation Draft Board + Leadership Action Tracker
 
 ### Added

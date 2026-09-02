@@ -34,6 +34,20 @@
 - `src/ai-quotation/aiQuotationDraftTypes.ts` — full type system; AqdDraftStatus/AqdLineItemType enums; DB + app-layer types; payloads; `canAccessAiQuotation`/`AiQuotationPlanGateError`; Thai labels; mappers; `AqdFilters`/`DEFAULT_AQD_FILTERS`
 - `src/ai-quotation/aiQuotationDraftStore.ts` — `useAiQuotationDraftStore`; 10 ENTERPRISE-gated actions; optimistic rollback on submitForReview/approveDraft/rejectDraft; UI helpers
 
+### ✅ Completed (v18.0 — sprint 7: Leadership Action Board UI + Storybook Stories + LAT Tests)
+- `src/leadership-actions/LeadershipActionBoard.tsx` — ENTERPRISE-gated UI; plan-gate wall, loading state, summary bar (open/in-progress/blocked/completed counts from `actions` array), filter bar (status/priority/category), new-action form, action list with status/priority/category Thai-label badges, detail panel (complete/cancel/reassign via `window.prompt`, post-update form, updates list), error banner; all `lat-*` data-testids; zero TS errors
+- `src/ai-quotation/AiQuotationDraftBoard.stories.tsx` — 18 CSF3 Storybook stories; `withAiQuotationDraftStore` decorator (no explicit return type — inferred); `fn()` spies; `userEvent` play functions for 5 interactive stories; TS clean
+- `src/qc-anomaly/QcAnomalyDashboard.stories.tsx` — 14 CSF3 Storybook stories; `withQcAnomalyStore` decorator; `fn()` spies; `userEvent` play functions; fixed `last_anomaly_at` field in SUMMARIES fixtures; TS clean
+- `src/leadership-actions/__tests__/leadershipActionStore.test.ts` — **70 Vitest unit tests, all passing**; ENTERPRISE plan gate (30 reject + 10 pass); full CRUD + optimistic rollback; loading-state tests use subscribe pattern; mock helpers return full app-layer types (`LatAction`/`LatActionAssignment`/`LatActionUpdate`); TS clean
+
+### 🔜 Pending (v18.0 — sprint 8+)
+- Vitest tests for `LeadershipActionBoard.tsx` (component-level)
+- Storybook stories for `LeadershipActionBoard.tsx`
+- QC Anomaly Detection component-level tests
+
+### ⚠️ User Action Required
+- Add `Supabase DB Lint` as required status check on main branch protection (GitHub Settings → Branches)
+
 ### ✅ Completed (v18.0 — sprint 6: AiQuotationDraftBoard + Leadership Action Tracker + aiQuotationDraftStore tests)
 - `src/ai-quotation/AiQuotationDraftBoard.tsx` — ENTERPRISE-gated UI; draft list (status/AI badges), new-draft form, editable line items table (DRAFT only), AddLineItemForm, totals footer, workflow buttons (submit/approve/reject), GenerationLogPanel (lazy Supabase), SummaryBar, filter bar, error banner, plan-gate wall
 - `supabase/migrations/20270220_leadership_action_tracker.sql` — 3 enums, 3 tables (lat_actions/lat_action_assignments/lat_action_updates), view (lat_action_summary_v), triggers, RLS, 10 indexes
