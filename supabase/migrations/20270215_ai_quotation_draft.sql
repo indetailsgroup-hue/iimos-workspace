@@ -38,8 +38,8 @@ SECURITY DEFINER
 AS $$
   SELECT EXISTS (
     SELECT 1
-    FROM   tenant_members tm
-    JOIN   tenants        t  ON t.id = tm.tenant_id
+    FROM   org_members tm
+    JOIN   public.organizations t  ON t.org_id = tm.org_id
     WHERE  tm.user_id  = auth.uid()
       AND  t.plan      = 'ENTERPRISE'
       AND  tm.is_active = true
@@ -53,7 +53,7 @@ $$;
 -- 3a. aqd_quotation_drafts
 CREATE TABLE aqd_quotation_drafts (
   id               uuid              PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id           uuid              NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  org_id           uuid              NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   title            text              NOT NULL,
   customer_name    text,
   customer_email   text,
@@ -76,7 +76,7 @@ CREATE TABLE aqd_quotation_drafts (
 CREATE TABLE aqd_draft_line_items (
   id               uuid               PRIMARY KEY DEFAULT gen_random_uuid(),
   draft_id         uuid               NOT NULL REFERENCES aqd_quotation_drafts(id) ON DELETE CASCADE,
-  org_id           uuid               NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  org_id           uuid               NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   item_type        aqd_line_item_type NOT NULL DEFAULT 'PRODUCT',
   description      text               NOT NULL,
   quantity         numeric(12,4)      NOT NULL DEFAULT 1,
@@ -91,7 +91,7 @@ CREATE TABLE aqd_draft_line_items (
 -- 3c. aqd_generation_logs
 CREATE TABLE aqd_generation_logs (
   id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id           uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  org_id           uuid        NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   draft_id         uuid        REFERENCES aqd_quotation_drafts(id) ON DELETE SET NULL,
   prompt           text        NOT NULL,
   model            text        NOT NULL DEFAULT 'gpt-4o',
@@ -208,12 +208,11 @@ CREATE POLICY "aqd_drafts_insert"
   ON aqd_quotation_drafts FOR INSERT
   WITH CHECK (
     aqd_is_enterprise() AND
-    EXISTS (
-      SELECT 1 FROM tenant_members
-      WHERE  user_id        = auth.uid()
-        AND  tenant_id      = org_id
-        AND  hierarchy_level >= 80
-        AND  is_active      = true
+    org_id IN (
+      SELECT om.org_id FROM org_members om
+      WHERE  om.user_id         = auth.uid()
+        AND  om.hierarchy_level >= 80
+        AND  om.is_active       = true
     )
   );
 
@@ -221,12 +220,11 @@ CREATE POLICY "aqd_drafts_update"
   ON aqd_quotation_drafts FOR UPDATE
   USING (
     aqd_is_enterprise() AND
-    EXISTS (
-      SELECT 1 FROM tenant_members
-      WHERE  user_id        = auth.uid()
-        AND  tenant_id      = org_id
-        AND  hierarchy_level >= 80
-        AND  is_active      = true
+    org_id IN (
+      SELECT om.org_id FROM org_members om
+      WHERE  om.user_id         = auth.uid()
+        AND  om.hierarchy_level >= 80
+        AND  om.is_active       = true
     )
   );
 
@@ -234,12 +232,11 @@ CREATE POLICY "aqd_drafts_delete"
   ON aqd_quotation_drafts FOR DELETE
   USING (
     aqd_is_enterprise() AND
-    EXISTS (
-      SELECT 1 FROM tenant_members
-      WHERE  user_id        = auth.uid()
-        AND  tenant_id      = org_id
-        AND  hierarchy_level >= 80
-        AND  is_active      = true
+    org_id IN (
+      SELECT om.org_id FROM org_members om
+      WHERE  om.user_id         = auth.uid()
+        AND  om.hierarchy_level >= 80
+        AND  om.is_active       = true
     )
   );
 
@@ -253,12 +250,11 @@ CREATE POLICY "aqd_line_items_insert"
   ON aqd_draft_line_items FOR INSERT
   WITH CHECK (
     aqd_is_enterprise() AND
-    EXISTS (
-      SELECT 1 FROM tenant_members
-      WHERE  user_id        = auth.uid()
-        AND  tenant_id      = org_id
-        AND  hierarchy_level >= 80
-        AND  is_active      = true
+    org_id IN (
+      SELECT om.org_id FROM org_members om
+      WHERE  om.user_id         = auth.uid()
+        AND  om.hierarchy_level >= 80
+        AND  om.is_active       = true
     )
   );
 
@@ -266,12 +262,11 @@ CREATE POLICY "aqd_line_items_update"
   ON aqd_draft_line_items FOR UPDATE
   USING (
     aqd_is_enterprise() AND
-    EXISTS (
-      SELECT 1 FROM tenant_members
-      WHERE  user_id        = auth.uid()
-        AND  tenant_id      = org_id
-        AND  hierarchy_level >= 80
-        AND  is_active      = true
+    org_id IN (
+      SELECT om.org_id FROM org_members om
+      WHERE  om.user_id         = auth.uid()
+        AND  om.hierarchy_level >= 80
+        AND  om.is_active       = true
     )
   );
 
@@ -279,12 +274,11 @@ CREATE POLICY "aqd_line_items_delete"
   ON aqd_draft_line_items FOR DELETE
   USING (
     aqd_is_enterprise() AND
-    EXISTS (
-      SELECT 1 FROM tenant_members
-      WHERE  user_id        = auth.uid()
-        AND  tenant_id      = org_id
-        AND  hierarchy_level >= 80
-        AND  is_active      = true
+    org_id IN (
+      SELECT om.org_id FROM org_members om
+      WHERE  om.user_id         = auth.uid()
+        AND  om.hierarchy_level >= 80
+        AND  om.is_active       = true
     )
   );
 
