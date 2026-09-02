@@ -51,7 +51,7 @@ END $$;
 -- ─── 3. Create partitioned parent table ──────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.etax_submissions (
   id                UUID         NOT NULL DEFAULT gen_random_uuid(),
-  org_id            UUID         NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id            UUID         NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   invoice_id        UUID         NOT NULL REFERENCES public.invoices(id)      ON DELETE RESTRICT,
   document_type     TEXT         NOT NULL CHECK (document_type IN ('T01','T02','T03','T04')),
   status            TEXT         NOT NULL DEFAULT 'queued'
