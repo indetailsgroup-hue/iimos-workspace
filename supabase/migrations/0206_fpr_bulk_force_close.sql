@@ -51,7 +51,8 @@ INSERT INTO public.line_oa_message_templates (
   message_kind,
   body,
   flex_payload,
-  is_active
+  is_active,
+  org_id
 )
 VALUES (
   'tpl_fpr_force_closed_flex_card',
@@ -197,7 +198,8 @@ VALUES (
       )
     )
   ),
-  true
+  true,
+  '00000000-0000-0000-0000-000000000000'   -- sentinel: shared platform template
 )
 ON CONFLICT (template_key, vertical_context)
 DO UPDATE SET
