@@ -138,12 +138,13 @@ SELECT
     )                                                   AS worst_severity_tier,
 
     -- distinct document types with at least one breach
-    (
-        SELECT COUNT(DISTINCT document_type)
+    ARRAY(
+        SELECT DISTINCT ia.document_type
         FROM public.etax_sla_breach_archive ia
         WHERE ia.org_id = a.org_id
           AND ia.breached_count > 0
-    )::int                                              AS breached_document_types,
+        ORDER BY ia.document_type
+    )                                                   AS breached_document_types,
 
     -- config
     COALESCE(
@@ -261,7 +262,7 @@ RETURNS TABLE (
     peak_daily_breach_rate   numeric,
     peak_cumulative          bigint,
     worst_severity_tier      text,
-    breached_document_types  int,
+    breached_document_types  TEXT[],
     sla_threshold_hours      int
 )
 LANGUAGE sql
