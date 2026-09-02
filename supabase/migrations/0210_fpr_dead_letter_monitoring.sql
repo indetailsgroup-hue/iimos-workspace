@@ -186,7 +186,7 @@ BEGIN
   PERFORM cron.schedule(
     'fpr-dead-letter-alert',
     '5 * * * *',   -- every hour at HH:05
-    $$SELECT public.fn_cron_alert_dead_letter_fpr();$$
+    'SELECT public.fn_cron_alert_dead_letter_fpr();'
   );
 EXCEPTION WHEN OTHERS THEN
   RAISE WARNING '[0210] pg_cron not available — skipping fpr-dead-letter-alert schedule: %', SQLERRM;
