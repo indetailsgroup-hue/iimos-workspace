@@ -101,7 +101,7 @@ COMMENT ON FUNCTION public.fn_outbound_mark_failed(uuid) IS
 --    Replaces the 0196 version — only the eligibility filter changes.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.rpc_retry_fpr_notifications(
-  p_site_code  text,
+  p_site_code  text     DEFAULT NULL,
   p_older_than interval DEFAULT interval '10 minutes'
 )
 RETURNS jsonb
@@ -191,3 +191,4 @@ COMMENT ON FUNCTION public.rpc_retry_fpr_notifications(text, interval) IS
   'Migration 0208 (supersedes 0196).';
 
 COMMIT;
+
