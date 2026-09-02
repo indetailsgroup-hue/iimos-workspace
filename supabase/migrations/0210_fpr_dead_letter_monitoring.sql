@@ -47,7 +47,6 @@ SELECT
   m.send_type,
   m.target_type,
   m.target_id,
-  m.reply_token,
   m.created_at                                 AS message_created_at,
   fpr.status                                   AS request_status,
   fpr.amount,
