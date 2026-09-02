@@ -1,274 +1,239 @@
 -- =============================================================================
--- Migration 0215 — rpc_bulk_record_fpr_payment
---
--- Adds a batch payment-recording RPC that processes an array of fpr_payment
--- records in a single call.  Each row is handled atomically inside a sub-block:
---   • idempotency_key dedup → SKIP (no error)
---   • business-rule validation → per-row error object (no transaction abort)
---   • successful insert      → audit entry + ok=true result
---
--- Depends on: 0176_field_purchase_core, 0212_fpr_vendor_payment_flow
+-- Migration 0215 — FPR Bulk Record Payment
+-- RPC     : rpc_bulk_record_fpr_payment(p_args jsonb)
+-- Depends : 0212 (fpr_payment table + single-row rpc_record_fpr_payment)
+-- Purpose : Batch payment recording for purchased field purchase requests.
+--           Per-row idempotency via fpr_payment.idempotency_key (UNIQUE).
+--           Append-only audit to field_purchase_audit_log per row.
+--           Skips (does not fail) invalid / already-recorded rows and reports
+--           them in the result payload.
+-- Constraints: SECURITY DEFINER, append-only audit, RLS fail-closed,
+--              idempotent per idempotency_key, no client write path.
+-- Idempotent: yes — DROP IF EXISTS guard; per-row idem via idempotency_key.
 -- =============================================================================
 
--- ---------------------------------------------------------------------------
--- SECTION 1 — RPC rpc_bulk_record_fpr_payment
--- ---------------------------------------------------------------------------
+BEGIN;
 
-CREATE OR REPLACE FUNCTION rpc_bulk_record_fpr_payment(
-  p_payments JSONB           -- JSON array of payment objects (see below)
-)
-RETURNS JSONB
+-- ---------------------------------------------------------------------------
+-- rpc_bulk_record_fpr_payment
+--
+-- Input p_args shape:
+--   {
+--     "payment_records": [
+--       {
+--         "request_id":        "<uuid>",      -- required
+--         "amount":            1500.00,        -- required, must be > 0
+--         "payment_method":    "cash",         -- optional, default 'cash'
+--         "vendor_code":       "V001",         -- optional
+--         "payment_reference": "CHQ-001",      -- optional (cheque / transfer ref)
+--         "currency":          "THB",          -- optional, default 'THB'
+--         "idempotency_key":   "<string>"      -- optional; strongly recommended
+--       },
+--       ...
+--     ]
+--   }
+--
+-- Returns:
+--   {
+--     "ok":              true,
+--     "processed_count": N,           -- rows inserted into fpr_payment
+--     "skipped_count":   M,           -- rows skipped (idempotent / invalid / bad status)
+--     "results": [
+--       { "request_id": "<uuid>", "payment_id": "<uuid>", "skipped": false },
+--       { "request_id": "<uuid>", "payment_id": "<uuid>",
+--         "skipped": true, "reason": "idempotent" },
+--       { "request_id": "<uuid>", "skipped": true,
+--         "reason": "invalid_status", "current_status": "pending" },
+--       { "request_id": "<uuid>", "skipped": true, "reason": "request_not_found" },
+--       { "request_id": "<uuid>", "skipped": true, "reason": "invalid_input" },
+--       ...
+--     ]
+--   }
+--
+-- Authority : operator, finance, or governance app-role
+-- ---------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.rpc_bulk_record_fpr_payment(jsonb);
+CREATE OR REPLACE FUNCTION public.rpc_bulk_record_fpr_payment(p_args jsonb)
+RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
-/*
-  Input shape (one element of p_payments):
-  {
-    "request_id"        : "<uuid>",           -- required
-    "payment_method"    : "cash|transfer|cheque|card|other",  -- required
-    "amount"            : 1500.00,            -- required, > 0
-    "vendor_id"         : "<uuid>",           -- optional
-    "payment_reference" : "REF-001",          -- optional
-    "currency"          : "THB",              -- optional, default THB
-    "paid_at"           : "2026-09-01T09:00:00Z",  -- optional, default now()
-    "paid_by"           : "actor-id",         -- optional, default resolve_actor()
-    "idempotency_key"   : "unique-client-key" -- optional; skip if already exists
-  }
-
-  Return shape:
-  {
-    "total"    : 3,
-    "recorded" : 2,
-    "skipped"  : 1,
-    "errors"   : 0,
-    "results"  : [
-      { "index": 0, "ok": true,  "skipped": false, "payment_id": "<uuid>" },
-      { "index": 1, "ok": true,  "skipped": true,  "payment_id": "<uuid>", "reason": "idempotency_key already recorded" },
-      { "index": 2, "ok": false, "skipped": false, "error": "..." }
-    ]
-  }
-*/
 DECLARE
-  v_actor            text;
-  v_idx              int;
-  v_row              JSONB;
-  v_result           JSONB;
-  v_results          JSONB  := '[]'::jsonb;
-
-  -- per-row extracted fields
-  v_payment_id       uuid;
-  v_request_id       uuid;
-  v_vendor_id        uuid;
-  v_payment_method   text;
-  v_payment_ref      text;
-  v_amount           numeric;
-  v_currency         text;
-  v_paid_at          timestamptz;
-  v_paid_by          text;
-  v_idem_key         text;
-  v_existing_id      uuid;
-
-  -- running counters
-  v_cnt_recorded     int := 0;
-  v_cnt_skipped      int := 0;
-  v_cnt_errors       int := 0;
+    v_actor         text            := resolve_actor();
+    v_records       jsonb           := p_args->'payment_records';
+    v_record        jsonb;
+    v_request_id    uuid;
+    v_amount        numeric(14,2);
+    v_method        text;
+    v_vendor_code   text;
+    v_reference     text;
+    v_currency      text;
+    v_idem_key      text;
+    v_fpr_status    field_purchase_status;
+    v_org_id        uuid;
+    v_existing_id   uuid;
+    v_payment_id    uuid;
+    v_processed     int             := 0;
+    v_skipped       int             := 0;
+    v_results       jsonb           := '[]'::jsonb;
+    v_i             int;
 BEGIN
+    -- ── Authority gate ─────────────────────────────────────────────────────
+    IF NOT has_any_app_role(ARRAY['operator','finance','governance']) THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'permission_denied');
+    END IF;
 
-  -- ── Security gate ─────────────────────────────────────────────────────────
-  IF NOT has_any_app_role(ARRAY['governance', 'finance', 'site_admin']) THEN
-    RAISE EXCEPTION 'Access denied: finance, governance or site_admin role required'
-      USING ERRCODE = 'insufficient_privilege';
-  END IF;
-
-  v_actor := resolve_actor();
-
-  -- ── Input type guard ──────────────────────────────────────────────────────
-  IF p_payments IS NULL OR jsonb_typeof(p_payments) <> 'array' THEN
-    RAISE EXCEPTION 'p_payments must be a non-null JSON array'
-      USING ERRCODE = 'invalid_parameter_value';
-  END IF;
-
-  IF jsonb_array_length(p_payments) = 0 THEN
-    RETURN jsonb_build_object(
-      'total', 0, 'recorded', 0, 'skipped', 0, 'errors', 0,
-      'results', '[]'::jsonb
-    );
-  END IF;
-
-  -- ── Process each payment row ───────────────────────────────────────────────
-  FOR v_idx IN 0 .. (jsonb_array_length(p_payments) - 1) LOOP
-    v_row    := p_payments -> v_idx;
-    v_result := jsonb_build_object('index', v_idx, 'ok', false, 'skipped', false);
-
-    <<row_block>>
-    BEGIN
-
-      -- Extract fields (with type coercions)
-      v_request_id    := (v_row ->>'request_id')::uuid;
-      v_vendor_id     := (v_row ->>'vendor_id')::uuid;
-      v_payment_method := v_row ->>'payment_method';
-      v_payment_ref   := v_row ->>'payment_reference';
-      v_amount        := (v_row ->>'amount')::numeric;
-      v_currency      := COALESCE(v_row ->>'currency', 'THB');
-      v_paid_at       := COALESCE((v_row ->>'paid_at')::timestamptz, now());
-      v_paid_by       := COALESCE(v_row ->>'paid_by', v_actor);
-      v_idem_key      := v_row ->>'idempotency_key';
-
-      -- Required-field validation ────────────────────────────────────────────
-      IF v_request_id IS NULL THEN
-        v_result := v_result
-          || jsonb_build_object('error', 'request_id is required');
-        v_cnt_errors := v_cnt_errors + 1;
-        EXIT row_block;
-      END IF;
-
-      IF v_payment_method IS NULL
-         OR v_payment_method NOT IN ('cash','transfer','cheque','card','other')
-      THEN
-        v_result := v_result
-          || jsonb_build_object('error',
-               'payment_method must be one of: cash, transfer, cheque, card, other');
-        v_cnt_errors := v_cnt_errors + 1;
-        EXIT row_block;
-      END IF;
-
-      IF v_amount IS NULL OR v_amount <= 0 THEN
-        v_result := v_result
-          || jsonb_build_object('error', 'amount must be a positive number');
-        v_cnt_errors := v_cnt_errors + 1;
-        EXIT row_block;
-      END IF;
-
-      -- Idempotency dedup ────────────────────────────────────────────────────
-      IF v_idem_key IS NOT NULL THEN
-        SELECT id INTO v_existing_id
-          FROM fpr_payment
-         WHERE idempotency_key = v_idem_key
-         LIMIT 1;
-
-        IF v_existing_id IS NOT NULL THEN
-          v_result := v_result || jsonb_build_object(
-            'ok',         true,
-            'skipped',    true,
-            'payment_id', v_existing_id,
-            'reason',     'idempotency_key already recorded'
-          );
-          v_cnt_skipped := v_cnt_skipped + 1;
-          EXIT row_block;
-        END IF;
-      END IF;
-
-      -- Business-rule: request must be in a payable state ───────────────────
-      IF NOT EXISTS (
-        SELECT 1 FROM field_purchase_request
-         WHERE id = v_request_id
-           AND status IN ('approved', 'purchased', 'closed')
-      ) THEN
-        v_result := v_result || jsonb_build_object(
-          'error',
-          'request not found or not in a payable state (approved / purchased / closed)'
+    -- ── Empty / null input — succeed immediately ───────────────────────────
+    IF v_records IS NULL OR jsonb_array_length(v_records) = 0 THEN
+        RETURN jsonb_build_object(
+            'ok',              true,
+            'processed_count', 0,
+            'skipped_count',   0,
+            'results',         '[]'::jsonb
         );
-        v_cnt_errors := v_cnt_errors + 1;
-        EXIT row_block;
-      END IF;
+    END IF;
 
-      -- Insert payment record ────────────────────────────────────────────────
-      v_payment_id := gen_random_uuid();
+    -- ── Per-record loop ────────────────────────────────────────────────────
+    FOR v_i IN 0 .. jsonb_array_length(v_records) - 1 LOOP
+        v_record      := v_records->v_i;
+        v_request_id  := (v_record->>'request_id')::uuid;
+        v_amount      := (v_record->>'amount')::numeric;
+        v_method      := coalesce(v_record->>'payment_method', 'cash');
+        v_vendor_code := v_record->>'vendor_code';
+        v_reference   := v_record->>'payment_reference';
+        v_currency    := coalesce(v_record->>'currency', 'THB');
+        v_idem_key    := v_record->>'idempotency_key';
 
-      INSERT INTO fpr_payment (
-        id,
-        request_id,
-        vendor_id,
-        payment_method,
-        payment_reference,
-        amount,
-        currency,
-        paid_at,
-        paid_by,
-        status,
-        idempotency_key
-      ) VALUES (
-        v_payment_id,
-        v_request_id,
-        v_vendor_id,
-        v_payment_method,
-        v_payment_ref,
-        v_amount,
-        v_currency,
-        v_paid_at,
-        v_paid_by,
-        'paid',
-        v_idem_key
-      );
+        -- ── Validate required fields ────────────────────────────────────
+        IF v_request_id IS NULL OR v_amount IS NULL OR v_amount <= 0 THEN
+            v_skipped := v_skipped + 1;
+            v_results := v_results || jsonb_build_array(
+                jsonb_build_object(
+                    'request_id', coalesce(v_record->>'request_id', 'null'),
+                    'skipped',    true,
+                    'reason',     'invalid_input'
+                )
+            );
+            CONTINUE;
+        END IF;
 
-      -- Append-only audit entry ─────────────────────────────────────────────
-      INSERT INTO fpr_audit_log (
-        request_id,
-        action,
-        actor,
-        details
-      ) VALUES (
-        v_request_id,
-        'bulk_payment_recorded',
-        v_actor,
-        jsonb_build_object(
-          'payment_id',       v_payment_id,
-          'payment_method',   v_payment_method,
-          'amount',           v_amount,
-          'currency',         v_currency,
-          'bulk_batch_index', v_idx
+        -- ── Idempotency check (fast path — no FPR lock needed) ─────────
+        IF v_idem_key IS NOT NULL THEN
+            SELECT id INTO v_existing_id
+            FROM   public.fpr_payment
+            WHERE  idempotency_key = v_idem_key;
+            IF FOUND THEN
+                v_skipped := v_skipped + 1;
+                v_results := v_results || jsonb_build_array(
+                    jsonb_build_object(
+                        'request_id', v_request_id,
+                        'payment_id', v_existing_id,
+                        'skipped',    true,
+                        'reason',     'idempotent'
+                    )
+                );
+                CONTINUE;
+            END IF;
+        END IF;
+
+        -- ── Lock FPR row and validate state ─────────────────────────────
+        SELECT status, org_id
+        INTO   v_fpr_status, v_org_id
+        FROM   public.field_purchase_request
+        WHERE  id = v_request_id
+        FOR    UPDATE;
+
+        IF NOT FOUND THEN
+            v_skipped := v_skipped + 1;
+            v_results := v_results || jsonb_build_array(
+                jsonb_build_object(
+                    'request_id', v_request_id,
+                    'skipped',    true,
+                    'reason',     'request_not_found'
+                )
+            );
+            CONTINUE;
+        END IF;
+
+        -- Payment recording requires the FPR to already be in 'purchased' status.
+        -- (The goods must have been confirmed as purchased before payment is recorded.)
+        IF v_fpr_status <> 'purchased' THEN
+            v_skipped := v_skipped + 1;
+            v_results := v_results || jsonb_build_array(
+                jsonb_build_object(
+                    'request_id',     v_request_id,
+                    'skipped',        true,
+                    'reason',         'invalid_status',
+                    'current_status', v_fpr_status::text
+                )
+            );
+            CONTINUE;
+        END IF;
+
+        -- ── Insert into fpr_payment; inherit org_id from parent FPR ────
+        INSERT INTO public.fpr_payment (
+            org_id, request_id, vendor_code, payment_method,
+            payment_reference, amount, currency,
+            status, paid_at, paid_by, idempotency_key
+        ) VALUES (
+            v_org_id, v_request_id, v_vendor_code, v_method,
+            v_reference, v_amount, v_currency,
+            'paid', now(), v_actor, v_idem_key
         )
-      );
+        RETURNING id INTO v_payment_id;
 
-      v_result := v_result || jsonb_build_object(
-        'ok',        true,
-        'payment_id', v_payment_id
-      );
-      v_cnt_recorded := v_cnt_recorded + 1;
+        -- ── Append-only audit entry ─────────────────────────────────────
+        INSERT INTO public.field_purchase_audit_log
+            (request_id, actor, event_type, old_status, new_status, metadata)
+        VALUES (
+            v_request_id,
+            v_actor,
+            'payment_recorded',
+            'purchased',
+            'purchased',
+            jsonb_build_object(
+                'payment_id',        v_payment_id,
+                'payment_method',    v_method,
+                'amount',            v_amount,
+                'currency',          v_currency,
+                'vendor_code',       v_vendor_code,
+                'payment_reference', v_reference
+            )
+        );
 
-    EXCEPTION WHEN OTHERS THEN
-      -- Surface per-row exceptions without aborting the outer transaction
-      v_result := v_result || jsonb_build_object(
-        'error',    SQLERRM,
-        'sqlstate', SQLSTATE
-      );
-      v_cnt_errors := v_cnt_errors + 1;
-    END row_block;
+        v_processed := v_processed + 1;
+        v_results := v_results || jsonb_build_array(
+            jsonb_build_object(
+                'request_id', v_request_id,
+                'payment_id', v_payment_id,
+                'skipped',    false
+            )
+        );
+    END LOOP;
 
-    v_results := v_results || jsonb_build_array(v_result);
-  END LOOP;
-
-  -- ── Summary envelope ──────────────────────────────────────────────────────
-  RETURN jsonb_build_object(
-    'total',    jsonb_array_length(p_payments),
-    'recorded', v_cnt_recorded,
-    'skipped',  v_cnt_skipped,
-    'errors',   v_cnt_errors,
-    'results',  v_results
-  );
-
+    RETURN jsonb_build_object(
+        'ok',              true,
+        'processed_count', v_processed,
+        'skipped_count',   v_skipped,
+        'results',         v_results
+    );
 END;
 $$;
 
--- ---------------------------------------------------------------------------
--- SECTION 2 — Permissions
--- ---------------------------------------------------------------------------
+REVOKE ALL  ON FUNCTION public.rpc_bulk_record_fpr_payment(jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.rpc_bulk_record_fpr_payment(jsonb)
+    TO authenticated, service_role;
 
-REVOKE ALL ON FUNCTION rpc_bulk_record_fpr_payment(JSONB) FROM PUBLIC;
+COMMENT ON FUNCTION public.rpc_bulk_record_fpr_payment(jsonb) IS
+  '0215 — Batch payment recording for purchased FPRs. '
+  'Writes to fpr_payment (0212 table); idempotent per fpr_payment.idempotency_key. '
+  'Appends payment_recorded event to field_purchase_audit_log per row. '
+  'Skips (no exception) rows that are: already idempotent, not found, '
+  'not in purchased status, or have invalid input. '
+  'Authority: operator, finance, or governance app-role. '
+  'Input: { payment_records: [{request_id, amount, payment_method?, vendor_code?, '
+  'payment_reference?, currency?, idempotency_key?}] }. '
+  'Returns: { ok, processed_count, skipped_count, results[] }.';
 
--- Authenticated users can call; row-level access enforced inside via has_any_app_role
-GRANT EXECUTE ON FUNCTION rpc_bulk_record_fpr_payment(JSONB)
-  TO authenticated;
-
--- ---------------------------------------------------------------------------
--- SECTION 3 — Comment
--- ---------------------------------------------------------------------------
-
-COMMENT ON FUNCTION rpc_bulk_record_fpr_payment(JSONB) IS
-  'Batch-records fpr_payment rows from a JSON array.  Each element is processed '
-  'independently: idempotency_key collisions are silently skipped; validation '
-  'failures and unexpected errors are captured per-row without aborting the '
-  'batch.  Returns a summary envelope with total/recorded/skipped/errors counts '
-  'and a per-row results array.  Requires finance, governance or site_admin role.';
-
+COMMIT;
