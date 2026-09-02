@@ -115,7 +115,7 @@ SELECT
   s.compliance_success_rate,
   s.overdue_with_pending_etax,
   s.failed_last_24h,
-  s.today_daily_total,
+  s.today_total                                                          AS today_daily_total,
   s.today_retry_exhaustion_rate_pct,
   s.compliance_mv_last_refreshed_at,
   s.trend_mv_last_refreshed_at,
