@@ -68,6 +68,7 @@ ALLOWLIST: frozenset[str] = frozenset(
         "millwork_stage_defs",    # Shared millwork workflow definitions; platform-managed.
         "process_model",          # Process templates shared across tenants.
         "vendor_master",          # Platform-wide vendor registry; org-specific refs via FK.
+        "platform_config",        # Platform-level key/value config store; read by trigger/edge functions; no org_id column. Added by 0195b.
         # ── MCP infrastructure tables (platform-service-level; no org_id column) ──
         "mcp_tool_registry",      # Registry of MCP tools; platform-managed, no tenant scope.
         "mcp_rate_limit_counter", # Per-tool rate limit counters; scoped by tool_id, not org.
