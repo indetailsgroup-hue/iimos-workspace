@@ -48,7 +48,7 @@ SELECT
   NULL::text                                   AS target_type,   -- column not on line_oa_outbound_messages (iter 25t)
   NULL::uuid                                   AS target_id,      -- column not on line_oa_outbound_messages (iter 25t)
   NULL::text                                   AS reply_token,    -- column not on line_oa_outbound_messages (iter 25t)
-  m.created_at                                 AS message_created_at,
+  m.sent_at                                 AS message_created_at,
   fpr.status                                   AS request_status,
   fpr.amount,
   fpr.reason,
@@ -56,13 +56,13 @@ SELECT
   fpr.approval_level,
   fpr.updated_at                               AS request_updated_at,
   -- Age helpers for alert triage
-  now() - m.created_at                         AS message_age,
-  EXTRACT(EPOCH FROM (now() - m.created_at)) / 3600.0 AS message_age_hours
+  now() - m.sent_at                         AS message_age,
+  EXTRACT(EPOCH FROM (now() - m.sent_at)) / 3600.0 AS message_age_hours
 FROM public.line_oa_outbound_messages AS m
 LEFT JOIN public.field_purchase_request AS fpr
        ON fpr.id = (m.slot_values ->> 'request_id')::uuid
 WHERE m.status = 'dead'
-ORDER BY m.created_at DESC;
+ORDER BY m.sent_at DESC;
 
 COMMENT ON VIEW public.v_fpr_outbound_dead_letter IS
   'Dead-letter LINE outbound messages (retried_count >= 3, status=dead) joined '
@@ -200,3 +200,4 @@ COMMENT ON VIEW public.v_fpr_outbound_dead_letter IS
   'via pg_cron job fpr-dead-letter-alert. See migration 0210.';
 
 COMMIT;
+
