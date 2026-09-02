@@ -713,6 +713,17 @@ jobs:
           ALTER TABLE IF EXISTS public.org_invitations ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ;
           ALTER TABLE IF EXISTS public.org_invitations ADD COLUMN IF NOT EXISTS created_at  TIMESTAMPTZ DEFAULT now();
 
+          -- ── Iter 26a: notification_digest_queue stub missing columns ─────────────
+          -- Stub has only 'id'; 20260828_notifications_super_admin needs sent_at + scheduled_at
+          ALTER TABLE IF EXISTS public.notification_digest_queue
+            ADD COLUMN IF NOT EXISTS user_id          uuid,
+            ADD COLUMN IF NOT EXISTS org_id           uuid,
+            ADD COLUMN IF NOT EXISTS notification_ids uuid[],
+            ADD COLUMN IF NOT EXISTS frequency        text,
+            ADD COLUMN IF NOT EXISTS scheduled_at     timestamptz,
+            ADD COLUMN IF NOT EXISTS sent_at          timestamptz,
+            ADD COLUMN IF NOT EXISTS created_at       timestamptz DEFAULT now();
+
           -- ── Iter 19: extend invoice_status enum for 0176_auto_journal_on_approval ─
           -- 0176 uses lowercase 'approved', 'voided', 'cancelled' in trigger WHEN clauses
           -- and UPDATE statements; 0172 only defines PENDING/PARTIAL/PAID/OVERDUE/CANCELLED.
