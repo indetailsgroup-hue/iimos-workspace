@@ -182,6 +182,7 @@ Deno.test({
       const { error: notifErr } = await client
         .from("line_oa_outbound_messages")
         .insert({
+          org_id:       "00000000-0000-0000-0000-000000000000",
           send_type:    "flex",
           status:       "pending",
           template_key: "tpl_fpr_received_flex_card",
