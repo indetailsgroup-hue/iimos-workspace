@@ -33,7 +33,7 @@ create table if not exists public.employee_ai_assessments (
   id                    uuid primary key default gen_random_uuid(),
 
   org_id                uuid not null
-    references public.organizations(id) on delete cascade,
+    REFERENCES public.organizations(org_id) on delete cascade,
 
   employee_id           uuid not null
     references public.employees(id) on delete cascade,
@@ -86,7 +86,7 @@ create table if not exists public.employee_stage_history (
   id                    uuid primary key default gen_random_uuid(),
 
   org_id                uuid not null
-    references public.organizations(id) on delete cascade,
+    REFERENCES public.organizations(org_id) on delete cascade,
 
   employee_id           uuid not null
     references public.employees(id) on delete cascade,
@@ -134,7 +134,7 @@ create table if not exists public.employee_skill_gaps (
   id                    uuid primary key default gen_random_uuid(),
 
   org_id                uuid not null
-    references public.organizations(id) on delete cascade,
+    REFERENCES public.organizations(org_id) on delete cascade,
 
   employee_id           uuid not null
     references public.employees(id) on delete cascade,
