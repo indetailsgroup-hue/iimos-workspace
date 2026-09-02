@@ -5,6 +5,7 @@
 -- RPCs    : rpc_record_fpr_payment, rpc_cancel_fpr_payment
 -- RLS     : fail-closed; operators insert, governance can cancel
 -- Idempotent: yes (CREATE TABLE IF NOT EXISTS, DROP … IF EXISTS for view/RPCs)
+-- Fix(ci): vendor_master PK is vendor_code text (not id uuid); use vendor_code
 -- =============================================================================
 
 BEGIN;
@@ -17,7 +18,7 @@ CREATE TABLE IF NOT EXISTS public.fpr_payment (
     request_id       uuid        NOT NULL
                                  REFERENCES public.field_purchase_request(id)
                                  ON DELETE CASCADE,
-    vendor_id        uuid        REFERENCES public.vendor_master(id)
+    vendor_code      text        REFERENCES public.vendor_master(vendor_code)
                                  ON DELETE SET NULL,
     payment_method   text        NOT NULL
                                  CHECK (payment_method IN (
@@ -108,7 +109,7 @@ SELECT
     p.updated_at
 FROM  public.fpr_payment             p
 JOIN  public.field_purchase_request  fpr ON fpr.id = p.request_id
-LEFT JOIN public.vendor_master       vm  ON vm.id  = p.vendor_id;
+LEFT JOIN public.vendor_master       vm  ON vm.vendor_code = p.vendor_code;
 
 GRANT SELECT ON public.v_fpr_payment_summary
     TO authenticated, service_role;
@@ -129,7 +130,7 @@ AS $$
 DECLARE
     v_actor          text := resolve_actor();
     v_request_id     uuid := (p_args->>'request_id')::uuid;
-    v_vendor_id      uuid := (p_args->>'vendor_id')::uuid;
+    v_vendor_code    text := p_args->>'vendor_code';
     v_method         text := coalesce(p_args->>'payment_method','cash');
     v_reference      text := p_args->>'payment_reference';
     v_amount         numeric(14,2) := (p_args->>'amount')::numeric;
@@ -174,10 +175,10 @@ BEGIN
 
     -- insert payment (immediately mark as paid)
     INSERT INTO public.fpr_payment (
-        request_id, vendor_id, payment_method, payment_reference,
+        request_id, vendor_code, payment_method, payment_reference,
         amount, currency, status, paid_at, paid_by, idempotency_key
     ) VALUES (
-        v_request_id, v_vendor_id, v_method, v_reference,
+        v_request_id, v_vendor_code, v_method, v_reference,
         v_amount, v_currency, 'paid', now(), v_actor, v_idem_key
     )
     RETURNING id INTO v_payment_id;
@@ -196,7 +197,7 @@ BEGIN
             'payment_method',   v_method,
             'amount',           v_amount,
             'currency',         v_currency,
-            'vendor_id',        v_vendor_id,
+            'vendor_code',      v_vendor_code,
             'payment_reference',v_reference
         )
     );
