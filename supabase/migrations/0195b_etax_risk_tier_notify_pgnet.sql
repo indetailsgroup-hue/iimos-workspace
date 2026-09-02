@@ -1,6 +1,3 @@
-sha: 022e1f9a7071e52a15bfbd82df21587df1b718d9
-size: 9002
----
 -- =============================================================================
 -- Migration 0195 — pg_net Patch
 -- File   : 0195b_etax_risk_tier_notify_pgnet.sql
