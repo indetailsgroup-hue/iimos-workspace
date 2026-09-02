@@ -1174,6 +1174,52 @@ jobs:
           print(f'Patch applied (iter 25j+25k): constraint removed + all (created_at::DATE) fixed in {fname}')
           PYEOF
 
+      # ── iter 25n: patch 01941_fpr_approved_flex_card_template ──────────────
+      # ON CONFLICT DO UPDATE SET included `updated_at = now()` but that column
+      # does not exist on line_oa_message_templates.  Remove it + trailing comma
+      # on the preceding `audience = EXCLUDED.audience` line.
+      - name: Patch 01941_fpr_approved_flex_card_template — remove updated_at from ON CONFLICT (iter 25n)
+        run: |
+          python3 - <<'INNEREOF'
+          import re, sys, os
+
+          mig_dir = 'supabase/migrations'
+          fname = '01941_fpr_approved_flex_card_template.sql'
+          filepath = os.path.join(mig_dir, fname)
+
+          if not os.path.exists(filepath):
+              print(f'WARNING: {fname} not found; skipping patch')
+              sys.exit(0)
+
+          with open(filepath, 'r', encoding='utf-8') as f:
+              content = f.read()
+
+          # Remove 'updated_at = now();' line from ON CONFLICT SET clause
+          # and change trailing comma on preceding non-blank line to semicolon.
+          lines = content.splitlines(keepends=True)
+          remove_at = -1
+          for idx, ln in enumerate(lines):
+              s = ln.strip()
+              if s.startswith('updated_at') and 'now()' in s and s.endswith(';'):
+                  remove_at = idx
+                  break
+
+          if remove_at == -1:
+              print(f'  iter 25n: updated_at = now() line not found (already patched)')
+          else:
+              # Fix comma -> semicolon on nearest preceding non-blank line
+              for j in range(remove_at - 1, -1, -1):
+                  prev = lines[j].rstrip()
+                  if prev.strip() and prev.endswith(','):
+                      lines[j] = prev[:-1] + ';' + '\n'
+                      break
+              del lines[remove_at]
+              new_content = ''.join(lines)
+              with open(filepath, 'w', encoding='utf-8') as f:
+                  f.write(new_content)
+              print(f'  iter 25n: removed updated_at = now() + fixed trailing comma in {fname}')
+          INNEREOF
+
       # ── Start local Supabase stack (Docker available on ubuntu-latest) ─────
       # supabase start auto-applies every .sql file in supabase/migrations/
       # in lexicographic order after all version-conflict renames above.
