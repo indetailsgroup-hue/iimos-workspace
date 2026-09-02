@@ -333,12 +333,19 @@ jobs:
           -- 20261001_people_culture_schema.sql without user_id; stubbing here with
           -- IF NOT EXISTS means the real migration's CREATE TABLE is a no-op but
           -- user_id is present when the ace_usage_logs_select policy compiles.
+          -- ai_stage/department use TEXT here (ENUM created later by migration;
+          -- stub must exist before ENUM, so we can't use the ENUM type).
+          -- The migration's CREATE TABLE IF NOT EXISTS is a no-op against this
+          -- stub, but indexes idx_employees_ai_stage / idx_employees_department
+          -- succeed because the columns are present.
           CREATE TABLE IF NOT EXISTS public.employees (
-            id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-            org_id     uuid        NOT NULL,
-            user_id    uuid,
-            is_active  boolean     NOT NULL DEFAULT true,
-            created_at timestamptz NOT NULL DEFAULT now()
+            id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id       uuid        NOT NULL,
+            user_id      uuid,
+            department   text,
+            ai_stage     text        NOT NULL DEFAULT 'AI_UNAWARE',
+            is_active    boolean     NOT NULL DEFAULT true,
+            created_at   timestamptz NOT NULL DEFAULT now()
           );
 
           -- Singular stub tables assumed pre-existing by rpc_approve_quotation
