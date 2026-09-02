@@ -369,7 +369,8 @@ CREATE POLICY "aps_machine_configs_admin_write" ON aps_machine_configs
     AND org_id IN (
       SELECT org_id FROM org_members
       WHERE user_id = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -402,7 +403,8 @@ CREATE POLICY "aps_production_runs_update" ON aps_production_runs
       OR org_id IN (
         SELECT org_id FROM org_members
         WHERE user_id = auth.uid()
-          AND hierarchy_level >= 80
+          AND is_active = TRUE
+          AND role IN ('managing_director', 'governance')
       )
     )
   );
@@ -415,7 +417,8 @@ CREATE POLICY "aps_production_runs_delete" ON aps_production_runs
     AND org_id IN (
       SELECT org_id FROM org_members
       WHERE user_id = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -465,7 +468,8 @@ CREATE POLICY "aps_constraints_admin_write" ON aps_scheduling_constraints
     AND org_id IN (
       SELECT org_id FROM org_members
       WHERE user_id = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
