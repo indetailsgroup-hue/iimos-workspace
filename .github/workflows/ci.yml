@@ -671,6 +671,12 @@ jobs:
             END IF;
           END $uniq$;
 
+          -- ── Iter 25p: add created_at to line_oa_outbound_messages (required by 01951 view) ─
+          -- 01951_fpr_notification_status_view.sql uses oum.created_at AS notification_queued_at
+          -- but the base schema (00000000000002) never added this column.
+          ALTER TABLE IF EXISTS public.line_oa_outbound_messages
+            ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT timezone('utc', now());
+
           -- ── Iter 19: extend invoice_status enum for 0176_auto_journal_on_approval ─
           -- 0176 uses lowercase 'approved', 'voided', 'cancelled' in trigger WHEN clauses
           -- and UPDATE statements; 0172 only defines PENDING/PARTIAL/PAID/OVERDUE/CANCELLED.
