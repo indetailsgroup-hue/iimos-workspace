@@ -171,7 +171,7 @@ BEGIN
         PERFORM cron.schedule(
             'fpr-retry-failed-notifications',
             '*/10 * * * *',
-            $$SELECT public.rpc_retry_fpr_notifications(NULL, interval '5 minutes')$$
+            'SELECT public.rpc_retry_fpr_notifications(NULL, interval ''5 minutes'')'
         );
 
         RAISE NOTICE 'pg_cron schedule ''fpr-retry-failed-notifications'' registered (*/10).';
