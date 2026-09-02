@@ -86,7 +86,7 @@ SELECT
     -- 'pending' → queued, not yet dispatched
     -- 'failed'  → dispatch attempted and failed
     -- 'none'    → no outbound row exists for this request (LEFT JOIN miss)
-    COALESCE(oum.status, 'none')                AS line_delivery_status
+    COALESCE(oum.status::text, 'none')                AS line_delivery_status
 
 FROM public.field_purchase_request r
 
