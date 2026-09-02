@@ -102,11 +102,17 @@ BEGIN
      LIMIT 1;
 
     IF NOT FOUND THEN
-      -- Create a lightweight sentinel project for this site (CI / webhook use)
-      INSERT INTO installation_projects (site_code, name, created_by)
+      -- Create a lightweight sentinel project for this site (CI / webhook use).
+      -- org_id is NOT NULL (since 0187) but has no FK; derive from first available
+      -- org or fall back to the well-known sentinel UUID so the INSERT never fails.
+      INSERT INTO installation_projects (site_code, name, created_by, org_id)
       VALUES (v_site_code,
               'Sentinel – ' || v_site_code,
-              COALESCE(v_actor, 'system'))
+              COALESCE(v_actor, 'system'),
+              COALESCE(
+                (SELECT org_id FROM organizations ORDER BY org_id LIMIT 1),
+                '00000000-0000-0000-0000-000000000000'::uuid
+              ))
       RETURNING id INTO v_project_id;
     END IF;
   END IF;
