@@ -302,7 +302,8 @@ CREATE POLICY qca_threshold_configs_insert ON qca_threshold_configs
       SELECT 1 FROM org_members
       WHERE org_id          = qca_threshold_configs.org_id
         AND user_id         = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -314,7 +315,8 @@ CREATE POLICY qca_threshold_configs_update ON qca_threshold_configs
       SELECT 1 FROM org_members
       WHERE org_id          = qca_threshold_configs.org_id
         AND user_id         = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -326,7 +328,8 @@ CREATE POLICY qca_threshold_configs_delete ON qca_threshold_configs
       SELECT 1 FROM org_members
       WHERE org_id          = qca_threshold_configs.org_id
         AND user_id         = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -349,7 +352,8 @@ CREATE POLICY qca_measurements_insert ON qca_measurements
       SELECT 1 FROM org_members
       WHERE org_id          = qca_measurements.org_id
         AND user_id         = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -361,7 +365,8 @@ CREATE POLICY qca_measurements_delete ON qca_measurements
       SELECT 1 FROM org_members
       WHERE org_id          = qca_measurements.org_id
         AND user_id         = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -384,7 +389,8 @@ CREATE POLICY qca_anomaly_events_update ON qca_anomaly_events
       SELECT 1 FROM org_members
       WHERE org_id          = qca_anomaly_events.org_id
         AND user_id         = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -396,7 +402,8 @@ CREATE POLICY qca_anomaly_events_delete ON qca_anomaly_events
       SELECT 1 FROM org_members
       WHERE org_id          = qca_anomaly_events.org_id
         AND user_id         = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
