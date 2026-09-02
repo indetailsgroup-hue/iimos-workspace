@@ -211,7 +211,8 @@ CREATE POLICY "aqd_drafts_insert"
     org_id IN (
       SELECT om.org_id FROM org_members om
       WHERE  om.user_id         = auth.uid()
-        AND  om.hierarchy_level >= 80
+        AND  om.is_active = TRUE
+        AND  om.role IN ('managing_director', 'governance')
         AND  om.is_active       = true
     )
   );
@@ -223,7 +224,8 @@ CREATE POLICY "aqd_drafts_update"
     org_id IN (
       SELECT om.org_id FROM org_members om
       WHERE  om.user_id         = auth.uid()
-        AND  om.hierarchy_level >= 80
+        AND  om.is_active = TRUE
+        AND  om.role IN ('managing_director', 'governance')
         AND  om.is_active       = true
     )
   );
@@ -235,7 +237,8 @@ CREATE POLICY "aqd_drafts_delete"
     org_id IN (
       SELECT om.org_id FROM org_members om
       WHERE  om.user_id         = auth.uid()
-        AND  om.hierarchy_level >= 80
+        AND  om.is_active = TRUE
+        AND  om.role IN ('managing_director', 'governance')
         AND  om.is_active       = true
     )
   );
@@ -253,7 +256,8 @@ CREATE POLICY "aqd_line_items_insert"
     org_id IN (
       SELECT om.org_id FROM org_members om
       WHERE  om.user_id         = auth.uid()
-        AND  om.hierarchy_level >= 80
+        AND  om.is_active = TRUE
+        AND  om.role IN ('managing_director', 'governance')
         AND  om.is_active       = true
     )
   );
@@ -265,7 +269,8 @@ CREATE POLICY "aqd_line_items_update"
     org_id IN (
       SELECT om.org_id FROM org_members om
       WHERE  om.user_id         = auth.uid()
-        AND  om.hierarchy_level >= 80
+        AND  om.is_active = TRUE
+        AND  om.role IN ('managing_director', 'governance')
         AND  om.is_active       = true
     )
   );
@@ -277,7 +282,8 @@ CREATE POLICY "aqd_line_items_delete"
     org_id IN (
       SELECT om.org_id FROM org_members om
       WHERE  om.user_id         = auth.uid()
-        AND  om.hierarchy_level >= 80
+        AND  om.is_active = TRUE
+        AND  om.role IN ('managing_director', 'governance')
         AND  om.is_active       = true
     )
   );
