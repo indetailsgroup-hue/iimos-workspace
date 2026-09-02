@@ -294,18 +294,10 @@ jobs:
           -- guards inside 0173_rls_isolation_hardening.sql.
           -- Generated at CI runtime. NOT committed to the repo.
 
-          -- iter 25l: added slug/plan/status/max_users/max_jobs_per_month/settings
-          -- so that 0182 sentinel INSERT (slug) and later org migrations compile cleanly
           CREATE TABLE IF NOT EXISTS organizations (
-            org_id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-            name                text        NOT NULL    DEFAULT 'E2E Test Org',
-            slug                text        NOT NULL    DEFAULT 'e2e-test-org',
-            is_active           boolean     NOT NULL    DEFAULT true,
-            plan                text        NOT NULL    DEFAULT 'STANDARD',
-            status              text        NOT NULL    DEFAULT 'ACTIVE',
-            max_users           integer                 DEFAULT 50,
-            max_jobs_per_month  integer                 DEFAULT 500,
-            settings            jsonb       NOT NULL    DEFAULT '{}'::jsonb
+            org_id    uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+            name      text        NOT NULL    DEFAULT 'E2E Test Org',
+            is_active boolean     NOT NULL    DEFAULT true
           );
 
           -- Singular alias: 0174_secdef_rpc_hardening.sql references public.organization (no trailing s)
@@ -659,6 +651,16 @@ jobs:
           -- ── Iteration 24: add organizations.id referenced by 0177 audit_log trigger ─
           -- 0177_audit_log_insert_hardening.sql line 115: SELECT 1 FROM organizations o WHERE o.id = NEW.org_id
           ALTER TABLE IF EXISTS public.organizations ADD COLUMN IF NOT EXISTS id uuid DEFAULT gen_random_uuid();
+          -- Fill NULLs and add UNIQUE so 0195 FK REFERENCES organizations(id) resolves (iter 25o)
+          UPDATE public.organizations SET id = gen_random_uuid() WHERE id IS NULL;
+          DO $$ BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conrelid = 'public.organizations'::regclass AND conname = 'organizations_id_unique'
+            ) THEN
+              ALTER TABLE public.organizations ADD CONSTRAINT organizations_id_unique UNIQUE (id);
+            END IF;
+          END $$;
 
           -- ── Iter 19: extend invoice_status enum for 0176_auto_journal_on_approval ─
           -- 0176 uses lowercase 'approved', 'voided', 'cancelled' in trigger WHEN clauses
@@ -1140,7 +1142,7 @@ jobs:
           )
 
           if new_content == content:
-              print(f'  iter 25j: CONSTRAINT uq_notification_daily already absent (team-patched); skipping Step 1')
+              print(f'NOTE: CONSTRAINT uq_notification_daily pattern not found in {fname} — file is already patched; skipping constraint removal')
 
           # Step 2 (iter 25j): fix ALL remaining (created_at::DATE) -> double-wrapped IMMUTABLE expression
           # Covers: ON CONFLICT clause in trigger fn (orig line 344) + CREATE INDEX (orig line 697)
@@ -1173,52 +1175,6 @@ jobs:
               f.write(new_content)
           print(f'Patch applied (iter 25j+25k): constraint removed + all (created_at::DATE) fixed in {fname}')
           PYEOF
-
-      # ── iter 25n: patch 01941_fpr_approved_flex_card_template ──────────────
-      # ON CONFLICT DO UPDATE SET included `updated_at = now()` but that column
-      # does not exist on line_oa_message_templates.  Remove it + trailing comma
-      # on the preceding `audience = EXCLUDED.audience` line.
-      - name: Patch 01941_fpr_approved_flex_card_template — remove updated_at from ON CONFLICT (iter 25n)
-        run: |
-          python3 - <<'INNEREOF'
-          import re, sys, os
-
-          mig_dir = 'supabase/migrations'
-          fname = '01941_fpr_approved_flex_card_template.sql'
-          filepath = os.path.join(mig_dir, fname)
-
-          if not os.path.exists(filepath):
-              print(f'WARNING: {fname} not found; skipping patch')
-              sys.exit(0)
-
-          with open(filepath, 'r', encoding='utf-8') as f:
-              content = f.read()
-
-          # Remove 'updated_at = now();' line from ON CONFLICT SET clause
-          # and change trailing comma on preceding non-blank line to semicolon.
-          lines = content.splitlines(keepends=True)
-          remove_at = -1
-          for idx, ln in enumerate(lines):
-              s = ln.strip()
-              if s.startswith('updated_at') and 'now()' in s and s.endswith(';'):
-                  remove_at = idx
-                  break
-
-          if remove_at == -1:
-              print(f'  iter 25n: updated_at = now() line not found (already patched)')
-          else:
-              # Fix comma -> semicolon on nearest preceding non-blank line
-              for j in range(remove_at - 1, -1, -1):
-                  prev = lines[j].rstrip()
-                  if prev.strip() and prev.endswith(','):
-                      lines[j] = prev[:-1] + ';' + '\n'
-                      break
-              del lines[remove_at]
-              new_content = ''.join(lines)
-              with open(filepath, 'w', encoding='utf-8') as f:
-                  f.write(new_content)
-              print(f'  iter 25n: removed updated_at = now() + fixed trailing comma in {fname}')
-          INNEREOF
 
       # ── Start local Supabase stack (Docker available on ubuntu-latest) ─────
       # supabase start auto-applies every .sql file in supabase/migrations/
