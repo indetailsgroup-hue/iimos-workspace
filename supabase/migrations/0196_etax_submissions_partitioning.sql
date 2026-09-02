@@ -274,9 +274,9 @@ BEGIN
     )
     SELECT
       id, org_id, invoice_id, document_type, status, attempt_count,
-      last_attempt_at, submitted_at, error_detail, rd_ref_no,
+      last_attempt_at, submitted_at, error_message, etax_reference_no,
       pdf_status, pdf_path, pdf_downloaded_at,
-      '{}'::JSONB,
+      COALESCE(metadata, '{}'),
       created_at,
       COALESCE(updated_at, created_at)
     FROM public.etax_submissions_pre_partition;
@@ -384,7 +384,7 @@ BEGIN
     PERFORM cron.schedule(
       'auto-create-etax-partition',
       '0 0 20 * *',   -- 00:00 on the 20th of each month
-      $$SELECT public.fn_auto_create_next_etax_partition();$$
+      'SELECT public.fn_auto_create_next_etax_partition();'
     );
     RAISE NOTICE 'pg_cron job auto-create-etax-partition registered (0 0 20 * *)';
   ELSE
