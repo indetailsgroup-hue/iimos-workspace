@@ -73,6 +73,7 @@ ALLOWLIST: frozenset[str] = frozenset(
         "etax_submissions_default",   # Default partition of etax_submissions; inherits parent RLS (org_isolation policy). Added by 0196.
         # ── Linter false positives (schema-name artifacts from format() string literals) ──
         "public",                 # Schema name parsed as table name from EXECUTE format() literals in partitioning migrations; not a real table.
+        "if",                     # False positive: "CREATE TABLE IF NOT EXISTS," in comment text causes regex to capture "IF" as a table name; not a real table.
         # ── MCP infrastructure tables (platform-service-level; no org_id column) ──
         "mcp_tool_registry",      # Registry of MCP tools; platform-managed, no tenant scope.
         "mcp_rate_limit_counter", # Per-tool rate limit counters; scoped by tool_id, not org.
@@ -143,8 +144,13 @@ _ORG_ID_IN_CLAUSE_RE = re.compile(r"\borg_id\b", re.IGNORECASE)
 
 
 def _tables_in_file(sql: str) -> list[str]:
-    """Return lowercased table names from CREATE TABLE statements in *sql*."""
-    return [m.lower() for m in _CREATE_TABLE_RE.findall(sql)]
+    """Return lowercased table names from CREATE TABLE statements in *sql*.
+
+    Single-line SQL comments (-- ...) are stripped first to avoid false
+    positives such as "CREATE TABLE IF NOT EXISTS, ..." in comment text.
+    """
+    no_comments = re.sub(r'--[^\n]*', '', sql)
+    return [m.lower() for m in _CREATE_TABLE_RE.findall(no_comments)]
 
 
 def _rls_enabled(table: str, corpus: str) -> bool:
