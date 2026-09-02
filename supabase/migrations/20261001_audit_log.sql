@@ -11,7 +11,7 @@
 
 CREATE TABLE IF NOT EXISTS public.audit_log (
   id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id       UUID        NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id       UUID        NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   table_name   TEXT        NOT NULL,
   operation    TEXT        NOT NULL CHECK (operation IN ('INSERT', 'UPDATE', 'DELETE')),
   row_id       UUID,
