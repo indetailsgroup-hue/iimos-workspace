@@ -46,8 +46,8 @@ SECURITY DEFINER
 AS $$
   SELECT EXISTS (
     SELECT 1
-    FROM   org_plans
-    WHERE  org_id = auth.jwt() ->> 'org_id'
+    FROM   public.organizations
+    WHERE  org_id = (auth.jwt() ->> 'org_id')::uuid
     AND    plan   = 'ENTERPRISE'
   );
 $$;
