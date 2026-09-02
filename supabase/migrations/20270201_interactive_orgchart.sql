@@ -10,8 +10,8 @@
 CREATE OR REPLACE FUNCTION oc_is_professional_plus()
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER AS $$
   SELECT EXISTS (
-    SELECT 1 FROM organizations
-    WHERE id   = (auth.jwt() ->> 'org_id')::uuid
+    SELECT 1 FROM public.organizations
+    WHERE org_id = (auth.jwt() ->> 'org_id')::uuid
       AND plan IN ('PROFESSIONAL', 'ENTERPRISE')
   );
 $$;
@@ -20,7 +20,7 @@ $$;
 
 CREATE TABLE IF NOT EXISTS org_chart_nodes (
   id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id           UUID        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  org_id           UUID        NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   parent_id        UUID        REFERENCES org_chart_nodes(id) ON DELETE SET NULL,
   employee_id      UUID        REFERENCES employees(id) ON DELETE SET NULL,
   node_type        TEXT        NOT NULL DEFAULT 'EMPLOYEE'
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS org_chart_nodes (
 
 CREATE TABLE IF NOT EXISTS org_reporting_lines (
   id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id       UUID        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  org_id       UUID        NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   from_node_id UUID        NOT NULL REFERENCES org_chart_nodes(id) ON DELETE CASCADE,
   to_node_id   UUID        NOT NULL REFERENCES org_chart_nodes(id) ON DELETE CASCADE,
   line_type    TEXT        NOT NULL DEFAULT 'SOLID'
