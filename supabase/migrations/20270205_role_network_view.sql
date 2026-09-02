@@ -35,7 +35,7 @@ END $$;
 
 CREATE TABLE IF NOT EXISTS rnv_roles (
   id            uuid              NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
-  org_id        uuid              NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  org_id        uuid              NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   name          text              NOT NULL,
   description   text,
   seniority     rnv_seniority     NOT NULL DEFAULT 'MID',
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS rnv_roles (
 
 CREATE TABLE IF NOT EXISTS rnv_role_relationships (
   id                uuid                  NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
-  org_id            uuid                  NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  org_id            uuid                  NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   from_role_id      uuid                  NOT NULL REFERENCES rnv_roles(id) ON DELETE CASCADE,
   to_role_id        uuid                  NOT NULL REFERENCES rnv_roles(id) ON DELETE CASCADE,
   relationship_type rnv_relationship_type NOT NULL,
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS rnv_role_relationships (
 
 CREATE TABLE IF NOT EXISTS rnv_employee_roles (
   id          uuid        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
-  org_id      uuid        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  org_id      uuid        NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   employee_id uuid        NOT NULL,
   role_id     uuid        NOT NULL REFERENCES rnv_roles(id) ON DELETE CASCADE,
   is_primary  boolean     NOT NULL DEFAULT false,
@@ -79,9 +79,9 @@ SECURITY DEFINER
 AS $$
   SELECT EXISTS (
     SELECT 1
-    FROM   organizations
-    WHERE  id       = p_org_id
-    AND    org_plan = 'ENTERPRISE'
+    FROM   public.organizations
+    WHERE  org_id = p_org_id
+    AND    plan   = 'ENTERPRISE'
   );
 $$;
 
