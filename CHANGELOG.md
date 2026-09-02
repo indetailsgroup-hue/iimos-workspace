@@ -3,6 +3,28 @@
 All notable changes to the Monolith Workspace are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [18.5.0] — 2027-03-06 — Sprint 8: LAT Component Tests + Stories + 2S2P1C Org Health Score Module
+
+### Added
+- **2S2P1C Org Health Score module — Supabase migration** `supabase/migrations/20270227_org_health_score.sql`:
+  - `ohs_is_enterprise()` helper function; `ohs_dimension` enum (SAFETY/SATISFACTION/PERFORMANCE/PROCESS/CULTURE); `ohs_score_grade` enum (A/B/C/D/F)
+  - `ohs_scoring_configs` table (per-org per-dimension weights, UNIQUE org_id+dimension)
+  - `ohs_health_snapshots` table (composite score per date, UNIQUE org_id+snapshot_date)
+  - `ohs_dimension_scores` table (per-dimension per-snapshot, UNIQUE snapshot_id+dimension, GENERATED `weighted_contribution`)
+  - `ohs_current_score_v` view (latest snapshot with jsonb-aggregated dimensions via DISTINCT ON)
+  - `ohs_compute_health_score(p_org_id, p_snapshot_date, p_computed_by)` SECURITY DEFINER function: SAFETY from `qca_anomaly_events` (open_critical×−15, open_others×−5 clamped 0–100), PROCESS from QCA resolution rate, SATISFACTION from `enps_responses.score` mapped ×5+50, CULTURE from `culture_metrics.score` avg, PERFORMANCE placeholder 75.0; upserts both snapshot and dimension rows
+  - RLS: SELECT+INSERT+UPDATE+DELETE on configs (ENTERPRISE org_members only); SELECT-only on snapshots/dimension_scores (writes via SECURITY DEFINER only); indexes + assertions block
+- **orgHealthScoreTypes.ts** — `OhsDimension`, `OhsScoreGrade`, `ALL_OHS_DIMENSIONS`; row types × 3 + current-score view row; detail shapes × 5 (Safety/Process/Satisfaction/Culture/Performance); app-level types including `OhsCurrentScore` with `dimensionMap: Record<OhsDimension, OhsDimensionScore>`; Thai labels × 3 (`OHS_DIMENSION_LABELS`, `OHS_GRADE_LABELS`, `OHS_GRADE_ACCENT`); `deriveOhsGrade`; `canAccessOrgHealthScore` / `OrgHealthScorePlanGateError`; mappers × 4; `DEFAULT_OHS_SCORING_CONFIG`
+- **orgHealthScoreStore.ts** — 6 ENTERPRISE-gated actions: `fetchLatestScore` (reads `ohs_current_score_v`, sets `currentScore` + `dimensionScores`), `fetchHistory` (reads `ohs_health_snapshots` with optional fromDate/toDate), `computeScore` (calls `ohs_compute_health_score` RPC + re-fetches; `isComputing` flag), `fetchScoringConfig` (reads `ohs_scoring_configs`; `isConfigLoading` flag), `updateScoringConfig` (optimistic single-row update + rollback on error), `upsertScoringConfig` (bulk upsert via `onConflict: 'org_id,dimension'` + re-fetch); UI helpers: `selectSnapshot`, `clearError`
+
+### Tests
+- **LeadershipActionBoard.test.tsx** — **58 tests, all passing**: ENTERPRISE plan gate renders gate wall (FREE/PROFESSIONAL), loading state, summary bar counts (open/in-progress/blocked/completed), filter bar status/priority/category select interactions, new-action form submit (createAction called with correct payload) + cancel, detail panel complete/cancel/reassign interactions, admin delete button visibility, post-update form, error banner + clear, no-selection placeholder; `renderBoard(orgPlan, storeOverrides, { userId, isAdmin })` helper; `vi.mock('../leadershipActionStore')` auto-mock + `vi.mocked(...).mockReturnValue(makeStore())` per-test
+
+### Stories
+- **LeadershipActionBoard.stories.tsx** — **15 CSF3 Storybook stories**: PlanGateWall (PROFESSIONAL), PlanGateWallFree, LoadingState, EmptyList, WithActions, ActionSelected, AdminView, DetailPanelWithUpdates, BlockedCriticalAction, ErrorBanner; play-function stories: FilterBarInteraction (`userEvent.selectOptions`), NewActionFormInteraction, CompleteInteraction, CancelActionInteraction, PostUpdateInteraction; `withLeadershipActionStore` decorator (`useLeadershipActionStore.setState`); all async spies `.mockResolvedValue(undefined)`; `fetchActions` replaced with `noopAsync` to prevent mount-time Supabase calls
+
+---
+
 ## [18.0.6] — 2027-02-27 — Sprint 7: Leadership Action Board UI + Storybook Stories + LAT Tests
 
 ### Added

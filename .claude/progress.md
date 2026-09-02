@@ -34,19 +34,23 @@
 - `src/ai-quotation/aiQuotationDraftTypes.ts` — full type system; AqdDraftStatus/AqdLineItemType enums; DB + app-layer types; payloads; `canAccessAiQuotation`/`AiQuotationPlanGateError`; Thai labels; mappers; `AqdFilters`/`DEFAULT_AQD_FILTERS`
 - `src/ai-quotation/aiQuotationDraftStore.ts` — `useAiQuotationDraftStore`; 10 ENTERPRISE-gated actions; optimistic rollback on submitForReview/approveDraft/rejectDraft; UI helpers
 
+### ✅ Completed (v18.5 — sprint 8: LAT Component Tests + Stories + 2S2P1C Org Health Score Module)
+- `src/leadership-actions/__tests__/LeadershipActionBoard.test.tsx` — **58 Vitest component tests, all passing**; ENTERPRISE plan gate renders gate wall (FREE/PROFESSIONAL), loading state, summary bar counts, filter bar select interactions, new-action form submit + cancel, detail panel complete/cancel/reassign, admin delete visibility, post-update form, error banner + clear, no-selection placeholder; `renderBoard` helper; `vi.mock('../leadershipActionStore')` auto-mock pattern
+- `src/leadership-actions/LeadershipActionBoard.stories.tsx` — **15 CSF3 Storybook stories**; `withLeadershipActionStore` decorator; all async spies `.mockResolvedValue(undefined)`; 5 play-function stories (FilterBar, NewActionForm, Complete, Cancel, PostUpdate)
+- `supabase/migrations/20270227_org_health_score.sql` — `ohs_dimension`/`ohs_score_grade` enums; `ohs_scoring_configs`, `ohs_health_snapshots`, `ohs_dimension_scores` tables; `ohs_current_score_v` view; `ohs_compute_health_score` SECURITY DEFINER function (SAFETY/PROCESS from QCA, SATISFACTION from eNPS, CULTURE from culture_metrics, PERFORMANCE placeholder); full RLS + indexes
+- `src/org-health/orgHealthScoreTypes.ts` — `OhsDimension`/`OhsScoreGrade`; row types + app-layer types including `OhsCurrentScore` with `dimensionMap`; Thai labels; `deriveOhsGrade`; `canAccessOrgHealthScore`/`OrgHealthScorePlanGateError`; mappers × 4; `DEFAULT_OHS_SCORING_CONFIG`
+- `src/org-health/orgHealthScoreStore.ts` — `useOrgHealthScoreStore`; 6 ENTERPRISE-gated actions (fetchLatestScore, fetchHistory, computeScore, fetchScoringConfig, updateScoringConfig, upsertScoringConfig); UI helpers (selectSnapshot, clearError)
+
+### 🔜 Pending (v18.5 — sprint 9+)
+- `OrgHealthScoreBoard.tsx` UI component
+- Vitest tests for `orgHealthScoreStore.ts`
+- QC Anomaly Detection component-level Vitest tests
+
 ### ✅ Completed (v18.0 — sprint 7: Leadership Action Board UI + Storybook Stories + LAT Tests)
 - `src/leadership-actions/LeadershipActionBoard.tsx` — ENTERPRISE-gated UI; plan-gate wall, loading state, summary bar (open/in-progress/blocked/completed counts from `actions` array), filter bar (status/priority/category), new-action form, action list with status/priority/category Thai-label badges, detail panel (complete/cancel/reassign via `window.prompt`, post-update form, updates list), error banner; all `lat-*` data-testids; zero TS errors
 - `src/ai-quotation/AiQuotationDraftBoard.stories.tsx` — 18 CSF3 Storybook stories; `withAiQuotationDraftStore` decorator (no explicit return type — inferred); `fn()` spies; `userEvent` play functions for 5 interactive stories; TS clean
 - `src/qc-anomaly/QcAnomalyDashboard.stories.tsx` — 14 CSF3 Storybook stories; `withQcAnomalyStore` decorator; `fn()` spies; `userEvent` play functions; fixed `last_anomaly_at` field in SUMMARIES fixtures; TS clean
 - `src/leadership-actions/__tests__/leadershipActionStore.test.ts` — **70 Vitest unit tests, all passing**; ENTERPRISE plan gate (30 reject + 10 pass); full CRUD + optimistic rollback; loading-state tests use subscribe pattern; mock helpers return full app-layer types (`LatAction`/`LatActionAssignment`/`LatActionUpdate`); TS clean
-
-### 🔜 Pending (v18.0 — sprint 8+)
-- Vitest tests for `LeadershipActionBoard.tsx` (component-level)
-- Storybook stories for `LeadershipActionBoard.tsx`
-- QC Anomaly Detection component-level tests
-
-### ⚠️ User Action Required
-- Add `Supabase DB Lint` as required status check on main branch protection (GitHub Settings → Branches)
 
 ### ✅ Completed (v18.0 — sprint 6: AiQuotationDraftBoard + Leadership Action Tracker + aiQuotationDraftStore tests)
 - `src/ai-quotation/AiQuotationDraftBoard.tsx` — ENTERPRISE-gated UI; draft list (status/AI badges), new-draft form, editable line items table (DRAFT only), AddLineItemForm, totals footer, workflow buttons (submit/approve/reject), GenerationLogPanel (lazy Supabase), SummaryBar, filter bar, error banner, plan-gate wall
@@ -55,13 +59,7 @@
 - `src/leadership-actions/leadershipActionStore.ts` — `useLeadershipActionStore`; 10 ENTERPRISE-gated actions; optimistic rollback on completeAction/cancelAction; UI helpers
 - `src/ai-quotation/__tests__/aiQuotationDraftStore.test.ts` — **74 Vitest unit tests, all passing**; plan gate (10), fetchDrafts parallel (3), CRUD (9), workflow optimistic (6), line items (12), loading-state subscribe pattern
 
-### 📋 Remaining v18.0 tasks (sprint 7+)
-- Vitest unit tests for `leadershipActionStore.ts`
-- Storybook stories for `AiQuotationDraftBoard.tsx`
-- Leadership Action Tracker UI (`LeadershipActionBoard.tsx`)
-- QC Anomaly Detection Storybook stories
-
-**Last updated:** 2027-02-20
+**Last updated:** 2027-03-06
 
 ---
 
