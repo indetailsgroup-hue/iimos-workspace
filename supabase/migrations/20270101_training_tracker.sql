@@ -46,7 +46,7 @@ comment on function public.tt_is_professional_plus() is
 create table if not exists public.training_courses (
   id                    uuid primary key default gen_random_uuid(),
   org_id                uuid null
-    references public.organizations(id) on delete cascade,
+    REFERENCES public.organizations(org_id) on delete cascade,
   -- org_id = null → global seed course visible to all PROFESSIONAL+ orgs
 
   title                 text not null,
@@ -123,7 +123,7 @@ comment on table public.training_courses is
 create table if not exists public.training_enrollments (
   id                    uuid primary key default gen_random_uuid(),
   org_id                uuid not null
-    references public.organizations(id) on delete cascade,
+    REFERENCES public.organizations(org_id) on delete cascade,
 
   course_id             uuid not null
     references public.training_courses(id) on delete cascade,
@@ -166,7 +166,7 @@ comment on table public.training_enrollments is
 create table if not exists public.training_completions (
   id                    uuid primary key default gen_random_uuid(),
   org_id                uuid not null
-    references public.organizations(id) on delete cascade,
+    REFERENCES public.organizations(org_id) on delete cascade,
 
   course_id             uuid not null
     references public.training_courses(id) on delete cascade,
