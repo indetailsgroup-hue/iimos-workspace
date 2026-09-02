@@ -143,7 +143,7 @@ SELECT
   NOW()                                                           AS ranked_at
 
 FROM  public.v_etax_full_health_summary s
-JOIN  public.organizations              o ON o.id = s.org_id;
+JOIN  public.organizations              o ON o.org_id = s.org_id;
 
 -- View-level comment
 COMMENT ON VIEW public.v_etax_org_risk_ranking IS
