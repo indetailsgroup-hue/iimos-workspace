@@ -1,3 +1,6 @@
+sha: 022e1f9a7071e52a15bfbd82df21587df1b718d9
+size: 9002
+---
 -- =============================================================================
 -- Migration 0195 — pg_net Patch
 -- File   : 0195b_etax_risk_tier_notify_pgnet.sql
@@ -51,8 +54,8 @@ END $$;
 -- Insert or update the etax-risk-notify endpoint config.
 -- Operators must set these to the real values on each environment.
 INSERT INTO public.platform_config (key, value) VALUES
-  ('etax_risk_notify_url',    current_setting('app.etax_risk_notify_url',    true)::text),
-  ('etax_risk_notify_secret', current_setting('app.etax_risk_notify_secret', true)::text)
+  ('etax_risk_notify_url',    COALESCE(current_setting('app.etax_risk_notify_url',    true), '')),
+  ('etax_risk_notify_secret', COALESCE(current_setting('app.etax_risk_notify_secret', true), ''))
 ON CONFLICT (key) DO UPDATE
   SET value      = EXCLUDED.value,
       updated_at = NOW()
@@ -235,3 +238,4 @@ BEGIN
 END $$;
 
 COMMIT;
+
