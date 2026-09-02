@@ -395,3 +395,156 @@ Deno.test({
   sanitizeOps: false,
   sanitizeResources: false,
 });
+
+// ---------------------------------------------------------------------------
+// Test 3 — rpc_bulk_record_fpr_payment: submit → approve → purchased → batch pay (idempotent)
+// ---------------------------------------------------------------------------
+Deno.test({
+  name: "E2E: rpc_bulk_record_fpr_payment — batch payment recording + idempotency guard",
+  async fn() {
+    const client = getClient();
+    const SUFFIX      = crypto.randomUUID().slice(0, 8);
+    const IDEM_FPR    = `e2e-pay-fpr-${SUFFIX}`;
+    const IDEM_PAY    = `e2e-pay-${SUFFIX}`;
+    const SITE        = "SITE-E2E-PAY";
+    const ACTOR       = "e2e-pay-actor";
+    let requestId: string | null = null;
+
+    try {
+      // -----------------------------------------------------------------------
+      // Step 1: Submit FPR
+      // -----------------------------------------------------------------------
+      const submitResult = await rpc(client, "rpc_create_field_purchase_request", {
+        p_args: {
+          site_code:       SITE,
+          requester:       ACTOR,
+          amount:          2500.00,
+          reason:          "E2E bulk payment smoke test",
+          item_hint:       "cement bags",
+          photo_refs:      [],
+          idempotency_key: IDEM_FPR,
+          project_id:      null,
+          work_item_id:    null,
+        },
+      }) as { ok: boolean; request_id: string };
+
+      assertEquals(submitResult.ok, true, "submit should succeed");
+      assertExists(submitResult.request_id, "submit should return request_id");
+      requestId = submitResult.request_id;
+
+      // -----------------------------------------------------------------------
+      // Step 2: Approve
+      // -----------------------------------------------------------------------
+      const approveResult = await rpc(client, "rpc_bulk_approve_field_purchase_request", {
+        p_args: { request_ids: [requestId], approver: "team-lead-e2e" },
+      }) as { ok: boolean };
+      assertEquals(approveResult.ok, true, "approve should succeed");
+
+      // -----------------------------------------------------------------------
+      // Step 3: Mark as purchased (direct UPDATE — mirrors Test 1 Step 4)
+      // -----------------------------------------------------------------------
+      const { error: purchaseErr } = await client
+        .from("field_purchase_request")
+        .update({ status: "purchased", updated_at: new Date().toISOString() })
+        .eq("id", requestId)
+        .eq("status", "approved");
+      assertEquals(purchaseErr, null, "purchased transition should not error");
+
+      await client.from("field_purchase_audit_log").insert({
+        request_id: requestId,
+        actor:      ACTOR,
+        event_type: "status_change",
+        old_status: "approved",
+        new_status: "purchased",
+        metadata:   { source: "e2e_smoke_test" },
+      });
+
+      // -----------------------------------------------------------------------
+      // Step 4: Call rpc_bulk_record_fpr_payment with one record
+      // -----------------------------------------------------------------------
+      const payResult = await rpc(client, "rpc_bulk_record_fpr_payment", {
+        p_args: {
+          payment_records: [{
+            request_id:      requestId,
+            amount:          2500.00,
+            payment_method:  "cash",
+            idempotency_key: IDEM_PAY,
+          }],
+        },
+      }) as {
+        ok: boolean;
+        processed_count: number;
+        skipped_count: number;
+        results: Array<{ request_id: string; payment_id: string; skipped: boolean }>;
+      };
+
+      assertEquals(payResult.ok, true, "bulk payment should succeed");
+      assertEquals(payResult.processed_count, 1, "processed_count should be 1");
+      assertEquals(payResult.skipped_count, 0, "skipped_count should be 0");
+      assertExists(payResult.results[0]?.payment_id, "payment_id should be returned");
+      assertEquals(payResult.results[0].skipped, false, "first call should not be skipped");
+
+      const paymentId = payResult.results[0].payment_id;
+
+      // Verify fpr_payment row was created with correct values
+      const { data: payRow } = await client
+        .from("fpr_payment")
+        .select("id, status, amount, payment_method")
+        .eq("id", paymentId)
+        .single();
+
+      assertExists(payRow, "fpr_payment row should exist");
+      assertEquals(payRow!.status, "paid", "payment status should be paid");
+      assertEquals(Number(payRow!.amount), 2500.00, "payment amount should match FPR amount");
+      assertEquals(payRow!.payment_method, "cash", "payment method should match input");
+
+      // Verify append-only audit entry was written
+      const auditLog = await getAuditLog(client, requestId);
+      const hasPaymentAudit = auditLog.some((e) => e.event_type === "payment_recorded");
+      assertEquals(hasPaymentAudit, true, "audit should contain payment_recorded event");
+
+      // -----------------------------------------------------------------------
+      // Step 5: Idempotency guard — same key should skip, not duplicate
+      // -----------------------------------------------------------------------
+      const idemResult = await rpc(client, "rpc_bulk_record_fpr_payment", {
+        p_args: {
+          payment_records: [{
+            request_id:      requestId,
+            amount:          9999.00,          // intentionally wrong — must be ignored
+            payment_method:  "bank_transfer",
+            idempotency_key: IDEM_PAY,
+          }],
+        },
+      }) as {
+        ok: boolean;
+        processed_count: number;
+        skipped_count: number;
+        results: Array<{ skipped: boolean; reason: string; payment_id: string }>;
+      };
+
+      assertEquals(idemResult.ok, true, "idempotent call should still return ok=true");
+      assertEquals(idemResult.processed_count, 0, "idempotent: processed_count must be 0");
+      assertEquals(idemResult.skipped_count, 1, "idempotent: skipped_count must be 1");
+      assertEquals(idemResult.results[0].skipped, true, "row must be marked skipped");
+      assertEquals(idemResult.results[0].reason, "idempotent", "reason must be idempotent");
+      assertEquals(idemResult.results[0].payment_id, paymentId, "must return the original payment_id");
+
+      // Confirm no duplicate fpr_payment row was inserted
+      const { data: payRows } = await client
+        .from("fpr_payment")
+        .select("id")
+        .eq("request_id", requestId);
+      assertEquals(payRows?.length, 1, "only one fpr_payment row should exist after idempotent call");
+
+      console.log(`[E2E PASS] rpc_bulk_record_fpr_payment: processed=1 idempotency_guard=pass. payment_id=${paymentId}`);
+
+    } finally {
+      if (requestId) {
+        await client.from("fpr_payment").delete().eq("request_id", requestId);
+      }
+      await cleanup(client, requestId, SUFFIX);
+    }
+  },
+  sanitizeOps: false,
+  sanitizeResources: false,
+});
