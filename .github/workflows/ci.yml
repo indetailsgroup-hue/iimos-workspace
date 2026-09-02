@@ -318,15 +318,27 @@ jobs:
           );
 
           CREATE TABLE IF NOT EXISTS org_members (
-            id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-            org_id          uuid        NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
-            user_id         uuid        NOT NULL,
-            role            text        NOT NULL DEFAULT 'MEMBER',
-            display_name    text,
-            email           text,
-            is_active       boolean     NOT NULL DEFAULT true,
-            hierarchy_level int         NOT NULL DEFAULT 0,
-            created_at      timestamptz NOT NULL DEFAULT now()
+            id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id       uuid        NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
+            user_id      uuid        NOT NULL,
+            role         text        NOT NULL DEFAULT 'MEMBER',
+            display_name text,
+            email        text,
+            is_active    boolean     NOT NULL DEFAULT true,
+            created_at   timestamptz NOT NULL DEFAULT now()
+          );
+
+          -- iter26c: employees stub — 20270120_ai_cost_estimation.sql RLS policy
+          -- references employees.user_id (auth.uid()).  The real table is created by
+          -- 20261001_people_culture_schema.sql without user_id; stubbing here with
+          -- IF NOT EXISTS means the real migration's CREATE TABLE is a no-op but
+          -- user_id is present when the ace_usage_logs_select policy compiles.
+          CREATE TABLE IF NOT EXISTS public.employees (
+            id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id     uuid        NOT NULL,
+            user_id    uuid,
+            is_active  boolean     NOT NULL DEFAULT true,
+            created_at timestamptz NOT NULL DEFAULT now()
           );
 
           -- Singular stub tables assumed pre-existing by rpc_approve_quotation
