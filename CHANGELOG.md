@@ -3,6 +3,17 @@
 All notable changes to the Monolith Workspace are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [18.0.5] — 2027-02-20 — Sprint 6: AI Quotation Draft Board + Leadership Action Tracker
+
+### Added
+- **AiQuotationDraftBoard.tsx** — ENTERPRISE-gated UI: draft list with status/AI badges, new-draft form, editable line items table (DRAFT status only), AddLineItemForm, totals footer (subtotal/tax/total), workflow buttons (submit/approve/reject), GenerationLogPanel with lazy Supabase fetch, SummaryBar, filter bar (status + AI toggle), error banner, plan-gate wall
+- **Leadership Action Tracker module** — Supabase migration `20270220_leadership_action_tracker.sql`: 3 enums (lat_action_status/5, lat_action_priority/4, lat_action_category/8), 3 tables (lat_actions, lat_action_assignments, lat_action_updates), view (lat_action_summary_v with overdue_count), triggers (updated_at + terminal timestamp stamping), RLS (SELECT=ENTERPRISE, INSERT≥60, UPDATE=owner OR ≥80, DELETE≥80), 10 indexes
+- **leadershipActionTypes.ts** — LatActionStatus/LatActionPriority/LatActionCategory enums; DB row types × 4; app-layer aliases × 4; payloads × 4; canAccessLeadershipActions / LeadershipActionPlanGateError; Thai labels × 3 + getters × 3 + mappers × 4; LatFilters / DEFAULT_LAT_FILTERS
+- **leadershipActionStore.ts** — 10 ENTERPRISE-gated actions: fetchActions, createAction, updateAction, deleteAction, addAssignment, removeAssignment, postUpdate (append-only), completeAction + cancelAction (optimistic + rollback), reassignOwner; UI helpers: selectAction, setFilters, clearError
+
+### Tests
+- **aiQuotationDraftStore.test.ts** — 74 tests, all passing: ENTERPRISE plan gate on all 10 actions, fetchDrafts parallel fetch + error propagation, submitForReview/approveDraft/rejectDraft optimistic state + rollback, createDraft/updateDraft/deleteDraft CRUD with cascade, addLineItem/updateLineItem/removeLineItem with isLineItemLoading flag, isLoading subscribe pattern for loading-state tests
+
 ---
 
 ## [v18.0.4] — QcAnomalyDashboard + qcAnomalyStore Tests + AI Quotation Draft Module — 2027-02-15

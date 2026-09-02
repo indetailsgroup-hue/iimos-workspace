@@ -34,12 +34,20 @@
 - `src/ai-quotation/aiQuotationDraftTypes.ts` — full type system; AqdDraftStatus/AqdLineItemType enums; DB + app-layer types; payloads; `canAccessAiQuotation`/`AiQuotationPlanGateError`; Thai labels; mappers; `AqdFilters`/`DEFAULT_AQD_FILTERS`
 - `src/ai-quotation/aiQuotationDraftStore.ts` — `useAiQuotationDraftStore`; 10 ENTERPRISE-gated actions; optimistic rollback on submitForReview/approveDraft/rejectDraft; UI helpers
 
-### 📋 Remaining v18.0 tasks (sprint 6+)
-- AI Quotation Draft UI component (`AiQuotationDraftBoard.tsx` or similar)
-- Leadership Action Tracker module
-- QC Anomaly Detection Storybook stories + additional tests
+### ✅ Completed (v18.0 — sprint 6: AiQuotationDraftBoard + Leadership Action Tracker + aiQuotationDraftStore tests)
+- `src/ai-quotation/AiQuotationDraftBoard.tsx` — ENTERPRISE-gated UI; draft list (status/AI badges), new-draft form, editable line items table (DRAFT only), AddLineItemForm, totals footer, workflow buttons (submit/approve/reject), GenerationLogPanel (lazy Supabase), SummaryBar, filter bar, error banner, plan-gate wall
+- `supabase/migrations/20270220_leadership_action_tracker.sql` — 3 enums, 3 tables (lat_actions/lat_action_assignments/lat_action_updates), view (lat_action_summary_v), triggers, RLS, 10 indexes
+- `src/leadership-actions/leadershipActionTypes.ts` — LatActionStatus/LatActionPriority/LatActionCategory enums; DB row types × 4; app-layer aliases; payloads × 4; canAccessLeadershipActions / LeadershipActionPlanGateError; Thai labels + getters + mappers; LatFilters/DEFAULT_LAT_FILTERS
+- `src/leadership-actions/leadershipActionStore.ts` — `useLeadershipActionStore`; 10 ENTERPRISE-gated actions; optimistic rollback on completeAction/cancelAction; UI helpers
+- `src/ai-quotation/__tests__/aiQuotationDraftStore.test.ts` — **74 Vitest unit tests, all passing**; plan gate (10), fetchDrafts parallel (3), CRUD (9), workflow optimistic (6), line items (12), loading-state subscribe pattern
 
-**Last updated:** 2027-02-15
+### 📋 Remaining v18.0 tasks (sprint 7+)
+- Vitest unit tests for `leadershipActionStore.ts`
+- Storybook stories for `AiQuotationDraftBoard.tsx`
+- Leadership Action Tracker UI (`LeadershipActionBoard.tsx`)
+- QC Anomaly Detection Storybook stories
+
+**Last updated:** 2027-02-20
 
 ---
 
