@@ -164,7 +164,7 @@ SELECT
   NOW()                                                          AS snapshot_at
 
 FROM org_doc_agg   a
-JOIN organizations o ON o.id = a.org_id
+JOIN organizations o ON o.org_id = a.org_id
 ORDER BY
   a.breach_rate_pct DESC NULLS LAST,
   a.active_breach_count DESC,
@@ -316,3 +316,4 @@ COMMENT ON VIEW public.v_etax_submission_sla IS
 INSERT INTO platform_config (key, value)
 VALUES ('etax_sla_hours', '24')
 ON CONFLICT (key) DO NOTHING;
+
