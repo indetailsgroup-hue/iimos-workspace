@@ -23,6 +23,7 @@ BEGIN;
 INSERT INTO line_oa_message_templates (
   template_key,
   vertical_context,
+  body,
   message_kind,
   audience,
   flex_payload,
@@ -31,6 +32,7 @@ INSERT INTO line_oa_message_templates (
 VALUES (
   'tpl_fpr_approved_flex_card',
   'installation_pm',
+  '',
   'flex',
   'requester',
   jsonb_build_object(
