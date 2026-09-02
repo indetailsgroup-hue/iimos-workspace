@@ -184,7 +184,7 @@ SELECT
   (SELECT sla_hours FROM sla_cfg)                                AS sla_threshold_hours
 
 FROM timeline_base tb
-JOIN public.organizations o ON o.id = tb.org_id
+JOIN public.organizations o ON o.org_id = tb.org_id
 
 ORDER BY tb.org_id, tb.document_type, tb.breach_date;
 
