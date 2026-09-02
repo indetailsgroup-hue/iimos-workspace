@@ -318,12 +318,14 @@ jobs:
           );
 
           CREATE TABLE IF NOT EXISTS org_members (
-            id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-            org_id     uuid        NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
-            user_id    uuid        NOT NULL,
-            role       text        NOT NULL DEFAULT 'MEMBER',
-            is_active  boolean     NOT NULL DEFAULT true,
-            created_at timestamptz NOT NULL DEFAULT now()
+            id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id       uuid        NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
+            user_id      uuid        NOT NULL,
+            role         text        NOT NULL DEFAULT 'MEMBER',
+            display_name text,
+            email        text,
+            is_active    boolean     NOT NULL DEFAULT true,
+            created_at   timestamptz NOT NULL DEFAULT now()
           );
 
           -- Singular stub tables assumed pre-existing by rpc_approve_quotation
@@ -460,13 +462,6 @@ jobs:
             id      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
             user_id uuid NOT NULL
           );
-          -- ── Iter 26: patch notification_digest_queue stub for 202608282_notifications_super_admin ─
-          ALTER TABLE IF EXISTS public.notification_digest_queue ADD COLUMN IF NOT EXISTS org_id          UUID;
-          ALTER TABLE IF EXISTS public.notification_digest_queue ADD COLUMN IF NOT EXISTS notification_ids UUID[]      DEFAULT '{}'::uuid[];
-          ALTER TABLE IF EXISTS public.notification_digest_queue ADD COLUMN IF NOT EXISTS frequency       TEXT        DEFAULT 'daily';
-          ALTER TABLE IF EXISTS public.notification_digest_queue ADD COLUMN IF NOT EXISTS scheduled_at   TIMESTAMPTZ DEFAULT now();
-          ALTER TABLE IF EXISTS public.notification_digest_queue ADD COLUMN IF NOT EXISTS sent_at        TIMESTAMPTZ;
-          ALTER TABLE IF EXISTS public.notification_digest_queue ADD COLUMN IF NOT EXISTS created_at     TIMESTAMPTZ DEFAULT now();
 
           CREATE TABLE IF NOT EXISTS platform_metrics_snapshots (
             id uuid PRIMARY KEY DEFAULT gen_random_uuid()
