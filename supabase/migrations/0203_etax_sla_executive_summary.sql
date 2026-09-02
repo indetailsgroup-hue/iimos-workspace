@@ -44,7 +44,7 @@ WITH live AS (
     MAX(mv.sla_threshold_hours)                                 AS live_sla_threshold_hours,
     MAX(mv.last_submission_at)                                  AS live_last_submission_at
   FROM mv_etax_submission_sla mv
-  JOIN organizations o ON o.id = mv.org_id
+  JOIN organizations o ON o.org_id = mv.org_id
   GROUP BY mv.org_id, o.name
 ),
 archive AS (
