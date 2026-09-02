@@ -34,7 +34,7 @@ BEGIN
   SELECT org_id INTO v_org_id
   FROM public.org_members
   WHERE user_id = auth.uid()
-    AND status = 'ACTIVE'
+    AND is_active = true
   ORDER BY created_at ASC
   LIMIT 1;
   RETURN v_org_id;
@@ -104,7 +104,7 @@ BEGIN
   FROM public.org_members
   WHERE user_id = auth.uid()
     AND org_id   = p_org_id
-    AND status   = 'ACTIVE';        -- Fix Issue 4
+    AND is_active = true;           -- Fix Issue 4 (corrected: org_members uses is_active)
   RETURN COALESCE(v_level, 0) >= p_min_role_level;
 END;
 $$;
@@ -888,3 +888,4 @@ CREATE POLICY "anonymous_feedback_update" ON anonymous_feedback
 
 -- No DELETE policy intentionally.
 -- Admins should use action_status = 'DISMISSED' instead of deletion.
+
