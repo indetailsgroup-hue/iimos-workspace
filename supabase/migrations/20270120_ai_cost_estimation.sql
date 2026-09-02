@@ -321,7 +321,8 @@ CREATE POLICY "ace_cost_models_admin_write" ON ace_cost_models
     org_id IN (
       SELECT org_id FROM org_members
       WHERE user_id = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
     AND ace_is_enterprise()
   );
@@ -342,7 +343,8 @@ CREATE POLICY "ace_usage_logs_select" ON ace_usage_logs
       OR org_id IN (
         SELECT org_id FROM org_members
         WHERE user_id = auth.uid()
-          AND hierarchy_level >= 80
+          AND is_active = TRUE
+          AND role IN ('managing_director', 'governance')
       )
     )
   );
@@ -386,7 +388,8 @@ CREATE POLICY "ace_task_estimates_update" ON ace_task_estimates
       OR org_id IN (
         SELECT org_id FROM org_members
         WHERE user_id = auth.uid()
-          AND hierarchy_level >= 80
+          AND is_active = TRUE
+          AND role IN ('managing_director', 'governance')
       )
     )
   );
@@ -410,7 +413,8 @@ CREATE POLICY "ace_budget_periods_admin_write" ON ace_budget_periods
     AND org_id IN (
       SELECT org_id FROM org_members
       WHERE user_id = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
