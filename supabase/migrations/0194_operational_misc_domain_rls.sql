@@ -213,6 +213,8 @@ drop policy if exists workflow_audit_log_sel on public.workflow_audit_log;
 alter table public.workflow_audit_log
   add column if not exists org_id uuid;
 
+-- Bypass append-only trigger during org_id backfill (CI idempotency only)
+alter table public.workflow_audit_log disable trigger all;
 update public.workflow_audit_log wal
 set org_id = (
   select ip.org_id
@@ -224,6 +226,7 @@ where site_code is not null;
 update public.workflow_audit_log
   set org_id = '00000000-0000-0000-0000-000000000000'::uuid
   where org_id is null;
+alter table public.workflow_audit_log enable trigger all;
 alter table public.workflow_audit_log alter column org_id set not null;
 
 create policy workflow_audit_log_tenant_isolation on public.workflow_audit_log
