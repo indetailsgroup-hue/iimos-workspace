@@ -193,7 +193,8 @@ CREATE POLICY rnv_roles_insert ON rnv_roles
       SELECT 1 FROM org_members
       WHERE org_id          = rnv_roles.org_id
         AND user_id         = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -206,7 +207,8 @@ CREATE POLICY rnv_roles_update ON rnv_roles
       SELECT 1 FROM org_members
       WHERE org_id          = rnv_roles.org_id
         AND user_id         = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -219,7 +221,8 @@ CREATE POLICY rnv_roles_delete ON rnv_roles
       SELECT 1 FROM org_members
       WHERE org_id          = rnv_roles.org_id
         AND user_id         = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -242,7 +245,8 @@ CREATE POLICY rnv_role_rel_insert ON rnv_role_relationships
       SELECT 1 FROM org_members
       WHERE org_id          = rnv_role_relationships.org_id
         AND user_id         = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -254,7 +258,8 @@ CREATE POLICY rnv_role_rel_delete ON rnv_role_relationships
       SELECT 1 FROM org_members
       WHERE org_id          = rnv_role_relationships.org_id
         AND user_id         = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -277,7 +282,8 @@ CREATE POLICY rnv_employee_roles_insert ON rnv_employee_roles
       SELECT 1 FROM org_members
       WHERE org_id          = rnv_employee_roles.org_id
         AND user_id         = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
@@ -290,7 +296,8 @@ CREATE POLICY rnv_employee_roles_delete ON rnv_employee_roles
       SELECT 1 FROM org_members
       WHERE org_id          = rnv_employee_roles.org_id
         AND user_id         = auth.uid()
-        AND hierarchy_level >= 80
+        AND is_active = TRUE
+        AND role IN ('managing_director', 'governance')
     )
   );
 
