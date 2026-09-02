@@ -1,3 +1,5 @@
+sha: 19542b97f42506904ba4214acc54d2a14cabbc9a
+size: 13492
 -- =============================================================================
 -- Migration 0195 — eTax Risk Tier Change pg_notify Trigger
 -- Branch  : feat/accounting-rls-multibook
@@ -49,7 +51,7 @@ END $$;
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.etax_risk_tier_state (
   org_id       UUID        NOT NULL
-                           REFERENCES public.organizations(id) ON DELETE CASCADE,
+                           REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   risk_tier    TEXT        NOT NULL
                            CHECK (risk_tier IN ('CRITICAL','WARNING','HEALTHY')),
   health_score NUMERIC(6,2),
@@ -391,3 +393,4 @@ END $$;
 --   DROP TABLE   IF EXISTS public.etax_risk_tier_state;
 --
 -- Note: dropping etax_risk_tier_state will cascade to any FK references.
+
