@@ -456,6 +456,24 @@ jobs:
             org_id uuid NOT NULL    REFERENCES organizations(org_id) ON DELETE CASCADE
           );
 
+          -- ── Iter 25s: add columns expected by 20260828_multi_tenant_schema ──
+          -- CREATE TABLE IF NOT EXISTS is skipped (table already exists); add missing
+          -- columns so the subsequent CREATE INDEX statements can resolve them.
+          ALTER TABLE public.org_invitations ADD COLUMN IF NOT EXISTS
+            token text UNIQUE DEFAULT encode(gen_random_bytes(32), 'hex');
+          ALTER TABLE public.org_invitations ADD COLUMN IF NOT EXISTS
+            role text NOT NULL DEFAULT 'VIEWER';
+          ALTER TABLE public.org_invitations ADD COLUMN IF NOT EXISTS
+            status text NOT NULL DEFAULT 'PENDING';
+          ALTER TABLE public.org_invitations ADD COLUMN IF NOT EXISTS
+            expires_at timestamptz NOT NULL DEFAULT (now() + interval '7 days');
+          ALTER TABLE public.org_invitations ADD COLUMN IF NOT EXISTS
+            accepted_at timestamptz;
+          ALTER TABLE public.org_invitations ADD COLUMN IF NOT EXISTS
+            invited_by uuid;
+          ALTER TABLE public.org_invitations ADD COLUMN IF NOT EXISTS
+            invite_id uuid UNIQUE DEFAULT gen_random_uuid();
+
           CREATE TABLE IF NOT EXISTS notification_digest_queue (
             id      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
             user_id uuid NOT NULL
