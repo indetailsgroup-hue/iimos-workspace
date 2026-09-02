@@ -292,11 +292,17 @@ CREATE POLICY "aqd_line_items_delete"
 
 CREATE POLICY "aqd_logs_select"
   ON aqd_generation_logs FOR SELECT
-  USING (aqd_is_enterprise());
+  USING (
+    aqd_is_enterprise()
+    AND org_id = get_user_org_id()
+  );
 
 CREATE POLICY "aqd_logs_insert"
   ON aqd_generation_logs FOR INSERT
-  WITH CHECK (aqd_is_enterprise());
+  WITH CHECK (
+    aqd_is_enterprise()
+    AND org_id = get_user_org_id()
+  );
 
 -- ─────────────────────────────────────────────────────────────
 -- 8. INDEXES
