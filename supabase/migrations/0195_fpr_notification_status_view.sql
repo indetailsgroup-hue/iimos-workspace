@@ -78,8 +78,8 @@ SELECT
     -- Full slot_values for debugging / flex card preview
     oum.slot_values                             AS notification_slot_values,
 
-    -- When the outbound row was first inserted (= when the notification was queued)
-    oum.created_at                              AS notification_queued_at,
+    -- When the notification was dispatched (sent_at; NULL while status = 'pending')
+    oum.sent_at                                 AS notification_queued_at,
 
     -- ── Derived convenience column ───────────────────────────────────────────
     -- 'sent'    → delivered
