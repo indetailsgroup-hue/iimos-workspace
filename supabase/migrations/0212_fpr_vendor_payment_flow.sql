@@ -3,9 +3,10 @@
 -- Tables  : fpr_payment
 -- Views   : v_fpr_payment_summary
 -- RPCs    : rpc_record_fpr_payment, rpc_cancel_fpr_payment
--- RLS     : fail-closed; operators insert, governance can cancel
--- Idempotent: yes (CREATE TABLE IF NOT EXISTS, DROP … IF EXISTS for view/RPCs)
+-- RLS     : fail-closed; org_id tenant isolation + role-based write controls
+-- Idempotent: yes — uses CREATE TABLE IF NOT EXISTS, DROP … IF EXISTS guards
 -- Fix(ci): vendor_master PK is vendor_code text (not id uuid); use vendor_code
+-- Fix(ci): added org_id column + tenant_isolation policy for linter compliance
 -- =============================================================================
 
 BEGIN;
@@ -15,6 +16,8 @@ BEGIN;
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.fpr_payment (
     id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id           uuid        NOT NULL
+                                 REFERENCES public.organizations(org_id),
     request_id       uuid        NOT NULL
                                  REFERENCES public.field_purchase_request(id)
                                  ON DELETE CASCADE,
@@ -38,9 +41,12 @@ CREATE TABLE IF NOT EXISTS public.fpr_payment (
     updated_at       timestamptz NOT NULL DEFAULT now()
 );
 
--- index for fast lookup per request
+-- indexes for fast lookup per request and per org
 CREATE INDEX IF NOT EXISTS idx_fpr_payment_request_id
     ON public.fpr_payment (request_id);
+
+CREATE INDEX IF NOT EXISTS idx_fpr_payment_org_id
+    ON public.fpr_payment (org_id);
 
 -- updated_at trigger
 CREATE OR REPLACE FUNCTION public.fn_fpr_payment_set_updated_at()
@@ -54,34 +60,45 @@ CREATE TRIGGER trg_fpr_payment_updated_at
     FOR EACH ROW EXECUTE FUNCTION public.fn_fpr_payment_set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- 2. RLS — fail-closed
+-- 2. RLS — fail-closed; org_id tenant isolation + role-based write controls
 -- ---------------------------------------------------------------------------
 ALTER TABLE public.fpr_payment ENABLE ROW LEVEL SECURITY;
 
--- Operators / approvers can read their own site payments
-DROP POLICY IF EXISTS "fpr_payment select" ON public.fpr_payment;
-CREATE POLICY "fpr_payment select"
+-- Org isolation: users may only see payments belonging to their org
+DROP POLICY IF EXISTS "fpr_payment_tenant_isolation" ON public.fpr_payment;
+CREATE POLICY "fpr_payment_tenant_isolation"
     ON public.fpr_payment FOR SELECT
     USING (
-        has_any_app_role(ARRAY['operator','team_lead','project_manager',
+        org_id = public.get_user_org_id()
+        AND has_any_app_role(ARRAY['operator','team_lead','project_manager',
                                'managing_director','finance','governance'])
     );
 
--- Operators (finance role) may insert pending payments
+-- Operators (finance role) may insert pending payments within their org
 DROP POLICY IF EXISTS "fpr_payment insert" ON public.fpr_payment;
 CREATE POLICY "fpr_payment insert"
     ON public.fpr_payment FOR INSERT
     WITH CHECK (
-        has_any_app_role(ARRAY['operator','finance','governance'])
+        org_id = public.get_user_org_id()
+        AND has_any_app_role(ARRAY['operator','finance','governance'])
         AND status = 'pending'
     );
 
--- Only governance / finance may update (to mark paid / cancelled)
+-- Only governance / finance may update (to mark paid / cancelled) within their org
 DROP POLICY IF EXISTS "fpr_payment update" ON public.fpr_payment;
 CREATE POLICY "fpr_payment update"
     ON public.fpr_payment FOR UPDATE
-    USING (has_any_app_role(ARRAY['finance','governance']))
-    WITH CHECK (has_any_app_role(ARRAY['finance','governance']));
+    USING (
+        org_id = public.get_user_org_id()
+        AND has_any_app_role(ARRAY['finance','governance'])
+    )
+    WITH CHECK (
+        org_id = public.get_user_org_id()
+        AND has_any_app_role(ARRAY['finance','governance'])
+    );
+
+-- Remove old select policy name if it exists (rename: "fpr_payment select" → "fpr_payment_tenant_isolation")
+DROP POLICY IF EXISTS "fpr_payment select" ON public.fpr_payment;
 
 -- ---------------------------------------------------------------------------
 -- 3. v_fpr_payment_summary view
@@ -90,6 +107,7 @@ DROP VIEW IF EXISTS public.v_fpr_payment_summary;
 CREATE VIEW public.v_fpr_payment_summary AS
 SELECT
     p.id                  AS payment_id,
+    p.org_id,
     p.request_id,
     fpr.site_code,
     fpr.requester,
@@ -137,6 +155,7 @@ DECLARE
     v_currency       text := coalesce(p_args->>'currency','THB');
     v_idem_key       text := p_args->>'idempotency_key';
     v_fpr_status     field_purchase_status;
+    v_org_id         uuid;
     v_existing       uuid;
     v_payment_id     uuid;
 BEGIN
@@ -155,8 +174,9 @@ BEGIN
         END IF;
     END IF;
 
-    -- FPR must exist and be in 'purchased' status
-    SELECT status INTO v_fpr_status
+    -- FPR must exist and be in 'purchased' status; also fetch org_id for tenant isolation
+    SELECT status, org_id
+    INTO   v_fpr_status, v_org_id
     FROM   public.field_purchase_request
     WHERE  id = v_request_id
     FOR    UPDATE;
@@ -173,12 +193,12 @@ BEGIN
         );
     END IF;
 
-    -- insert payment (immediately mark as paid)
+    -- insert payment (immediately mark as paid); inherit org_id from parent FPR
     INSERT INTO public.fpr_payment (
-        request_id, vendor_code, payment_method, payment_reference,
+        org_id, request_id, vendor_code, payment_method, payment_reference,
         amount, currency, status, paid_at, paid_by, idempotency_key
     ) VALUES (
-        v_request_id, v_vendor_code, v_method, v_reference,
+        v_org_id, v_request_id, v_vendor_code, v_method, v_reference,
         v_amount, v_currency, 'paid', now(), v_actor, v_idem_key
     )
     RETURNING id INTO v_payment_id;
