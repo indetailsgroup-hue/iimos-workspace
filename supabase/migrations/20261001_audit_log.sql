@@ -169,12 +169,6 @@ CREATE TRIGGER audit_jobs
   AFTER INSERT OR UPDATE OR DELETE ON public.jobs
   FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_fn();
 
--- Trigger: employees (from 20261001_people_culture_schema.sql)
-DROP TRIGGER IF EXISTS audit_employees ON public.employees;
-CREATE TRIGGER audit_employees
-  AFTER INSERT OR UPDATE OR DELETE ON public.employees
-  FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_fn();
-
 -- ============================================================
 -- GRANTS
 -- ============================================================
