@@ -77,7 +77,7 @@ SELECT
     )                                                   AS sla_threshold_hours
 
 FROM public.etax_sla_breach_archive  a
-JOIN public.organizations            o ON o.id = a.org_id
+JOIN public.organizations            o ON o.org_id = a.org_id
 GROUP BY
     a.org_id,
     o.name,
@@ -154,7 +154,7 @@ SELECT
     )                                                   AS sla_threshold_hours
 
 FROM public.etax_sla_breach_archive  a
-JOIN public.organizations            o ON o.id = a.org_id
+JOIN public.organizations            o ON o.org_id = a.org_id
 GROUP BY
     a.org_id,
     o.name;
