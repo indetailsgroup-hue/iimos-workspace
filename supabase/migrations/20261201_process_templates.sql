@@ -30,7 +30,7 @@ security invoker
 as $$
   select o.plan
   from public.organizations o
-  join public.org_members m on m.org_id = o.id
+  join public.org_members m on m.org_id = o.org_id
   where m.user_id = auth.uid()
     and m.is_active = true
   limit 1;
@@ -56,7 +56,7 @@ $$;
 create table if not exists public.job_templates (
   id                  uuid primary key default gen_random_uuid(),
   org_id              uuid null
-    references public.organizations(id) on delete cascade,
+    references public.organizations(org_id) on delete cascade,
   -- org_id = null → global seed template (DAPH shared, editable per-org by clone)
 
   name                text not null,
@@ -112,7 +112,7 @@ create table if not exists public.job_template_stages (
   template_id             uuid not null
     references public.job_templates(id) on delete cascade,
   org_id                  uuid null
-    references public.organizations(id) on delete cascade,
+    references public.organizations(org_id) on delete cascade,
   -- denormalized from parent template for RLS simplicity
 
   stage_order             int not null check (stage_order >= 1),
@@ -157,7 +157,7 @@ comment on table public.job_template_stages is
 create table if not exists public.time_in_stage_log (
   id                  uuid primary key default gen_random_uuid(),
   org_id              uuid not null
-    references public.organizations(id) on delete cascade,
+    references public.organizations(org_id) on delete cascade,
   job_id              text not null,
   -- text to allow both UUID and legacy string job codes
 
@@ -669,3 +669,4 @@ begin
   raise notice '20261201_process_templates ✅ — 3 tables, RLS enabled, seed data OK';
 end;
 $$;
+
