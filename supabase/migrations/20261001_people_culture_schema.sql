@@ -240,7 +240,7 @@ CREATE POLICY employees_select ON public.employees
       SELECT 1 FROM public.org_members m
       WHERE m.user_id = auth.uid()
         AND m.org_id  = employees.org_id
-        AND m.status  = 'ACTIVE'     -- Fix Issue 4
+        AND m.is_active = TRUE       -- Fix Issue 4
     )
   );
 
@@ -302,7 +302,7 @@ CREATE POLICY skills_select ON public.skills
       SELECT 1 FROM public.org_members m
       WHERE m.user_id = auth.uid()
         AND m.org_id  = skills.org_id
-        AND m.status  = 'ACTIVE'
+        AND m.is_active = TRUE  
     )
   );
 
@@ -360,7 +360,7 @@ CREATE POLICY employee_skills_select ON public.employee_skills
       SELECT 1 FROM public.org_members m
       WHERE m.user_id = auth.uid()
         AND m.org_id  = public.get_employee_org_id(employee_skills.employee_id)
-        AND m.status  = 'ACTIVE'
+        AND m.is_active = TRUE  
     )
   );
 
@@ -430,7 +430,7 @@ CREATE POLICY training_records_select ON public.training_records
       SELECT 1 FROM public.org_members m
       WHERE m.user_id = auth.uid()
         AND m.org_id  = training_records.org_id
-        AND m.status  = 'ACTIVE'
+        AND m.is_active = TRUE  
     )
   );
 
@@ -542,7 +542,7 @@ CREATE POLICY sep_select ON public.super_employee_progress
       SELECT 1 FROM public.org_members m
       WHERE m.user_id = auth.uid()
         AND m.org_id  = super_employee_progress.org_id
-        AND m.status  = 'ACTIVE'
+        AND m.is_active = TRUE  
     )
   );
 
@@ -602,7 +602,7 @@ CREATE POLICY pst_select ON public.ps_survey_templates
       SELECT 1 FROM public.org_members m
       WHERE m.user_id = auth.uid()
         AND m.org_id  = ps_survey_templates.org_id
-        AND m.status  = 'ACTIVE'
+        AND m.is_active = TRUE  
     )
   );
 
@@ -667,7 +667,7 @@ CREATE POLICY psr_insert ON public.ps_survey_responses
       SELECT 1 FROM public.org_members m
       WHERE m.user_id = auth.uid()
         AND m.org_id  = ps_survey_responses.org_id
-        AND m.status  = 'ACTIVE'
+        AND m.is_active = TRUE  
     )
     AND is_org_active(org_id)
   );
@@ -710,7 +710,7 @@ CREATE POLICY ps_scores_select ON public.ps_scores
       SELECT 1 FROM public.org_members m
       WHERE m.user_id = auth.uid()
         AND m.org_id  = ps_scores.org_id
-        AND m.status  = 'ACTIVE'
+        AND m.is_active = TRUE  
     )
   );
 
@@ -776,7 +776,7 @@ CREATE POLICY af_insert ON public.anonymous_feedback
       SELECT 1 FROM public.org_members m
       WHERE m.user_id = auth.uid()
         AND m.org_id  = anonymous_feedback.org_id
-        AND m.status  = 'ACTIVE'
+        AND m.is_active = TRUE  
     )
     AND is_org_active(org_id)
   );
