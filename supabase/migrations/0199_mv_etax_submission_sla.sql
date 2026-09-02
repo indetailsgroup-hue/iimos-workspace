@@ -35,6 +35,7 @@ SELECT
   avg_processing_hours,
   max_processing_hours,
   sla_threshold_hours,
+  newest_breach_created_at          AS last_submission_at,
   snapshot_at                       AS updated_at
 FROM public.v_etax_submission_sla
 WITH DATA;
