@@ -81,7 +81,7 @@ AS $$
   SELECT EXISTS (
     SELECT 1
     FROM org_members om
-    JOIN orgs o ON o.id = om.org_id
+    JOIN public.organizations o ON o.org_id = om.org_id
     WHERE om.user_id = auth.uid()
       AND o.plan = 'ENTERPRISE'
   );
@@ -93,7 +93,7 @@ $$;
 
 CREATE TABLE IF NOT EXISTS ace_cost_models (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id           UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  org_id           UUID NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
 
   tool             ace_ai_tool NOT NULL,
   display_name     TEXT NOT NULL,               -- e.g. "GPT-4o (API)"
@@ -128,7 +128,7 @@ COMMENT ON TABLE ace_cost_models IS
 
 CREATE TABLE IF NOT EXISTS ace_usage_logs (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id           UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  org_id           UUID NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   employee_id      UUID NOT NULL,               -- references employees.id (no FK for perf)
   cost_model_id    UUID NOT NULL REFERENCES ace_cost_models(id),
 
@@ -162,7 +162,7 @@ COMMENT ON TABLE ace_usage_logs IS
 
 CREATE TABLE IF NOT EXISTS ace_task_estimates (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id           UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  org_id           UUID NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
   created_by       UUID REFERENCES auth.users(id),
 
   task_category    ace_task_category NOT NULL,
@@ -208,7 +208,7 @@ COMMENT ON TABLE ace_task_estimates IS
 
 CREATE TABLE IF NOT EXISTS ace_budget_periods (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id           UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  org_id           UUID NOT NULL REFERENCES public.organizations(org_id) ON DELETE CASCADE,
 
   period_type      ace_period_type NOT NULL,
   period_label     TEXT NOT NULL,               -- e.g. "2027-Q1", "2027-02"
