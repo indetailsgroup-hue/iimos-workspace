@@ -15,9 +15,22 @@ COMMENT ON COLUMN public.field_purchase_request.received_by IS
   'Actor (employee_id) who confirmed receipt.';
 
 -- ── 2. Flex card template ────────────────────────────────────────────────────
-INSERT INTO public.line_flex_templates (template_key, body_json, description)
+INSERT INTO public.line_oa_message_templates (
+  template_key,
+  vertical_context,
+  body,
+  message_kind,
+  audience,
+  flex_payload,
+  is_active,
+  org_id
+)
 VALUES (
   'tpl_fpr_received_flex_card',
+  'fpr',
+  '✅ สินค้าถึงแล้ว — {{site_code}} — {{item_hint}} ฿{{amount}} รับโดย {{received_by}}',
+  'flex',
+  'internal',        -- Guardrail G1: FPR notifications are internal-staff only
   jsonb_build_object(
     'type', 'bubble',
     'size', 'kilo',
@@ -70,10 +83,30 @@ VALUES (
         )
       )
     )
-  ),
-  'FPR goods-received confirmation Flex Card — emerald #10B981'
+  )::jsonb,
+  TRUE,
+  '00000000-0000-0000-0000-000000000000'   -- sentinel: shared platform template
 )
-ON CONFLICT (template_key) DO NOTHING;
+ON CONFLICT ON CONSTRAINT line_oa_message_templates_key_vertical_uniq
+DO UPDATE SET
+  body         = EXCLUDED.body,
+  flex_payload = EXCLUDED.flex_payload,
+  message_kind = EXCLUDED.message_kind,
+  audience     = EXCLUDED.audience,
+  is_active    = EXCLUDED.is_active;
+
+-- ── Verify seed ──────────────────────────────────────────────────────────────
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM line_oa_message_templates
+    WHERE template_key     = 'tpl_fpr_received_flex_card'
+      AND vertical_context = 'fpr'
+  ) THEN
+    RAISE EXCEPTION '0211: tpl_fpr_received_flex_card seed not found after upsert';
+  END IF;
+END;
+$$;
 
 -- ── 3. RPC ───────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.rpc_confirm_fpr_receiving(
