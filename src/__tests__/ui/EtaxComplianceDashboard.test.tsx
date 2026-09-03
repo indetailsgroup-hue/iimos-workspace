@@ -58,7 +58,7 @@ const mockOrgRiskRanking = [
   {
     org_id: "org-001",
     org_name: "Alpha Corp",
-    risk_tier: "HEALTHY",
+    risk_tier: "HEALTHY" as const,
     health_score: 82,
     risk_rank: 1,
     is_priority_review: false,
@@ -72,7 +72,7 @@ const mockOrgRiskRanking = [
   {
     org_id: "org-002",
     org_name: "Beta Ltd",
-    risk_tier: "WARNING",
+    risk_tier: "WARNING" as const,
     health_score: 61,
     risk_rank: 2,
     is_priority_review: false,
@@ -86,7 +86,7 @@ const mockOrgRiskRanking = [
   {
     org_id: "org-003",
     org_name: "Gamma SA",
-    risk_tier: "CRITICAL",
+    risk_tier: "CRITICAL" as const,
     health_score: 31,
     risk_rank: 3,
     is_priority_review: true,
@@ -506,6 +506,9 @@ describe("Group F – Error handling", () => {
         undefined as any,
         mockOrgRiskRanking[2],
       ],
+      compliance: [],
+      isRefreshing: false,
+      lastRefreshed: null,
       refetch: vi.fn(),
     });
     expect(() => renderDashboard()).not.toThrow();
