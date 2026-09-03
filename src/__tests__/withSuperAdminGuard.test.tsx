@@ -12,15 +12,17 @@
  *   T-SG-07  cleanup — cancels async check on unmount (no state-update-after-unmount)
  */
 
+/// <reference types="vitest/globals" />
 import React from 'react';
 import { vi } from 'vitest';
+import type { MockedFunction, Mock } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import withSuperAdminGuard, { SuperAdminDenied } from '../../admin/withSuperAdminGuard';
+import withSuperAdminGuard, { SuperAdminDenied } from '../admin/withSuperAdminGuard';
 
 // ─── Supabase mock ────────────────────────────────────────────────────────────
 
-vi.mock('../../core/auth/supabaseClient', () => ({
+vi.mock('../core/auth/supabaseClient', () => ({
   supabase: {
     auth: {
       getUser: vi.fn(),
@@ -30,15 +32,15 @@ vi.mock('../../core/auth/supabaseClient', () => ({
   },
 }));
 
-import { supabase } from '../../core/auth/supabaseClient';
+import { supabase } from '../core/auth/supabaseClient';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const mockGetUser = supabase.auth.getUser as vi.MockedFunction<
+const mockGetUser = supabase.auth.getUser as MockedFunction<
   typeof supabase.auth.getUser
 >;
 
-const mockRpc = supabase.rpc as vi.MockedFunction<typeof supabase.rpc>;
+const mockRpc = supabase.rpc as MockedFunction<typeof supabase.rpc>;
 
 /**
  * Configures `supabase.from('super_admins').select(...).eq(...).maybeSingle()`
@@ -48,7 +50,7 @@ function mockSuperAdminsQuery(response: {
   data: { user_id: string } | null;
   error: { message: string } | null;
 }): void {
-  (supabase.from as vi.Mock).mockReturnValue({
+  (supabase.from as Mock).mockReturnValue({
     select: vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
         maybeSingle: vi.fn().mockResolvedValue(response),
@@ -174,7 +176,7 @@ describe('withSuperAdminGuard HOC', () => {
     } as never);
 
     // from() should NOT be called when user is null
-    const fromSpy = supabase.from as vi.Mock;
+    const fromSpy = supabase.from as Mock;
 
     render(<GuardedTarget label="Analytics Panel" />);
 
@@ -308,7 +310,7 @@ function SearchSuggestionsPanel({
   const [rpcError, setRpcError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    void (supabase.rpc as vi.Mock)(
+    void (supabase.rpc as Mock)(
       'get_search_suggestions',
       { query_prefix: queryPrefix, result_limit: limit },
     ).then(
