@@ -86,7 +86,7 @@ export default function AccountingManagement() {
   }, [books, selectedBookId])
 
   const {
-    tree, flat: flatAccounts, isLoading: coaLoading, refetch: refetchCoa,
+    tree, accounts: flatAccounts, isLoading: coaLoading, refetch: refetchCoa,
     createAccount, updateAccount, deactivateAccount,
   } = useChartOfAccounts(selectedBookId)
 
