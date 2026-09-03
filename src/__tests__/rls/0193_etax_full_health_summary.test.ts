@@ -83,7 +83,7 @@ async function makeAuthClient(
   const { error: signInErr } = await anonClient.auth.signInWithPassword({ email, password })
   if (signInErr) throw new Error(`signIn failed: ${signInErr.message}`)
 
-  return { client: anonClient, userId, orgId: resolvedOrgId }
+  return { client: anonClient, userId, orgId: resolvedOrgId! }
 }
 
 // ---------------------------------------------------------------------------
