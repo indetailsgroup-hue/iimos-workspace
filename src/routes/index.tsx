@@ -126,14 +126,14 @@ const FinanceDashboard = lazy(() =>
 // release/15.0.0: eTax Compliance Dashboard (src/pages/EtaxComplianceDashboard.tsx)
 const EtaxComplianceDashboard = lazy(() =>
   import('../pages/EtaxComplianceDashboard').then((m) => ({
-    default: m.default ?? m.EtaxComplianceDashboard,
+    default: m.default,
   }))
 );
 
 // release/15.0.0: Accounting Management UI (src/pages/AccountingManagement.tsx)
 const AccountingManagement = lazy(() =>
   import('../pages/AccountingManagement').then((m) => ({
-    default: m.default ?? m.AccountingManagement,
+    default: m.default,
   }))
 );
 
