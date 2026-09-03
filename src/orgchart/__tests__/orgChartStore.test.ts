@@ -199,7 +199,7 @@ describe('plan gate', () => {
     'createNode throws OrgChartPlanGateError on %s',
     async (plan) => {
       await expect(
-        useOrgChartStore.getState().createNode(minNodeData, plan),
+        useOrgChartStore.getState().createNode('org-1', plan, { node_type: 'EMPLOYEE' as const, title: 'New Node' }),
       ).rejects.toBeInstanceOf(OrgChartPlanGateError);
     },
   );
@@ -210,7 +210,7 @@ describe('plan gate', () => {
       await expect(
         useOrgChartStore
           .getState()
-          .updateNode('node-1', { title: 'Updated' }, plan),
+          .updateNode('org-1', plan, 'node-1', { title: 'Updated' }),
       ).rejects.toBeInstanceOf(OrgChartPlanGateError);
     },
   );
@@ -237,7 +237,7 @@ describe('plan gate', () => {
     'addReportingLine throws OrgChartPlanGateError on %s',
     async (plan) => {
       await expect(
-        useOrgChartStore.getState().addReportingLine(minLineData, plan),
+        useOrgChartStore.getState().addReportingLine('org-1', plan, { from_node_id: 'node-1', to_node_id: 'node-2', line_type: 'SOLID' as const, label: null }),
       ).rejects.toBeInstanceOf(OrgChartPlanGateError);
     },
   );
@@ -246,7 +246,7 @@ describe('plan gate', () => {
     'removeReportingLine throws OrgChartPlanGateError on %s',
     async (plan) => {
       await expect(
-        useOrgChartStore.getState().removeReportingLine('line-1', plan),
+        useOrgChartStore.getState().removeReportingLine('org-1', plan, 'line-1'),
       ).rejects.toBeInstanceOf(OrgChartPlanGateError);
     },
   );
