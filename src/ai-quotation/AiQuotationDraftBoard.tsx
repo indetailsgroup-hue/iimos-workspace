@@ -1038,7 +1038,7 @@ export function AiQuotationDraftBoard({
                   defaultValue={selectedDraft.notes ?? ''}
                   placeholder="หมายเหตุ..."
                   onBlur={(e) =>
-                    updateDraft(selectedDraft.id, { notes: e.target.value.trim() || null }, orgPlan)
+                    updateDraft(selectedDraft.id, { notes: e.target.value.trim() || undefined }, orgPlan)
                   }
                   style={{
                     border: '1px solid #d1d5db', borderRadius: 6, padding: '6px 10px', fontSize: 14, width: 240,
