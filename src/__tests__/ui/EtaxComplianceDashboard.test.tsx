@@ -45,7 +45,7 @@ const mockHealthSummary = {
   overdue_with_pending_etax: 2,
   failed_last_24h: 1,
   health_score: 82,
-  health_status: "healthy",
+  health_status: "healthy" as const,
   compliance_freshness_status: "FRESH",
   trend_freshness_status: "FRESH",
   compliance_row_count: 10,
@@ -105,7 +105,6 @@ describe("Group A – Rendering & loading states", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: true,
       error: null,
-      dashboard: null,
       healthSummary: null,
       orgRiskRanking: [],
       refetch: vi.fn(),
@@ -123,7 +122,6 @@ describe("Group A – Rendering & loading states", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: false,
       error: null,
-      dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
       orgRiskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
@@ -140,7 +138,6 @@ describe("Group A – Rendering & loading states", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: false,
       error: null,
-      dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
       orgRiskRanking: [],
       refetch: vi.fn(),
@@ -152,7 +149,6 @@ describe("Group A – Rendering & loading states", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: false,
       error: null,
-      dashboard: null,
       healthSummary: null,
       orgRiskRanking: [],
       refetch: vi.fn(),
@@ -168,7 +164,6 @@ describe("Group B – Summary cards", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: false,
       error: null,
-      dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
       orgRiskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
@@ -225,8 +220,7 @@ describe("Group C – HealthScoreBadge colouring", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: false,
       error: null,
-      dashboard: mockDashboard,
-      healthSummary: { ...mockHealthSummary, health_score: 85, health_status: "healthy" },
+      healthSummary: { ...mockHealthSummary, health_score: 85, health_status: "healthy" as const },
       orgRiskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
     });
@@ -244,8 +238,7 @@ describe("Group C – HealthScoreBadge colouring", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: false,
       error: null,
-      dashboard: mockDashboard,
-      healthSummary: { ...mockHealthSummary, health_score: 65, health_status: "warning" },
+      healthSummary: { ...mockHealthSummary, health_score: 65, health_status: "warning" as const },
       orgRiskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
     });
@@ -263,8 +256,7 @@ describe("Group C – HealthScoreBadge colouring", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: false,
       error: null,
-      dashboard: mockDashboard,
-      healthSummary: { ...mockHealthSummary, health_score: 30, health_status: "critical" },
+      healthSummary: { ...mockHealthSummary, health_score: 30, health_status: "critical" as const },
       orgRiskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
     });
@@ -286,7 +278,6 @@ describe("Group D – Org risk ranking table", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: false,
       error: null,
-      dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
       orgRiskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
@@ -348,7 +339,6 @@ describe("Group E – Tab navigation", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: false,
       error: null,
-      dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
       orgRiskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
@@ -389,7 +379,6 @@ describe("Group E – Tab navigation", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: false,
       error: null,
-      dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
       orgRiskRanking: mockOrgRiskRanking,
       refetch: mockRefetch,
@@ -415,7 +404,6 @@ describe("Group F – Error handling", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: false,
       error: "Network error",
-      dashboard: null,
       healthSummary: null,
       orgRiskRanking: [],
       refetch: vi.fn(),
@@ -435,7 +423,6 @@ describe("Group F – Error handling", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: false,
       error: "Fetch failed",
-      dashboard: null,
       healthSummary: null,
       orgRiskRanking: [],
       refetch: mockRefetch,
@@ -456,7 +443,6 @@ describe("Group F – Error handling", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: false,
       error: null,
-      dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
       orgRiskRanking: [
         mockOrgRiskRanking[0],
@@ -476,7 +462,6 @@ describe("Group G – Accessibility & ARIA", () => {
     mockUseEtaxCompliance.mockReturnValue({
       isLoading: false,
       error: null,
-      dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
       orgRiskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
