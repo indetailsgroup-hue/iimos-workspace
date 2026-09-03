@@ -655,6 +655,9 @@ import type { CutListRow, NestingSheet } from '../core/export/monolith/monolithE
 import type { CabinetPanel } from '../core/types/Cabinet';
 import type { PlannedSheet } from '../core/export/planFactoryPackage';
 
+/** Extended CutListRow with optional grainDir for packet-stage tests. */
+type PacketCutListRow = CutListRow & { grainDir?: string };
+
 // ============================================================
 // Shared fixture — ARC panel, R=200 mm, sweep=60°, MDF 18 mm
 //   developedLength ≈ 200 × (π/3) ≈ 209.44 mm
@@ -6874,6 +6877,7 @@ describe('@smoke Stage 47 — PARTS_CURVED LINE count equals exactly 4 per curve
     const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
     const row: CutListRow = {
       partId:          'SMOKE_TALL_ARC_47',
+      materialId:      'MDF_18',
       cabinetId:       'CAB_SMOKE',
       finishW:         PANEL_STUB.finishWidth,
       finishH:         PANEL_STUB.finishHeight,
@@ -7413,6 +7417,7 @@ describe('@smoke Stage 52 — HATCH_CURVED LINE count equals 2 per curved panel 
     const fields = computeCurveFields(PANEL_STUB, DEFAULT_KERF_TOOL, 'MDF')!;
     const row: CutListRow = {
       partId:          'SMOKE_TALL_ARC_52',
+      materialId:      'MDF_18',
       cabinetId:       'CAB_SMOKE',
       finishW:         PANEL_STUB.finishWidth,
       finishH:         PANEL_STUB.finishHeight,
