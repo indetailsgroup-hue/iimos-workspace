@@ -29,7 +29,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach } from 'vitest';
 
 // ─── Client setup ────────────────────────────────────────────────────────────
 
