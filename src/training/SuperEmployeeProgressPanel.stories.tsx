@@ -108,7 +108,7 @@ interface ProgressStoreOverride {
   clearError?: () => void;
 }
 
-const NOOP_FETCH = fn().mockResolvedValue(undefined);
+const NOOP_FETCH = fn().mockResolvedValue(undefined) as unknown as (...args: unknown[]) => Promise<void>;
 
 const withProgressStore =
   (overrides: ProgressStoreOverride = {}): ((Story: StoryFn) => React.ReactElement) =>
@@ -130,11 +130,11 @@ const withProgressStore =
       fetchAssessments: NOOP_FETCH,
       fetchOrgReadiness: NOOP_FETCH,
       // Default write actions to no-ops
-      resolveSkillGap: fn().mockResolvedValue(undefined),
-      recordStageTransition: fn(),
-      createAssessment: fn(),
-      addSkillGap: fn(),
-      clearError: fn(),
+      resolveSkillGap: fn().mockResolvedValue(undefined) as unknown as (...args: unknown[]) => Promise<void>,
+      recordStageTransition: fn() as unknown as (...args: unknown[]) => void,
+      createAssessment: fn() as unknown as (...args: unknown[]) => void,
+      addSkillGap: fn() as unknown as (...args: unknown[]) => void,
+      clearError: fn() as unknown as () => void,
       ...overrides,
     });
     return <Story />;
@@ -484,10 +484,10 @@ export const AdminResolveInteraction: Story = {
         fetchAssessments: fn().mockResolvedValue(undefined),
         fetchOrgReadiness: fn().mockResolvedValue(undefined),
         resolveSkillGap: resolveSkillGapSpy,
-        recordStageTransition: fn(),
-        createAssessment: fn(),
-        addSkillGap: fn(),
-        clearError: fn(),
+        recordStageTransition: fn() as unknown as (...args: unknown[]) => void,
+        createAssessment: fn() as unknown as (...args: unknown[]) => void,
+        addSkillGap: fn() as unknown as (...args: unknown[]) => void,
+        clearError: fn() as unknown as () => void,
       });
 
       return <Story />;
