@@ -50,7 +50,10 @@ function makeSummaryRow(usageMonth: string, overrides: SummaryOverrides = {}) {
     requestCount: 10,
     avgCostThbPerRequest: 50,
     ...overrides,
-  };
+  totalInputTokens: 0,
+  totalOutputTokens: 0,
+  uniqueEmployees: 1,
+};
 }
 
 type BudgetOverrides = Partial<{
@@ -75,7 +78,9 @@ function makeBudgetPeriod(overrides: BudgetOverrides = {}) {
     createdBy: null,
     createdAt: '2027-01-01T00:00:00Z',
     ...overrides,
-  };
+  alertSent: false,
+  updatedAt: '2027-01-01T00:00:00Z',
+};
 }
 
 function makeStore(overrides: Partial<AiCostEstimationState> = {}) {
