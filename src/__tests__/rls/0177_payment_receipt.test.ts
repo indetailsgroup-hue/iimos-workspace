@@ -34,7 +34,7 @@ const admin   = makeClient();  // service-role: bypasses RLS
 
 /** Helper: สร้าง JWT สำหรับ test user (ต้องมี app_role + org_member row) */
 async function signInAs(email: string, password: string): Promise<SupabaseClient> {
-  const { data, error } = await admin.auth.admin.signInWithPassword({ email, password });
+  const { data, error } = await admin.auth.signInWithPassword({ email, password });
   if (error || !data.session) throw new Error(`signInAs(${email}) failed: ${error?.message}`);
   return makeClient(data.session.access_token);
 }
@@ -126,12 +126,12 @@ beforeAll(async () => {
   // Minimal customers
   const { data: cA } = await admin.from('customer').insert({
     name: 'Customer A', phone: '0800000001', org_id: ORG_A,
-  }).select('customer_id').single().catch(() => ({ data: null }));
+  }).select('customer_id').single().then(r => r, () => ({ data: null }));
   customerIdA = cA?.customer_id ?? '00000000-cccc-0000-0000-000000000001';
 
   const { data: cB } = await admin.from('customer').insert({
     name: 'Customer B', phone: '0800000002', org_id: ORG_B,
-  }).select('customer_id').single().catch(() => ({ data: null }));
+  }).select('customer_id').single().then(r => r, () => ({ data: null }));
   customerIdB = cB?.customer_id ?? '00000000-cccc-0000-0000-000000000002';
 
   // Create authenticated clients
