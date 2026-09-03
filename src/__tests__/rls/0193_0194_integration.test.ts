@@ -119,9 +119,8 @@ beforeAll(async () => {
     }).catch(() => { /* already exists */ });
 
     // Upsert org_member with FINANCE role
-    const { data: user } = await db.auth.admin.getUserByEmail(
-      `${org.userId}@test.monolith.local`
-    );
+    const { data: usersData } = await db.auth.admin.listUsers();
+    const user = { user: usersData?.users?.find(u => u.email === `${org.userId}@test.monolith.local`) ?? null };
     if (user?.user) {
       await db.from("org_members").upsert(
         { org_id: org.orgId, user_id: user.user.id, role: "FINANCE" },
@@ -625,9 +624,8 @@ describe("Group F – RLS and tenant isolation", () => {
     await refreshAllMVs();
 
     // Call authenticated RPC as Alpha user
-    const { data: adminData } = await db.auth.admin.getUserByEmail(
-      `${TEST_ORGS[0].userId}@test.monolith.local`
-    );
+    const { data: usersData2 } = await db.auth.admin.listUsers();
+    const adminData = { user: usersData2?.users?.find(u => u.email === `${TEST_ORGS[0].userId}@test.monolith.local`) ?? null };
     if (!adminData?.user) return;
 
     const { data: tokenData } = await db.auth.admin.generateLink({
