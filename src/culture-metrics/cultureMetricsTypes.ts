@@ -235,6 +235,8 @@ export interface CmdOrgHealth {
   latestPeriod: string;
   latestSnapshotDate: string;
   healthStatus: CmdHealthStatus;
+  minScore?: number;
+  maxScore?: number;
 }
 
 export interface CmdEnpsResults {
