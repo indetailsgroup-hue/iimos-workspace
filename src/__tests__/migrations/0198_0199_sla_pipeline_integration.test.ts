@@ -117,7 +117,7 @@ describe('Group A — v_etax_submission_sla base view', () => {
     expect(error).toBeNull();
     const row = data?.[0];
     expect(row).toBeDefined();
-    expect(row.sla_breach_flag).toBe(true);
+    expect(row!.sla_breach_flag).toBe(true);
   });
 
   it('A3: severity_tier escalates correctly for high breach rate', async () => {
