@@ -181,7 +181,7 @@ describe('Group B — pg_net HTTP POST dispatch on tier change', () => {
       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'net' AND p.proname = 'http_post'
     `);
-    expect(rows[0]?.cnt).toBeGreaterThan('0');
+    expect(rows[0]?.cnt).toBeGreaterThan(0);
   });
 
   it('B3: tier transition HEALTHY→CRITICAL queues a pg_net request', async () => {
