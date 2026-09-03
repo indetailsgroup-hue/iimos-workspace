@@ -41,12 +41,13 @@ const svc = () => createClient(SUPABASE_URL, SERVICE_KEY, {
 /** Authenticated client with a JWT that sets org_id claim */
 async function userClient(userId: string, orgId: string, role = 'FINANCE'): Promise<SupabaseClient> {
   const admin = svc()
-  const { data: { session }, error } = await admin.auth.admin.generateLink({
+  const { data: genData, error } = await admin.auth.admin.generateLink({
     type: 'magiclink',
     email: `${userId}@test.monolith`,
     options: { data: { org_id: orgId, role } },
   })
   if (error) throw error
+  const session = (genData as any).session as { access_token: string };
   return createClient(SUPABASE_URL, ANON_KEY, {
     auth: { persistSession: false },
     global: { headers: { Authorization: `Bearer ${session!.access_token}` } },
