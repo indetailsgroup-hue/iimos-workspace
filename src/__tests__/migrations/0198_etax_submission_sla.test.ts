@@ -57,7 +57,7 @@ beforeAll(async () => {
     [USER_A_ID, `sla_test_a_${ORG_A_ID.slice(0,8)}@test.monolith`],
     [USER_B_ID, `sla_test_b_${ORG_B_ID.slice(0,8)}@test.monolith`],
   ]) {
-    await svc.auth.admin.createUser({ id: uid as string, email: email as string, password: 'Test1234!', email_confirm: true }).catch(() => {})
+    await svc.auth.admin.createUser({ id: uid as string, email: email as string, password: 'Test1234!', email_confirm: true }).then(() => {}, () => {})
   }
 
   // 3. Add users to org_members (FINANCE role)
@@ -152,12 +152,12 @@ afterAll(async () => {
     await svc.from('etax_submissions').delete().in('id', submissionIds)
   }
   for (const invId of INV_IDS) {
-    await svc.from('invoices').delete().eq('id', invId).catch(() => {})
+    await svc.from('invoices').delete().eq('id', invId).then(() => {}, () => {})
   }
-  await svc.from('org_members').delete().in('org_id', [ORG_A_ID, ORG_B_ID]).catch(() => {})
-  await svc.from('organizations').delete().in('id', [ORG_A_ID, ORG_B_ID]).catch(() => {})
-  await svc.auth.admin.deleteUser(USER_A_ID).catch(() => {})
-  await svc.auth.admin.deleteUser(USER_B_ID).catch(() => {})
+  await svc.from('org_members').delete().in('org_id', [ORG_A_ID, ORG_B_ID]).then(() => {}, () => {})
+  await svc.from('organizations').delete().in('id', [ORG_A_ID, ORG_B_ID]).then(() => {}, () => {})
+  await svc.auth.admin.deleteUser(USER_A_ID).then(() => {}, () => {})
+  await svc.auth.admin.deleteUser(USER_B_ID).then(() => {}, () => {})
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -687,10 +687,8 @@ describe('Group G — platform_config SLA threshold', () => {
 
     // Migration seed uses ON CONFLICT DO NOTHING — simulate
     await svc.from('platform_config')
-      .insert({ key: 'etax_sla_hours', value: '24' })
-      .onConflict('key')
-      // PostgREST does nothing on conflict when upsert is omitted
-      .catch(() => {})
+      .upsert({ key: 'etax_sla_hours', value: '24' }, { onConflict: 'key', ignoreDuplicates: true })
+      .then(() => {}, () => {})
 
     const { data } = await svc
       .from('platform_config')
