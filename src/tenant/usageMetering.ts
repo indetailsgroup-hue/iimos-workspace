@@ -275,8 +275,8 @@ export function getUsageAlerts(metrics: UsageMetrics): UsageAlert[] {
   }
 
   // Storage alerts
-  const storagePercent = metrics.storageimitMb > 0
-    ? metrics.storageUsedMb / metrics.storageimitMb
+  const storagePercent = metrics.storageLimitMb > 0
+    ? metrics.storageUsedMb / metrics.storageLimitMb
     : 0;
   if (storagePercent >= 1) {
     alerts.push({
@@ -318,7 +318,7 @@ export function buildUsageMetrics(
     membersCount: currentMemberCount,
     membersLimit: PLAN_LIMITS[org.plan].maxUsers,
     storageUsedMb,
-    storageimitMb: PLAN_STORAGE_LIMITS[org.plan],
+    storageLimitMb: PLAN_STORAGE_LIMITS[org.plan],
   };
 }
 
