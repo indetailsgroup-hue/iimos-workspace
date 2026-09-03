@@ -128,7 +128,7 @@ describe('v16.2 — Webhook + Usage Metering + Audit Log', () => {
         membersCount: 2,
         membersLimit: 5,
         storageUsedMb: 100,
-        storageimitMb: 500,
+        storageLimitMb: 500,
       };
       const alerts = getUsageAlerts(metrics);
       expect(alerts.some(a => a.type === 'blocked' && a.resource === 'jobs')).toBe(true);
@@ -144,7 +144,7 @@ describe('v16.2 — Webhook + Usage Metering + Audit Log', () => {
         membersCount: 2,
         membersLimit: 5,
         storageUsedMb: 100,
-        storageimitMb: 500,
+        storageLimitMb: 500,
       };
       const alerts = getUsageAlerts(metrics);
       expect(alerts.some(a => a.resource === 'jobs' && (a.type === 'warning' || a.type === 'critical'))).toBe(true);
@@ -160,7 +160,7 @@ describe('v16.2 — Webhook + Usage Metering + Audit Log', () => {
         membersCount: 3,
         membersLimit: 20,
         storageUsedMb: 100,
-        storageimitMb: 25000,
+        storageLimitMb: 25000,
       };
       const alerts = getUsageAlerts(metrics);
       expect(alerts).toHaveLength(0);
