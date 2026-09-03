@@ -38,7 +38,7 @@ const mockFrom = vi.fn(() => ({
 
 vi.mock('../core/auth/supabaseClient', () => ({
   supabase: {
-    from: (...args: any[]) => mockFrom(...args),
+    from: (...args: any[]) => (mockFrom as any)(...args),
     rpc: (...args: any[]) => mockRpc(...args),
     auth: {
       getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null }),
