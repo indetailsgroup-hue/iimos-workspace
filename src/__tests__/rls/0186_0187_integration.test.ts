@@ -108,7 +108,7 @@ async function seedOrgWithSubmissions(
   let token = SERVICE_KEY  // fallback; works because SECURITY DEFINER RPCs use get_user_org_id()
   try {
     const { data: signIn } = await admin.auth.admin.createUser({
-      user_id: userId,
+      id: userId,
       email:   `user-${userId.slice(0, 8)}@test.local`,
       password: 'test-password-0186',
       email_confirm: true,
