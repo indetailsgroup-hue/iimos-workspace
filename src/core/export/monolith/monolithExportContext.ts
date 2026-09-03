@@ -32,10 +32,10 @@ export interface CutListRow {
 
   // ---- Finish Dimensions ----
   /** Finish width (W) in mm */
-  finishW: number;
+  finishW?: number;
 
   /** Finish height (H) in mm */
-  finishH: number;
+  finishH?: number;
 
   // ---- Edge Banding ----
   /** Edge band thickness Left (mm) */
