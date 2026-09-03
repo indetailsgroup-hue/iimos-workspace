@@ -40,16 +40,14 @@ type SummaryOverrides = Partial<{
 
 function makeSummaryRow(usageMonth: string, overrides: SummaryOverrides = {}) {
   return {
-    id: `sum-${usageMonth}`,
     orgId: 'org-1',
-    tool: 'CHATGPT',
+    tool: 'CHATGPT' as AiTool,
     modelName: 'gpt-4o',
     usageMonth,
     totalCostThb: 500,
     totalCostUsd: 14.3,
     totalTimeSavedMin: 120,
     requestCount: 10,
-    avgCostThbPerRequest: 50,
     ...overrides,
   totalInputTokens: 0,
   totalOutputTokens: 0,
