@@ -240,7 +240,7 @@ export function UsageDashboard({ metrics: propMetrics, compact = false, onUpgrad
       <ProgressBar
         label="พื้นที่จัดเก็บ"
         current={metrics.storageUsedMb}
-        limit={metrics.storageimitMb}
+        limit={metrics.storageLimitMb}
         formatValue={storageFormatted}
       />
 
@@ -269,7 +269,7 @@ export function UsageDashboard({ metrics: propMetrics, compact = false, onUpgrad
         </div>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
-            {storageFormatted(metrics.storageimitMb - metrics.storageUsedMb)}
+            {storageFormatted(metrics.storageLimitMb - metrics.storageUsedMb)}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>พื้นที่เหลือ</div>
         </div>
