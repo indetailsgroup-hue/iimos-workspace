@@ -163,7 +163,7 @@ describe('E2E: Tenant Lifecycle — Onboarding through Suspension', () => {
         membersCount: 15,
         membersLimit: 20,
         storageUsedMb: 18000,
-        storageimitMb: 25000,
+        storageLimitMb: 25000,
       };
       const { container } = render(<UsageDashboard metrics={metrics} />);
       expect(container.textContent).toContain('150');
@@ -185,7 +185,7 @@ describe('E2E: Tenant Lifecycle — Onboarding through Suspension', () => {
         membersCount: 9,
         membersLimit: 10,
         storageUsedMb: 4500,
-        storageimitMb: 5000,
+        storageLimitMb: 5000,
       };
       const { container } = render(<UsageDashboard metrics={metrics} />);
       // Should show warning indicators
