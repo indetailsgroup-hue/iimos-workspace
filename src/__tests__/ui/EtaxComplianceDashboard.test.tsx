@@ -39,12 +39,19 @@ const mockDashboard = {
 
 const mockHealthSummary = {
   org_id: "org-001",
+  org_name: "Alpha Corp",
   compliance_success_rate: 90.0,
   today_retry_exhaustion_rate_pct: 5.0,
   overdue_with_pending_etax: 2,
   failed_last_24h: 1,
   health_score: 82,
   health_status: "healthy",
+  compliance_freshness_status: "FRESH",
+  trend_freshness_status: "FRESH",
+  compliance_row_count: 10,
+  trend_row_count: 5,
+  compliance_last_refreshed_at: "2026-09-01T00:00:00Z",
+  trend_last_refreshed_at: "2026-09-01T00:00:00Z",
 };
 
 const mockOrgRiskRanking = [
@@ -96,7 +103,7 @@ function renderDashboard() {
 describe("Group A – Rendering & loading states", () => {
   it("A1 – renders skeleton/loading indicator while data is fetching", () => {
     mockUseEtaxCompliance.mockReturnValue({
-      loading: true,
+      isLoading: true,
       error: null,
       dashboard: null,
       healthSummary: null,
@@ -114,7 +121,7 @@ describe("Group A – Rendering & loading states", () => {
 
   it("A2 – renders page title once data is loaded", async () => {
     mockUseEtaxCompliance.mockReturnValue({
-      loading: false,
+      isLoading: false,
       error: null,
       dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
@@ -131,7 +138,7 @@ describe("Group A – Rendering & loading states", () => {
 
   it("A3 – renders with empty orgRiskRanking without crash", () => {
     mockUseEtaxCompliance.mockReturnValue({
-      loading: false,
+      isLoading: false,
       error: null,
       dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
@@ -143,7 +150,7 @@ describe("Group A – Rendering & loading states", () => {
 
   it("A4 – renders with null dashboard/healthSummary gracefully", () => {
     mockUseEtaxCompliance.mockReturnValue({
-      loading: false,
+      isLoading: false,
       error: null,
       dashboard: null,
       healthSummary: null,
@@ -159,7 +166,7 @@ describe("Group A – Rendering & loading states", () => {
 describe("Group B – Summary cards", () => {
   beforeEach(() => {
     mockUseEtaxCompliance.mockReturnValue({
-      loading: false,
+      isLoading: false,
       error: null,
       dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
@@ -216,7 +223,7 @@ describe("Group B – Summary cards", () => {
 describe("Group C – HealthScoreBadge colouring", () => {
   it("C1 – shows green badge for healthy score (≥80)", async () => {
     mockUseEtaxCompliance.mockReturnValue({
-      loading: false,
+      isLoading: false,
       error: null,
       dashboard: mockDashboard,
       healthSummary: { ...mockHealthSummary, health_score: 85, health_status: "healthy" },
@@ -235,7 +242,7 @@ describe("Group C – HealthScoreBadge colouring", () => {
 
   it("C2 – shows yellow badge for warning score (50–79)", async () => {
     mockUseEtaxCompliance.mockReturnValue({
-      loading: false,
+      isLoading: false,
       error: null,
       dashboard: mockDashboard,
       healthSummary: { ...mockHealthSummary, health_score: 65, health_status: "warning" },
@@ -254,7 +261,7 @@ describe("Group C – HealthScoreBadge colouring", () => {
 
   it("C3 – shows red badge for critical score (<50)", async () => {
     mockUseEtaxCompliance.mockReturnValue({
-      loading: false,
+      isLoading: false,
       error: null,
       dashboard: mockDashboard,
       healthSummary: { ...mockHealthSummary, health_score: 30, health_status: "critical" },
@@ -277,7 +284,7 @@ describe("Group C – HealthScoreBadge colouring", () => {
 describe("Group D – Org risk ranking table", () => {
   beforeEach(() => {
     mockUseEtaxCompliance.mockReturnValue({
-      loading: false,
+      isLoading: false,
       error: null,
       dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
@@ -339,7 +346,7 @@ describe("Group D – Org risk ranking table", () => {
 describe("Group E – Tab navigation", () => {
   beforeEach(() => {
     mockUseEtaxCompliance.mockReturnValue({
-      loading: false,
+      isLoading: false,
       error: null,
       dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
@@ -380,7 +387,7 @@ describe("Group E – Tab navigation", () => {
   it("E3 – refetch button triggers refetch callback", async () => {
     const mockRefetch = vi.fn();
     mockUseEtaxCompliance.mockReturnValue({
-      loading: false,
+      isLoading: false,
       error: null,
       dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
@@ -406,8 +413,8 @@ describe("Group E – Tab navigation", () => {
 describe("Group F – Error handling", () => {
   it("F1 – renders error state with message when hook returns error", async () => {
     mockUseEtaxCompliance.mockReturnValue({
-      loading: false,
-      error: new Error("Network error"),
+      isLoading: false,
+      error: "Network error",
       dashboard: null,
       healthSummary: null,
       orgRiskRanking: [],
@@ -426,8 +433,8 @@ describe("Group F – Error handling", () => {
   it("F2 – retry button available in error state", async () => {
     const mockRefetch = vi.fn();
     mockUseEtaxCompliance.mockReturnValue({
-      loading: false,
-      error: new Error("Fetch failed"),
+      isLoading: false,
+      error: "Fetch failed",
       dashboard: null,
       healthSummary: null,
       orgRiskRanking: [],
@@ -447,7 +454,7 @@ describe("Group F – Error handling", () => {
 
   it("F3 – does not crash when orgRiskRanking contains undefined entries", () => {
     mockUseEtaxCompliance.mockReturnValue({
-      loading: false,
+      isLoading: false,
       error: null,
       dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
@@ -467,7 +474,7 @@ describe("Group F – Error handling", () => {
 describe("Group G – Accessibility & ARIA", () => {
   beforeEach(() => {
     mockUseEtaxCompliance.mockReturnValue({
-      loading: false,
+      isLoading: false,
       error: null,
       dashboard: mockDashboard,
       healthSummary: mockHealthSummary,
