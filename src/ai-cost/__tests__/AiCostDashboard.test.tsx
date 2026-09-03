@@ -21,6 +21,7 @@ import { render, screen } from '@testing-library/react';
 import { AiCostDashboard } from '../AiCostDashboard';
 import { useAiCostEstimationStore } from '../aiCostEstimationStore';
 import type { AiCostEstimationState } from '../aiCostEstimationStore';
+import type { AiTool } from '../aiCostEstimationTypes';
 
 vi.mock('../aiCostEstimationStore');
 
@@ -92,6 +93,7 @@ function makeStore(overrides: Partial<AiCostEstimationState> = {}) {
     taskRoi: [],
     budgetPeriods: [],
     filters: {
+      tool: 'ALL' as const,
       employeeId: null,
       taskCategory: 'ALL' as const,
       fromDate: null,
