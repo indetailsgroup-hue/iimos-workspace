@@ -4,7 +4,7 @@
 //          rpc_etax_org_risk_ranking()
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/core/supabase'
 
 // ─── Domain types ────────────────────────────────────────────────────────────
 
