@@ -96,7 +96,7 @@ describe('v16.3 — AuditLogViewer + UsageDashboard + GracePeriod', () => {
         membersCount: 12,
         membersLimit: 20,
         storageUsedMb: 5000,
-        storageimitMb: 25000,
+        storageLimitMb: 25000,
       };
       render(<UsageDashboard metrics={metrics} />);
       expect(screen.getByTestId('usage-dashboard')).toBeDefined();
@@ -119,7 +119,7 @@ describe('v16.3 — AuditLogViewer + UsageDashboard + GracePeriod', () => {
         membersCount: 3,
         membersLimit: 5,
         storageUsedMb: 1000,
-        storageimitMb: 5000,
+        storageLimitMb: 5000,
       };
       render(<UsageDashboard metrics={metrics} />);
       expect(screen.getByText('งาน/เดือน')).toBeDefined();
@@ -142,7 +142,7 @@ describe('v16.3 — AuditLogViewer + UsageDashboard + GracePeriod', () => {
         membersCount: 2,
         membersLimit: 2,
         storageUsedMb: 50,
-        storageimitMb: 500,
+        storageLimitMb: 500,
       };
       render(<UsageDashboard metrics={metrics} />);
       const alerts = screen.getAllByTestId('usage-alert');
@@ -161,7 +161,7 @@ describe('v16.3 — AuditLogViewer + UsageDashboard + GracePeriod', () => {
         orgId: 'org-1', period: '2026-08',
         jobsCreated: 5, jobsLimit: 50,
         membersCount: 2, membersLimit: 5,
-        storageUsedMb: 100, storageimitMb: 5000,
+        storageUsedMb: 100, storageLimitMb: 5000,
       }} onUpgrade={mockUpgrade} />);
       expect(screen.getByText('อัพเกรดแพลน')).toBeDefined();
     });
@@ -177,7 +177,7 @@ describe('v16.3 — AuditLogViewer + UsageDashboard + GracePeriod', () => {
         orgId: 'org-1', period: '2026-08',
         jobsCreated: 5, jobsLimit: 9999,
         membersCount: 50, membersLimit: 999,
-        storageUsedMb: 5000, storageimitMb: 100000,
+        storageUsedMb: 5000, storageLimitMb: 100000,
       }} onUpgrade={() => {}} />);
       expect(screen.queryByText('อัพเกรดแพลน')).toBeNull();
     });
@@ -193,7 +193,7 @@ describe('v16.3 — AuditLogViewer + UsageDashboard + GracePeriod', () => {
         orgId: 'org-1', period: '2026-08',
         jobsCreated: 100, jobsLimit: 200,
         membersCount: 15, membersLimit: 20,
-        storageUsedMb: 10000, storageimitMb: 25000,
+        storageUsedMb: 10000, storageLimitMb: 25000,
       }} />);
       expect(screen.getByText('100')).toBeDefined(); // 200-100 remaining jobs
       expect(screen.getByText('5')).toBeDefined(); // 20-15 remaining members
