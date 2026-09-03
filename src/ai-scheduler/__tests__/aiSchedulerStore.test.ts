@@ -142,7 +142,6 @@ function makeRunRow(overrides: Partial<ProductionRunRow> = {}): ProductionRunRow
     ai_model_used: null,
     ai_confidence_score: null,
     total_items: 0,
-    estimated_total_min: null,
     actual_total_min: null,
     approved_by: null,
     approved_at: null,
