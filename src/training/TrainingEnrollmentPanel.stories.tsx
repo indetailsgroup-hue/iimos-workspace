@@ -56,9 +56,9 @@ function makeEnrollment(
 }
 
 const MOCK_ENROLLMENTS: TrainingEnrollment[] = [
-  makeEnrollment('001', { status: 'COMPLETED', progressPct: 100 }),
-  makeEnrollment('002', { status: 'IN_PROGRESS', progressPct: 55 }),
-  makeEnrollment('003', { status: 'ENROLLED', progressPct: 0 }),
+  makeEnrollment('001', { status: 'COMPLETED' }),
+  makeEnrollment('002', { status: 'IN_PROGRESS' }),
+  makeEnrollment('003', { status: 'ENROLLED' }),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -81,8 +81,8 @@ const withEnrollmentStore =
       enrollments: [],
       isEnrollmentLoading: false,
       error: null,
-      bulkEnroll: async () => [],
-      fetchEnrollments: async () => {},
+      bulkEnroll: (async () => []) as any,
+      fetchEnrollments: (async () => {}) as any,
       clearError: () => {},
       ...overrides,
     });
