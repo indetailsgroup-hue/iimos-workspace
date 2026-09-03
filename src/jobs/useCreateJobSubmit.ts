@@ -158,7 +158,7 @@ export function useCreateJobSubmit(): UseCreateJobSubmitReturn {
           // (e.g., server might override job_code with a DB sequence)
           const serverJobCode = serverRecord.job_code ?? optimisticJob.jobCode;
           if (serverJobCode !== optimisticJob.jobCode) {
-            updateJob(optimisticJob.jobId, { jobCode: serverJobCode });
+            updateJob(optimisticJob.jobId, { jobCode: serverJobCode } as any);
           }
         }
 
