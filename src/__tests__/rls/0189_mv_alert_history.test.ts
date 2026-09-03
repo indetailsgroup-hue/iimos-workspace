@@ -435,7 +435,7 @@ describe('Group C — Resolution detection accuracy', () => {
     expect(error).toBeNull()
     const rows = (data as { alert_id: string; seconds_to_resolve: number | null }[]) ?? []
     // Find most recent row (alert_rank 1)
-    const sorted = rows.sort((a, b) => (a as { alert_rank: number }).alert_rank - (b as { alert_rank: number }).alert_rank)
+    const sorted = rows.sort((a, b) => (a as unknown as { alert_rank: number }).alert_rank - (b as unknown as { alert_rank: number }).alert_rank)
     const newest = sorted[0]
     expect(newest.seconds_to_resolve).toBeNull()
   })
