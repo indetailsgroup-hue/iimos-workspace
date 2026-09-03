@@ -1203,7 +1203,7 @@ export const router = createBrowserRouter([
   {
     path: '/settings',
     element: (
-      <RequireRole allow={['ADMIN', 'OWNER']}>
+      <RequireRole allow={['ADMIN']}>
         <Suspense fallback={<PageLoadingFallback message="Loading Settings…" />}>
           <OrgSettingsPageComponent />
         </Suspense>
@@ -1214,7 +1214,7 @@ export const router = createBrowserRouter([
   {
     path: '/settings/billing',
     element: (
-      <RequireRole allow={['OWNER']}>
+      <RequireRole allow={['ADMIN']}>
         <Suspense fallback={<PageLoadingFallback message="Loading Billing…" />}>
           <BillingPageComponent />
         </Suspense>
@@ -1225,7 +1225,7 @@ export const router = createBrowserRouter([
   {
     path: '/settings/audit-log',
     element: (
-      <RequireRole allow={['OWNER', 'ADMIN']}>
+      <RequireRole allow={['ADMIN']}>
         <Suspense fallback={<PageLoadingFallback message="Loading Audit Log…" />}>
           <AuditLogViewerComponent />
         </Suspense>
@@ -1236,7 +1236,7 @@ export const router = createBrowserRouter([
   {
     path: '/settings/usage',
     element: (
-      <RequireRole allow={['OWNER', 'ADMIN']}>
+      <RequireRole allow={['ADMIN']}>
         <Suspense fallback={<PageLoadingFallback message="Loading Usage…" />}>
           <UsageDashboardComponent />
         </Suspense>
@@ -1294,7 +1294,7 @@ export const router = createBrowserRouter([
   {
     path: '/etax',
     element: (
-      <RequireRole allow={['OWNER', 'ADMIN', 'FINANCE']}>
+      <RequireRole allow={['ADMIN', 'FINANCE']}>
         <Suspense fallback={<PageLoadingFallback message="Loading eTax Dashboard…" />}>
           <EtaxComplianceDashboard />
         </Suspense>
@@ -1305,7 +1305,7 @@ export const router = createBrowserRouter([
   {
     path: '/accounting',
     element: (
-      <RequireRole allow={['OWNER', 'ADMIN', 'FINANCE']}>
+      <RequireRole allow={['ADMIN', 'FINANCE']}>
         <Suspense fallback={<PageLoadingFallback message="Loading Accounting…" />}>
           <AccountingManagement />
         </Suspense>
