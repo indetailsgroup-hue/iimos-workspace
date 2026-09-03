@@ -15,7 +15,7 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { useCultureStore } from './cultureStore';
+import { useCultureStore, selectScoresForChart, selectIsAnyLoading, selectPendingFeedback, selectCurrentPeriodLabel } from './cultureStore';
 import { useTenantStore } from '../tenant/tenantStore';
 import { ORG_ROLE_HIERARCHY } from '../tenant/types';
 import {
@@ -177,11 +177,11 @@ const FeedbackItem: React.FC<FeedbackItemProps> = ({ feedback, onAction }) => {
             </button>
           )}
 
-          {feedback.adminNote && (
+          {feedback.actionNote && (
             <div className="mt-2 border-t border-gray-100 pt-2">
               <p className="text-xs text-gray-500">
                 <span className="font-medium">หมายเหตุ: </span>
-                {feedback.adminNote}
+                {feedback.actionNote}
               </p>
             </div>
           )}
@@ -227,10 +227,10 @@ export const CultureDashboard: React.FC<CultureDashboardProps> = ({ orgId }) => 
   const isAdmin = currentMember ? ORG_ROLE_HIERARCHY[currentMember.role] >= 80 : false;
 
   // ── selectors ─────────────────────────────────────────────
-  const chartData = useCultureStore((s) => s.selectScoresForChart());
-  const isLoading = useCultureStore((s) => s.selectIsAnyLoading());
-  const pendingFeedback = useCultureStore((s) => s.selectPendingFeedback());
-  const currentPeriodLabel = useCultureStore((s) => s.selectCurrentPeriodLabel());
+  const chartData = useCultureStore(selectScoresForChart);
+  const isLoading = useCultureStore(selectIsAnyLoading);
+  const pendingFeedback = useCultureStore(selectPendingFeedback);
+  const currentPeriodLabel = useCultureStore(selectCurrentPeriodLabel);
 
   // ── latest score ──────────────────────────────────────────
   const latestScore = useMemo(
@@ -300,12 +300,12 @@ export const CultureDashboard: React.FC<CultureDashboardProps> = ({ orgId }) => 
             <>
               <div className="mt-2 flex items-end gap-1.5">
                 <span className="text-4xl font-bold text-gray-900">
-                  {latestScore.overallScore.toFixed(1)}
+                  {latestScore.score.toFixed(1)}
                 </span>
                 <span className="mb-1 text-lg text-gray-400">/100</span>
               </div>
               <div className="mt-2">
-                <ScoreBadge score={latestScore.overallScore} />
+                <ScoreBadge score={latestScore.score} />
               </div>
             </>
           ) : (
@@ -325,20 +325,20 @@ export const CultureDashboard: React.FC<CultureDashboardProps> = ({ orgId }) => 
               <div className="flex items-baseline gap-2">
                 <span
                   className={`text-2xl font-bold ${
-                    latestScore.overallScore >= THAI_MANUFACTURING_PS_BENCHMARK
+                    latestScore.score >= THAI_MANUFACTURING_PS_BENCHMARK
                       ? 'text-green-600'
                       : 'text-red-500'
                   }`}
                 >
-                  {latestScore.overallScore >= THAI_MANUFACTURING_PS_BENCHMARK ? '▲' : '▼'}
+                  {latestScore.score >= THAI_MANUFACTURING_PS_BENCHMARK ? '▲' : '▼'}
                   {Math.abs(
-                    latestScore.overallScore - THAI_MANUFACTURING_PS_BENCHMARK
+                    latestScore.score - THAI_MANUFACTURING_PS_BENCHMARK
                   ).toFixed(1)}
                 </span>
                 <span className="text-sm text-gray-500">จากเกณฑ์ {THAI_MANUFACTURING_PS_BENCHMARK}</span>
               </div>
               <p className="mt-1 text-xs text-gray-400">
-                {latestScore.overallScore >= THAI_MANUFACTURING_PS_BENCHMARK
+                {latestScore.score >= THAI_MANUFACTURING_PS_BENCHMARK
                   ? 'สูงกว่าค่าเฉลี่ยอุตสาหกรรม'
                   : 'ต่ำกว่าค่าเฉลี่ยอุตสาหกรรม'}
               </p>
@@ -405,7 +405,7 @@ export const CultureDashboard: React.FC<CultureDashboardProps> = ({ orgId }) => 
               />
               <Line
                 type="monotone"
-                dataKey="overallScore"
+                dataKey="score"
                 name="คะแนนรวม"
                 stroke="#6366f1"
                 strokeWidth={2.5}
@@ -523,7 +523,7 @@ export const CultureDashboard: React.FC<CultureDashboardProps> = ({ orgId }) => 
               <FeedbackItem
                 key={feedback.id}
                 feedback={feedback}
-                onAction={actionFeedback}
+                onAction={async (id, status) => { await actionFeedback({ feedbackId: id, actionStatus: status }); }}
               />
             ))}
           </div>
