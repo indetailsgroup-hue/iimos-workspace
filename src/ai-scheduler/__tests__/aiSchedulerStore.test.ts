@@ -127,7 +127,8 @@ function makeItemRow(overrides: Partial<ScheduleItemRow> = {}): ScheduleItemRow 
     sequence_order: 1,
     created_at: new Date().toISOString(),
     ...overrides,
-  };
+  updated_at: new Date().toISOString(),
+};
 }
 
 function makeRunRow(overrides: Partial<ProductionRunRow> = {}): ProductionRunRow {
@@ -138,11 +139,9 @@ function makeRunRow(overrides: Partial<ProductionRunRow> = {}): ProductionRunRow
     schedule_date: '2027-02-01',
     status: 'READY',
     schedule_mode: 'AUTO',
-    ai_model_ref: null,
-    confidence_score: null,
+    ai_model_used: null,
+    ai_confidence_score: null,
     total_items: 0,
-    completed_items: 0,
-    failed_items: 0,
     estimated_total_min: null,
     actual_total_min: null,
     approved_by: null,
@@ -151,7 +150,13 @@ function makeRunRow(overrides: Partial<ProductionRunRow> = {}): ProductionRunRow
     created_by: null,
     created_at: new Date().toISOString(),
     ...overrides,
-  };
+  override_count: 0,
+  estimated_utilisation_pct: null,
+  delay_risk_count: 0,
+  ai_prompt_tokens: null,
+  ai_run_duration_ms: null,
+  updated_at: new Date().toISOString(),
+};
 }
 
 // ============================================================================
@@ -259,7 +264,7 @@ describe('Plan gate — ENTERPRISE only', () => {
       it('createConstraint throws AiSchedulerPlanGateError', async () => {
         await expect(
           useAiSchedulerStore.getState().createConstraint(orgId, plan, {
-            constraintType: 'MACHINE_WINDOW',
+            constraintType: 'MACHINE_DOWN',
           }),
         ).rejects.toBeInstanceOf(AiSchedulerPlanGateError);
       });
@@ -477,7 +482,7 @@ describe('updateItemStatus — is_overridden flag', () => {
   it('updates the scheduleItems array in the store with the new item state', async () => {
     const updatedRow = makeItemRow({
       id: itemId,
-      status: 'COMPLETED',
+      status: 'DONE',
       is_overridden: true,
       override_reason: 'manual finish',
     });
@@ -485,7 +490,7 @@ describe('updateItemStatus — is_overridden flag', () => {
 
     await useAiSchedulerStore.getState().updateItemStatus(orgId, 'ENTERPRISE', {
       itemId,
-      status: 'COMPLETED',
+      status: 'DONE',
       overrideReason: 'manual finish',
     });
 
@@ -504,7 +509,7 @@ describe('updateItemStatus — is_overridden flag', () => {
 describe('setFilters — partial merge', () => {
   it('merges a single field without clobbering other fields', () => {
     const store = useAiSchedulerStore.getState();
-    store.setFilters({ status: 'APPROVED', scheduleMode: 'MANUAL' });
+    store.setFilters({ status: 'APPROVED', scheduleMode: 'MANUAL_OVERRIDE' });
     useAiSchedulerStore.getState().setFilters({ status: 'DRAFT' });
     const { filters } = useAiSchedulerStore.getState();
     expect(filters.status).toBe('DRAFT');
