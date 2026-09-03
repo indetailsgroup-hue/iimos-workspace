@@ -103,7 +103,7 @@ async function insertRow(overrides: Partial<typeof TEST_PARTITIONS[0]> = {}) {
   const row = { ...TEST_PARTITIONS[0], ...overrides }
   const { data, error } = await svc
     .from('partition_archive_log')
-    .insert(row)
+    .insert(row as any)
     .select('id')
     .single()
   expect(error).toBeNull()
@@ -223,7 +223,7 @@ describe('Group B — Direct insert (service_role path)', () => {
     for (const row of TEST_PARTITIONS) {
       const { data, error } = await svc
         .from('partition_archive_log')
-        .insert(row)
+        .insert(row as any)
         .select('id')
         .single()
       expect(error, `row=${row.partition_name}`).toBeNull()
