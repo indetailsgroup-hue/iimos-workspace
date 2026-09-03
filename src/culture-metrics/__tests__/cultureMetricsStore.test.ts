@@ -122,7 +122,7 @@ function makeMetricDefinitionRow() {
     id: 'metric-1',
     org_id: 'org-1',
     metric_category: 'ENGAGEMENT',
-    metric_source: 'SURVEY',
+    metric_source: 'PS_SURVEY',
     display_name: 'Employee Satisfaction',
     display_name_th: null,
     min_score: 0,
@@ -209,7 +209,7 @@ describe('Plan gate — PROFESSIONAL+ only', () => {
         await expect(
           useCultureMetricsStore.getState().createMetricDefinition(orgId, plan, {
             metricCategory: 'ENGAGEMENT',
-            metricSource: 'SURVEY',
+            metricSource: 'PS_SURVEY',
             displayName: 'Satisfaction',
           }),
         ).rejects.toBeInstanceOf(CultureMetricsPlanGateError);
@@ -222,7 +222,7 @@ describe('Plan gate — PROFESSIONAL+ only', () => {
         await expect(
           useCultureMetricsStore.getState().createMetricDefinition(orgId, plan, {
             metricCategory: 'ENGAGEMENT',
-            metricSource: 'SURVEY',
+            metricSource: 'PS_SURVEY',
             displayName: 'Satisfaction',
           }),
         ).resolves.toMatchObject({ id: 'metric-1', displayName: 'Employee Satisfaction' });
@@ -413,9 +413,9 @@ describe('setFilters — partial merge', () => {
   it('merges a single field without clobbering other fields', () => {
     const store = useCultureMetricsStore.getState();
     store.setFilters({ metricCategory: 'ENGAGEMENT', periodType: 'MONTHLY' });
-    useCultureMetricsStore.getState().setFilters({ metricCategory: 'WELLBEING' });
+    useCultureMetricsStore.getState().setFilters({ metricCategory: 'CUSTOM' });
     const { filters } = useCultureMetricsStore.getState();
-    expect(filters.metricCategory).toBe('WELLBEING');
+    expect(filters.metricCategory).toBe('CUSTOM');
     expect(filters.periodType).toBe('MONTHLY');
   });
 
