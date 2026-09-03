@@ -106,7 +106,7 @@ describe("Group A – Rendering & loading states", () => {
       isLoading: true,
       error: null,
       healthSummary: null,
-      orgRiskRanking: [],
+      riskRanking: [],
       refetch: vi.fn(),
     });
     renderDashboard();
@@ -123,7 +123,7 @@ describe("Group A – Rendering & loading states", () => {
       isLoading: false,
       error: null,
       healthSummary: mockHealthSummary,
-      orgRiskRanking: mockOrgRiskRanking,
+      riskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
     });
     renderDashboard();
@@ -139,7 +139,7 @@ describe("Group A – Rendering & loading states", () => {
       isLoading: false,
       error: null,
       healthSummary: mockHealthSummary,
-      orgRiskRanking: [],
+      riskRanking: [],
       refetch: vi.fn(),
     });
     expect(() => renderDashboard()).not.toThrow();
@@ -150,7 +150,7 @@ describe("Group A – Rendering & loading states", () => {
       isLoading: false,
       error: null,
       healthSummary: null,
-      orgRiskRanking: [],
+      riskRanking: [],
       refetch: vi.fn(),
     });
     expect(() => renderDashboard()).not.toThrow();
@@ -165,7 +165,7 @@ describe("Group B – Summary cards", () => {
       isLoading: false,
       error: null,
       healthSummary: mockHealthSummary,
-      orgRiskRanking: mockOrgRiskRanking,
+      riskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
     });
   });
@@ -221,7 +221,7 @@ describe("Group C – HealthScoreBadge colouring", () => {
       isLoading: false,
       error: null,
       healthSummary: { ...mockHealthSummary, health_score: 85, health_status: "healthy" as const },
-      orgRiskRanking: mockOrgRiskRanking,
+      riskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
     });
     renderDashboard();
@@ -239,7 +239,7 @@ describe("Group C – HealthScoreBadge colouring", () => {
       isLoading: false,
       error: null,
       healthSummary: { ...mockHealthSummary, health_score: 65, health_status: "warning" as const },
-      orgRiskRanking: mockOrgRiskRanking,
+      riskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
     });
     renderDashboard();
@@ -257,7 +257,7 @@ describe("Group C – HealthScoreBadge colouring", () => {
       isLoading: false,
       error: null,
       healthSummary: { ...mockHealthSummary, health_score: 30, health_status: "critical" as const },
-      orgRiskRanking: mockOrgRiskRanking,
+      riskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
     });
     renderDashboard();
@@ -279,7 +279,7 @@ describe("Group D – Org risk ranking table", () => {
       isLoading: false,
       error: null,
       healthSummary: mockHealthSummary,
-      orgRiskRanking: mockOrgRiskRanking,
+      riskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
     });
   });
@@ -340,7 +340,7 @@ describe("Group E – Tab navigation", () => {
       isLoading: false,
       error: null,
       healthSummary: mockHealthSummary,
-      orgRiskRanking: mockOrgRiskRanking,
+      riskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
     });
   });
@@ -380,7 +380,7 @@ describe("Group E – Tab navigation", () => {
       isLoading: false,
       error: null,
       healthSummary: mockHealthSummary,
-      orgRiskRanking: mockOrgRiskRanking,
+      riskRanking: mockOrgRiskRanking,
       refetch: mockRefetch,
     });
     renderDashboard();
@@ -405,7 +405,7 @@ describe("Group F – Error handling", () => {
       isLoading: false,
       error: "Network error",
       healthSummary: null,
-      orgRiskRanking: [],
+      riskRanking: [],
       refetch: vi.fn(),
     });
     renderDashboard();
@@ -424,7 +424,7 @@ describe("Group F – Error handling", () => {
       isLoading: false,
       error: "Fetch failed",
       healthSummary: null,
-      orgRiskRanking: [],
+      riskRanking: [],
       refetch: mockRefetch,
     });
     renderDashboard();
@@ -444,7 +444,7 @@ describe("Group F – Error handling", () => {
       isLoading: false,
       error: null,
       healthSummary: mockHealthSummary,
-      orgRiskRanking: [
+      riskRanking: [
         mockOrgRiskRanking[0],
         undefined as any,
         mockOrgRiskRanking[2],
@@ -463,7 +463,7 @@ describe("Group G – Accessibility & ARIA", () => {
       isLoading: false,
       error: null,
       healthSummary: mockHealthSummary,
-      orgRiskRanking: mockOrgRiskRanking,
+      riskRanking: mockOrgRiskRanking,
       refetch: vi.fn(),
     });
   });
