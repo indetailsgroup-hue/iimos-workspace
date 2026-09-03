@@ -73,7 +73,7 @@ beforeAll(async () => {
   ]) {
     await svc.auth.admin
       .createUser({ id: uid as string, email: email as string, password: 'Test1234!', email_confirm: true })
-      .catch(() => {})
+      .then(() => {}, () => {})
   }
 
   // 3. Assign org_members
@@ -137,13 +137,13 @@ beforeAll(async () => {
     id: bInvId, org_id: ORG_B_ID,
     invoice_number: `INV-MV-B-${bInvId}`, total_amount: 500,
     status: 'approved', created_at: hoursAgo(50),
-  }).catch(() => {})
+  }).then(() => {}, () => {})
   await svc.from('etax_submissions').insert({
     id: uuidv4(), org_id: ORG_B_ID,
     invoice_id: bInvId, document_type: 'T01',
     status: 'submitting', attempt_count: 1,
     created_at: hoursAgo(50),
-  }).catch(() => {})
+  }).then(() => {}, () => {})
 
   // 7. Initial MV refresh so data is populated
   await svc.rpc('fn_refresh_mv_etax_submission_sla')
@@ -156,7 +156,7 @@ afterAll(async () => {
   await svc.from('etax_submissions').delete().in('org_id', [ORG_A_ID, ORG_B_ID])
   await svc.from('invoices').delete().in('org_id', [ORG_A_ID, ORG_B_ID])
   for (const uid of [USER_A_ID, USER_B_ID]) {
-    await svc.auth.admin.deleteUser(uid).catch(() => {})
+    await svc.auth.admin.deleteUser(uid).then(() => {}, () => {})
   }
   await svc.from('org_members').delete().in('org_id', [ORG_A_ID, ORG_B_ID])
   await svc.from('organizations').delete().in('id', [ORG_A_ID, ORG_B_ID])
