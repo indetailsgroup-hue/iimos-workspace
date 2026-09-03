@@ -52,3 +52,5 @@ export function getSupabaseClient(): SupabaseClient | null {
   });
   return cachedClient;
 }
+
+export const supabase = getSupabaseClient() as SupabaseClient;
