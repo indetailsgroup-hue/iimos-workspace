@@ -207,3 +207,25 @@ export function useJournalEntries(bookId: string | null, page = 0, pageSize = 50
 
   return { entries, totalCount, isLoading, error, refetch: fetchEntries }
 }
+
+// ─── useAccounting ────────────────────────────────────────────────────────────
+// Composite hook that combines useBooks, useChartOfAccounts, and useJournalEntries.
+
+export function useAccounting(bookId: string | null = null) {
+  const booksResult    = useBooks()
+  const accountsResult = useChartOfAccounts(bookId)
+  const entriesResult  = useJournalEntries(bookId)
+  return {
+    books:             booksResult.books,
+    accounts:          accountsResult.accounts,
+    tree:              accountsResult.tree,
+    entries:           entriesResult.entries,
+    totalCount:        entriesResult.totalCount,
+    isLoading:         booksResult.isLoading || accountsResult.isLoading || entriesResult.isLoading,
+    error:             booksResult.error ?? accountsResult.error ?? entriesResult.error,
+    refetch:           booksResult.refetch,
+    createAccount:     accountsResult.createAccount,
+    updateAccount:     accountsResult.updateAccount,
+    deactivateAccount: accountsResult.deactivateAccount,
+  }
+}
