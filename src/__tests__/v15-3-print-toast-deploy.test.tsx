@@ -100,7 +100,7 @@ const mockJob: Job = {
   jobId: 'job-test-001',
   jobCode: 'DAPH-2025-0042',
   title: 'ติดตั้งผนัง ACP อาคาร A',
-  customer: { name: 'บจก. ทดสอบ', phone: '081-234-5678', address: 'กรุงเทพ' },
+  customer: { customerId: 'cust-test-001', name: 'บจก. ทดสอบ', phone: '081-234-5678', address: 'กรุงเทพ' },
   panels: [mockPanel, mockCurvedPanel],
   status: 'IN_PRODUCTION',
   priority: 'HIGH',
