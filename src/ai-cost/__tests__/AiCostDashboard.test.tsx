@@ -34,7 +34,7 @@ type SummaryOverrides = Partial<{
   totalCostThb: number;
   totalTimeSavedMin: number;
   requestCount: number;
-  tool: string;
+  tool?: AiTool;
   modelName: string;
 }>;
 
