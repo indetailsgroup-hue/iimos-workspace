@@ -240,7 +240,7 @@ describe('Group B — Direct insert (service_role path)', () => {
       backup_file_path:     '/mnt/archive/test_b2.sql',
       backup_size_bytes:    1024000,
       size_bytes_at_archive: 2048000,
-    })
+    } as any)
     const { data, error } = await svc
       .from('partition_archive_log')
       .select('archived_name, backup_file_path, backup_size_bytes, size_bytes_at_archive')
