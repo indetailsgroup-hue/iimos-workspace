@@ -120,7 +120,7 @@ export function extractNestingParts(rows: CutListRow[]): NestingPart[] {
       parts.push({
         id,
         sourcePartId: row.partId,
-        cabinetId: row.cabinetId,
+        cabinetId: row.cabinetId ?? '',
         width: flatBlankW,
         height: flatBlankH,
         materialId: row.materialId,
