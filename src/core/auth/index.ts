@@ -16,4 +16,4 @@ export {
   deriveRoleFromToken,
   onAuthStateChange,
 } from './supabaseAuth';
-export { RequireRole, RequireSpecState, RequirePermission, DevOnly, AdminOnly, FactoryOnly } from './guards';
+export { RequireRole, RequireSpecState, RequirePermission, DevOnly, AdminOnly, FactoryOnly, RoleBadge } from './guards';
