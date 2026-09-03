@@ -4,7 +4,7 @@
 // (Migration 0179 — multibook_dynamic)
 
 import { useCallback, useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/core/supabase'
 
 // ─── Domain types ─────────────────────────────────────────────────────────────
 
