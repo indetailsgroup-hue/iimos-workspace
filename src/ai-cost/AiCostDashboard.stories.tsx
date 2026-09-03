@@ -155,9 +155,9 @@ const withDashboardStore =
       isUsageLoading: false,
       isBudgetLoading: false,
       error: null,
-      fetchCostModels: async () => {},
-      fetchUsageSummary: async () => {},
-      fetchBudgetPeriods: async () => {},
+      fetchCostModels: async () => {} as any,
+      fetchUsageSummary: async () => {} as any,
+      fetchBudgetPeriods: async () => {} as any,
       clearError: () => {},
       ...overrides,
     });
