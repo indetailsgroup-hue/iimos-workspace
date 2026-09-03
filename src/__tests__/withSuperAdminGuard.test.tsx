@@ -13,19 +13,20 @@
  */
 
 import React from 'react';
+import { vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import withSuperAdminGuard, { SuperAdminDenied } from '../../admin/withSuperAdminGuard';
 
 // ─── Supabase mock ────────────────────────────────────────────────────────────
 
-jest.mock('../../core/auth/supabaseClient', () => ({
+vi.mock('../../core/auth/supabaseClient', () => ({
   supabase: {
     auth: {
-      getUser: jest.fn(),
+      getUser: vi.fn(),
     },
-    from: jest.fn(),
-    rpc:  jest.fn(),
+    from: vi.fn(),
+    rpc:  vi.fn(),
   },
 }));
 
@@ -33,11 +34,11 @@ import { supabase } from '../../core/auth/supabaseClient';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const mockGetUser = supabase.auth.getUser as jest.MockedFunction<
+const mockGetUser = supabase.auth.getUser as vi.MockedFunction<
   typeof supabase.auth.getUser
 >;
 
-const mockRpc = supabase.rpc as jest.MockedFunction<typeof supabase.rpc>;
+const mockRpc = supabase.rpc as vi.MockedFunction<typeof supabase.rpc>;
 
 /**
  * Configures `supabase.from('super_admins').select(...).eq(...).maybeSingle()`
@@ -47,10 +48,10 @@ function mockSuperAdminsQuery(response: {
   data: { user_id: string } | null;
   error: { message: string } | null;
 }): void {
-  (supabase.from as jest.Mock).mockReturnValue({
-    select: jest.fn().mockReturnValue({
-      eq: jest.fn().mockReturnValue({
-        maybeSingle: jest.fn().mockResolvedValue(response),
+  (supabase.from as vi.Mock).mockReturnValue({
+    select: vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        maybeSingle: vi.fn().mockResolvedValue(response),
       }),
     }),
   });
@@ -77,7 +78,7 @@ const GuardedTarget = withSuperAdminGuard(TargetComponent);
 
 describe('withSuperAdminGuard HOC', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   // ── T-SG-01 ──────────────────────────────────────────────────────────────
@@ -173,7 +174,7 @@ describe('withSuperAdminGuard HOC', () => {
     } as never);
 
     // from() should NOT be called when user is null
-    const fromSpy = supabase.from as jest.Mock;
+    const fromSpy = supabase.from as vi.Mock;
 
     render(<GuardedTarget label="Analytics Panel" />);
 
@@ -218,7 +219,7 @@ describe('withSuperAdminGuard HOC', () => {
     });
     mockGetUser.mockReturnValue(slowPromise as never);
 
-    const spy = jest.spyOn(console, 'error');
+    const spy = vi.spyOn(console, 'error');
 
     const { unmount } = render(<GuardedTarget label="Panel" />);
 
@@ -307,7 +308,7 @@ function SearchSuggestionsPanel({
   const [rpcError, setRpcError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    void (supabase.rpc as jest.Mock)(
+    void (supabase.rpc as vi.Mock)(
       'get_search_suggestions',
       { query_prefix: queryPrefix, result_limit: limit },
     ).then(
@@ -337,7 +338,7 @@ const GuardedSearchPanel = withSuperAdminGuard(SearchSuggestionsPanel);
 
 describe('withSuperAdminGuard + get_search_suggestions (SECURITY INVOKER)', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   // ── T-SG-08 ──────────────────────────────────────────────────────────────
