@@ -25,7 +25,7 @@ export interface CutListRow {
   partId: string;
 
   /** Cabinet ID this part belongs to */
-  cabinetId: string;
+  cabinetId?: string;
 
   /** Material ID */
   materialId: string;
@@ -39,16 +39,16 @@ export interface CutListRow {
 
   // ---- Edge Banding ----
   /** Edge band thickness Left (mm) */
-  edgeL: number;
+  edgeL?: number;
 
   /** Edge band thickness Right (mm) */
-  edgeR: number;
+  edgeR?: number;
 
   /** Edge band thickness Top (mm) */
-  edgeT: number;
+  edgeT?: number;
 
   /** Edge band thickness Bottom (mm) */
-  edgeB: number;
+  edgeB?: number;
 
   // ---- Premill (SPEC-08 v8.2) ----
   /** Premill amount Left (mm) */
@@ -76,6 +76,7 @@ export interface CutListRow {
 
   /** Optional notes */
   note?: string;
+  label?: string;
 
   /** Grain direction */
   grain?: 'HORIZONTAL' | 'VERTICAL' | 'NONE';
