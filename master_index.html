@@ -111,7 +111,7 @@
     <div class="version-pill">v3.0 · AMD-001</div>
   </div>
   <div class="stats-row">
-    <div class="stat-pill"><strong id="hdr-total">170</strong> Files Total</div>
+    <div class="stat-pill"><strong id="hdr-total">173</strong> Files Total</div>
     <div class="stat-pill"><strong>20</strong> Live Agents</div>
     <div class="stat-pill"><strong>5</strong> Planned · Phase B/C</div>
     <div class="stat-pill"><strong>24</strong> SOP Sections</div>
@@ -600,6 +600,15 @@ const FILES=[
 
   {n:170, name:'thai_swift_driver_fieldapp.html',                               type:'HTML', cat:'Thai Brief',  lang:'TH',    isNew:true,  agents:['Driver Agent'],
          desc:'Thai Swift Driver PWA Field App — 6 screens: (1) Job Queue/Accept Job (pending jobs list + accept button); (2) GPS Pickup Check-in (geolocation + TC-DRIVER-01 Sev:9 tagged — Critical test case); (3) In Transit Updates (Driver Checklist CHK-D01–D10, milestone stage list, journey bar); (4) POD Capture (TC-DRIVER-03 Sev:9 tagged — Critical test case; signature canvas + photo upload); (5) Damage Report (PFMEA severity selector + halt_alert MCP trigger); (6) Job Summary (MCP payload preview + simulateSync + toast); accent #e65c00 (orange); Sarabun font; PWA Service Worker (cache name: swift-driver-v1); 7-stage journey bar (Pickup Request→Dispatch→GPS Pickup→In Transit→Out for Delivery→POD→Review); JS advances journey dots as user progresses; MCP payload: event_type=job_complete, client=swift, domain=logistics_delivery; Supabase tables: driver_jobs/shipments/pfmea_risk_rows'},
+
+  {n:171, name:'vs01-vision-to-boq-vertical-slice-v1.th.md',                   type:'MD',   cat:'Reference',   lang:'TH',    isNew:true,  agents:['Designer Agent','Factory Agent'],
+         desc:'VS-01 Vision-to-BOQ Vertical Slice Specification v1.0 Thai Markdown — FR-03 + FR-04 + RM-030–033; 15 sections: scope (drawing/photo→evidence draft→BOQ draft→human review→validation), vision model layer (benchmark criteria + 4 candidates), system prompt contract (4 versioned prompt IDs: FR-03-DRAW/FR-04-PHOTO/FR-03-BOQ/FR-03-CONFLICT), confidence bands (HIGH/MEDIUM/LOW/VERY_LOW), refusal rules, evidence draft JSON schema, specs SSoT (11 drifts resolved), BOQ draft JSON schema, validation rules (V-ED-01–06 + V-BOQ-01–06), 6 API endpoints, 10 acceptance criteria (AC-VS01-01–10), P0 dependency map; hard boundary: NO auto-CNC/Released Spec/production truth; DRAFT 2026-09-04'},
+
+  {n:172, name:'vs01-vision-to-boq-vertical-slice-v1.th.html',                 type:'HTML', cat:'Reference',   lang:'TH',    isNew:true,  agents:['Designer Agent','Factory Agent'],
+         desc:'VS-01 Vision-to-BOQ Vertical Slice Specification v1.0 Thai HTML — same content as n:171; sidebar nav, confidence band cards, pipeline flow, Specs SSoT table (11 drifts), AC checklist; navy/gold/green theme; Sarabun font; DRAFT 2026-09-04'},
+
+  {n:173, name:'vs01-vision-to-boq-vertical-slice-v1.sha256',                  type:'MD',   cat:'Archive',     lang:'EN',    isNew:true,  agents:[],
+         desc:'VS-01 SHA256 checksums — verifies vs01...v1.th.md + vs01...v1.th.html; 2026-09-04'},
 
 ];
 
