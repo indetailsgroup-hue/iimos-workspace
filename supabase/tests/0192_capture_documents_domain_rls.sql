@@ -143,10 +143,15 @@ VALUES
   ('b2b2b2b2-0192-0000-0000-000000000001'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'SITE-0192-B', 'Beta 0192 Project', 'active')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.capture_artifact (id, org_id, capture_type, status, source, principal, site_code, idempotency_key)
+INSERT INTO public.capture_type_config (capture_type, org_id, field_schema, verify_rules, commit_target, critical_fields, active)
 VALUES
-  ('a1a1a1a1-0192-0000-0000-000000000010'::uuid, 'a1a1a1a1-0000-0000-0000-000000000001'::uuid, 'id_card', 'proposed', 'app', 'staff-a', 'SITE-0192-A', 'idem-0192-a'),
-  ('b2b2b2b2-0192-0000-0000-000000000010'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'id_card', 'proposed', 'app', 'staff-b', 'SITE-0192-B', 'idem-0192-b')
+  ('test_type_0192', '00000000-0000-0000-0000-000000000000'::uuid, '{}'::jsonb, '{}'::jsonb, 'none', '{}', true)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.capture_artifact (id, org_id, capture_type, status, source, principal, site_code, idempotency_key, raw_uri)
+VALUES
+  ('a1a1a1a1-0192-0000-0000-000000000010'::uuid, 'a1a1a1a1-0000-0000-0000-000000000001'::uuid, 'test_type_0192', 'proposed', 'app', 'staff-a', 'SITE-0192-A', 'idem-0192-a', 'https://storage.test/0192-a.jpg'),
+  ('b2b2b2b2-0192-0000-0000-000000000010'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'test_type_0192', 'proposed', 'app', 'staff-b', 'SITE-0192-B', 'idem-0192-b', 'https://storage.test/0192-b.jpg')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.contract_documents (id, org_id, project_id, site_code, version, data, status)
@@ -159,11 +164,6 @@ INSERT INTO public.document_links (token, org_id, project_id, site_code, doc_typ
 VALUES
   ('a1a1a1a1-0192-0000-0000-000000000030'::uuid, 'a1a1a1a1-0000-0000-0000-000000000001'::uuid, 'a1a1a1a1-0192-0000-0000-000000000001'::uuid, 'SITE-0192-A', 'contract', 'a1a1a1a1-0192-0000-0000-000000000020'::uuid, now() + interval '7 days'),
   ('b2b2b2b2-0192-0000-0000-000000000030'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'b2b2b2b2-0192-0000-0000-000000000001'::uuid, 'SITE-0192-B', 'contract', 'b2b2b2b2-0192-0000-0000-000000000020'::uuid, now() + interval '7 days')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.capture_type_config (capture_type, org_id, field_schema, verify_rules, commit_target, critical_fields, active)
-VALUES
-  ('test_type_0192', '00000000-0000-0000-0000-000000000000'::uuid, '{}'::jsonb, '{}'::jsonb, 'none', '{}', true)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.form_templates (id, org_id, template_key, version, kind, applies_to, lane, title, items, status)
