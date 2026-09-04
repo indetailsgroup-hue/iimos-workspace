@@ -2090,3 +2090,50 @@ Comprehensive one-page A4 HTML executive summary covering the complete v3.0 SOP 
 - Build order: MCP Layer → pgvector RAG → Prompt Engineering → LINE OA webhook → Vision pipeline
 - Master index: n:156
 - Sarabun font; navy/gold/green theme
+
+---
+
+## [MCP-LAYER-IMPLEMENTATION] — 2026-09-04
+**Files Created/Modified:**
+- `thai_mcp_layer_implementation.html` (NEW · n:157)
+
+**Summary:**
+- MCP Layer (Layer 2) implementation plan อิงจาก monolith-mcp-layer_requirements.md (19 requirements) + tasks.md (Tasks 1–8)
+- Architecture flow diagram + Tool_Class governance table (READ/WRITE/ADMIN)
+- 8-phase task list with real task IDs (Task 1.1✓ → 8✓, Gate-1 pending Task 1.4)
+- PDPA boundary checklist 12 items in 4 cards + Data_Minimization_Boundary diagram
+- 5-tab TypeScript scaffold: mcp-server/index.ts, rpc_mcp_invoke_read SQL, redaction.ts, autonomy.ts, pdpa.ts
+- 6 DB schema tables + Correctness Properties P1–P19 test coverage table
+- Source: monolith-mcp-layer_requirements.md, _design.md, _tasks.md
+
+---
+
+## [PGVECTOR-RAG-ROADMAP] — 2026-09-04
+**Files Created/Modified:**
+- `thai_build_deploy_roadmap.html` (MODIFIED — pgvector RAG section added · n:155)
+
+**Summary:**
+- Added Layer 3 pgvector RAG Setup section before NEXT STEP BOX
+- SQL schema for knowledge_embeddings table (uuid PK, embedding vector(1536), IVFFlat index)
+- 5-step embed process: Parse JSON → Chunk 178 docs → OpenAI text-embedding-3-small → Upsert Supabase → Verify
+- TypeScript embed script referencing actual _knowledge-export.json fields (processModel, pfmeaRiskRows, raciMap)
+- RAG query function rpc_mcp_query_knowledge with process_step + content_type filters
+- reviewStatus=draft warning — MCP Layer must return low_confidence_warning:true
+- File grew from 711 to 946 lines
+
+---
+
+## [AI-AGENT-PROMPT-ENGINEERING] — 2026-09-04
+**Files Created/Modified:**
+- `thai_ai_agent_prompt_engineering.html` (NEW · n:158)
+
+**Summary:**
+- 5-agent tab interface: Sale, Designer, Factory, PM (Production Planning), Procurement
+- Source: daph-second-brain _knowledge-export.json (schemaVersion 1.0.0, reviewStatus draft)
+- Per-agent: RACI table, PFMEA critical risks, MCP tools list, system prompt template (Thai), few-shot examples
+- Sale Agent: 6 PFMEA rows (sev=9), escalate on discount>10%, handoff to Designer
+- Designer Agent: 31 PFMEA rows, unanimous approval gate (ผู้จัดการออกแบบ + ลูกค้า)
+- Factory Agent: 23 PFMEA rows, halt on CNC file version mismatch, QC per step
+- PM Agent: 27 PFMEA rows, first_response approval gate, capacity check before plan
+- Procurement Agent: 8 PFMEA rows, budget ceiling validation, vendor lead time confirm
+- All agents: low_confidence_warning:true (reviewStatus=draft), output JSON structured
