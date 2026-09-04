@@ -338,7 +338,7 @@ CREATE POLICY "ace_usage_logs_select" ON ace_usage_logs
     AND org_id IN (SELECT org_id FROM org_members WHERE user_id = auth.uid())
     AND (
       employee_id IN (
-        SELECT id FROM employees WHERE user_id = auth.uid()
+        SELECT employee_id FROM public.identity_binding WHERE auth_user_id = auth.uid() AND is_active = TRUE
       )
       OR org_id IN (
         SELECT org_id FROM org_members
