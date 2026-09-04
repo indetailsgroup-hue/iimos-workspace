@@ -58,7 +58,7 @@ INSERT INTO public.organizations (org_id, name, slug) VALUES
 ON CONFLICT (org_id) DO NOTHING;
 
 -- ── org_members ───────────────────────────────────────────────────────────
-INSERT INTO public.org_members (member_id, org_id, user_id, email, role, is_active) VALUES
+INSERT INTO public.org_members (id, org_id, user_id, email, role, is_active) VALUES
   (gen_random_uuid(), 'a1a1a1a1-0000-0000-0000-000000000001',
    'a1a1a1a1-0000-0000-0001-000000000002', 'alpha@example.com', 'OWNER', true),
   (gen_random_uuid(), 'b2b2b2b2-0000-0000-0000-000000000001',
@@ -66,13 +66,13 @@ INSERT INTO public.org_members (member_id, org_id, user_id, email, role, is_acti
 ON CONFLICT DO NOTHING;
 
 -- ── Alpha customer ────────────────────────────────────────────────────────
-INSERT INTO public.customer
+INSERT INTO public.customers
   (customer_id, name, org_id)
 VALUES
   ('a1a1a1a1-0001-0000-0000-000000000001', 'Alpha Customer', 'a1a1a1a1-0000-0000-0000-000000000001');
 
 -- ── Alpha job ─────────────────────────────────────────────────────────────
-INSERT INTO public.job
+INSERT INTO public.jobs
   (job_id, job_code, title, customer_id, created_by, org_id)
 VALUES
   ('a1a1a1a1-0002-0000-0000-000000000001', 'J-ALPHA-001', 'Alpha Job',
@@ -81,7 +81,7 @@ VALUES
    'a1a1a1a1-0000-0000-0000-000000000001');
 
 -- ── Alpha job_panel ───────────────────────────────────────────────────────
-INSERT INTO public.job_panel
+INSERT INTO public.job_panels
   (panel_id, job_id, name, material, width_mm, height_mm, org_id)
 VALUES
   ('a1a1a1a1-0003-0000-0000-000000000001',
@@ -90,7 +90,7 @@ VALUES
    'a1a1a1a1-0000-0000-0000-000000000001');
 
 -- ── Alpha quotation (needed for quotation_line FK) ────────────────────────
-INSERT INTO public.quotation
+INSERT INTO public.quotations
   (quotation_id, quotation_code, customer_id, created_by, org_id)
 VALUES
   ('a1a1a1a1-0004-0000-0000-000000000001', 'Q-ALPHA-001',
@@ -99,7 +99,7 @@ VALUES
    'a1a1a1a1-0000-0000-0000-000000000001');
 
 -- ── Alpha quotation_line ──────────────────────────────────────────────────
-INSERT INTO public.quotation_line
+INSERT INTO public.quotation_lines
   (line_id, quotation_id, description, org_id)
 VALUES
   ('a1a1a1a1-0005-0000-0000-000000000001',
@@ -127,13 +127,13 @@ VALUES
    'SYSTEM', 'normal', 'Alpha Notification', 'Alpha body text');
 
 -- ── Beta customer (own-org fixture for T15–T17) ───────────────────────────
-INSERT INTO public.customer
+INSERT INTO public.customers
   (customer_id, name, org_id)
 VALUES
   ('b2b2b2b2-0001-0000-0000-000000000001', 'Beta Customer', 'b2b2b2b2-0000-0000-0000-000000000001');
 
 -- ── Beta job ──────────────────────────────────────────────────────────────
-INSERT INTO public.job
+INSERT INTO public.jobs
   (job_id, job_code, title, customer_id, created_by, org_id)
 VALUES
   ('b2b2b2b2-0002-0000-0000-000000000001', 'J-BETA-001', 'Beta Job',
@@ -142,7 +142,7 @@ VALUES
    'b2b2b2b2-0000-0000-0000-000000000001');
 
 -- ── Beta quotation_line ───────────────────────────────────────────────────
-INSERT INTO public.quotation
+INSERT INTO public.quotations
   (quotation_id, quotation_code, customer_id, created_by, org_id)
 VALUES
   ('b2b2b2b2-0004-0000-0000-000000000001', 'Q-BETA-001',
@@ -150,7 +150,7 @@ VALUES
    'b2b2b2b2-0000-0000-0001-000000000002',
    'b2b2b2b2-0000-0000-0000-000000000001');
 
-INSERT INTO public.quotation_line
+INSERT INTO public.quotation_lines
   (line_id, quotation_id, description, org_id)
 VALUES
   ('b2b2b2b2-0005-0000-0000-000000000001',
@@ -199,7 +199,7 @@ SELECT is(
 
 -- T05  customer
 SELECT is(
-  (SELECT COUNT(*) FROM public.customer
+  (SELECT COUNT(*) FROM public.customers
     WHERE org_id = 'a1a1a1a1-0000-0000-0000-000000000001'),
   0::bigint,
   'T05: Beta sees 0 Alpha rows in customer'
@@ -207,7 +207,7 @@ SELECT is(
 
 -- T06  job
 SELECT is(
-  (SELECT COUNT(*) FROM public.job
+  (SELECT COUNT(*) FROM public.jobs
     WHERE org_id = 'a1a1a1a1-0000-0000-0000-000000000001'),
   0::bigint,
   'T06: Beta sees 0 Alpha rows in job'
@@ -215,7 +215,7 @@ SELECT is(
 
 -- T07  job_panel
 SELECT is(
-  (SELECT COUNT(*) FROM public.job_panel
+  (SELECT COUNT(*) FROM public.job_panels
     WHERE org_id = 'a1a1a1a1-0000-0000-0000-000000000001'),
   0::bigint,
   'T07: Beta sees 0 Alpha rows in job_panel'
@@ -223,7 +223,7 @@ SELECT is(
 
 -- T08  quotation_line
 SELECT is(
-  (SELECT COUNT(*) FROM public.quotation_line
+  (SELECT COUNT(*) FROM public.quotation_lines
     WHERE org_id = 'a1a1a1a1-0000-0000-0000-000000000001'),
   0::bigint,
   'T08: Beta sees 0 Alpha rows in quotation_line'
@@ -235,7 +235,7 @@ SELECT is(
 
 -- T09  customer INSERT with Alpha org_id
 SELECT throws_ok(
-  $$ INSERT INTO public.customer (customer_id, name, org_id)
+  $$ INSERT INTO public.customers (customer_id, name, org_id)
      VALUES (gen_random_uuid(), 'Trojan Customer',
              'a1a1a1a1-0000-0000-0000-000000000001') $$,
   '42501',
@@ -245,7 +245,7 @@ SELECT throws_ok(
 
 -- T10  job INSERT with Alpha org_id
 SELECT throws_ok(
-  $$ INSERT INTO public.job (job_id, job_code, title, customer_id, created_by, org_id)
+  $$ INSERT INTO public.jobs (job_id, job_code, title, customer_id, created_by, org_id)
      VALUES (gen_random_uuid(), 'J-TROJAN-001', 'Trojan Job',
              'a1a1a1a1-0001-0000-0000-000000000001',
              'b2b2b2b2-0000-0000-0001-000000000002',
@@ -257,7 +257,7 @@ SELECT throws_ok(
 
 -- T11  job_panel INSERT with Alpha org_id
 SELECT throws_ok(
-  $$ INSERT INTO public.job_panel (panel_id, job_id, name, material, width_mm, height_mm, org_id)
+  $$ INSERT INTO public.job_panels (panel_id, job_id, name, material, width_mm, height_mm, org_id)
      VALUES (gen_random_uuid(),
              'a1a1a1a1-0002-0000-0000-000000000001',
              'Trojan Panel', 'MDF 18mm White', 300, 600,
@@ -269,7 +269,7 @@ SELECT throws_ok(
 
 -- T12  quotation_line INSERT with Alpha org_id
 SELECT throws_ok(
-  $$ INSERT INTO public.quotation_line (line_id, quotation_id, description, org_id)
+  $$ INSERT INTO public.quotation_lines (line_id, quotation_id, description, org_id)
      VALUES (gen_random_uuid(),
              'a1a1a1a1-0004-0000-0000-000000000001',
              'Trojan Line',
@@ -286,7 +286,7 @@ SELECT throws_ok(
 -- T13  UPDATE customer — Beta UPDATE on Alpha row touches 0 rows
 SELECT is(
   (WITH upd AS (
-    UPDATE public.customer
+    UPDATE public.customers
        SET name = 'Tampered'
      WHERE customer_id = 'a1a1a1a1-0001-0000-0000-000000000001'
   RETURNING 1)
@@ -298,7 +298,7 @@ SELECT is(
 -- T14  UPDATE job — Beta UPDATE on Alpha row touches 0 rows
 SELECT is(
   (WITH upd AS (
-    UPDATE public.job
+    UPDATE public.jobs
        SET title = 'Tampered'
      WHERE job_id = 'a1a1a1a1-0002-0000-0000-000000000001'
   RETURNING 1)
@@ -314,7 +314,7 @@ SELECT is(
 -- T23  DELETE customer — Beta DELETE on Alpha row touches 0 rows
 SELECT is(
   (WITH del AS (
-    DELETE FROM public.customer
+    DELETE FROM public.customers
      WHERE customer_id = 'a1a1a1a1-0001-0000-0000-000000000001'
     RETURNING 1
   )
@@ -326,7 +326,7 @@ SELECT is(
 -- T24  DELETE job — Beta DELETE on Alpha job row touches 0 rows
 SELECT is(
   (WITH del AS (
-    DELETE FROM public.job
+    DELETE FROM public.jobs
      WHERE job_id = 'a1a1a1a1-0002-0000-0000-000000000001'
     RETURNING 1
   )
@@ -338,7 +338,7 @@ SELECT is(
 -- T25  DELETE quotation_line — Beta DELETE on Alpha quotation_line row touches 0 rows
 SELECT is(
   (WITH del AS (
-    DELETE FROM public.quotation_line
+    DELETE FROM public.quotation_lines
      WHERE line_id = 'a1a1a1a1-0005-0000-0000-000000000001'
     RETURNING 1
   )
@@ -353,7 +353,7 @@ SELECT is(
 
 -- T15  Beta can SELECT its own customer row
 SELECT is(
-  (SELECT COUNT(*) FROM public.customer
+  (SELECT COUNT(*) FROM public.customers
     WHERE org_id = 'b2b2b2b2-0000-0000-0000-000000000001'),
   1::bigint,
   'T15: Beta sees its own customer row'
@@ -361,7 +361,7 @@ SELECT is(
 
 -- T16  Beta can SELECT its own job row
 SELECT is(
-  (SELECT COUNT(*) FROM public.job
+  (SELECT COUNT(*) FROM public.jobs
     WHERE org_id = 'b2b2b2b2-0000-0000-0000-000000000001'),
   1::bigint,
   'T16: Beta sees its own job row'
@@ -369,7 +369,7 @@ SELECT is(
 
 -- T17  Beta can INSERT a new customer into its own org
 SELECT lives_ok(
-  $$ INSERT INTO public.customer (customer_id, name, org_id)
+  $$ INSERT INTO public.customers (customer_id, name, org_id)
      VALUES (gen_random_uuid(), 'Beta New Customer',
              'b2b2b2b2-0000-0000-0000-000000000001') $$,
   'T17: Beta can INSERT customer row into its own org'
@@ -385,7 +385,7 @@ SET LOCAL row_security = off;
 
 -- T18  Alpha customer row name is unmodified
 SELECT is(
-  (SELECT name FROM public.customer
+  (SELECT name FROM public.customers
     WHERE customer_id = 'a1a1a1a1-0001-0000-0000-000000000001'),
   'Alpha Customer',
   'T18: Alpha customer row name is unchanged after Beta UPDATE attempt'
@@ -393,7 +393,7 @@ SELECT is(
 
 -- T19  Alpha job title is unmodified
 SELECT is(
-  (SELECT title FROM public.job
+  (SELECT title FROM public.jobs
     WHERE job_id = 'a1a1a1a1-0002-0000-0000-000000000001'),
   'Alpha Job',
   'T19: Alpha job title is unchanged after Beta UPDATE attempt'
@@ -417,7 +417,7 @@ SELECT is(
 
 -- T22  No stray Alpha-org rows created via Beta INSERT attempts
 SELECT is(
-  (SELECT COUNT(*) FROM public.customer
+  (SELECT COUNT(*) FROM public.customers
     WHERE org_id = 'a1a1a1a1-0000-0000-0000-000000000001'
       AND name = 'Trojan Customer'),
   0::bigint,
