@@ -157,10 +157,10 @@ VALUES
   ('b2b2b2b2-0191-0000-0000-000000000010'::uuid, 'b2b2b2b2-0191-0000-0000-000000000002'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 1, 'machining', 'pending')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.project_turnkey (project_id, org_id, tier, price_snapshot, scope_snapshot, delivery_days)
+INSERT INTO public.project_turnkey (project_id, org_id, tier, price_snapshot, scope_snapshot, delivery_days, promised_date, warranty_years)
 VALUES
-  ('a1a1a1a1-0191-0000-0000-000000000001'::uuid, 'a1a1a1a1-0000-0000-0000-000000000001'::uuid, 'standard', 150000, '{}'::jsonb, 60),
-  ('b2b2b2b2-0191-0000-0000-000000000001'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'premium', 250000, '{}'::jsonb, 90)
+  ('a1a1a1a1-0191-0000-0000-000000000001'::uuid, 'a1a1a1a1-0000-0000-0000-000000000001'::uuid, 'standard', 150000, '{}'::jsonb, 60, '2026-12-31'::date, 1),
+  ('b2b2b2b2-0191-0000-0000-000000000001'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'premium', 250000, '{}'::jsonb, 90, '2026-12-31'::date, 2)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.price_rates (material_grade, org_id, rate_min_per_sqm, rate_max_per_sqm)
