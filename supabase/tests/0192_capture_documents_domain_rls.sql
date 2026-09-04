@@ -21,7 +21,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'capture_artifact' AND n.nspname = 'public'),
   'T-0192-03: capture_artifact has RLS enabled');
-SELECT policy_exists('public', 'capture_artifact', 'capture_artifact_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'capture_artifact'
+            AND policyname = 'capture_artifact_tenant_isolation'),
   'T-0192-04: capture_artifact_tenant_isolation policy exists');
 
 -- capture_audit_log (T-0192-05..08)
@@ -34,7 +38,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'capture_audit_log' AND n.nspname = 'public'),
   'T-0192-07: capture_audit_log has RLS enabled');
-SELECT policy_exists('public', 'capture_audit_log', 'capture_audit_log_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'capture_audit_log'
+            AND policyname = 'capture_audit_log_tenant_isolation'),
   'T-0192-08: capture_audit_log_tenant_isolation policy exists');
 
 -- capture_type_config (T-0192-09..12)
@@ -47,7 +55,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'capture_type_config' AND n.nspname = 'public'),
   'T-0192-11: capture_type_config has RLS enabled');
-SELECT policy_exists('public', 'capture_type_config', 'capture_type_config_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'capture_type_config'
+            AND policyname = 'capture_type_config_tenant_isolation'),
   'T-0192-12: capture_type_config_tenant_isolation policy exists');
 
 -- contract_documents (T-0192-13..16)
@@ -60,7 +72,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'contract_documents' AND n.nspname = 'public'),
   'T-0192-15: contract_documents has RLS enabled');
-SELECT policy_exists('public', 'contract_documents', 'contract_documents_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'contract_documents'
+            AND policyname = 'contract_documents_tenant_isolation'),
   'T-0192-16: contract_documents_tenant_isolation policy exists');
 
 -- customer_docs (T-0192-17..20)
@@ -73,7 +89,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'customer_docs' AND n.nspname = 'public'),
   'T-0192-19: customer_docs has RLS enabled');
-SELECT policy_exists('public', 'customer_docs', 'customer_docs_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'customer_docs'
+            AND policyname = 'customer_docs_tenant_isolation'),
   'T-0192-20: customer_docs_tenant_isolation policy exists');
 
 -- document_links (T-0192-21..24)
@@ -86,7 +106,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'document_links' AND n.nspname = 'public'),
   'T-0192-23: document_links has RLS enabled');
-SELECT policy_exists('public', 'document_links', 'document_links_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'document_links'
+            AND policyname = 'document_links_tenant_isolation'),
   'T-0192-24: document_links_tenant_isolation policy exists');
 
 -- form_templates (T-0192-25..28)
@@ -99,7 +123,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'form_templates' AND n.nspname = 'public'),
   'T-0192-27: form_templates has RLS enabled');
-SELECT policy_exists('public', 'form_templates', 'form_templates_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'form_templates'
+            AND policyname = 'form_templates_tenant_isolation'),
   'T-0192-28: form_templates_tenant_isolation policy exists');
 
 -- ---------------------------------------------------------------------------
