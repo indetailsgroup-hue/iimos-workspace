@@ -168,7 +168,7 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO public.form_templates (id, org_id, template_key, version, kind, applies_to, lane, title, items, status)
 VALUES
-  ('00000000-0192-0000-0000-000000000001'::uuid, '00000000-0000-0000-0000-000000000000'::uuid, 'test-form-0192', 1, 'checklist', '[]'::jsonb, 1, 'Test Form 0192', '[]'::jsonb, 'active')
+  ('00000000-0192-0000-0000-000000000001'::uuid, '00000000-0000-0000-0000-000000000000'::uuid, 'test-form-0192', 1, 'checklist', '[]'::jsonb, 1, 'Test Form 0192', '[]'::jsonb, 'draft')
 ON CONFLICT DO NOTHING;
 
 SET LOCAL row_security = on;
