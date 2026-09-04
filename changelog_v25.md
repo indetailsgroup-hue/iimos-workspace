@@ -1,5 +1,47 @@
 # Changelog — MONOLITH SOP & Engineering Standards Package
 
+## v2.6 → จาก v2.5 · วันที่: 4 กันยายน 2569
+
+---
+
+### [v2.6] — 4 September 2026
+
+#### ✅ เพิ่มใหม่ (Added)
+
+**Prompt Library — docs/prompts/ (n:174–177)**
+- `fr03-drawing-analysis-prompt-v1.0.md` — FR-03-DRAW v1.0: DXF/drawing analysis system prompt; SSoT 11 drifts baked in; outputs evidence draft JSON with confidence band
+- `fr04-photo-analysis-prompt-v1.0.md` — FR-04-PHOTO v1.0: site photo analysis prompt; inputs max 8 photos; outputs site_evidence JSON
+- `fr03-boq-extraction-prompt-v1.0.md` — FR-03-BOQ v1.0: BOQ item extraction from evidence draft; outputs boq_draft JSON; hard boundary DRAFT only
+- `fr03-conflict-resolution-prompt-v1.0.md` — FR-03-CONFLICT v1.0: dimension/hardware conflict resolution; resolution priority matrix; canonical bound enforcement table
+
+**JSON Schemas — docs/specs/schemas/ (n:178–179)**
+- `evidence-draft.schema.json` — VS-01 §7 canonical JSON Schema v1.0; fields: cabinets array, conflicts, confidence_band ENUM
+- `boq-draft.schema.json` — VS-01 §9 canonical JSON Schema v1.0; fields: line_items array, subtotal/tax/grand_total_thb, status ENUM
+
+**FR-18 Gate Spec — docs/specs/ (n:182–183)**
+- `fr18-vision-boq-production-gate-v1.th.md` — FR-18 Vision→BOQ Production Gate Spec v1.0 Thai; GATE spec only; 10 gate conditions (AC-VS01-01–10); opens when all AC pass + owner designated
+- `fr18-vision-boq-production-gate-v1.sha256` — SHA256 checksum for FR-18 spec
+
+#### 🔧 แก้ไข (Fixed)
+
+**AB-AUTH-01 Source Fix (n:180–181)**
+- `src/core/auth/roles.ts` — เพิ่ม `AI_REVIEWER` role, `canReviewVSEvidence` feature flag, `getRoleFeatures()` case, AB-AUTH-01 WARNING comment
+- `supabase/functions/factory-api/index.ts` — เพิ่ม `AI_REVIEWER` ใน FactoryCapability, `VS_EVIDENCE_INTAKE/REVIEW_CAPABILITIES` constants, `actorHasSiteCode()` helper
+
+**CI pgTAP Fix — supabase/migrations/**
+- `0173_rls_isolation_hardening.sql` — แก้ `om.member_id` → `om.id` (3 occurrences); commit `81ed678c67cf`; SQLSTATE 42703 resolved
+- `20270120_ai_cost_estimation.sql` — แก้ `SELECT id FROM employees WHERE user_id = auth.uid()` → `SELECT employee_id FROM public.identity_binding WHERE auth_user_id = auth.uid() AND is_active = TRUE`; commit `12ca630884e3`; SQLSTATE 42703 resolved; employees table ไม่มี user_id column — ต้องใช้ identity_binding pattern ตาม ADR-040/migration 0105
+
+#### 📊 สถิติ
+- Files Total: **173 → 183** (+10)
+- Prompt files: +4 (FR-03-DRAW, FR-04-PHOTO, FR-03-BOQ, FR-03-CONFLICT)
+- JSON Schemas: +2 (evidence-draft, boq-draft)
+- Source fixes: +2 (roles.ts, factory-api/index.ts)
+- Gate specs: +2 (FR-18 md + sha256)
+- CI migrations fixed: 2 (0173 + 20270120)
+
+---
+
 ## v2.5 → จาก v2.4 · วันที่: 2 กันยายน 2569
 
 ---
