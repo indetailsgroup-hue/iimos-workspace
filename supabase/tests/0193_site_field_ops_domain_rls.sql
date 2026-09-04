@@ -206,6 +206,14 @@ VALUES
    'SITE-0193-B', 'Z1', 1, '{}'::jsonb, '{}'::jsonb, 'active', 'test-actor-b')
 ON CONFLICT DO NOTHING;
 
+-- ensure alpha user is in org_members so get_user_org_id() returns alpha org
+INSERT INTO public.org_members (id, org_id, user_id, role, is_active)
+VALUES ('a1a1a1a1-0193-0000-0000-0000000000ff'::uuid,
+        'a1a1a1a1-0000-0000-0000-000000000001'::uuid,
+        'a1a1a1a1-0000-0000-0001-000000000002'::uuid,
+        'VIEWER', true)
+ON CONFLICT DO NOTHING;
+
 SET LOCAL row_security = on;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims',
