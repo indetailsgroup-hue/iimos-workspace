@@ -35,32 +35,32 @@ END $$;
 -- ---------------------------------------------------------------------------
 
 SELECT has_column(
-  'public', 'customer', 'org_id',
+  'public', 'customers', 'org_id',
   'T-0179-NNB-01: customer.org_id column exists'
 );
 
 SELECT has_column(
-  'public', 'job', 'org_id',
+  'public', 'jobs', 'org_id',
   'T-0179-NNB-02: job.org_id column exists'
 );
 
 SELECT has_column(
-  'public', 'quotation', 'org_id',
+  'public', 'quotations', 'org_id',
   'T-0179-NNB-03: quotation.org_id column exists'
 );
 
 SELECT has_column(
-  'public', 'invoice', 'org_id',
+  'public', 'invoices', 'org_id',
   'T-0179-NNB-04: invoice.org_id column exists'
 );
 
 SELECT has_column(
-  'public', 'quotation_line', 'org_id',
+  'public', 'quotation_lines', 'org_id',
   'T-0179-NNB-05: quotation_line.org_id column exists'
 );
 
 SELECT has_column(
-  'public', 'job_panel', 'org_id',
+  'public', 'job_panels', 'org_id',
   'T-0179-NNB-06: job_panel.org_id column exists'
 );
 
@@ -85,7 +85,7 @@ SELECT has_column(
 );
 
 SELECT has_column(
-  'public', 'ledger_entry', 'org_id',
+  'public', 'ledger_entries', 'org_id',
   'T-0179-NNB-11: ledger_entry.org_id column exists'
 );
 
@@ -95,32 +95,32 @@ SELECT has_column(
 -- ---------------------------------------------------------------------------
 
 SELECT col_not_null(
-  'public', 'customer', 'org_id',
+  'public', 'customers', 'org_id',
   'T-0179-NNB-12: customer.org_id is NOT NULL'
 );
 
 SELECT col_not_null(
-  'public', 'job', 'org_id',
+  'public', 'jobs', 'org_id',
   'T-0179-NNB-13: job.org_id is NOT NULL'
 );
 
 SELECT col_not_null(
-  'public', 'quotation', 'org_id',
+  'public', 'quotations', 'org_id',
   'T-0179-NNB-14: quotation.org_id is NOT NULL'
 );
 
 SELECT col_not_null(
-  'public', 'invoice', 'org_id',
+  'public', 'invoices', 'org_id',
   'T-0179-NNB-15: invoice.org_id is NOT NULL'
 );
 
 SELECT col_not_null(
-  'public', 'quotation_line', 'org_id',
+  'public', 'quotation_lines', 'org_id',
   'T-0179-NNB-16: quotation_line.org_id is NOT NULL'
 );
 
 SELECT col_not_null(
-  'public', 'job_panel', 'org_id',
+  'public', 'job_panels', 'org_id',
   'T-0179-NNB-17: job_panel.org_id is NOT NULL'
 );
 
@@ -145,7 +145,7 @@ SELECT col_not_null(
 );
 
 SELECT col_not_null(
-  'public', 'ledger_entry', 'org_id',
+  'public', 'ledger_entries', 'org_id',
   'T-0179-NNB-22: ledger_entry.org_id is NOT NULL'
 );
 
@@ -157,37 +157,37 @@ SELECT col_not_null(
 -- ---------------------------------------------------------------------------
 
 SELECT throws_ok(
-  $sql$ INSERT INTO public.customer (org_id) VALUES (NULL) $sql$,
+  $sql$ INSERT INTO public.customers (org_id) VALUES (NULL) $sql$,
   '23502',
   'T-0179-NNB-23: customer rejects NULL org_id (23502)'
 );
 
 SELECT throws_ok(
-  $sql$ INSERT INTO public.job (org_id) VALUES (NULL) $sql$,
+  $sql$ INSERT INTO public.jobs (org_id) VALUES (NULL) $sql$,
   '23502',
   'T-0179-NNB-24: job rejects NULL org_id (23502)'
 );
 
 SELECT throws_ok(
-  $sql$ INSERT INTO public.quotation (org_id) VALUES (NULL) $sql$,
+  $sql$ INSERT INTO public.quotations (org_id) VALUES (NULL) $sql$,
   '23502',
   'T-0179-NNB-25: quotation rejects NULL org_id (23502)'
 );
 
 SELECT throws_ok(
-  $sql$ INSERT INTO public.invoice (org_id) VALUES (NULL) $sql$,
+  $sql$ INSERT INTO public.invoices (org_id) VALUES (NULL) $sql$,
   '23502',
   'T-0179-NNB-26: invoice rejects NULL org_id (23502)'
 );
 
 SELECT throws_ok(
-  $sql$ INSERT INTO public.quotation_line (org_id) VALUES (NULL) $sql$,
+  $sql$ INSERT INTO public.quotation_lines (org_id) VALUES (NULL) $sql$,
   '23502',
   'T-0179-NNB-27: quotation_line rejects NULL org_id (23502)'
 );
 
 SELECT throws_ok(
-  $sql$ INSERT INTO public.job_panel (org_id) VALUES (NULL) $sql$,
+  $sql$ INSERT INTO public.job_panels (org_id) VALUES (NULL) $sql$,
   '23502',
   'T-0179-NNB-28: job_panel rejects NULL org_id (23502)'
 );
@@ -217,7 +217,7 @@ SELECT throws_ok(
 );
 
 SELECT throws_ok(
-  $sql$ INSERT INTO public.ledger_entry (org_id) VALUES (NULL) $sql$,
+  $sql$ INSERT INTO public.ledger_entries (org_id) VALUES (NULL) $sql$,
   '23502',
   'T-0179-NNB-33: ledger_entry rejects NULL org_id (23502)'
 );
@@ -231,17 +231,17 @@ SELECT is(
   (
     SELECT COALESCE(SUM(null_count), 0)::bigint
     FROM (
-      SELECT COUNT(*) AS null_count FROM public.customer         WHERE org_id IS NULL
+      SELECT COUNT(*) AS null_count FROM public.customers         WHERE org_id IS NULL
       UNION ALL
-      SELECT COUNT(*) FROM public.job                            WHERE org_id IS NULL
+      SELECT COUNT(*) FROM public.jobs                            WHERE org_id IS NULL
       UNION ALL
-      SELECT COUNT(*) FROM public.quotation                      WHERE org_id IS NULL
+      SELECT COUNT(*) FROM public.quotations                      WHERE org_id IS NULL
       UNION ALL
-      SELECT COUNT(*) FROM public.invoice                        WHERE org_id IS NULL
+      SELECT COUNT(*) FROM public.invoices                        WHERE org_id IS NULL
       UNION ALL
-      SELECT COUNT(*) FROM public.quotation_line                 WHERE org_id IS NULL
+      SELECT COUNT(*) FROM public.quotation_lines                 WHERE org_id IS NULL
       UNION ALL
-      SELECT COUNT(*) FROM public.job_panel                      WHERE org_id IS NULL
+      SELECT COUNT(*) FROM public.job_panels                      WHERE org_id IS NULL
       UNION ALL
       SELECT COUNT(*) FROM public.payment                        WHERE org_id IS NULL
       UNION ALL
@@ -251,7 +251,7 @@ SELECT is(
       UNION ALL
       SELECT COUNT(*) FROM public.material_request               WHERE org_id IS NULL
       UNION ALL
-      SELECT COUNT(*) FROM public.ledger_entry                   WHERE org_id IS NULL
+      SELECT COUNT(*) FROM public.ledger_entries                   WHERE org_id IS NULL
     ) sub
   ),
   0::bigint,
@@ -271,17 +271,17 @@ SELECT is(
   (
     SELECT COUNT(*)::integer
     FROM (
-      SELECT org_id FROM public.customer         WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
+      SELECT org_id FROM public.customers         WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
-      SELECT org_id FROM public.job              WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
+      SELECT org_id FROM public.jobs              WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
-      SELECT org_id FROM public.quotation        WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
+      SELECT org_id FROM public.quotations        WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
-      SELECT org_id FROM public.invoice          WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
+      SELECT org_id FROM public.invoices          WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
-      SELECT org_id FROM public.quotation_line   WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
+      SELECT org_id FROM public.quotation_lines   WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
-      SELECT org_id FROM public.job_panel        WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
+      SELECT org_id FROM public.job_panels        WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
       SELECT org_id FROM public.payment          WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
@@ -291,7 +291,7 @@ SELECT is(
       UNION ALL
       SELECT org_id FROM public.material_request WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
-      SELECT org_id FROM public.ledger_entry     WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
+      SELECT org_id FROM public.ledger_entries     WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
     ) sentinel_rows
   ),
   -- On a fresh test DB after `supabase db reset`, no rows exist → count = 0.
@@ -302,17 +302,17 @@ SELECT is(
   (
     SELECT COUNT(*)::integer
     FROM (
-      SELECT org_id FROM public.customer         WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
+      SELECT org_id FROM public.customers         WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
-      SELECT org_id FROM public.job              WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
+      SELECT org_id FROM public.jobs              WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
-      SELECT org_id FROM public.quotation        WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
+      SELECT org_id FROM public.quotations        WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
-      SELECT org_id FROM public.invoice          WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
+      SELECT org_id FROM public.invoices          WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
-      SELECT org_id FROM public.quotation_line   WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
+      SELECT org_id FROM public.quotation_lines   WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
-      SELECT org_id FROM public.job_panel        WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
+      SELECT org_id FROM public.job_panels        WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
       SELECT org_id FROM public.payment          WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
@@ -322,7 +322,7 @@ SELECT is(
       UNION ALL
       SELECT org_id FROM public.material_request WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
       UNION ALL
-      SELECT org_id FROM public.ledger_entry     WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
+      SELECT org_id FROM public.ledger_entries     WHERE org_id::text = '00000000-0000-0000-0000-000000000000'
     ) sentinel_rows
   ),
   'T-0179-NNB-35: sentinel UUID backfill rows use correct UUID 00000000-0000-0000-0000-000000000000'
