@@ -2366,3 +2366,31 @@ Interactive PFMEA Live Dashboard แสดง pfmeaRiskRows 122 rows จาก K
 - master_index.html: n:165 added (165 entries total)
 - agents: Sale Agent, Designer Agent, Factory Agent, Install Agent, PM Agent
 
+
+---
+
+## [MONOLITH-PLATFORM-SPEC] thai_monolith_platform_spec.html — n:166
+**Date:** 2026-09-04
+**Type:** New File — Platform Architecture Reference
+
+### Summary
+แยก spec ระหว่าง Platform-level (MONOLITH Core) กับ Client-level (Daph Instance) อย่างชัดเจน
+ใช้เป็น reference document สำหรับ onboard clients ใหม่และสื่อสาร architecture ภายใน
+
+### Key Content
+- **4-Layer Stack Diagram**: Infrastructure → Integration+Automation → Agent Runtime → Client Application
+- **6 Core Platform Components**: Agent Framework / MCP Event Layer / LINE Integration Engine / KB Engine / PFMEA Engine / PWA Field App SDK — แต่ละ component มี Platform-owned (🔷) vs Client-configures (🔶) แยกชัดเจน
+- **Platform vs Client Boundary Table**: 20 rows — tag-p (Platform) / tag-c (Client) / tag-s (Shared/Configurable)
+- **Daph Instance Profile**: 6 agents + 122 PFMEA rows + 10-stage journey + .env config
+- **10-step Client Onboarding Process**: < 3 วัน, config-driven, no platform code changes
+- **client_{id}.json Config Schema**: agents[], line{}, supabase{}, pfmea.agent_step_mapping, field_app.checklist_items, branding{}
+
+### Architectural Decision
+MONOLITH = Platform (code, framework, methodology)
+Daph = Client Instance #1 (config, domain content, LINE OA channel, DB)
+New clients = สร้าง client_{id}.json ใหม่ + ไม่ต้องแก้ platform code
+
+### Registry
+- master_index.html: n:166 added (166 entries)
+- agents: Sale/Designer/Factory/Install/PM/Procurement Agent
+
