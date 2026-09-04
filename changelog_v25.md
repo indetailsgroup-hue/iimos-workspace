@@ -2453,3 +2453,103 @@ New clients = สร้าง client_{id}.json ใหม่ + ไม่ต้อ
 - Color-coded output (✅ PASS / ❌ FAIL / ⚠️ WARN); exit code 0=valid, 1=invalid
 - Validated against client_daph.json: **129/129 PASS** ✅
 
+---
+
+## [SWIFT-CONFIG] n:168 — client_swift.json
+**Date:** 2026-09-04
+**File:** `client_swift.json`
+**Size:** ~8KB | **Validator:** validate_client_config.py (127 checks) | **Result:** 127/127 PASS ✅
+
+### What was added
+- Real JSON config file for Swift Logistics, mirroring client_daph.json structure (schema_version 1.0.0)
+- **Top Level:** client_id=swift, client_name="Swift Logistics", domain=logistics_delivery, language=th, timezone=Asia/Bangkok, status=pilot
+- **LINE config:** channel_access_token, channel_secret, webhook_url
+  - `liff_ids{7}`: tracking / pod / review / status / schedule / gallery / approval
+  - `rich_menu_ids{6}`: default / tracking / project / approval / install / complete
+- **Supabase config:** url, anon_key, service_role_key, db_schema=swift, tables{4}: shipments/pfmea_risk_rows/driver_jobs/line_messages
+- **agents[5]:** Dispatch / CS / Driver / Warehouse / QC Agent — each with id/name/role/enabled/tools[]/kpis{}/mcp_events[]
+- **pfmea{}:** 35 rows, critical_sev_threshold=8, critical_test_cases[2]: TC-DRIVER-01 (GPS Pickup, Sev:9, score=4) + TC-DRIVER-03 (POD Capture, Sev:9, score=4); agent_step_mapping{} maps steps to Swift agents
+- **field_app{}:** accent_color=#e65c00, app_type=pwa_driver_app, gps_required=true, offline_mode=true, checklist_items[10]: CHK-D01–CHK-D10
+- **branding{}:** primary_color=#1f2d5a, accent_color=#e65c00, font_family=Sarabun, logo_url
+
+### Fix Applied (during this session)
+- Initial file had 8/127 checks failing: `liff_ids` missing status/schedule/gallery/approval; `rich_menu_ids` missing project/approval/install/complete
+- Fixed by adding missing keys with Swift-mapped placeholder values
+- Re-ran validator: **127/127 PASS**
+
+---
+
+## [PLATFORM-SPEC-MCP-TAB] n:166-mod2 — thai_monolith_platform_spec.html updated
+**Date:** 2026-09-04
+**File:** `thai_monolith_platform_spec.html`
+**Change:** Tab 07 MCP Event Catalog inserted | **Size:** ~75KB | **Total tabs:** 8
+
+### What was added
+- **Tab button** (line ~133): `🔔 MCP Event Catalog` tab 07 button
+- **Tab 07 div** (line ~1036): Full MCP Event Catalog section
+- **Overview stat cards:** 12 events / 2 clients / 11 agents / ≥1,000 events/hr throughput
+- **12-event payload schema table:** new_inquiry / brief_received / approval_request / project_created / first_response_4h / qc_checkpoint / halt_alert / bom_received / stock_alert / job_scheduled / job_complete / status_update — each row shows: event_type / trigger / source_agent / client_scope / required_payload_fields / mcp_priority
+- **Daph routing rules table:** maps each of 12 events → LINE Flex action + Supabase table + Agent handler for Daph instance
+- **Swift routing rules table:** maps each of 12 events → LINE Flex action + Supabase table + Agent handler for Swift instance
+- **JSON payload examples:** full job_complete payload (Swift) + halt_alert payload (Daph) with all required fields shown
+
+---
+
+## [API-REFERENCE] n:169 — thai_monolith_api_reference.html
+**Date:** 2026-09-04
+**File:** `thai_monolith_api_reference.html`
+**Lines:** ~800L | **Size:** ~55KB
+
+### What was created
+- Complete API reference documentation for all MONOLITH agent tools — both Daph and Swift clients
+- **11 agents × 55 tools** total
+- **Daph agents (6):** Sale Agent / Designer Agent / Factory Agent / Install Agent / PM Agent / Procurement Agent
+- **Swift agents (5):** Dispatch Agent / CS Agent / Driver Agent / Warehouse Agent / QC Agent
+- **Tool card fields:** endpoint, HTTP method (GET/POST/PUT), parameters table (name/type/required/description), response schema (JSON), MCP event trigger (if applicable)
+- **Client filter tabs:** All / 🏠 Daph / 🚚 Swift — filters tool list by client ownership
+- **Full-text search:** searches by tool name or endpoint across all 55 tools
+- **Styling:** navy #1f2d5a / gold #c9a84c / green #2d7a4f theme; Sarabun + Inter fonts; agent color-coded headers (Daph=purple #5b4fcf, Swift=orange #e65c00)
+
+---
+
+## [PFMEA-CLIENT-FILTER] n:165-mod2 — thai_pfmea_live_dashboard.html updated
+**Date:** 2026-09-04
+**File:** `thai_pfmea_live_dashboard.html`
+**Change:** Client filter + Swift PFMEA rows | **Size:** 85,979 chars | **Total rows:** 157 (122 Daph + 35 Swift)
+
+### What was added
+- **CSS:** `.client-chip` style; active state — navy for Daph, #e65c00 for Swift
+- **Client filter chips** in filter bar: ทั้งหมด / 🏠 Daph / 🚚 Swift
+- **JS state:** `fClient='all'` variable; `filterClient()` function; updated `filteredRows()` with `(r.client||'daph')` logic; updated `resetFilters()`
+- **Swift agent strip cards (5):** Dispatch(8)/CS(5)/Driver(12)/Warehouse(5)/QC(5) added to Agent section
+- **All Agents count:** updated 122 → 157
+- **35 Swift PFMEA rows** (ids 123–157) with `"client":"swift"` field:
+  - Dispatch Agent: 8 rows (package intake, route assignment, driver allocation, dispatch timing, system sync, comm failure, overload, SLA breach)
+  - CS Agent: 5 rows (inquiry response, complaint handling, escalation, status update, satisfaction survey)
+  - Driver Agent: 12 rows (GPS pickup TC-DRIVER-01 Sev:9, route navigation, vehicle check, POD capture TC-DRIVER-03 Sev:9, delivery failure, damage report, customer contact, time window, address validation, signature, photo doc, return handling)
+  - Warehouse Agent: 5 rows (stock receipt, storage, pick/pack, barcode scan, inventory reconciliation)
+  - QC Agent: 5 rows (package inspection, dimension check, weight verify, damage detect, clearance approve)
+
+### Backward Compatibility
+- All existing 122 Daph rows have no `client` field — `filteredRows()` defaults them to Daph via `(r.client||'daph')`; no data modification needed
+
+---
+
+## [SWIFT-DRIVER-FIELDAPP] n:170 — thai_swift_driver_fieldapp.html
+**Date:** 2026-09-04
+**File:** `thai_swift_driver_fieldapp.html`
+**Lines:** ~600L | **Size:** ~40KB | **Type:** PWA (Progressive Web App)
+
+### What was created
+- PWA Driver Field App for Swift Logistics (counterpart to Daph's thai_installation_agent_fieldapp.html)
+- **Accent color:** #e65c00 (orange) | **Font:** Sarabun | **Service Worker cache:** swift-driver-v1
+- **6 screens (bottom nav):**
+  1. **Job Queue / Accept Job** — pending jobs list with shipment ID/destination/weight; Accept button sets journey to step 1
+  2. **GPS Pickup Check-in** — navigator.geolocation; lat/lng display; TC-DRIVER-01 Sev:9 critical test case tag; advances journey dot to GPS Pickup
+  3. **In Transit Updates** — Driver Checklist (CHK-D01–CHK-D10: Vehicle check / Load secured / Documents ready / Customer notified / Route confirmed / ETA updated / Hazmat check / Cold chain / Fragile items / Final review); milestone stage list for 7-stage journey; JS advances dots
+  4. **POD Capture** — signature canvas (touch/mouse); photo upload button; TC-DRIVER-03 Sev:9 critical test case tag; POD reference number; advances journey to POD dot
+  5. **Damage Report** — PFMEA severity selector (Sev:1–9); damage description textarea; halt_alert MCP event trigger when Sev≥8
+  6. **Job Summary** — full MCP payload preview (event_type=job_complete, client=swift, domain=logistics_delivery, driver_id, shipment_id, pod_ref, gps_coords, checklist_items, timestamp); simulateSync() with toast notification
+- **7-stage journey bar** at top: Pickup Request → Dispatch → GPS Pickup → In Transit → Out for Delivery → POD → Review (dots advance as user completes screens)
+- **MCP integration:** halt_alert trigger on Sev≥8 damage; job_complete payload on summary sync
+
