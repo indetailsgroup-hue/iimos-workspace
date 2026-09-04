@@ -267,7 +267,6 @@ jobs:
           DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
           pg_prove \
             --dbname "$DB_URL" \
-            --recursive \
             --verbose \
             supabase/tests/*.sql
         env:
