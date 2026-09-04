@@ -16,8 +16,7 @@ SELECT has_column('public', 'design_lock_field_config', 'org_id',
   'T-0194-01: design_lock_field_config has org_id column');
 SELECT col_not_null('public', 'design_lock_field_config', 'org_id',
   'T-0194-02: design_lock_field_config.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'design_lock_field_config'::name,
-  'T-0194-03: design_lock_field_config has RLS enabled');
+SELECT has_row_level_security('public', 'design_lock_field_config', 'T-0194-03: design_lock_field_config has RLS enabled');
 SELECT policy_exists('public', 'design_lock_field_config', 'design_lock_field_config_tenant_isolation',
   'T-0194-04: design_lock_field_config_tenant_isolation policy exists');
 
@@ -26,8 +25,7 @@ SELECT has_column('public', 'issue_routing', 'org_id',
   'T-0194-05: issue_routing has org_id column');
 SELECT col_not_null('public', 'issue_routing', 'org_id',
   'T-0194-06: issue_routing.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'issue_routing'::name,
-  'T-0194-07: issue_routing has RLS enabled');
+SELECT has_row_level_security('public', 'issue_routing', 'T-0194-07: issue_routing has RLS enabled');
 SELECT policy_exists('public', 'issue_routing', 'issue_routing_tenant_isolation',
   'T-0194-08: issue_routing_tenant_isolation policy exists');
 
@@ -36,8 +34,7 @@ SELECT has_column('public', 'lead_followup_config', 'org_id',
   'T-0194-09: lead_followup_config has org_id column');
 SELECT col_not_null('public', 'lead_followup_config', 'org_id',
   'T-0194-10: lead_followup_config.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'lead_followup_config'::name,
-  'T-0194-11: lead_followup_config has RLS enabled');
+SELECT has_row_level_security('public', 'lead_followup_config', 'T-0194-11: lead_followup_config has RLS enabled');
 SELECT policy_exists('public', 'lead_followup_config', 'lead_followup_config_tenant_isolation',
   'T-0194-12: lead_followup_config_tenant_isolation policy exists');
 
@@ -46,8 +43,7 @@ SELECT has_column('public', 'material_master', 'org_id',
   'T-0194-13: material_master has org_id column');
 SELECT col_not_null('public', 'material_master', 'org_id',
   'T-0194-14: material_master.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'material_master'::name,
-  'T-0194-15: material_master has RLS enabled');
+SELECT has_row_level_security('public', 'material_master', 'T-0194-15: material_master has RLS enabled');
 SELECT policy_exists('public', 'material_master', 'material_master_tenant_isolation',
   'T-0194-16: material_master_tenant_isolation policy exists');
 
@@ -56,8 +52,7 @@ SELECT has_column('public', 'material_purchase_price', 'org_id',
   'T-0194-17: material_purchase_price has org_id column');
 SELECT col_not_null('public', 'material_purchase_price', 'org_id',
   'T-0194-18: material_purchase_price.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'material_purchase_price'::name,
-  'T-0194-19: material_purchase_price has RLS enabled');
+SELECT has_row_level_security('public', 'material_purchase_price', 'T-0194-19: material_purchase_price has RLS enabled');
 SELECT policy_exists('public', 'material_purchase_price', 'material_purchase_price_tenant_isolation',
   'T-0194-20: material_purchase_price_tenant_isolation policy exists');
 
@@ -66,8 +61,7 @@ SELECT has_column('public', 'ops_contacts', 'org_id',
   'T-0194-21: ops_contacts has org_id column');
 SELECT col_not_null('public', 'ops_contacts', 'org_id',
   'T-0194-22: ops_contacts.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'ops_contacts'::name,
-  'T-0194-23: ops_contacts has RLS enabled');
+SELECT has_row_level_security('public', 'ops_contacts', 'T-0194-23: ops_contacts has RLS enabled');
 SELECT policy_exists('public', 'ops_contacts', 'ops_contacts_tenant_isolation',
   'T-0194-24: ops_contacts_tenant_isolation policy exists');
 
@@ -76,8 +70,7 @@ SELECT has_column('public', 'phase_rosters', 'org_id',
   'T-0194-25: phase_rosters has org_id column');
 SELECT col_not_null('public', 'phase_rosters', 'org_id',
   'T-0194-26: phase_rosters.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'phase_rosters'::name,
-  'T-0194-27: phase_rosters has RLS enabled');
+SELECT has_row_level_security('public', 'phase_rosters', 'T-0194-27: phase_rosters has RLS enabled');
 SELECT policy_exists('public', 'phase_rosters', 'phase_rosters_tenant_isolation',
   'T-0194-28: phase_rosters_tenant_isolation policy exists');
 
@@ -86,8 +79,7 @@ SELECT has_column('public', 'released_spec', 'org_id',
   'T-0194-29: released_spec has org_id column');
 SELECT col_not_null('public', 'released_spec', 'org_id',
   'T-0194-30: released_spec.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'released_spec'::name,
-  'T-0194-31: released_spec has RLS enabled');
+SELECT has_row_level_security('public', 'released_spec', 'T-0194-31: released_spec has RLS enabled');
 SELECT policy_exists('public', 'released_spec', 'released_spec_tenant_isolation',
   'T-0194-32: released_spec_tenant_isolation policy exists');
 
@@ -96,8 +88,7 @@ SELECT has_column('public', 'revision_event', 'org_id',
   'T-0194-33: revision_event has org_id column');
 SELECT col_not_null('public', 'revision_event', 'org_id',
   'T-0194-34: revision_event.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'revision_event'::name,
-  'T-0194-35: revision_event has RLS enabled');
+SELECT has_row_level_security('public', 'revision_event', 'T-0194-35: revision_event has RLS enabled');
 SELECT policy_exists('public', 'revision_event', 'revision_event_tenant_isolation',
   'T-0194-36: revision_event_tenant_isolation policy exists');
 
@@ -106,8 +97,7 @@ SELECT has_column('public', 'staff_bind_tokens', 'org_id',
   'T-0194-37: staff_bind_tokens has org_id column');
 SELECT col_not_null('public', 'staff_bind_tokens', 'org_id',
   'T-0194-38: staff_bind_tokens.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'staff_bind_tokens'::name,
-  'T-0194-39: staff_bind_tokens has RLS enabled');
+SELECT has_row_level_security('public', 'staff_bind_tokens', 'T-0194-39: staff_bind_tokens has RLS enabled');
 SELECT policy_exists('public', 'staff_bind_tokens', 'staff_bind_tokens_tenant_isolation',
   'T-0194-40: staff_bind_tokens_tenant_isolation policy exists');
 
@@ -116,8 +106,7 @@ SELECT has_column('public', 'workflow_audit_log', 'org_id',
   'T-0194-41: workflow_audit_log has org_id column');
 SELECT col_not_null('public', 'workflow_audit_log', 'org_id',
   'T-0194-42: workflow_audit_log.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'workflow_audit_log'::name,
-  'T-0194-43: workflow_audit_log has RLS enabled');
+SELECT has_row_level_security('public', 'workflow_audit_log', 'T-0194-43: workflow_audit_log has RLS enabled');
 SELECT policy_exists('public', 'workflow_audit_log', 'workflow_audit_log_tenant_isolation',
   'T-0194-44: workflow_audit_log_tenant_isolation policy exists');
 
