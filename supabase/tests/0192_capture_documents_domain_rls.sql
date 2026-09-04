@@ -171,6 +171,14 @@ VALUES
   ('00000000-0192-0000-0000-000000000001'::uuid, '00000000-0000-0000-0000-000000000000'::uuid, 'test-form-0192', 1, 'checklist', '[]'::jsonb, 1, 'Test Form 0192', '[]'::jsonb, 'draft')
 ON CONFLICT DO NOTHING;
 
+-- ensure alpha user is in org_members so get_user_org_id() resolves
+INSERT INTO public.org_members (id, org_id, user_id, role, is_active)
+VALUES ('a1a1a1a1-0192-0000-0000-0000000000ff'::uuid,
+        'a1a1a1a1-0000-0000-0000-000000000001'::uuid,
+        'a1a1a1a1-0000-0000-0001-000000000002'::uuid,
+        'VIEWER', true)
+ON CONFLICT DO NOTHING;
+
 SET LOCAL row_security = on;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims',
