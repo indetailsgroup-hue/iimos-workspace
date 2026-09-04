@@ -111,7 +111,7 @@
     <div class="version-pill">v3.0 · AMD-001</div>
   </div>
   <div class="stats-row">
-    <div class="stat-pill"><strong id="hdr-total">173</strong> Files Total</div>
+    <div class="stat-pill"><strong id="hdr-total">183</strong> Files Total</div>
     <div class="stat-pill"><strong>20</strong> Live Agents</div>
     <div class="stat-pill"><strong>5</strong> Planned · Phase B/C</div>
     <div class="stat-pill"><strong>24</strong> SOP Sections</div>
@@ -607,8 +607,38 @@ const FILES=[
   {n:172, name:'vs01-vision-to-boq-vertical-slice-v1.th.html',                 type:'HTML', cat:'Reference',   lang:'TH',    isNew:true,  agents:['Designer Agent','Factory Agent'],
          desc:'VS-01 Vision-to-BOQ Vertical Slice Specification v1.0 Thai HTML — same content as n:171; sidebar nav, confidence band cards, pipeline flow, Specs SSoT table (11 drifts), AC checklist; navy/gold/green theme; Sarabun font; DRAFT 2026-09-04'},
 
-  {n:173, name:'vs01-vision-to-boq-vertical-slice-v1.sha256',                  type:'MD',   cat:'Archive',     lang:'EN',    isNew:true,  agents:[],
+  {n:173, name:'vs01-vision-to-boq-vertical-slice-v1.sha256',                  type:'MD',   cat:'Archive',     lang:'EN',    isNew:false, agents:[],
          desc:'VS-01 SHA256 checksums — verifies vs01...v1.th.md + vs01...v1.th.html; 2026-09-04'},
+
+  {n:174, name:'fr03-drawing-analysis-prompt-v1.0.md',                         type:'MD',   cat:'Prompt',      lang:'EN',    isNew:true,  agents:['Designer Agent'],
+         desc:'FR-03-DRAW v1.0 System Prompt — DXF/drawing analysis; inputs: drawing_base64, drawing_format (DXF/PDF/PNG/JPG/SVG), site_code, job_id; outputs: evidence draft JSON (cabinet_count, dimensions with premill, hardware, conflicts, confidence_band HIGH/MEDIUM/LOW/VERY_LOW); SSoT 11 drifts baked in (DXF=AC1015, hinge cup 12mm, minifix 13.5mm, 7 views incl Top, MIN_WIDTH 300mm, MAX_DEPTH 600mm, 5 cabinet types, sleeve Ø10×17.5mm); refusal rules; 2026-09-04'},
+
+  {n:175, name:'fr04-photo-analysis-prompt-v1.0.md',                           type:'MD',   cat:'Prompt',      lang:'EN',    isNew:true,  agents:['Designer Agent'],
+         desc:'FR-04-PHOTO v1.0 System Prompt — site photo analysis for cabinet installation; inputs: photo_base64 array (max 8), site_code, job_id; outputs: site_evidence JSON (room_type, obstructions, ceiling_height, electrical_outlets, conflict_flags, installation_notes, confidence_band); 2026-09-04'},
+
+  {n:176, name:'fr03-boq-extraction-prompt-v1.0.md',                           type:'MD',   cat:'Prompt',      lang:'EN',    isNew:true,  agents:['Designer Agent','Factory Agent'],
+         desc:'FR-03-BOQ v1.0 System Prompt — BOQ item extraction from evidence draft; inputs: evidence_draft JSON, site_code, job_id; outputs: boq_draft JSON (line items with cabinet_type, dimensions, hardware, material, unit_qty, unit_cost_thb, total_cost_thb); SSoT cabinet types UPPER/LOWER/TALL/ISLAND/CUSTOM; hard boundary: DRAFT only, no auto-CNC; 2026-09-04'},
+
+  {n:177, name:'fr03-conflict-resolution-prompt-v1.0.md',                      type:'MD',   cat:'Prompt',      lang:'EN',    isNew:true,  agents:['Designer Agent'],
+         desc:'FR-03-CONFLICT v1.0 System Prompt — dimension/hardware conflict resolution; resolution priority matrix (drawing→photo→spec→default); canonical bound enforcement table (MIN_WIDTH 300mm, MAX_DEPTH 600mm, hinge cup 12mm, minifix 13.5mm); integration flow with evidence draft; outputs: resolved_evidence JSON with conflict_log; 2026-09-04'},
+
+  {n:178, name:'evidence-draft.schema.json',                                   type:'MD',   cat:'Schema',      lang:'EN',    isNew:true,  agents:['Designer Agent','Factory Agent'],
+         desc:'JSON Schema v1.0 for evidence_draft — VS-01 §7 canonical; fields: schema_version, source_drawing_id, source_photo_ids, extracted_at, site_code, job_id, cabinets array (cabinet_id, position_label, cabinet_type ENUM, nominal dimensions, premill flag, hardware list), conflicts array, confidence_band ENUM, notes, reviewer_id; 2026-09-04'},
+
+  {n:179, name:'boq-draft.schema.json',                                        type:'MD',   cat:'Schema',      lang:'EN',    isNew:true,  agents:['Designer Agent','Factory Agent'],
+         desc:'JSON Schema v1.0 for boq_draft — VS-01 §9 canonical; fields: schema_version, evidence_draft_id, generated_at, site_code, job_id, line_items array (line_id, cabinet_ref_id, description, cabinet_type ENUM, material, width_mm, depth_mm, height_mm, unit_qty, unit_cost_thb, total_cost_thb, notes), subtotal_thb, tax_rate, tax_thb, grand_total_thb, status DRAFT/REVIEWED/APPROVED, reviewer_id; 2026-09-04'},
+
+  {n:180, name:'roles.ts',                                                      type:'MD',   cat:'Source Fix',  lang:'EN',    isNew:true,  agents:['Designer Agent'],
+         desc:'AB-AUTH-01 fix: src/core/auth/roles.ts — added AI_REVIEWER to Role type + ROLES array + ROLE_INFO (color #0ea5e9); added canReviewVSEvidence: boolean to RoleFeatures; added AI_REVIEWER case in getRoleFeatures(); AB-AUTH-01 WARNING comment in getCurrentRole(); 2026-09-04'},
+
+  {n:181, name:'index.ts (factory-api)',                                        type:'MD',   cat:'Source Fix',  lang:'EN',    isNew:true,  agents:['Designer Agent','Factory Agent'],
+         desc:'AB-AUTH-01 fix: supabase/functions/factory-api/index.ts — added AI_REVIEWER to FactoryCapability type; ai_reviewer/AI_REVIEWER to CLAIM_CAPABILITY map; VS_EVIDENCE_INTAKE_CAPABILITIES + VS_EVIDENCE_REVIEW_CAPABILITIES constants; actorHasSiteCode() helper (ADMIN bypasses, others check siteCodes.includes); 2026-09-04'},
+
+  {n:182, name:'fr18-vision-boq-production-gate-v1.th.md',                     type:'MD',   cat:'Reference',   lang:'TH',    isNew:true,  agents:['Designer Agent','Factory Agent'],
+         desc:'FR-18 Vision→BOQ Production Gate Spec v1.0 Thai — GATE spec only (not implementation); 11 sections: scope, gate purpose, 10 gate conditions (AC-VS01-01–10 status table), FR-18 scope draft, hard boundaries (no auto-CNC/Released Spec/production truth), owner requirements, AC template, risk register; opens when all 10 AC pass + owner designated; Sarabun/navy/gold/green; 2026-09-04'},
+
+  {n:183, name:'fr18-vision-boq-production-gate-v1.sha256',                    type:'MD',   cat:'Archive',     lang:'EN',    isNew:true,  agents:[],
+         desc:'FR-18 spec SHA256 checksum — verifies fr18-vision-boq-production-gate-v1.th.md; 00dab15eb85694b925e8dc2ab10d174fc50428d521a8a83c297c11b561bac03e; 2026-09-04'},
 
 ];
 
