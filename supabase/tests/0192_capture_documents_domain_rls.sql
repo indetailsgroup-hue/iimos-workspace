@@ -145,8 +145,8 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO public.capture_artifact (id, org_id, capture_type, status, source, principal, site_code, idempotency_key)
 VALUES
-  ('a1a1a1a1-0192-0000-0000-000000000010'::uuid, 'a1a1a1a1-0000-0000-0000-000000000001'::uuid, 'id_card', 'proposed', 'mobile', 'staff-a', 'SITE-0192-A', 'idem-0192-a'),
-  ('b2b2b2b2-0192-0000-0000-000000000010'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'id_card', 'proposed', 'mobile', 'staff-b', 'SITE-0192-B', 'idem-0192-b')
+  ('a1a1a1a1-0192-0000-0000-000000000010'::uuid, 'a1a1a1a1-0000-0000-0000-000000000001'::uuid, 'id_card', 'proposed', 'app', 'staff-a', 'SITE-0192-A', 'idem-0192-a'),
+  ('b2b2b2b2-0192-0000-0000-000000000010'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'id_card', 'proposed', 'app', 'staff-b', 'SITE-0192-B', 'idem-0192-b')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.contract_documents (id, org_id, project_id, site_code, version, data, status)
