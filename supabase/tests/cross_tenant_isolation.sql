@@ -284,25 +284,27 @@ SELECT throws_ok(
 -- ===========================================================================
 
 -- T13  UPDATE customer — Beta UPDATE on Alpha row touches 0 rows
+WITH upd AS (
+  UPDATE public.customers
+     SET name = 'Tampered'
+   WHERE customer_id = 'a1a1a1a1-0001-0000-0000-000000000001'
+  RETURNING 1
+)
 SELECT is(
-  (WITH upd AS (
-    UPDATE public.customers
-       SET name = 'Tampered'
-     WHERE customer_id = 'a1a1a1a1-0001-0000-0000-000000000001'
-  RETURNING 1)
-  SELECT COUNT(*) FROM upd),
+  (SELECT COUNT(*) FROM upd),
   0::bigint,
   'T13: Beta UPDATE on Alpha customer row affects 0 rows'
 );
 
 -- T14  UPDATE job — Beta UPDATE on Alpha row touches 0 rows
+WITH upd AS (
+  UPDATE public.jobs
+     SET title = 'Tampered'
+   WHERE job_id = 'a1a1a1a1-0002-0000-0000-000000000001'
+  RETURNING 1
+)
 SELECT is(
-  (WITH upd AS (
-    UPDATE public.jobs
-       SET title = 'Tampered'
-     WHERE job_id = 'a1a1a1a1-0002-0000-0000-000000000001'
-  RETURNING 1)
-  SELECT COUNT(*) FROM upd),
+  (SELECT COUNT(*) FROM upd),
   0::bigint,
   'T14: Beta UPDATE on Alpha job row affects 0 rows'
 );
@@ -312,37 +314,37 @@ SELECT is(
 -- ===========================================================================
 
 -- T23  DELETE customer — Beta DELETE on Alpha row touches 0 rows
+WITH del AS (
+  DELETE FROM public.customers
+   WHERE customer_id = 'a1a1a1a1-0001-0000-0000-000000000001'
+  RETURNING 1
+)
 SELECT is(
-  (WITH del AS (
-    DELETE FROM public.customers
-     WHERE customer_id = 'a1a1a1a1-0001-0000-0000-000000000001'
-    RETURNING 1
-  )
-  SELECT COUNT(*) FROM del),
+  (SELECT COUNT(*) FROM del),
   0::bigint,
   'T23: Beta DELETE on Alpha customer row affects 0 rows'
 );
 
 -- T24  DELETE job — Beta DELETE on Alpha job row touches 0 rows
+WITH del AS (
+  DELETE FROM public.jobs
+   WHERE job_id = 'a1a1a1a1-0002-0000-0000-000000000001'
+  RETURNING 1
+)
 SELECT is(
-  (WITH del AS (
-    DELETE FROM public.jobs
-     WHERE job_id = 'a1a1a1a1-0002-0000-0000-000000000001'
-    RETURNING 1
-  )
-  SELECT COUNT(*) FROM del),
+  (SELECT COUNT(*) FROM del),
   0::bigint,
   'T24: Beta DELETE on Alpha job row affects 0 rows'
 );
 
 -- T25  DELETE quotation_line — Beta DELETE on Alpha quotation_line row touches 0 rows
+WITH del AS (
+  DELETE FROM public.quotation_lines
+   WHERE line_id = 'a1a1a1a1-0005-0000-0000-000000000001'
+  RETURNING 1
+)
 SELECT is(
-  (WITH del AS (
-    DELETE FROM public.quotation_lines
-     WHERE line_id = 'a1a1a1a1-0005-0000-0000-000000000001'
-    RETURNING 1
-  )
-  SELECT COUNT(*) FROM del),
+  (SELECT COUNT(*) FROM del),
   0::bigint,
   'T25: Beta DELETE on Alpha quotation_line row affects 0 rows'
 );
