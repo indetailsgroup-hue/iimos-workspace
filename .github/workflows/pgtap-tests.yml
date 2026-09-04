@@ -238,7 +238,7 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Enable pgTAP extension
         run: |
-          DB_URL=$(supabase status --output env | grep DB_URL | cut -d= -f2-)
+          DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
           psql "$DB_URL" -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
         env:
           PGPASSWORD: postgres
@@ -264,7 +264,7 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Run pg_prove on supabase/tests/*.sql
         run: |
-          DB_URL=$(supabase status --output env | grep DB_URL | cut -d= -f2-)
+          DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
           pg_prove \
             --dbname "$DB_URL" \
             --recursive \
