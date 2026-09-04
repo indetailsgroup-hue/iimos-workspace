@@ -2553,3 +2553,30 @@ New clients = สร้าง client_{id}.json ใหม่ + ไม่ต้อ
 - **7-stage journey bar** at top: Pickup Request → Dispatch → GPS Pickup → In Transit → Out for Delivery → POD → Review (dots advance as user completes screens)
 - **MCP integration:** halt_alert trigger on Sev≥8 damage; job_complete payload on summary sync
 
+
+---
+
+## [VS-01-SPEC] n:171–173 — VS-01 Vision-to-BOQ Vertical Slice Specification
+**Date:** 2026-09-04
+**Files:**
+- `vs01-vision-to-boq-vertical-slice-v1.th.md` (n:171) — 35KB
+- `vs01-vision-to-boq-vertical-slice-v1.th.html` (n:172) — 46KB
+- `vs01-vision-to-boq-vertical-slice-v1.sha256` (n:173) — 220 bytes
+
+### What was created
+- **feat(vs01):** VS-01 Vision-to-BOQ Vertical Slice spec v1.0 — DRAFT 2026-09-04
+- **Scope:** FR-03 (Spatial Evidence Compiler) + FR-04 (Capture Spine); references RM-030–RM-033
+- **15 sections:** Overview, Scope/Non-Scope (hard boundary: no auto Released Spec / CNC / production truth), PRD alignment, Input Layer (drawing/photo quality gates), Vision Model Layer (benchmark criteria + 4 candidate models: GPT-4o Vision / Claude 3.5 Sonnet / SpatialLM / Gemini 2.0 Flash), Inference Pipeline, System Prompt Contract (4 versioned prompts: FR-03-DRAW / FR-04-PHOTO / FR-03-BOQ / FR-03-CONFLICT v1.0), Confidence Rules (4 bands: HIGH 0.90–1.00 / MEDIUM 0.70–0.89 / LOW 0.50–0.69 / VERY_LOW 0.00–0.49), Refusal Rules (5 types), Evidence Draft JSON Schema, Specs SSoT (11 drifts resolved), BOQ Draft JSON Schema, Human Review Workflow (triggers / actions / escalation), Validation Rules (V-ED-01–06 + V-BOQ-01–06), Export/API Spec (6 endpoints), Acceptance Criteria (AC-VS01-01–10), P0 Dependency Map
+- **10 Acceptance Criteria (AC-VS01-01–10):** pipeline completeness, confidence band enforcement, refusal rules, SSoT alignment, evidence provenance, BOQ draft generation, human review queue, validation gate, API export, scope boundary
+- **11 SSoT drifts resolved** (canonical values embedded in all 4 prompt templates so AI reads from VS-01, not conflicting spec files): Premill, DXF AC1015, Hinge 12mm, Minifix 13.5mm, 7 views, MIN_WIDTH 300mm, MAX_DEPTH 600mm, Cabinet types, Minifix bolt bore Ø10×17.5mm, export path manufacturing/, +PreMill in API packet
+- **HTML:** sidebar nav, confidence band cards, pipeline flow diagram, SSoT table, AC checklist; Sarabun font; navy #1f2d5a / gold #c9a84c / green #2d7a4f theme
+- **SHA256:** th.md=`8d42ee8722536a87350242fcdab5c7921ff81d0f8decc2206da8304378e2f75d` | th.html=`b2e50e82ee1383dafb2babb3e61a00331cc3c8fc604fbdebfc449db82f1ebe0a`
+- **GitHub push:** docs/specs/vs01-vision-to-boq-vertical-slice-v1.{th.md, th.html, sha256} — 3/3 OK
+
+### Naming rationale
+- VS-01 code chosen to avoid collision with DOCX S55 (Section 55 = Phase 3 RFP & Vendor Selection Framework; IDs 2571–2699 in monolith/inject_s55.py)
+- FR-18 gating condition: must pass all 10 AC-VS01 criteria + have a named owner + separate ACs before FR-18 is created
+
+### Backward Compatibility
+- No changes to existing S17 specs, schemas, or DOCX S-series numbering
+- master_index.html: stat pill updated 170→173; entries n:171–173 added
