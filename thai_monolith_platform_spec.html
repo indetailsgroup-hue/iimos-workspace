@@ -127,6 +127,7 @@ code{background:#f1f3f5;padding:2px 6px;border-radius:4px;font-size:12px;font-fa
   <button class="tab-btn" onclick="switchTab('components',this)">⚙️ Core Components</button>
   <button class="tab-btn" onclick="switchTab('boundary',this)">📐 Platform vs Client Boundary</button>
   <button class="tab-btn" onclick="switchTab('daph',this)">🏠 Daph Instance</button>
+  <button class="tab-btn" onclick="switchTab('swift',this)">🚚 Swift Logistics</button>
   <button class="tab-btn" onclick="switchTab('onboarding',this)">🚀 Client Onboarding</button>
   <button class="tab-btn" onclick="switchTab('config',this)">🔧 Client Config Schema</button>
 </div>
@@ -670,6 +671,138 @@ SUPABASE_ANON_KEY=<span class="s">"&lt;daph_anon_key&gt;"</span>
 <span class="c"># MCP Server</span>
 MCP_WEBHOOK_URL=<span class="s">"https://api.monolith.app/clients/daph/webhook/line"</span>
 CLIENT_ID=<span class="s">"daph"</span></pre></div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     TAB 04B: SWIFT LOGISTICS INSTANCE
+══════════════════════════════════════════════════════════ -->
+<div id="tab-swift" class="tab-content">
+
+  <div class="card">
+    <div class="card-title">🚚 Swift Logistics — Client Instance Profile</div>
+    <div class="c-box" style="margin-bottom:16px;border-left:4px solid #e65c00;">
+      <div class="box-title" style="color:#e65c00;">🔶 Swift Logistics คือ Client ลำดับที่ 2 บน MONOLITH Platform (Pilot)</div>
+      <p style="font-size:13px;margin-top:4px;">
+        ธุรกิจ: <strong>Logistics &amp; Delivery — ขนส่ง / จัดส่งพัสดุ / ระบบ POD</strong><br>
+        ช่องทางหลัก: <strong>LINE OA</strong> (ลูกค้าแจ้ง pickup request) + <strong>PWA Driver App</strong> (คนขับรับงาน/อัปเดต)<br>
+        ขนาด: SME — ทีม Dispatch, ทีมขนส่ง, ทีม Warehouse, Customer Service, QC<br>
+        Status: <strong style="color:#e65c00;">Pilot</strong> — เริ่ม 2025-Q1, Go-Live เป้าหมาย 2025-Q2
+      </p>
+    </div>
+
+    <div class="section-title">Swift Agent Configuration (5 Agents)</div>
+    <table>
+      <tr><th>Agent</th><th>Role (Swift-specific)</th><th>Key Tools</th><th>Critical KPI</th></tr>
+      <tr>
+        <td><strong>Dispatch Agent</strong></td>
+        <td>รับ pickup request, จัดคิวงาน, assign driver, ส่ง Flex Message แจ้งลูกค้า</td>
+        <td>create_job, assign_driver, send_dispatch_flex, update_job_status</td>
+        <td>Dispatch SLA &lt;15min, Assign Rate 100%</td>
+      </tr>
+      <tr>
+        <td><strong>CS Agent</strong></td>
+        <td>ตอบสอบถามลูกค้าผ่าน LINE, ติดตามสถานะพัสดุ, รับ complaint</td>
+        <td>get_parcel_status, send_tracking_flex, escalate_complaint, send_line_message</td>
+        <td>First Response &lt;2h, Resolution &lt;24h</td>
+      </tr>
+      <tr>
+        <td><strong>Driver Agent</strong></td>
+        <td>รับงานผ่าน PWA, GPS check-in pickup/delivery, capture POD</td>
+        <td>accept_job, gps_checkin, capture_pod, update_delivery_status, report_damage</td>
+        <td>On-time Delivery ≥95%, POD Capture 100%</td>
+      </tr>
+      <tr>
+        <td><strong>Warehouse Agent</strong></td>
+        <td>รับพัสดุ, สแกน barcode, จัดเก็บ, เตรียมของส่ง</td>
+        <td>scan_barcode, update_stock, prepare_shipment, report_discrepancy</td>
+        <td>Scan Accuracy ≥99.5%, Discrepancy 0%</td>
+      </tr>
+      <tr>
+        <td><strong>QC Agent</strong></td>
+        <td>ตรวจสอบสภาพพัสดุ, บันทึก damage, ออก claim</td>
+        <td>inspect_parcel, record_damage, issue_claim, trigger_investigation</td>
+        <td>Damage Detection Rate ≥99%, Claim SLA &lt;48h</td>
+      </tr>
+    </table>
+
+    <div class="section-title">Swift PFMEA Data (Pilot — In Configuration)</div>
+    <div class="arch-grid">
+      <div class="arch-layer client" style="border-color:#e65c00;">
+        <h3 style="color:#e65c00;">🔶 Logistics Failure Modes</h3>
+        <span class="arch-chip c" style="background:#fff3ec;color:#e65c00;border-color:#ffd1b0;">Package Damage (Sev-9)</span>
+        <span class="arch-chip c" style="background:#fff3ec;color:#e65c00;border-color:#ffd1b0;">Wrong Delivery (Sev-8)</span>
+        <span class="arch-chip c" style="background:#fff3ec;color:#e65c00;border-color:#ffd1b0;">Delivery Delay (Sev-7)</span>
+        <span class="arch-chip c" style="background:#fff3ec;color:#e65c00;border-color:#ffd1b0;">Lost Parcel (Sev-9)</span>
+        <br><br>
+        <span class="arch-chip" style="background:#f5f5f5;color:#888;">PFMEA Rows: In config (Pilot)</span>
+        <span class="arch-chip" style="background:#f5f5f5;color:#888;">Critical TCs: TBD</span>
+      </div>
+      <div class="arch-layer client" style="border-color:#e65c00;">
+        <h3 style="color:#e65c00;">🔶 Swift Critical Processes</h3>
+        <p style="font-size:12px;text-align:left;margin-top:8px;">
+          <strong>Pickup → Dispatch:</strong> SLA &lt;15 min จากรับ request<br><br>
+          <strong>Delivery → POD:</strong> Driver ต้อง capture POD ทุกครั้ง 100%<br><br>
+          <strong>Damage Report:</strong> ต้อง trigger QC Agent ทันที (real-time)<br><br>
+          <strong>Lost Parcel:</strong> Escalate to CS + Manager within 1h
+        </p>
+      </div>
+    </div>
+
+    <div class="section-title">Swift Customer Journey (7 Stages)</div>
+    <table>
+      <tr><th>#</th><th>Stage</th><th>MCP Event</th><th>Agent</th><th>LINE / App Action</th></tr>
+      <tr><td>1</td><td>ลูกค้าแจ้ง Pickup Request ผ่าน LINE OA</td><td>new_inquiry</td><td>CS Agent</td><td>Pickup Confirmed Flex</td></tr>
+      <tr><td>2</td><td>Dispatch จัดคิวงาน + Assign Driver</td><td>job_scheduled</td><td>Dispatch Agent</td><td>Driver Assigned Flex</td></tr>
+      <tr><td>3</td><td>Driver รับของ (GPS check-in Pickup)</td><td>status_update</td><td>Driver Agent</td><td>PWA Driver App — Pickup Confirm</td></tr>
+      <tr><td>4</td><td>ขนส่งพัสดุ (In Transit)</td><td>status_update</td><td>Driver Agent</td><td>Tracking Flex — ลูกค้าอัปเดต</td></tr>
+      <tr><td>5</td><td>จัดส่งถึงปลายทาง</td><td>status_update</td><td>Driver Agent</td><td>Out for Delivery Flex</td></tr>
+      <tr><td>6</td><td>Delivery + POD Capture</td><td>job_complete</td><td>Driver Agent</td><td>PWA — Sign / Photo POD</td></tr>
+      <tr><td>7</td><td>ลูกค้า Review การจัดส่ง</td><td>status_update</td><td>CS Agent</td><td>Review LIFF (Rating + Comment)</td></tr>
+    </table>
+
+    <div class="section-title">Swift LINE OA Configuration</div>
+    <div class="code-block"><pre><span class="c"># Swift Client Config — .env</span>
+<span class="c"># LINE Channel (Swift-owned)</span>
+LINE_CHANNEL_ACCESS_TOKEN=<span class="s">"&lt;swift_channel_access_token&gt;"</span>
+LINE_CHANNEL_SECRET=<span class="s">"&lt;swift_channel_secret&gt;"</span>
+
+<span class="c"># LIFF App IDs (Swift — 3 apps)</span>
+LIFF_ID_TRACKING=<span class="s">"9876543210-xxxxxxxx"</span>
+LIFF_ID_POD=<span class="s">"9876543210-yyyyyyyy"</span>
+LIFF_ID_REVIEW=<span class="s">"9876543210-zzzzzzzz"</span>
+
+<span class="c"># Rich Menu IDs (Swift-specific)</span>
+RM_DEFAULT_ID=<span class="s">"richmenu-swift-xxxxxxxxxxxxxxxxxxxxxxxxxxxx"</span>
+RM_TRACKING_ID=<span class="s">"richmenu-swift-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"</span>
+
+<span class="c"># Supabase (Swift's own project)</span>
+SUPABASE_URL=<span class="s">"https://&lt;swift-project&gt;.supabase.co"</span>
+SUPABASE_ANON_KEY=<span class="s">"&lt;swift_anon_key&gt;"</span>
+
+<span class="c"># MCP Server</span>
+MCP_WEBHOOK_URL=<span class="s">"https://api.monolith.app/clients/swift/webhook/line"</span>
+CLIENT_ID=<span class="s">"swift"</span>
+
+<span class="c"># PWA Driver App</span>
+PWA_ACCENT_COLOR=<span class="s">"#e65c00"</span>
+PWA_APP_NAME=<span class="s">"Swift Driver"</span></pre></div>
+
+    <div class="section-title">ความแตกต่างระหว่าง Daph (Interior) vs Swift (Logistics) บน MONOLITH</div>
+    <table>
+      <tr><th>Feature</th><th>🏠 Daph Decor</th><th>🚚 Swift Logistics</th></tr>
+      <tr><td>Domain</td><td>Interior Decoration</td><td>Logistics &amp; Delivery</td></tr>
+      <tr><td>Status</td><td style="color:#2d7a4f;font-weight:600;">Active</td><td style="color:#e65c00;font-weight:600;">Pilot</td></tr>
+      <tr><td>Agents</td><td>6 (Sale/Designer/Factory/Install/PM/Procurement)</td><td>5 (Dispatch/CS/Driver/Warehouse/QC)</td></tr>
+      <tr><td>Customer Journey</td><td>10 stages — inquiry → install complete</td><td>7 stages — pickup → review</td></tr>
+      <tr><td>Field App Focus</td><td>Installation checklist + defect capture</td><td>POD capture + GPS tracking</td></tr>
+      <tr><td>PFMEA Rows</td><td>122 rows (fully configured)</td><td>In configuration (Pilot)</td></tr>
+      <tr><td>MCP Events Active</td><td>12/12</td><td>8/12</td></tr>
+      <tr><td>LIFF Apps</td><td>5 (status/schedule/gallery/approval/review)</td><td>3 (tracking/pod/review)</td></tr>
+      <tr><td>Accent Color</td><td style="color:#5b4fcf;">■ #5b4fcf (Purple — Install)</td><td style="color:#e65c00;">■ #e65c00 (Orange — Driver)</td></tr>
+      <tr><td>Platform Code Change</td><td colspan="2" style="text-align:center;">❌ ไม่ต้องแก้ไข platform code — config-driven onboarding</td></tr>
+    </table>
   </div>
 
 </div>
