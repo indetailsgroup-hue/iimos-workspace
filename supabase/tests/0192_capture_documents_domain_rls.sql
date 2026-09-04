@@ -154,10 +154,10 @@ VALUES
   ('b2b2b2b2-0192-0000-0000-000000000010'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'test_type_0192', 'proposed', 'app', 'staff-b', 'SITE-0192-B', 'idem-0192-b', 'https://storage.test/0192-b.jpg')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.contract_documents (id, org_id, project_id, site_code, version, data, status)
+INSERT INTO public.contract_documents (id, org_id, project_id, site_code, version, data, body, status)
 VALUES
-  ('a1a1a1a1-0192-0000-0000-000000000020'::uuid, 'a1a1a1a1-0000-0000-0000-000000000001'::uuid, 'a1a1a1a1-0192-0000-0000-000000000001'::uuid, 'SITE-0192-A', 1, '{}'::jsonb, 'draft'),
-  ('b2b2b2b2-0192-0000-0000-000000000020'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'b2b2b2b2-0192-0000-0000-000000000001'::uuid, 'SITE-0192-B', 1, '{}'::jsonb, 'draft')
+  ('a1a1a1a1-0192-0000-0000-000000000020'::uuid, 'a1a1a1a1-0000-0000-0000-000000000001'::uuid, 'a1a1a1a1-0192-0000-0000-000000000001'::uuid, 'SITE-0192-A', 1, '{}'::jsonb, 'test contract body alpha 0192', 'draft'),
+  ('b2b2b2b2-0192-0000-0000-000000000020'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'b2b2b2b2-0192-0000-0000-000000000001'::uuid, 'SITE-0192-B', 1, '{}'::jsonb, 'test contract body beta 0192', 'draft')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.document_links (token, org_id, project_id, site_code, doc_type, ref_id, expires_at)
