@@ -687,6 +687,241 @@
     </tbody>
   </table>
 
+
+  <!-- PGVECTOR RAG SECTION -->
+  <div class="section-title">🗄️ Layer 3 — pgvector RAG Setup (Knowledge Base)</div>
+  <div style="background:#e8f0fe;border-left:4px solid #1f2d5a;border-radius:8px;padding:14px 18px;margin-bottom:24px;font-size:13.5px;color:#1f2d5a;">
+    <strong>ที่มา:</strong> ฝัง <code>_knowledge-export.json</code> (daph-second-brain · sourceVersion: <code>daph-qms-2020-rev00</code> · importedAt: <code>2026-07-09</code>) เข้า Supabase pgvector — รองรับ Semantic Search สำหรับ 5 MVP Agents
+    <span style="float:right;background:#c9a84c;color:white;border-radius:12px;padding:2px 10px;font-size:12px;font-weight:700;">reviewStatus: draft</span>
+  </div>
+
+  <!-- SQL SCHEMA CARD -->
+  <div style="background:white;border-radius:12px;padding:28px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-bottom:24px;">
+    <div style="font-size:15px;font-weight:800;color:#1f2d5a;margin-bottom:16px;">📐 SQL Schema — ตาราง <code>knowledge_embeddings</code> (Supabase)</div>
+    <pre style="background:#0f172a;color:#e2e8f0;border-radius:8px;padding:20px;font-size:12.5px;line-height:1.7;overflow-x:auto;font-family:'Courier New',monospace;">-- Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE IF NOT EXISTS knowledge_embeddings (
+  id               uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_id        text          NOT NULL,                              -- 'daph-second-brain'
+  source_version   text          NOT NULL DEFAULT 'daph-qms-2020-rev00',
+  imported_at      timestamptz   NOT NULL,
+  review_status    text          NOT NULL DEFAULT 'draft',             -- 'draft' | 'approved'
+  process_step     text,                                               -- step nameEN (e.g. 'Sale', 'Designer')
+  sub_process_group text,                                              -- 'Office' | 'Factory' | 'Installation'
+  content          text          NOT NULL,                             -- chunk text สำหรับ embed
+  content_type     text          NOT NULL                              -- ประเภทเนื้อหา
+                   CHECK (content_type IN (
+                     'process_step',   -- 28 steps จาก processModel
+                     'pfmea_row',      -- 122 rows จาก pfmeaRiskRows
+                     'raci_entry'      -- RACI สำหรับแต่ละ step
+                   )),
+  embedding        vector(1536),                                       -- text-embedding-3-small dims
+  metadata         jsonb         DEFAULT '{}',                        -- canonOrder, severity, detection ฯลฯ
+  created_at       timestamptz   NOT NULL DEFAULT now()
+);
+
+-- IVFFlat index สำหรับ cosine similarity search
+CREATE INDEX IF NOT EXISTS idx_knowledge_embeddings_ivfflat
+  ON knowledge_embeddings
+  USING ivfflat (embedding vector_cosine_ops)
+  WITH (lists = 100);
+
+-- Index เพิ่มเติม สำหรับ filter by agent/step
+CREATE INDEX IF NOT EXISTS idx_knowledge_process_step  ON knowledge_embeddings (process_step);
+CREATE INDEX IF NOT EXISTS idx_knowledge_content_type  ON knowledge_embeddings (content_type);
+CREATE INDEX IF NOT EXISTS idx_knowledge_review_status ON knowledge_embeddings (review_status);</pre>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px;">
+      <div style="background:#f0fdf4;border:1px solid #2d7a4f;border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:22px;font-weight:800;color:#2d7a4f;">28</div>
+        <div style="font-size:11px;color:#4a5568;">process_step chunks<br>(canonOrder 0–27)</div>
+      </div>
+      <div style="background:#fff8e8;border:1px solid #c9a84c;border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:22px;font-weight:800;color:#c9a84c;">122</div>
+        <div style="font-size:11px;color:#4a5568;">pfmea_row chunks<br>(severity + controls)</div>
+      </div>
+      <div style="background:#e8f0fe;border:1px solid #1f2d5a;border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:22px;font-weight:800;color:#1f2d5a;">28</div>
+        <div style="font-size:11px;color:#4a5568;">raci_entry chunks<br>(R/A/C/I per step)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5-STEP EMBED PROCESS -->
+  <div style="background:white;border-radius:12px;padding:28px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-bottom:24px;">
+    <div style="font-size:15px;font-weight:800;color:#1f2d5a;margin-bottom:20px;">⚙️ 5 ขั้นตอน Embed daph-second-brain → Supabase</div>
+    <div style="display:flex;flex-direction:column;gap:0;">
+      <div style="display:flex;align-items:flex-start;gap:16px;padding:16px 0;border-bottom:1px solid #eef0f3;">
+        <div style="background:#1f2d5a;color:white;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;">1</div>
+        <div>
+          <div style="font-weight:700;color:#1f2d5a;font-size:14px;">Parse <code>_knowledge-export.json</code></div>
+          <div style="font-size:13px;color:#4a5568;margin-top:4px;">อ่าน 3 arrays: <code>processModel</code> (28 steps), <code>pfmeaRiskRows</code> (122 rows), <code>raciMap</code> (28 entries) · ตรวจสอบ <code>schemaVersion</code> = "1.0.0" และ <code>reviewStatus</code> = "draft"</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:16px;padding:16px 0;border-bottom:1px solid #eef0f3;">
+        <div style="background:#1f2d5a;color:white;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;">2</div>
+        <div>
+          <div style="font-weight:700;color:#1f2d5a;font-size:14px;">Chunk เนื้อหาเป็น Embedded Documents</div>
+          <div style="font-size:13px;color:#4a5568;margin-top:4px;">แปลงแต่ละ record เป็น chunk text — process_step: "<em>Process Step: {nameEN} ({nameTH}) | Group: {group} | Order: {canonOrder}</em>" · pfmea_row: "<em>PFMEA [{processStep}] Mode: {failureMode} | Sev: {severity} | Controls: {controls}</em>" · รวม 178 chunks</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:16px;padding:16px 0;border-bottom:1px solid #eef0f3;">
+        <div style="background:#c9a84c;color:white;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;">3</div>
+        <div>
+          <div style="font-weight:700;color:#1f2d5a;font-size:14px;">OpenAI text-embedding-3-small (1536 dims)</div>
+          <div style="font-size:13px;color:#4a5568;margin-top:4px;">batch 100 chunks/request · estimated cost: 178 chunks × avg 40 tokens = ~7,120 tokens ≈ <strong>$0.0001</strong> · model: <code>text-embedding-3-small</code> · output: float32[1536]</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:16px;padding:16px 0;border-bottom:1px solid #eef0f3;">
+        <div style="background:#c9a84c;color:white;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;">4</div>
+        <div>
+          <div style="font-weight:700;color:#1f2d5a;font-size:14px;">Upsert เข้า Supabase <code>knowledge_embeddings</code></div>
+          <div style="font-size:13px;color:#4a5568;margin-top:4px;">upsert on conflict <code>(source_id, source_version, content_type, process_step)</code> · บันทึก <code>review_status</code> = "draft" ทุก row เพื่อให้ MCP Layer ส่ง <code>low_confidence_warning: true</code> กลับ agent</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:16px;padding:16px 0;">
+        <div style="background:#2d7a4f;color:white;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;">5</div>
+        <div>
+          <div style="font-weight:700;color:#1f2d5a;font-size:14px;">Verify Count & Spot-check</div>
+          <div style="font-size:13px;color:#4a5568;margin-top:4px;font-family:'Courier New',monospace;background:#f8f9fa;padding:8px;border-radius:4px;">SELECT content_type, COUNT(*) FROM knowledge_embeddings GROUP BY content_type;<br>-- expected: process_step=28, pfmea_row=122, raci_entry=28</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TYPESCRIPT EMBED SCRIPT -->
+  <div style="background:white;border-radius:12px;padding:28px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-bottom:24px;">
+    <div style="font-size:15px;font-weight:800;color:#1f2d5a;margin-bottom:4px;">💻 TypeScript Embed Script — <code>scripts/embed-knowledge.ts</code></div>
+    <div style="font-size:12px;color:#718096;margin-bottom:16px;">อ้างอิงจาก field จริงใน <code>_knowledge-export.json</code> (schemaVersion 1.0.0)</div>
+    <pre style="background:#0f172a;color:#e2e8f0;border-radius:8px;padding:20px;font-size:12px;line-height:1.65;overflow-x:auto;font-family:'Courier New',monospace;"><span style="color:#93c5fd;">import</span> { createClient } <span style="color:#93c5fd;">from</span> <span style="color:#86efac;">'@supabase/supabase-js'</span>;
+<span style="color:#93c5fd;">import</span> OpenAI <span style="color:#93c5fd;">from</span> <span style="color:#86efac;">'openai'</span>;
+<span style="color:#93c5fd;">import</span> knowledgeExport <span style="color:#93c5fd;">from</span> <span style="color:#86efac;">'./_knowledge-export.json'</span>;
+
+<span style="color:#94a3b8;">// Types จาก schemaVersion 1.0.0</span>
+<span style="color:#93c5fd;">interface</span> <span style="color:#fcd34d;">ProcessStep</span> {
+  canonOrder: <span style="color:#93c5fd;">number</span>; nameEN: <span style="color:#93c5fd;">string</span>; nameTH: <span style="color:#93c5fd;">string</span>;
+  group: <span style="color:#86efac;">'Office'</span> | <span style="color:#86efac;">'Factory'</span> | <span style="color:#86efac;">'Installation'</span>;
+  requiresApproval: <span style="color:#93c5fd;">boolean</span>;
+}
+<span style="color:#93c5fd;">interface</span> <span style="color:#fcd34d;">PfmeaRow</span> {
+  id: <span style="color:#93c5fd;">string</span>; processStep: <span style="color:#93c5fd;">string</span>; failureMode: <span style="color:#93c5fd;">string</span>;
+  effect: <span style="color:#93c5fd;">string</span>; severity: <span style="color:#93c5fd;">number</span>; cause: <span style="color:#93c5fd;">string</span>;
+  detection: <span style="color:#93c5fd;">number</span>; controls: <span style="color:#93c5fd;">string</span>[];
+}
+<span style="color:#93c5fd;">interface</span> <span style="color:#fcd34d;">RaciEntry</span> {
+  processStep: <span style="color:#93c5fd;">string</span>; responsible: <span style="color:#93c5fd;">string</span>[];
+  accountable: <span style="color:#93c5fd;">string</span>; consulted: <span style="color:#93c5fd;">string</span>[];
+  informed: <span style="color:#93c5fd;">string</span>[]; confidence: <span style="color:#93c5fd;">number</span>;
+}
+
+<span style="color:#93c5fd;">const</span> supabase = createClient(
+  process.env.<span style="color:#fcd34d;">SUPABASE_URL</span>!, process.env.<span style="color:#fcd34d;">SUPABASE_ANON_KEY</span>!
+);
+<span style="color:#93c5fd;">const</span> openai = <span style="color:#93c5fd;">new</span> OpenAI({ apiKey: process.env.<span style="color:#fcd34d;">OPENAI_API_KEY</span>! });
+
+<span style="color:#93c5fd;">type</span> <span style="color:#fcd34d;">EmbedDoc</span> = {
+  content: <span style="color:#93c5fd;">string</span>; content_type: <span style="color:#93c5fd;">string</span>;
+  process_step: <span style="color:#93c5fd;">string</span>; sub_process_group: <span style="color:#93c5fd;">string</span>; metadata: <span style="color:#93c5fd;">object</span>;
+};
+
+<span style="color:#93c5fd;">async function</span> <span style="color:#fcd34d;">buildChunks</span>(): <span style="color:#93c5fd;">Promise</span>&lt;<span style="color:#fcd34d;">EmbedDoc</span>[]&gt; {
+  <span style="color:#93c5fd;">const</span> docs: <span style="color:#fcd34d;">EmbedDoc</span>[] = [];
+
+  <span style="color:#94a3b8;">// 1. processModel → process_step chunks (28 steps)</span>
+  <span style="color:#93c5fd;">for</span> (<span style="color:#93c5fd;">const</span> step <span style="color:#93c5fd;">of</span> knowledgeExport.processModel <span style="color:#93c5fd;">as</span> <span style="color:#fcd34d;">ProcessStep</span>[]) {
+    docs.push({
+      content: <span style="color:#86efac;">`Process Step: ${step.nameEN} (${step.nameTH}) | Group: ${step.group} | Order: ${step.canonOrder} | RequiresApproval: ${step.requiresApproval}`</span>,
+      content_type: <span style="color:#86efac;">'process_step'</span>,
+      process_step: step.nameEN,
+      sub_process_group: step.group,
+      metadata: { canonOrder: step.canonOrder, requiresApproval: step.requiresApproval }
+    });
+  }
+
+  <span style="color:#94a3b8;">// 2. pfmeaRiskRows → pfmea_row chunks (122 rows)</span>
+  <span style="color:#93c5fd;">for</span> (<span style="color:#93c5fd;">const</span> row <span style="color:#93c5fd;">of</span> knowledgeExport.pfmeaRiskRows <span style="color:#93c5fd;">as</span> <span style="color:#fcd34d;">PfmeaRow</span>[]) {
+    docs.push({
+      content: <span style="color:#86efac;">`PFMEA [${row.processStep}] FailureMode: ${row.failureMode} | Effect: ${row.effect} | Sev: ${row.severity} | Controls: ${row.controls.join('; ')}`</span>,
+      content_type: <span style="color:#86efac;">'pfmea_row'</span>,
+      process_step: row.processStep,
+      sub_process_group: <span style="color:#86efac;">''</span>,
+      metadata: { id: row.id, severity: row.severity, detection: row.detection, cause: row.cause }
+    });
+  }
+
+  <span style="color:#94a3b8;">// 3. raciMap → raci_entry chunks (28 entries)</span>
+  <span style="color:#93c5fd;">for</span> (<span style="color:#93c5fd;">const</span> raci <span style="color:#93c5fd;">of</span> knowledgeExport.raciMap <span style="color:#93c5fd;">as</span> <span style="color:#fcd34d;">RaciEntry</span>[]) {
+    docs.push({
+      content: <span style="color:#86efac;">`RACI [${raci.processStep}] Responsible: ${raci.responsible.join(', ')} | Accountable: ${raci.accountable} | Consulted: ${raci.consulted.join(', ')} | Informed: ${raci.informed.join(', ')}`</span>,
+      content_type: <span style="color:#86efac;">'raci_entry'</span>,
+      process_step: raci.processStep,
+      sub_process_group: <span style="color:#86efac;">''</span>,
+      metadata: { confidence: raci.confidence }
+    });
+  }
+  <span style="color:#93c5fd;">return</span> docs;
+}
+
+<span style="color:#93c5fd;">async function</span> <span style="color:#fcd34d;">embedAndUpsert</span>() {
+  <span style="color:#93c5fd;">const</span> docs = <span style="color:#93c5fd;">await</span> buildChunks();
+  console.log(<span style="color:#86efac;">`Built ${docs.length} chunks (expected: 178)`</span>);
+
+  <span style="color:#94a3b8;">// batch embed — 100 per API call</span>
+  <span style="color:#93c5fd;">const</span> BATCH = <span style="color:#fcd34d;">100</span>;
+  <span style="color:#93c5fd;">for</span> (<span style="color:#93c5fd;">let</span> i = <span style="color:#fcd34d;">0</span>; i &lt; docs.length; i += BATCH) {
+    <span style="color:#93c5fd;">const</span> batch = docs.slice(i, i + BATCH);
+    <span style="color:#93c5fd;">const</span> resp = <span style="color:#93c5fd;">await</span> openai.embeddings.create({
+      model: <span style="color:#86efac;">'text-embedding-3-small'</span>, input: batch.map(d =&gt; d.content)
+    });
+    <span style="color:#93c5fd;">const</span> rows = batch.map((doc, j) =&gt; ({
+      source_id: <span style="color:#86efac;">'daph-second-brain'</span>,
+      source_version: knowledgeExport.sourceVersion,
+      imported_at: knowledgeExport.importedAt,
+      review_status: knowledgeExport.reviewStatus,   <span style="color:#94a3b8;">// 'draft'</span>
+      process_step: doc.process_step,
+      sub_process_group: doc.sub_process_group,
+      content: doc.content,
+      content_type: doc.content_type,
+      embedding: resp.data[j].embedding,
+      metadata: doc.metadata
+    }));
+    <span style="color:#93c5fd;">const</span> { error } = <span style="color:#93c5fd;">await</span> supabase.from(<span style="color:#86efac;">'knowledge_embeddings'</span>).upsert(rows);
+    <span style="color:#93c5fd;">if</span> (error) <span style="color:#93c5fd;">throw</span> error;
+    console.log(<span style="color:#86efac;">`Upserted batch ${i / BATCH + 1}`</span>);
+  }
+  console.log(<span style="color:#86efac;">'✅ Done — verify with:'</span>);
+  console.log(<span style="color:#86efac;">"SELECT content_type, COUNT(*) FROM knowledge_embeddings GROUP BY content_type;"</span>);
+}
+
+embedAndUpsert().catch(console.error);</pre>
+  </div>
+
+  <!-- RAG QUERY PATTERN -->
+  <div style="background:white;border-radius:12px;padding:28px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-bottom:32px;">
+    <div style="font-size:15px;font-weight:800;color:#1f2d5a;margin-bottom:16px;">🔍 RAG Query Pattern — ใช้ใน MCP Tool <code>query_knowledge</code></div>
+    <pre style="background:#0f172a;color:#e2e8f0;border-radius:8px;padding:20px;font-size:12px;line-height:1.65;overflow-x:auto;font-family:'Courier New',monospace;"><span style="color:#94a3b8;">-- rpc_mcp_query_knowledge (Supabase RPC function)</span>
+<span style="color:#93c5fd;">CREATE OR REPLACE FUNCTION</span> rpc_mcp_query_knowledge(
+  query_embedding  vector(<span style="color:#fcd34d;">1536</span>),
+  process_step_filter text  <span style="color:#93c5fd;">DEFAULT</span> <span style="color:#86efac;">NULL</span>,
+  content_type_filter text  <span style="color:#93c5fd;">DEFAULT</span> <span style="color:#86efac;">NULL</span>,
+  match_count int           <span style="color:#93c5fd;">DEFAULT</span> <span style="color:#fcd34d;">5</span>
+) <span style="color:#93c5fd;">RETURNS TABLE</span> (
+  content text, content_type text, process_step text,
+  review_status text, similarity float, metadata jsonb
+) <span style="color:#93c5fd;">LANGUAGE</span> sql <span style="color:#93c5fd;">AS</span> $$
+  <span style="color:#93c5fd;">SELECT</span> content, content_type, process_step, review_status,
+         <span style="color:#fcd34d;">1 - (embedding <&lt;=&gt; query_embedding)</span> <span style="color:#93c5fd;">AS</span> similarity, metadata
+  <span style="color:#93c5fd;">FROM</span> knowledge_embeddings
+  <span style="color:#93c5fd;">WHERE</span> (process_step_filter <span style="color:#93c5fd;">IS NULL OR</span> process_step = process_step_filter)
+    <span style="color:#93c5fd;">AND</span>   (content_type_filter <span style="color:#93c5fd;">IS NULL OR</span> content_type = content_type_filter)
+  <span style="color:#93c5fd;">ORDER BY</span> embedding <span style="color:#fcd34d;">&lt;=&gt;</span> query_embedding
+  <span style="color:#93c5fd;">LIMIT</span> match_count;
+$$;</pre>
+    <div style="background:#fff8e8;border:1px solid #c9a84c;border-radius:8px;padding:12px 16px;margin-top:12px;font-size:13px;color:#6b4c11;">
+      ⚠️ <strong>reviewStatus = "draft"</strong> → MCP Layer ต้องเพิ่ม <code>low_confidence_warning: true</code> ใน response ทุกครั้ง จนกว่า SME จะ approve เป็น "approved" (Task 1.4 Gate-1 pending)
+    </div>
+  </div>
+
   <!-- NEXT STEP BOX -->
   <div style="background: linear-gradient(135deg, var(--navy) 0%, #0d1a3a 100%); border-radius: 12px; padding: 32px; color: white; text-align: center;">
     <div style="font-size: 13px; color: var(--gold); font-weight: 700; letter-spacing: 2px; margin-bottom: 12px; text-transform: uppercase;">Next Step ทันที</div>
