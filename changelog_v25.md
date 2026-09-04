@@ -2394,3 +2394,62 @@ New clients = สร้าง client_{id}.json ใหม่ + ไม่ต้อ
 - master_index.html: n:166 added (166 entries)
 - agents: Sale/Designer/Factory/Install/PM/Procurement Agent
 
+
+---
+
+## [CLIENT-REGISTRY] n:167 — thai_monolith_client_registry.html
+**Date:** 2025-Q2
+**File:** `thai_monolith_client_registry.html`
+**Lines:** ~330L | **Size:** ~22KB
+
+### What was added
+- Dashboard page แสดง Registered Clients ทั้งหมดบน MONOLITH Platform (multi-tenant showcase)
+- **Stat Cards:** Total Clients=2, Active=1, Pilot=1, Total Agents=11, MCP Events=12, Core Components=6
+- **Client Cards:** Daph Decor (Active, interior_decoration, 6 agents, 122 PFMEA rows, purple #5b4fcf) + Swift Logistics (Pilot, logistics_delivery, 5 agents, orange #e65c00)
+- **Card/Table view toggle** + Filter by status/domain + text search
+- **Component Enablement Matrix:** 6 components × 2 clients (✅/🟡 partial)
+- **Agent Deployment Summary:** Daph 6 agents + Swift 5 agents (11 total)
+- **Platform Config Summary:** Supabase/LINE/LIFF/Rich Menu/PWA per client counts
+- **Onboarding Timeline:** Daph 2024-Q4 Active → Swift 2025-Q1 Pilot → Client#3 TBD
+- Sarabun font; navy #1f2d5a / gold #c9a84c / green #2d7a4f theme
+
+---
+
+## [PLATFORM-SPEC-CLIENT2-UPDATE] n:166-mod — thai_monolith_platform_spec.html updated
+**Date:** 2025-Q2
+**File:** `thai_monolith_platform_spec.html`
+**Lines:** 909L → 1042L (+133L) | **Size:** ~63KB
+
+### What was added
+- **New tab button:** 🚚 Swift Logistics (after Daph tab)
+- **New Tab 04B: Swift Logistics Instance** — complete client profile:
+  - Business profile: Logistics & Delivery, Pilot status, accent orange #e65c00
+  - 5 agents table: Dispatch Agent, CS Agent, Driver Agent, Warehouse Agent, QC Agent (role/tools/KPI)
+  - PFMEA failure modes: Package Damage (Sev-9), Wrong Delivery (Sev-8), Delay (Sev-7), Lost Parcel (Sev-9)
+  - 7-stage customer journey: Pickup Request → Dispatch → GPS Pickup → In Transit → Out for Delivery → POD → Review
+  - .env config snippet (LINE channel, LIFF 3 apps, PWA Driver App accent color)
+  - **Daph vs Swift comparison table** (10 rows: domain/status/agents/journey/field app/PFMEA/MCP events/LIFF/accent/platform code)
+
+---
+
+## [CLIENT-CONFIG] n:168 — client_daph.json + validate_client_config.py
+**Date:** 2025-Q2
+
+### client_daph.json
+- Real JSON config file from Config Schema in platform spec
+- **Schema version:** 1.0.0 | **Size:** 9,577B
+- Top-level: client_id=daph, client_name, domain=interior_decoration, language=th, timezone=Asia/Bangkok
+- line{}: channel_access_token, channel_secret, webhook_url, liff_ids{5}, rich_menu_ids{5}
+- supabase{}: url, anon_key, service_role_key, db_schema, tables{4}
+- agents[6]: sale/designer/factory/install/pm/procurement — each with id/name/role/enabled/tools[]/kpis{}/mcp_events[]
+- pfmea{}: kb_file, total_rows=122, critical_sev_threshold=8, critical_test_cases[2] (TC-INSTALL-02 score=4 + TC-INSTALL-05 score=4), agent_step_mapping{14 steps→4 agents}, row_counts_by_agent{}, severity_summary{}
+- field_app{}: accent_color=#5b4fcf, mcp_endpoint, gps_required, offline_mode, checklist_items[8]
+- branding{}: primary_color=#1f2d5a, accent_color=#5b4fcf, font_family=Sarabun, logo_url
+- customer_journey{}: 10 stages with mcp_event, agent, line_action per stage
+
+### validate_client_config.py
+- Python 3 CLI: `python3 validate_client_config.py client_daph.json`
+- **129 checks** covering all 7 sections: Top Level, LINE, Supabase, Agents, PFMEA, Field App, Branding
+- Color-coded output (✅ PASS / ❌ FAIL / ⚠️ WARN); exit code 0=valid, 1=invalid
+- Validated against client_daph.json: **129/129 PASS** ✅
+
