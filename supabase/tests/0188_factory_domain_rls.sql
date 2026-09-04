@@ -235,6 +235,19 @@ INSERT INTO public.factory_checkins (id, site_code, work_date, org_id) VALUES
    'b2b2b2b2-0000-0000-0000-000000000001')
 ON CONFLICT DO NOTHING;
 
+-- ── org_members (Beta user) ───────────────────────────────────────────────
+-- get_user_org_id() runs: SELECT org_id FROM public.org_members
+--   WHERE user_id = auth.uid() AND is_active = true LIMIT 1
+-- Without this row, get_user_org_id() returns NULL for the Beta JWT and
+-- the tenant_isolation policy (org_id = get_user_org_id()) filters out
+-- ALL rows including Beta's own — causing T-0188-25 to fail.
+INSERT INTO public.org_members (id, org_id, user_id, role, is_active) VALUES
+  ('b2b2b2b2-0000-0000-0188-000000000001'::uuid,
+   'b2b2b2b2-0000-0000-0000-000000000001',
+   'b2b2b2b2-0000-0000-0001-000000000002',
+   'VIEWER', true)
+ON CONFLICT DO NOTHING;
+
 -- ---------------------------------------------------------------------------
 -- Switch to Beta user context (authenticated, Beta org_id claim)
 -- ---------------------------------------------------------------------------
