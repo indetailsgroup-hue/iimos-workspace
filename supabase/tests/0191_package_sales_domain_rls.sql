@@ -16,8 +16,7 @@ SELECT has_column('public', 'package_addons', 'org_id',
   'T-0191-01: package_addons has org_id column');
 SELECT col_not_null('public', 'package_addons', 'org_id',
   'T-0191-02: package_addons.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'package_addons'::name,
-  'T-0191-03: package_addons has RLS enabled');
+SELECT has_row_level_security('public', 'package_addons', 'T-0191-03: package_addons has RLS enabled');
 SELECT policy_exists('public', 'package_addons', 'package_addons_tenant_isolation',
   'T-0191-04: package_addons_tenant_isolation policy exists');
 
@@ -26,8 +25,7 @@ SELECT has_column('public', 'package_estimates', 'org_id',
   'T-0191-05: package_estimates has org_id column');
 SELECT col_not_null('public', 'package_estimates', 'org_id',
   'T-0191-06: package_estimates.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'package_estimates'::name,
-  'T-0191-07: package_estimates has RLS enabled');
+SELECT has_row_level_security('public', 'package_estimates', 'T-0191-07: package_estimates has RLS enabled');
 SELECT policy_exists('public', 'package_estimates', 'package_estimates_tenant_isolation',
   'T-0191-08: package_estimates_tenant_isolation policy exists');
 
@@ -36,8 +34,7 @@ SELECT has_column('public', 'package_materials', 'org_id',
   'T-0191-09: package_materials has org_id column');
 SELECT col_not_null('public', 'package_materials', 'org_id',
   'T-0191-10: package_materials.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'package_materials'::name,
-  'T-0191-11: package_materials has RLS enabled');
+SELECT has_row_level_security('public', 'package_materials', 'T-0191-11: package_materials has RLS enabled');
 SELECT policy_exists('public', 'package_materials', 'package_materials_tenant_isolation',
   'T-0191-12: package_materials_tenant_isolation policy exists');
 
@@ -46,8 +43,7 @@ SELECT has_column('public', 'package_stages', 'org_id',
   'T-0191-13: package_stages has org_id column');
 SELECT col_not_null('public', 'package_stages', 'org_id',
   'T-0191-14: package_stages.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'package_stages'::name,
-  'T-0191-15: package_stages has RLS enabled');
+SELECT has_row_level_security('public', 'package_stages', 'T-0191-15: package_stages has RLS enabled');
 SELECT policy_exists('public', 'package_stages', 'package_stages_tenant_isolation',
   'T-0191-16: package_stages_tenant_isolation policy exists');
 
@@ -56,8 +52,7 @@ SELECT has_column('public', 'price_rates', 'org_id',
   'T-0191-17: price_rates has org_id column');
 SELECT col_not_null('public', 'price_rates', 'org_id',
   'T-0191-18: price_rates.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'price_rates'::name,
-  'T-0191-19: price_rates has RLS enabled');
+SELECT has_row_level_security('public', 'price_rates', 'T-0191-19: price_rates has RLS enabled');
 SELECT policy_exists('public', 'price_rates', 'price_rates_tenant_isolation',
   'T-0191-20: price_rates_tenant_isolation policy exists');
 
@@ -66,8 +61,7 @@ SELECT has_column('public', 'project_turnkey', 'org_id',
   'T-0191-21: project_turnkey has org_id column');
 SELECT col_not_null('public', 'project_turnkey', 'org_id',
   'T-0191-22: project_turnkey.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'project_turnkey'::name,
-  'T-0191-23: project_turnkey has RLS enabled');
+SELECT has_row_level_security('public', 'project_turnkey', 'T-0191-23: project_turnkey has RLS enabled');
 SELECT policy_exists('public', 'project_turnkey', 'project_turnkey_tenant_isolation',
   'T-0191-24: project_turnkey_tenant_isolation policy exists');
 
@@ -76,8 +70,7 @@ SELECT has_column('public', 'turnkey_offers', 'org_id',
   'T-0191-25: turnkey_offers has org_id column');
 SELECT col_not_null('public', 'turnkey_offers', 'org_id',
   'T-0191-26: turnkey_offers.org_id is NOT NULL');
-SELECT relrowsecurity('public'::name, 'turnkey_offers'::name,
-  'T-0191-27: turnkey_offers has RLS enabled');
+SELECT has_row_level_security('public', 'turnkey_offers', 'T-0191-27: turnkey_offers has RLS enabled');
 SELECT policy_exists('public', 'turnkey_offers', 'turnkey_offers_tenant_isolation',
   'T-0191-28: turnkey_offers_tenant_isolation policy exists');
 
