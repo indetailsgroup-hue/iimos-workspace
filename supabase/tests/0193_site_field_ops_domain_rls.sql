@@ -21,7 +21,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'appointments' AND n.nspname = 'public'),
   'T-0193-03: appointments has RLS enabled');
-SELECT policy_exists('public', 'appointments', 'appointments_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'appointments'
+            AND policyname = 'appointments_tenant_isolation'),
   'T-0193-04: appointments_tenant_isolation policy exists');
 
 -- daily_reports (T-0193-05..08)
@@ -34,7 +38,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'daily_reports' AND n.nspname = 'public'),
   'T-0193-07: daily_reports has RLS enabled');
-SELECT policy_exists('public', 'daily_reports', 'daily_reports_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'daily_reports'
+            AND policyname = 'daily_reports_tenant_isolation'),
   'T-0193-08: daily_reports_tenant_isolation policy exists');
 
 -- qc_inspections (T-0193-09..12)
@@ -47,7 +55,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'qc_inspections' AND n.nspname = 'public'),
   'T-0193-11: qc_inspections has RLS enabled');
-SELECT policy_exists('public', 'qc_inspections', 'qc_inspections_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'qc_inspections'
+            AND policyname = 'qc_inspections_tenant_isolation'),
   'T-0193-12: qc_inspections_tenant_isolation policy exists');
 
 -- site_checkins (T-0193-13..16)
@@ -60,7 +72,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'site_checkins' AND n.nspname = 'public'),
   'T-0193-15: site_checkins has RLS enabled');
-SELECT policy_exists('public', 'site_checkins', 'site_checkins_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'site_checkins'
+            AND policyname = 'site_checkins_tenant_isolation'),
   'T-0193-16: site_checkins_tenant_isolation policy exists');
 
 -- site_survey_zone (T-0193-17..20)
@@ -73,7 +89,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'site_survey_zone' AND n.nspname = 'public'),
   'T-0193-19: site_survey_zone has RLS enabled');
-SELECT policy_exists('public', 'site_survey_zone', 'site_survey_zone_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'site_survey_zone'
+            AND policyname = 'site_survey_zone_tenant_isolation'),
   'T-0193-20: site_survey_zone_tenant_isolation policy exists');
 
 -- variation_orders (T-0193-21..24)
@@ -86,7 +106,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'variation_orders' AND n.nspname = 'public'),
   'T-0193-23: variation_orders has RLS enabled');
-SELECT policy_exists('public', 'variation_orders', 'variation_orders_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'variation_orders'
+            AND policyname = 'variation_orders_tenant_isolation'),
   'T-0193-24: variation_orders_tenant_isolation policy exists');
 
 -- work_packages (T-0193-25..28)
@@ -99,7 +123,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'work_packages' AND n.nspname = 'public'),
   'T-0193-27: work_packages has RLS enabled');
-SELECT policy_exists('public', 'work_packages', 'work_packages_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'work_packages'
+            AND policyname = 'work_packages_tenant_isolation'),
   'T-0193-28: work_packages_tenant_isolation policy exists');
 
 -- ---------------------------------------------------------------------------
