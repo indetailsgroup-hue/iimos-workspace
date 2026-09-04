@@ -347,3 +347,17 @@ These modules exist in the repository but have no corresponding SOP section — 
 | Commit msg | `feat: S58 BAU Governance Charter DOCX (200,150B), thai_programme_completion_brief.html, all 9 Thai briefs, rebuilt ZIP 153 entries, inject/accept s51–s58 scripts, programme COMPLETE S1–S58` |
 | Key files | monolith_project_summary_v25_accepted.docx · all 9 Thai briefs · inject_s51–s58.py · accept_s51–s58.py · master_index.html · changelog_v25.md · sop_github_mapping.md · MONOLITH_SOP_Package_v2.5.zip + all backup DOCXs |
 | Status | **BLOCKED — PAT required** |
+
+## n:155 — thai_build_deploy_roadmap.html
+| Field | Value |
+|---|---|
+| File | `thai_build_deploy_roadmap.html` |
+| Type | HTML |
+| Category | Thai Brief |
+| Language | TH |
+| Size | ~45K bytes |
+| Status | ✅ Pushed to GitHub |
+| Push SHA | TBD (next push) |
+| Branch | main |
+| Path | monolith/thai_build_deploy_roadmap.html |
+| Description | Build & Deploy Roadmap Phase A–F; SOP → Live AI Agents; 28 agents; technology stack; effort estimates; Sarabun font; navy/gold/green theme |

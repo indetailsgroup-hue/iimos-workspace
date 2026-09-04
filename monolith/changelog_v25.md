@@ -2042,3 +2042,32 @@ Comprehensive one-page A4 HTML executive summary covering the complete v3.0 SOP 
 ### Package State
 - master_index.html: 153 → 154 entries (n:154)
 - ZIP: rebuild pending
+
+---
+
+## [BUILD-DEPLOY-ROADMAP] thai_build_deploy_roadmap.html — 2026-09-04
+
+### File Created
+- **thai_build_deploy_roadmap.html** — 45,000+ bytes
+- Build & Deploy Roadmap: SOP Documentation → Live AI Agents
+
+### Content
+- **Hero stats:** 6 phases / 28 agents / Phase A–F / SOP → Deployed
+- **Phase A — Foundation (2 months):** AI model selection (GPT-4o / Claude 3.5 / Gemini 1.5 Pro), API gateway, cloud infrastructure, data pipeline
+- **Phase B — Prompt Engineering (2 months):** System prompt design per SOP section, few-shot examples, Thai/English bilingual handling, prompt version control
+- **Phase C — Agent Build (3 months):** 28 agents coded, conversation flow, tool integrations (CRM/ERP/inventory), function calling
+- **Phase D — Integration (2 months):** LINE OA / WhatsApp / Web chat, property management CRM, inventory system, payment gateway
+- **Phase E — Testing & UAT (1.5 months):** Unit test per agent, integration test, UAT with DAPH staff, load test, security audit
+- **Phase F — Go-Live & BAU (ongoing):** Phased rollout, monitoring dashboard, SLA tracking, continuous improvement
+- **Technology stack table:** 6-row (AI Model / Orchestration / CRM Integration / Chat Platform / Monitoring / Cloud)
+- **Key decisions table:** 5 decisions (build vs buy, language model, deployment, data residency, rollback)
+- **Effort estimate table:** Phase A–F with months + team size
+- **Critical path & risks:** 5 risks with mitigation
+- **Vision input flow diagram:** Technical drawing → SOP docs → AI model → deployed agents
+- Sarabun font; navy #1f2d5a / gold #c9a84c / green #2d7a4f
+
+### Package State
+- master_index.html: 154 → 155 entries (n:155)
+- Thai files: 10 HTML briefs total
+- ZIP: rebuild pending → rebuilt
+- GitHub: pending push
