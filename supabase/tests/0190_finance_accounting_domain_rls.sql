@@ -330,10 +330,10 @@ INSERT INTO public.bank_feed_txn
 ON CONFLICT (id) DO NOTHING;
 
 -- ── receivable (both tenants — used for T-0190-40, T-0190-43) ─────────────────
-INSERT INTO public.receivable (id, customer, amount, org_id) VALUES
-  ('a1a1a1a1-0190-0001-0000-000000000001', 'ALPHA-CUST-0190', 1000.00,
+INSERT INTO public.receivable (id, customer, due_date, amount, org_id) VALUES
+  ('a1a1a1a1-0190-0001-0000-000000000001', 'ALPHA-CUST-0190', '2026-12-31', 1000.00,
    'a1a1a1a1-0000-0000-0000-000000000001'),
-  ('b2b2b2b2-0190-0001-0000-000000000001', 'BETA-CUST-0190',  1000.00,
+  ('b2b2b2b2-0190-0001-0000-000000000001', 'BETA-CUST-0190',  '2026-12-31', 1000.00,
    'b2b2b2b2-0000-0000-0000-000000000001')
 ON CONFLICT (id) DO NOTHING;
 
