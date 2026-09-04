@@ -2071,3 +2071,22 @@ Comprehensive one-page A4 HTML executive summary covering the complete v3.0 SOP 
 - Thai files: 10 HTML briefs total
 - ZIP: rebuild pending → rebuilt
 - GitHub: pending push
+
+## [TECH-STACK-DEEP-RESEARCH] thai_tech_stack_deep_research.html — 2026-09-04
+
+### Added
+- **thai_tech_stack_deep_research.html** — 61,000+ bytes
+- Deep Research Report: Technology Stack สำหรับ AI Agents บน Monolith Platform
+- 6-Layer Stack Analysis (Layer 1–6): AI Model / Orchestration / Knowledge Base / Vision / Integration / UI
+- Repo Analysis: github.com/indetailsgroup-hue/monolith-workspace (4,722 files, TypeScript)
+- Layer 1 AI Model: GPT-4o (primary) vs Claude Sonnet 4 vs Gemini 2.0 Pro — pricing 2026
+- Layer 2 Orchestration: Supabase Edge Functions + Vercel AI SDK + MCP Layer (NOT n8n/LangChain)
+- Layer 3 Knowledge Base: pgvector on Supabase + daph-second-brain _knowledge-export.json (113KB, 28 steps, 122 PFMEA rows)
+- Layer 4 Vision Processing: GPT-4o Vision + LINE webhook pipeline
+- Layer 5 Integration: LINE OA Webhook + Supabase Realtime (NOT HubSpot/Zoho)
+- Layer 6 UI: Field App PWA (29 screens built) + LINE Flex Message (NOT new custom app)
+- Cost comparison: old roadmap $600–1,500/mo vs correct stack $175–500/mo (60–70% saving)
+- PDPA Data Minimization Boundary — Req 9–10 mcp-layer spec
+- Build order: MCP Layer → pgvector RAG → Prompt Engineering → LINE OA webhook → Vision pipeline
+- Master index: n:156
+- Sarabun font; navy/gold/green theme

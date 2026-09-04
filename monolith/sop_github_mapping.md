@@ -361,3 +361,21 @@ These modules exist in the repository but have no corresponding SOP section — 
 | Branch | main |
 | Path | monolith/thai_build_deploy_roadmap.html |
 | Description | Build & Deploy Roadmap Phase A–F; SOP → Live AI Agents; 28 agents; technology stack; effort estimates; Sarabun font; navy/gold/green theme |
+
+---
+
+## n:156 — thai_tech_stack_deep_research.html
+
+| Field | Value |
+|-------|-------|
+| File | `thai_tech_stack_deep_research.html` |
+| Index | n:156 |
+| Type | HTML |
+| Category | Thai Brief |
+| Language | TH |
+| Path | monolith/thai_tech_stack_deep_research.html |
+| Size | 61,000+ bytes |
+| Theme | Sarabun font; navy #1f2d5a / gold #c9a84c / green #2d7a4f |
+| Description | Thai Deep Research Report — Technology Stack 6 Layers for AI Agents on Monolith Platform; Repo analysis 4,722 files TypeScript; cost saving 60–70%; PDPA boundary |
+| Created | 2026-09-04 |
+| GitHub SHA | (see next push) |
