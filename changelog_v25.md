@@ -2220,3 +2220,56 @@ Comprehensive one-page A4 HTML executive summary covering the complete v3.0 SOP 
 - changelog_v25.md: this block appended
 - sop_github_mapping.md: n:161 row appended
 
+
+---
+
+## [INSTALL-AGENT-SPEC] thai_installation_agent_spec.html — NEW (n:162)
+**Date:** 2026-09-04
+**File:** `thai_installation_agent_spec.html` (n:162 NEW)
+**Type:** New HTML document
+
+### Content
+- Installation Agent (Agent #6) full specification for DAPH Decor interior project workflow
+- 6-tab interface: ภาพรวม / System Prompt / KPI Benchmarks / Site Checklist / Defect Capture Flow / PFMEA Test Cases
+- Agent role: installation_supervisor; MCP tools: capture_defect, update_installation_status, notify_pm, trigger_qc_inspection, escalate_halt
+- Halt conditions: PFMEA Sev≥9 defects → immediate halt + PM notification
+- KPI benchmarks (6 KPIs): Site Readiness Check ≥98%, Defect Capture Rate 100%, Installation Accuracy ≤2mm tolerance, Customer Sign-off Rate 100%, Escalation Response <1h, Rework Rate <5%
+- 12-item site checklist across 3 phases (Pre-Install: 5 items, During Install: 4 items, Post-Install: 3 items)
+- Defect capture flow: 6-step process (Site Arrival → Pre-Install Check → Defect Detected → Photo+Description Capture → Classify Severity [PFMEA Sev scale] → Notify PM + Log to Supabase)
+- PFMEA test cases: TC-INSTALL-01 (material shortage, Sev=7), TC-INSTALL-02 (Sev=9 defect during install — CRITICAL, score=4), TC-INSTALL-03 (customer not present, Sev=5), TC-INSTALL-04 (tool failure, Sev=6), TC-INSTALL-05 (dimension mismatch — CRITICAL, score=4)
+- Accent color purple #5b4fcf; Sarabun font; navy #1f2d5a / gold #c9a84c / green #2d7a4f theme
+- 45,218 bytes / 698 lines
+
+### Registry
+- master_index.html: 163 entries (n:162 added)
+- sop_github_mapping.md: n:162 row appended
+- changelog_v25.md: this block appended
+
+---
+
+## [LINE-OA-CUSTOMER-JOURNEY] thai_line_oa_customer_journey.html — NEW (n:163)
+**Date:** 2026-09-04
+**File:** `thai_line_oa_customer_journey.html` (n:163 NEW)
+**Type:** New HTML document
+
+### Content
+- Complete LINE OA customer journey for DAPH Decor from initial contact to installation complete
+- 10 customer journey stages with visual flow diagrams and stage cards:
+  1. เพิ่ม LINE OA (customer action) → 2. ส่งข้อมูลสนใจ (customer action) → 3. รับใบเสนอราคา → 4. อนุมัติ/ปฏิเสธ (customer action) → 5. ชำระเงิน → 6. ออกแบบ → 7. ผลิต → 8. นัดหมายติดตั้ง (customer action) → 9. ติดตั้งจริง → 10. Installation Complete
+- Stages 2/4/7/10 require customer action (highlighted in gold)
+- 6-tab interface: Customer Journey / Flex Message Previews / Rich Menu Design / LINE OA Settings / Auto-reply Rules / LIFF & Tech Setup
+- Flex Message visual mockups: Welcome Message, Acknowledgment, Approval Request, Job Scheduled, Job Complete
+- Rich Menu: 3-column × 2-row grid (ดูสถานะงาน / นัดหมาย / ติดต่อ Sale / Gallery / FAQ / โทรฉุกเฉิน); 5 stage-specific menu variants; switch_rich_menu() + link_rich_menu_id_to_user() code
+- Rich Menu env vars: RM_DEFAULT_ID, RM_PROJECT_ID, RM_APPROVAL_ID, RM_INSTALL_ID, RM_COMPLETE_ID
+- LINE OA settings table: 10 settings (webhook URL, greeting, auto-reply, rich menu default, etc.)
+- 6 keyword auto-reply rules handled by Sale Agent webhook (สนใจ/ราคา/รีวิว/ติดต่อ/ยกเลิก/ฉุกเฉิน)
+- LIFF apps table: 5 apps (LIFF_ID_STATUS, LIFF_ID_SCHEDULE, LIFF_ID_GALLERY, LIFF_ID_APPROVAL, LIFF_ID_REVIEW; all Full size except review=Compact)
+- notify_customer() and broadcast_to_customers() code snippets; LINE Messaging API only (LINE Notify DEPRECATED March 31, 2025)
+- 10-step go-live checklist; analytics KPIs
+- Sarabun font; navy #1f2d5a / gold #c9a84c / green #2d7a4f theme
+- 68,553 bytes / 1,212 lines
+
+### Registry
+- master_index.html: 163 entries (n:163 added)
+- sop_github_mapping.md: n:163 row appended
+- changelog_v25.md: this block appended
