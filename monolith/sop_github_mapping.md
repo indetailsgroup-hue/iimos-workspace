@@ -379,3 +379,7 @@ These modules exist in the repository but have no corresponding SOP section — 
 | Description | Thai Deep Research Report — Technology Stack 6 Layers for AI Agents on Monolith Platform; Repo analysis 4,722 files TypeScript; cost saving 60–70%; PDPA boundary |
 | Created | 2026-09-04 |
 | GitHub SHA | (see next push) |
+
+| n:157 | thai_mcp_layer_implementation.html | HTML | MCP Layer 2 implementation plan; 8-phase task list, PDPA checklist, TypeScript scaffold, DB schema, P1-P19 | monolith-mcp-layer_requirements.md, _design.md, _tasks.md | 2026-09-04 |
+| n:158 | thai_ai_agent_prompt_engineering.html | HTML | 5 MVP Agent prompt engineering; Sale/Designer/Factory/PM/Procurement; system prompts + few-shot from daph-second-brain | _knowledge-export.json (schemaVersion 1.0.0, reviewStatus draft) | 2026-09-04 |
+| n:155-mod | thai_build_deploy_roadmap.html | HTML (modified) | pgvector RAG setup section added — SQL schema, 5-step embed, TypeScript script, RAG query function | _knowledge-export.json | 2026-09-04 |
