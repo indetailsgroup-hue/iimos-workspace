@@ -111,7 +111,7 @@
     <div class="version-pill">v3.0 · AMD-001</div>
   </div>
   <div class="stats-row">
-    <div class="stat-pill"><strong id="hdr-total">115</strong> Files Total</div>
+    <div class="stat-pill"><strong id="hdr-total">154</strong> Files Total</div>
     <div class="stat-pill"><strong>20</strong> Live Agents</div>
     <div class="stat-pill"><strong>5</strong> Planned · Phase B/C</div>
     <div class="stat-pill"><strong>24</strong> SOP Sections</div>
@@ -222,7 +222,7 @@ const FILES=[
   {n:1,  name:'SOP_Integrated_Manual_accepted.docx',                         type:'DOCX', cat:'SOP Manual',        lang:'EN',    isNew:false, agents:LIVE20,
          desc:'Full 23-section SOP manual — all tracked changes accepted, production-ready'},
   {n:2,  name:'monolith_project_summary_v25_accepted.docx',                  type:'DOCX', cat:'Project Summary',   lang:'EN',    isNew:false, agents:ALL28,
-         desc:'Project summary — S1–S51 CLEAN FINAL (51 sections): AMD-004 PDD (WS-A–E, ฿5.2M, S38), S39 Biophilic Design SOP (GAP-01), S40 Design Freeze Gate (GAP-02), S41 Sensory Commissioning Protocol (GAP-03), S42 Post-Occupancy Evaluation (GAP-04), S43 SC Governance Module (GAP-07), S44 GitHub Integration Roadmap, S45 AMD-004 WS-B Technology Infrastructure + GAP-05 AI Creative Engine (AIE-001–005), S46 AMD-004 WS-C Client Service Innovation + GAP-06 Cross-Pillar Event Bus (EVT-001–005), S47 GAP-08 Real-time KPI Dashboard (KPI-001–024), S48 AMD-004 WS-E Human Capital &amp; Change Management (TRN-001–004, CHG-001–004), S49 AMD-004 Programme Closure &amp; Phase 2 Gateway (WS-A–E summary, THB 5.2M, Phase 1 cert GAP-01/02/03/04/07/08, Phase 2 gate GAP-05/06/09/10/11/12), S50 Phase 2 Programme Definition Document (SC-2032-XX, GAP-05/06/09/10/11/12 workplan, THB 6.0M budget, milestones P2-M1–M4, readiness checklist P1-CHK-01–12), S51 Phase 2 Procurement &amp; Vendor Selection Framework for GAP-05 AI Creative Engine (RFP-GAP05-001, 5-stage selection process, SLA KPIs, readiness checklist P2-CHK-01–12) — Phase 1 COMPLETE · Phase 2 PDD LOCKED — 0 tracked changes, 163,761 bytes'},
+         desc:'Project summary — S1–S58 CLEAN FINAL (58 sections): AMD-004 PDD (WS-A–E, ฿5.2M, S38), S39–S44 GAP-01/02/03/04/07/08 + GitHub Roadmap, S45–S49 Phase 1 closure (THB 5.2M), S50 Phase 2 PDD (THB 6.0M), S51 P2 Procurement, S52 P2 Vendor Onboarding, S53 P2 Go-Live, S54 Phase 3 PDD (THB 7.0M; P3-M1–M4; 92% coverage target), S55 Phase 3 RFP &amp; Vendor Selection (RFP-P3-WSA/B/C-001; scoring 40/25/20/15; P3-VND-CHK-01–10), S56 Phase 3 Vendor Onboarding (MONOLITH-S56-P3ONB-001; P3-ONB-CHK-01–12; SLA acceptance matrix), S57 Phase 3 Go-Live (MONOLITH-S57-P3GOLIVE-001; P3-GL-CHK-01–10; cutover T-5→T+72h; P3-M4; 92% coverage confirmed; THB 18.2M), S58 BAU Governance Charter (MONOLITH-S58-BAUGOV-001 v1.0; 4 committees SC/PGB/TAG/AOC; 5 KPI review cycles; Programme Closure Certificate MONOLITH-S58-CLOSECERT-001; Post-Programme Audit Plan T+30/60/90d + Annual; activated by P3-GL-CHK-10 + P3-M4; 28/28 agents; THB 18.2M total; +36pp 56%→92%) — Phase 1 COMPLETE · Phase 2 COMPLETE · Phase 3 COMPLETE · BAU GOVERNANCE ACTIVE — 0 tracked changes, 200,150 bytes'},
   {n:3,  name:'v30_planning_final.docx',                                      type:'DOCX', cat:'Planning',          lang:'EN',    isNew:false, agents:V30_5,
          desc:'v3.0 scope planning document — clean final, all tracked changes accepted'},
   {n:4,  name:'v30_planning.docx',                                            type:'DOCX', cat:'Planning',          lang:'EN',    isNew:false, agents:V30_5,
@@ -463,6 +463,94 @@ const FILES=[
          desc:'Pre-S51 backup of production DOCX — 50 sections (S1–S50), 165,356 bytes, captured before inject_s51.py ran'},
   {n:115, name:'monolith_project_summary_v25_accepted_pre_accept_s51_backup.docx', type:'DOCX', cat:'Backup',      lang:'EN',    isNew:true,  agents:ALL28,
          desc:'Pre-accept-S51 backup — 51 sections with 250 tracked insertions (w:ins), 165,356 bytes, captured before accept_s51.py ran'},
+
+  {n:116, name:'thai_procurement_brief.html',                                 type:'HTML', cat:'Brief',              lang:'TH',    isNew:true,  agents:['Aria','Signal','Core','Nova','Nexus','Guardian'],
+         desc:'Thai A4 brief — S51 Procurement Framework; RFP-GAP05-001 สรุป, กระบวนการคัดเลือก 5 ขั้นตอน, เกณฑ์ประเมิน Technical 40%/Commercial 30%/Strategic 30%, SLA KPIs AIE-001–005 (latency/availability table), P2-CHK-01–08 checklist; Sarabun font, navy/gold/green, A4 @page margins; 2-page layout'},
+  {n:117, name:'inject_s52.py',                                               type:'PY',   cat:'Script',             lang:'EN',    isNew:true,  agents:[],
+         desc:'Injection script — S52 Phase 2 Vendor Onboarding & Integration Protocol (52.1–52.7, V-CHK-01–12, AIE-001–005 endpoint specs, 90-day hypercare); IDs 1777–2035 (259 IDs); injects into monolith_project_summary_v25_accepted.docx as tracked changes'},
+  {n:118, name:'accept_s52.py',                                               type:'PY',   cat:'Script',             lang:'EN',    isNew:true,  agents:[],
+         desc:'Accept script — two-pass strip of S52 tracked insertions; 259→0 w:ins tags; insideH/V 14 preserved; S51+S52 content verified intact; file 168,420 bytes post-accept'},
+  {n:119, name:'monolith_project_summary_v25_accepted_pre_s52_backup.docx',  type:'DOCX', cat:'Backup',             lang:'EN',    isNew:true,  agents:ALL28,
+         desc:'Pre-S52 backup of production DOCX — 51 sections (S1–S51), 163,761 bytes, captured before inject_s52.py ran'},
+  {n:120, name:'monolith_project_summary_v25_accepted_pre_accept_s52_backup.docx', type:'DOCX', cat:'Backup',       lang:'EN',    isNew:true,  agents:ALL28,
+         desc:'Pre-accept-S52 backup — 52 sections with 259 tracked insertions (w:ins), 170,170 bytes, captured before accept_s52.py ran'},
+
+  {n:121, name:'thai_vendor_onboarding_brief.html',                               type:'HTML', cat:'Brief',        lang:'TH',    isNew:true,  agents:['Aria','Signal','Core','Nova','Nexus','Guardian'],
+         desc:'A4 Thai brief for S52 Phase 2 Vendor Onboarding & Integration Protocol — V-CHK-01–12 checklist table, AIE-001–005 SLA table, 90-day hypercare escalation matrix (L1–L4), hypercare milestone timeline (Day 0/30/60/90); Sarabun font, navy/gold/green theme'},
+
+  {n:122, name:'inject_s53.py',                                                   type:'PY',   cat:'Script',       lang:'EN',    isNew:true,  agents:[],
+         desc:'Injection script — S53 Phase 2 Go-Live Operations Plan (53.1–53.6, GL-CHK-01–10, cutover schedule T-5→T+72h, BAU transition 4-phase, Phase 3 readiness gate); IDs 2036–2257 (222 IDs); injects into monolith_project_summary_v25_accepted.docx as tracked changes'},
+
+  {n:123, name:'accept_s53.py',                                                   type:'PY',   cat:'Script',       lang:'EN',    isNew:true,  agents:[],
+         desc:'Accept script — two-pass strip of S53 tracked insertions; 222→0 w:ins tags; insideH/V 14 preserved; S51+S52+S53 content verified intact; GL-CHK-10/Phase 3 Readiness Gate confirmed; file 173,578 bytes post-accept'},
+
+  {n:124, name:'monolith_project_summary_v25_accepted_pre_s53_backup.docx',       type:'DOCX', cat:'Backup',       lang:'EN',    isNew:true,  agents:ALL28,
+         desc:'Pre-S53 backup — 52 sections, 0 tracked changes, 168,420 bytes, captured before inject_s53.py ran'},
+
+  {n:125, name:'monolith_project_summary_v25_accepted_pre_accept_s53_backup.docx',type:'DOCX', cat:'Backup',       lang:'EN',    isNew:true,  agents:ALL28,
+         desc:'Pre-accept-S53 backup — 53 sections with 222 tracked insertions (w:ins), 175,280 bytes, captured before accept_s53.py ran'},
+
+  {n:126, name:'thai_golive_brief.html',                                          type:'HTML', cat:'Brief',        lang:'TH',    isNew:true,  agents:['Signal','Core','Nova','Nexus','Aria','Guardian','Atlas','Ops','Pulse','Ledger','Vega','Rex'],
+         desc:'A4 Thai brief for S53 Phase 2 Go-Live Operations Plan — GL-CHK-01–10 checklist table, cutover schedule T-5→T+72h visual timeline (6 steps), BAU transition 4-phase table (Phase A–D Day 1–91+), Phase 3 Readiness Gate panel (GAP-05/06/09/10/11/12 CLOSED + GAP-01/02/03/04/13/14/15 Phase 3 scope), coverage ladder 56%→68%→80%→92%; Sarabun font, navy/gold/green theme'},
+  {n:127, name:'thai_phase2_summary_brief.html',                                  type:'HTML', cat:'Brief',        lang:'TH',    isNew:true,  agents:['Kelly','Signal','Aria','Blaze','Nova','Compass','Remy','Scout','Finn','Hana','Ember','Shore','Draft','Core','Nexus','Rex','Guardian','Ledger'],
+         desc:'1-page A4 Thai executive summary for SC Chair — consolidates S51+S52+S53 Phase 2 outcomes: three-column section cards (Procurement/Onboarding/Go-Live), programme KPI strip, timeline strip, coverage progress bar 80% gate highlighted, SC action box GL-CHK-10, next steps (S54 PDD/Phase 3 RFP/MONOLITH BAU target 92%); Sarabun font, navy/gold/green theme'},
+  {n:128, name:'inject_s54.py',                                                    type:'PY',   cat:'Script',      lang:'EN',    isNew:true,  agents:[],
+         desc:'Injection script — S54 Phase 3 Programme Definition Document (54.1–54.6, P3-CHK-01–12, WS-A GAP-01/02, WS-B GAP-03/04, WS-C GAP-13/14/15, THB 7.0M budget, milestones P3-M1–M4); IDs 2258–2570 (313 IDs); injects into monolith_project_summary_v25_accepted.docx as tracked changes; Date 2026-09-04'},
+  {n:129, name:'accept_s54.py',                                                    type:'PY',   cat:'Script',      lang:'EN',    isNew:true,  agents:[],
+         desc:'Accept script — two-pass strip of S54 tracked insertions; 313→0 w:ins tags; insideH/V 14 preserved; S51+S52+S53+S54 content verified intact; P3-CHK-12/THB 7.0M/P3-M4/GL-CHK-10/GAP-15 confirmed; file 178,044 bytes post-accept'},
+  {n:130, name:'monolith_project_summary_v25_accepted_pre_s54_backup.docx',        type:'DOCX', cat:'Backup',      lang:'EN',    isNew:true,  agents:[],
+         desc:'Pre-S54 backup — S1–S53 CLEAN (0 tracked changes), 173,578 bytes; taken by inject_s54.py before S54 injection'},
+  {n:131, name:'monolith_project_summary_v25_accepted_pre_accept_s54_backup.docx', type:'DOCX', cat:'Backup',      lang:'EN',    isNew:true,  agents:[],
+         desc:'Pre-accept-S54 backup — S1–S54 with 313 tracked insertions, 179,946 bytes; taken by accept_s54.py before stripping tracked changes'},
+  {n:132, name:'thai_phase3_kickoff_brief.html',                                   type:'HTML', cat:'Brief',        lang:'TH',    isNew:true,  agents:['Aria','Core','Signal','Nova','Nexus','Guardian','Ledger','Vega','Rex'],
+         desc:'A4 Thai Kickoff Brief for S54 Phase 3 PDD — P3-CHK-01–12 checklist table (gate per milestone M1–M4), GAP Workplan table WS-A (GAP-01/02)/WS-B (GAP-03/04)/WS-C (GAP-13/14/15) with SLA targets, milestone timeline strip P3-M1–M4 (Q3 2033–Q2 2034), budget strip THB 7.0M by GAP, SC Action Items box for P3-M1 kickoff; Sarabun font, navy/gold/green theme'},
+  {n:133, name:'inject_s55.py',                                                    type:'PY',   cat:'Script',      lang:'EN',    isNew:true,  agents:[],
+         desc:'Injection script — S55 Phase 3 RFP & Vendor Selection Framework (55.1–55.6, RFP-P3-WSA-001/WSB-001/WSC-001, 5-stage process, scoring matrix 40/25/20/15, SLA targets per GAP, P3-VND-CHK-01–10); IDs 2571–2699 (129 IDs); Date 2026-09-04'},
+  {n:134, name:'accept_s55.py',                                                    type:'PY',   cat:'Script',      lang:'EN',    isNew:true,  agents:[],
+         desc:'Accept script — two-pass strip of S55 tracked insertions; 129→0 w:ins tags; insideH/V 14 preserved; S51–S55 content verified intact; RFP-P3-WSA/B/C-001 + P3-VND-CHK-10 + SLA drift confirmed; file 183,620 bytes post-accept'},
+  {n:135, name:'monolith_project_summary_v25_accepted_pre_s55_backup.docx',        type:'DOCX', cat:'Backup',      lang:'EN',    isNew:true,  agents:[],
+         desc:'Pre-S55 backup — S1–S54 CLEAN (0 tracked changes), 178,044 bytes; taken by inject_s55.py before S55 injection'},
+  {n:136, name:'monolith_project_summary_v25_accepted_pre_accept_s55_backup.docx', type:'DOCX', cat:'Backup',      lang:'EN',    isNew:true,  agents:[],
+         desc:'Pre-accept-S55 backup — S1–S55 with 129 tracked insertions, 184,565 bytes; taken by accept_s55.py before stripping tracked changes'},
+  {n:137, name:'sop_github_mapping.md',                                            type:'MD',   cat:'Reference',   lang:'EN',    isNew:false, agents:[],
+         desc:'SOP × GitHub module mapping matrix — updated to S55; 55 sections; pending push row includes S52+S53+S54+S55 DOCX, Thai briefs (4+1=5), inject/accept scripts, rebuilt ZIP'},
+
+  {n:138, name:'inject_s56.py',                                                    type:'PY',   cat:'Script',      lang:'EN',    isNew:false, agents:[],
+         desc:'S56 injection script — 71 tracked insertions, IDs 2700–2770; P3-ONB-CHK-01–12; WS-A/B/C integration protocols; SLA acceptance matrix; 90-day hypercare; P3-M2 gate criteria'},
+  {n:139, name:'accept_s56.py',                                                    type:'PY',   cat:'Script',      lang:'EN',    isNew:false, agents:[],
+         desc:'S56 accept script — two-pass XML strip; 71→0 w:ins; insideH/V 17 preserved; S56+S55+S54+S53+S51 intact; 189,546 bytes post-accept'},
+  {n:140, name:'monolith_project_summary_v25_accepted_pre_s56_backup.docx',        type:'DOCX', cat:'Backup',      lang:'EN',    isNew:false, agents:[],
+         desc:'Pre-S56 backup — S1–S55 CLEAN (0 tracked changes), 183,620 bytes; taken by inject_s56.py before S56 injection'},
+  {n:141, name:'monolith_project_summary_v25_accepted_pre_accept_s56_backup.docx', type:'DOCX', cat:'Backup',      lang:'EN',    isNew:false, agents:[],
+         desc:'Pre-accept-S56 backup — S1–S56 with 71 tracked insertions, 190,030 bytes; taken by accept_s56.py before stripping tracked changes'},
+  {n:142, name:'thai_phase3_vendor_brief.html',                                    type:'HTML', cat:'Thai Brief',  lang:'TH',    isNew:false, agents:[],
+         desc:'Thai brief — S55 Phase 3 RFP &amp; Vendor Selection Framework; RFP-P3-WSA/B/C-001 cards, 5-stage process, scoring matrix 40/25/20/15, SLA targets GAP-01–15, P3-VND-CHK-01–10; A4 single-page Thai; Sarabun font; navy/gold/green theme'},
+  {n:143, name:'inject_s57.py',                                                    type:'PY',   cat:'Script',      lang:'EN',    isNew:true,  agents:[],
+         desc:'Injection script — S57 Phase 3 Go-Live Operations Plan (57.1–57.5, P3-GL-CHK-01–10, cutover schedule T-5→T+72h, BAU transition 4-phase, P3-M4 programme delivery milestone, 92% coverage, THB 18.2M); IDs 2771–2829 (59 IDs); injects into monolith_project_summary_v25_accepted.docx as tracked changes'},
+  {n:144, name:'accept_s57.py',                                                    type:'PY',   cat:'Script',      lang:'EN',    isNew:true,  agents:[],
+         desc:'Accept script — strips 59 w:ins tracked insertions from S57 injection; two-pass XML strip (opening tags then closing tags); produces S1–S57 CLEAN FINAL 195,663 bytes'},
+  {n:145, name:'monolith_project_summary_v25_accepted_pre_s57_backup.docx',        type:'DOCX', cat:'Backup',      lang:'EN',    isNew:true,  agents:[],
+         desc:'Pre-S57 backup — S1–S56 CLEAN FINAL before S57 injection; 189,546 bytes; 0 tracked changes'},
+  {n:146, name:'monolith_project_summary_v25_accepted_pre_accept_s57_backup.docx', type:'DOCX', cat:'Backup',      lang:'EN',    isNew:true,  agents:[],
+         desc:'Pre-accept-S57 backup — S57 injected with 59 tracked insertions before acceptance; 196,116 bytes'},
+  {n:147, name:'thai_phase3_onboarding_brief.html',                                type:'HTML', cat:'Thai Brief',  lang:'TH',    isNew:true,  agents:[],
+         desc:'Thai brief — S56 Phase 3 Vendor Onboarding &amp; Integration Protocol; P3-ONB-CHK-01–12 checklist (Access/Integration/SLA phases), WS-A/B/C integration protocol cards (method/auth/routes/SLA), SLA acceptance matrix 7 GAPs, escalation path L1–L4, 90-day hypercare strip, P3-M2 gate box; A4 single-page Thai; Sarabun font; navy/gold/green theme'},
+  {n:148, name:'thai_phase3_golive_brief.html',                                    type:'HTML', cat:'Thai Brief',  lang:'TH',    isNew:true,  agents:[],
+         desc:'Thai A4 brief — S57 Phase 3 Go-Live; coverage strip 56%→92%; cutover schedule T-5→T+72h; BAU 4-phase; P3-GL-CHK-01–10; milestones P3-M1–M4; THB 18.2M; escalation L1–L4; Sarabun font; navy/gold/green theme'},
+  {n:149, name:'inject_s58.py',                                                    type:'PY',   cat:'Script',     lang:'EN',    isNew:true,  agents:[],
+         desc:'Injection script — S58 BAU Governance Charter (MONOLITH-S58-BAUGOV-001 v1.0; 58.1–58.5: Overview, Committee Structure SC/PGB/TAG/AOC, KPI Review Cadence 5 cycles, Programme Closure Certificate MONOLITH-S58-CLOSECERT-001, Post-Programme Audit Plan T+30/60/90d+Annual); IDs 2830–2874 (45 IDs); injects into monolith_project_summary_v25_accepted.docx as tracked changes'},
+  {n:150, name:'accept_s58.py',                                                    type:'PY',   cat:'Script',     lang:'EN',    isNew:true,  agents:[],
+         desc:'Accept script — strips 45 w:ins tracked insertions from S58 injection; two-pass XML strip (opening tags then closing tags); produces S1–S58 CLEAN FINAL 200,150 bytes'},
+  {n:151, name:'monolith_project_summary_v25_accepted_pre_s58_backup.docx',        type:'DOCX', cat:'Backup',     lang:'EN',    isNew:true,  agents:[],
+         desc:'Pre-S58 backup — S1–S57 CLEAN FINAL state before inject_s58.py was run; 195,663 bytes; 0 tracked changes'},
+  {n:152, name:'monolith_project_summary_v25_accepted_pre_accept_s58_backup.docx', type:'DOCX', cat:'Backup',     lang:'EN',    isNew:true,  agents:[],
+         desc:'Pre-accept-S58 backup — S1–S57 + S58 tracked (45 w:ins) state before accept_s58.py was run; 200,444 bytes'},
+  {n:153, name:'thai_programme_completion_brief.html',                             type:'HTML', cat:'Thai Brief',  lang:'TH',    isNew:true,  agents:[],
+         desc:'Thai A4 executive brief — S57+S58 programme completion summary for SC Chair; 6-stat hero header (92% coverage, 28 agents, THB 18.2M, 58 sections, +36pp, 3 phases); phase delivery strip 56%→68%→80%→92%; Programme Closure Certificate MONOLITH-S58-CLOSECERT-001; committee table SC/PGB/TAG/AOC; audit schedule T+30/60/90d+Annual; KPI review cadence 5 cycles; BAU Governance Charter activation box; P3-GL-CHK-10 SC Chair sign-off block; Sarabun font; navy/gold/green theme'},
+  {n:154, name:'thai_programme_roadmap.html',                                      type:'HTML', cat:'Thai Brief',  lang:'TH',    isNew:true,  agents:[],
+         desc:'Thai A4 Programme Roadmap — S1–S58 full programme journey; coverage journey 56%→68%→80%→92%→BAU; phase timeline (Phase 1 S1–S49 / Phase 2 S50–S53 / Phase 3 S54–S57 / BAU S58); section map with chip grid; milestones P1-M4/P2-M4/P3-M4/BAU-M1; BAU governance committees SC/PGB/TAG/AOC; forward roadmap table (T+30/60/90d, monthly/quarterly/semi-annual/annual); cert MONOLITH-S58-CLOSECERT-001; Sarabun font; navy/gold/green theme'},
+
+         desc:'Thai brief — S57 Phase 3 Go-Live Operations Plan; coverage trajectory 56%→68%→80%→92%, cutover schedule T-5→T+72h (12-row table), BAU transition 4-phase (Day 1–90+ bar chart), readiness gate P3-GL-CHK-01–10 (CHK-08/10 hard gates highlighted), monitoring stats (24 KPIs / 28 agents / ≤1h drift / 92% target), escalation path L1–L4, milestones P3-M1–M4, programme total THB 18.2M; A4 single-page Thai; Sarabun font; navy/gold/green theme; 27,882 bytes'},
 
 ];
 

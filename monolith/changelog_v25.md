@@ -1609,3 +1609,436 @@ Comprehensive one-page A4 HTML executive summary covering the complete v3.0 SOP 
 - n:114 = `monolith_project_summary_v25_accepted_pre_s51_backup.docx`
 - n:115 = `monolith_project_summary_v25_accepted_pre_accept_s51_backup.docx`
 - Subtitle updated: "110 files" → "115 files"; hdr-total: 110 → 115
+
+---
+
+## Session Update — 3 September 2026 (S52 + Thai Procurement Brief)
+
+### S52 — Phase 2 Vendor Onboarding & Integration Protocol
+
+**Script:** `inject_s52.py` → `accept_s52.py`
+
+#### Injection (inject_s52.py)
+- **Backup created:** `monolith_project_summary_v25_accepted_pre_s52_backup.docx` (163,761 bytes)
+- **IDs allocated:** 1777–2035 (259 IDs)
+- **Tracked insertions:** 259 `<w:ins>` tags
+- **Injection point:** `</w:body>`
+- **insideH intact:** 14 | **insideV intact:** 14
+- **S52 present:** True (V-CHK-12, AIE-005, Section 52, 90-Day Hypercare, MONOLITH-S52-ONB-001)
+- **File size post-inject:** 170,170 bytes
+
+#### Content — Sections 52.1–52.7
+- **52.1 Overview & Scope:** MONOLITH-S52-ONB-001 v1.0; GAP-05; AIE-001–005; trigger: RFP-GAP05-001 contract award Q1 2033; owner: Programme Director; co-owners: Signal, Aria
+- **52.2 Pre-Onboarding Requirements:** V-CHK-01–04; 10 business days; documents: MSA/SOW/DPA, NDA, access provisioning, environment setup; gate authority: Aria
+- **52.3 System Integration Protocol:** AIE-001 REST ≤3s, AIE-002 GraphQL ≤5s, AIE-003 Webhook ≤10s, AIE-004 Batch ≤30s, AIE-005 Streaming ≤60s; OAuth 2.0; TLS 1.3; AES-256; SIEM audit (Nexus); V-CHK-05/06
+- **52.4 Testing & Acceptance:** SIT ≥98% pass; UAT 10 project briefs, score ≥4.0/5.0; V-CHK-05–07; P1/P2/P3 defect definitions; sign-off: Aria + Programme Director
+- **52.5 Go-Live Protocol:** V-CHK-08; 2-window cutover (AIE-001/002 then AIE-003/004/005); rollback ≤30 min; rollback authority: Signal (24h unilateral); target: P2-M3 Q2 2033
+- **52.6 Post-Integration Support:** 90-day hypercare; P1 ≤1h ack/≤4h resolution 24/7; P2 ≤4h/≤1 day; L1–L4 escalation matrix (Signal → vendor → Programme Director → SC Chair); V-CHK-09; weekly reports; BAU SLA ≥99.5%
+- **52.7 V-CHK-01–12 Readiness Checklist:** Complete gate control; V-CHK-01–04 Pre-Onboarding; V-CHK-05–06 SIT; V-CHK-07 UAT; V-CHK-08 Go-Live; V-CHK-09–12 Hypercare (30/60/90-day milestones); MONOLITH-S52-VCHK-001 v1.0
+
+#### Accept (accept_s52.py)
+- **Backup created:** `monolith_project_summary_v25_accepted_pre_accept_s52_backup.docx` (170,170 bytes)
+- **w:ins before accept:** 259 → **after:** 0
+- **insideH intact:** 14 | **insideV intact:** 14
+- **S52 content intact:** True | **S51 content intact:** True
+- **File size post-accept:** 168,420 bytes
+- **Production DOCX:** `monolith_project_summary_v25_accepted.docx` — 52 sections (S1–S52), 168,420 bytes, 0 tracked changes
+
+---
+
+### thai_procurement_brief.html — Thai A4 S51 Procurement Brief
+
+**File:** `/home/sandbox/thai_procurement_brief.html`
+**Size:** ~18KB | **Language:** Thai | **Font:** Sarabun (Google CDN)
+**Theme:** Navy #1f2d5a / Gold #c9a84c / Green #2d7a4f | **Format:** A4 @page (14mm margins)
+
+**KPI bar (title block):**
+- งบประมาณ THB 1.5M | 5 ขั้นตอนคัดเลือก | 3 vendors shortlisted | Q1 2033 award target | 5 AIE modules
+
+**Sections:**
+1. **กรอบ RFP-GAP05-001** — RFP + 7 SOW/DPA documents table (RFP-GAP05-001, PQ-GAP05-001, SOW-AIE-001 through SOW-AIE-005, DPA-GAP05) with schedule
+2. **กระบวนการคัดเลือก 5 ขั้นตอน** — Stage cards: Pre-Qual (2w) → RFP Issue (4w) → Technical Eval (3w) → Commercial Review (2w) → Award (2w)
+3. **เกณฑ์การประเมินผู้ขาย** — 3-column grid: Technical 40% / Commercial 30% / Strategic 30% with sub-criteria bullets; pass threshold ≥60% tech + ≥70% total
+4. **SLA KPIs AIE-001–005** — Full SLA table with latency/availability/error rate per module; penalty schedule; Nova dashboard description
+5. **การจัดการสัญญา & P2-CHK** — P2-CHK-01–08 checklist (2-column); agents ownership row (Aria, Signal, Core, Nova, Nexus, Guardian, Programme Director, SC Chair)
+**Layout:** 2-page (page-break after section 3 evaluation grid)
+
+---
+
+### sop_github_mapping.md — SHA Update
+
+- **SHA updated:** `14b90bc` → `5c29dd9d`
+- **Header update note:** Added update notice explaining SHA change and S38→S52 section count
+- **SOP version updated:** "38 Sections" → "52 Sections (S1–S52)"
+- **Part A extended:** Added S39–S52 rows to SOP×GitHub matrix
+- **Part D updated:** Coverage table updated for 52 sections (12 ✅, 26 ⚠️, 14 ❌, 1 🔵)
+- **Part F updated:** Added action 9 (AIE-001–005 integration post RFP award)
+- **Part G updated:** Layer 1 covers S1–S52; Phase 2 procurement note added
+- **Part H added:** New push history table (SHA 14b90bc → 5c29dd9d); PAT revocation note
+- **Footer updated:** Source SHA and next review date updated
+
+---
+
+### master_index.html — Entry Updates
+
+- **hdr-total:** 115 → 120
+- **DOCX n:10 desc updated:** S1–S51 → S1–S52; bytes 163,761 → 168,420; added S52 description; status note "S52 ONBOARDING READY"
+- **n:116 added:** `thai_procurement_brief.html` — TH, Brief, Aria/Signal/Core/Nova/Nexus/Guardian
+- **n:117 added:** `inject_s52.py` — EN, Script, IDs 1777–2035
+- **n:118 added:** `accept_s52.py` — EN, Script, 259→0 tracked changes
+- **n:119 added:** `monolith_project_summary_v25_accepted_pre_s52_backup.docx` — EN, Backup
+- **n:120 added:** `monolith_project_summary_v25_accepted_pre_accept_s52_backup.docx` — EN, Backup
+
+---
+
+## [S53 · 2026-09-04] Phase 2 Go-Live Operations Plan + thai_vendor_onboarding_brief.html
+
+### S53 DOCX Injection & Accept
+- **inject_s53.py created:** sections 53.1–53.6, IDs 2036–2257 (222 IDs), Date 2026-09-04T00:00:00Z, Author Scispace Agent
+- **Sections injected:** 53.1 Overview & Scope (MONOLITH-S53-GOLIVE-001 v1.0), 53.2 Pre Go-Live Readiness Assessment (GL-CHK-01–03), 53.3 Cutover Schedule (T-5 days freeze → T+72h stability confirmation), 53.4 BAU Transition (4-phase 90-day: Phase A Day 1–30 enhanced, Phase B Day 31–60 standard, Phase C Day 61–90 pre-BAU, Phase D Day 91+ BAU; GL-CHK-04–08), 53.5 Phase 3 Readiness Gate (GAP-05/06/09/10/11/12 CLOSED ≥80% coverage, GL-CHK-09–10), 53.6 GL-CHK-01–10 checklist
+- **inject_s53.py result:** 222 tracked insertions, insideH/V 14/14 intact, 175,280 bytes
+- **accept_s53.py created & run:** two-pass XML strip, 222→0 tracked changes
+- **accept_s53.py result:** S53/S52/S51 content intact, GL-CHK-10 ✓, Phase 3 Readiness Gate ✓, Cutover Schedule ✓, BAU Transition ✓, insideH/V 14/14, final 173,578 bytes
+- **DOCX pre-S53 backup:** `monolith_project_summary_v25_accepted_pre_s53_backup.docx` — 168,420 bytes
+- **DOCX pre-accept-S53 backup:** `monolith_project_summary_v25_accepted_pre_accept_s53_backup.docx` — 175,280 bytes
+
+### thai_vendor_onboarding_brief.html Created
+- **File:** `thai_vendor_onboarding_brief.html` — A4 Thai brief for S52 Phase 2 Vendor Onboarding & Integration Protocol
+- **Page 1:** Title block with KPI cards (12 V-CHK, 5 AIE integrations, 90 days, Q2 2033, 4 escalation levels); V-CHK-01–12 checklist table (phase badges: Pre-Onb/SIT/UAT/Go-Live/Hypercare, authority column); AIE-001–005 SLA table (latency p95, availability pills, error rate, monitor)
+- **Page 2:** 90-day hypercare escalation matrix (4-card grid: L1 Signal ≤30min, L2 Vendor+Signal ≤2h, L3 Programme Director ≤4h, L4 SC Chair trigger); hypercare milestones (Day 0/30/60/90 cards); Agents row; footer
+- **Styling:** Sarabun Google Fonts CDN, navy #1f2d5a / gold #c9a84c / green #2d7a4f theme, agent names/technical codes in English
+
+### master_index.html Updated
+- **hdr-total:** 120 → 125
+- **n:2 desc updated:** S1–S53, 53 sections, 173,578 bytes, S53 GO-LIVE PLAN LOCKED
+- **n:121 added:** `thai_vendor_onboarding_brief.html` — TH, Brief
+- **n:122 added:** `inject_s53.py` — EN, Script, IDs 2036–2257
+- **n:123 added:** `accept_s53.py` — EN, Script, 222→0 tracked changes
+- **n:124 added:** `monolith_project_summary_v25_accepted_pre_s53_backup.docx` — EN, Backup
+- **n:125 added:** `monolith_project_summary_v25_accepted_pre_accept_s53_backup.docx` — EN, Backup
+
+### ZIP Rebuilt
+- `MONOLITH_SOP_Package_v2.5.zip` rebuilt with all new/updated files (S53 DOCX 173,578 bytes)
+
+
+---
+
+## [S53 Thai Brief · 2026-09-04] thai_golive_brief.html Created
+
+### thai_golive_brief.html
+- **File:** `thai_golive_brief.html` — 24,158 bytes · A4 Thai brief for S53 Phase 2 Go-Live Operations Plan
+- **Page 1:** Title block (KPIs: 10 GL-CHK, 3 Go-Live Windows, 90-day BAU, 80% Coverage Gate, Q2 2033); Cutover Schedule visual timeline (6 steps: T-5 Change Freeze → T-2 Final Delta → T-1 Readiness Call → T+0 Window 1 Mon 06:00–10:00 AIE-001/002 → T+48h Window 2 Wed 06:00–10:00 AIE-003/004/005 → T+72h Stability); GL-CHK-01–10 checklist table (phase badges, authority, timing)
+- **Page 2:** BAU Transition 4-phase table (Phase A Day 1–30 Enhanced, Phase B Day 31–60 Standard, Phase C Day 61–90 Pre-BAU, Phase D Day 91+ BAU); Phase 3 Readiness Gate panel (GAP-05/06/09/10/11/12 CLOSED · GAP-01/02/03/04/13/14/15 → Phase 3); Coverage Ladder 56%→68%→80%→92% (Phase 2 gate highlighted); Agents row (Signal, Core, Nova, Nexus, Aria, Guardian, Atlas, Ops, Pulse, Ledger, Vega, Rex); footer
+- **Styling:** Sarabun Google Fonts CDN, navy #1f2d5a / gold #c9a84c / green #2d7a4f theme, agent names/technical codes in English
+
+### master_index.html Updated
+- **hdr-total:** 125 → 126
+- **n:126 added:** `thai_golive_brief.html` — TH, Brief
+
+
+---
+
+## [S54] Phase 3 Programme Definition Document — 2026-09-04
+
+### inject_s54.py
+- Section: S54 Phase 3 Programme Definition Document (MONOLITH-S54-P3PDD-001 v1.0)
+- Trigger: GL-CHK-10 confirmed; coverage target 80%→92%
+- Sub-sections: 54.1 Overview & Scope, 54.2 Programme Structure (WS-A/B/C),
+  54.3 GAP Workplan (GAP-01/02/03/04/13/14/15), 54.4 Budget (THB 7.0M),
+  54.5 Milestones (P3-M1–M4 Q3 2033–Q2 2034), 54.6 P3-CHK-01–12 Checklist
+- Tracked insertions: 313 (IDs 2258–2570)
+- Pre-S54 backup: monolith_project_summary_v25_accepted_pre_s54_backup.docx (173,578 bytes)
+- Post-inject size: 179,946 bytes
+- Spot-checks PASS: S54 ✓ · S53 intact ✓ · P3-CHK-12 ✓ · THB 7.0M ✓ · P3-M4 ✓ · insideH/V=14 ✓
+
+### accept_s54.py
+- Two-pass accept: 313→0 tracked insertions
+- Pre-accept backup: monolith_project_summary_v25_accepted_pre_accept_s54_backup.docx (179,946 bytes)
+- Post-accept size: 178,044 bytes; insideH=14, insideV=14
+- Spot-checks PASS: S54 ✓ · S53 ✓ · S52 ✓ · S51 ✓ · P3-CHK-12 ✓ · THB 7.0M ✓ · P3-M4 ✓ · GL-CHK-10 ✓ · GAP-15 ✓
+- Programme status: Phase 1 COMPLETE · Phase 2 COMPLETE · S54 PHASE 3 PDD LOCKED
+
+### thai_phase2_summary_brief.html
+- Created: 1-page A4 Thai executive summary for SC Chair
+- Content: S51+S52+S53 three-column section cards, programme KPI strip, timeline strip,
+  coverage progress bar (80% gate highlighted), SC action box (GL-CHK-10),
+  next steps (S54 PDD locked / Phase 3 RFP / MONOLITH BAU 92% target)
+- Size: 17,022 bytes; Sarabun font; navy/gold/green theme
+
+### master_index.html
+- Updated: 126→131 entries (n:127 thai_phase2_summary_brief.html, n:128 inject_s54.py,
+  n:129 accept_s54.py, n:130 pre-S54 backup, n:131 pre-accept-S54 backup)
+- DOCX entry updated: S1–S53 → S1–S54; 173,578 → 178,044 bytes; status Phase 3 PDD LOCKED
+- hdr-total: 126 → 131
+
+
+---
+
+## [S55] Phase 3 RFP & Vendor Selection Framework — 2026-09-04
+
+### inject_s55.py
+- Section: S55 Phase 3 RFP & Vendor Selection Framework (MONOLITH-S55-P3RFP-001 v1.0)
+- Sub-sections: 55.1 Overview & Scope, 55.2 RFP Framework (RFP-P3-WSA-001/WSB-001/WSC-001),
+  55.3 5-Stage Evaluation Process, 55.4 Scoring Matrix (40/25/20/15),
+  55.5 SLA Targets per GAP (GAP-01/02/03/04/13/14/15), 55.6 P3-VND-CHK-01–10 Checklist
+- Tracked insertions: 129 (IDs 2571–2699)
+- Pre-S55 backup: monolith_project_summary_v25_accepted_pre_s55_backup.docx (178,044 bytes)
+- Post-inject size: 184,565 bytes
+- Spot-checks PASS: S55 ✓ · RFP-P3-WSA/B/C-001 ✓ · P3-VND-CHK-10 ✓ · drift alert ✓ · 5-stage ✓ · insideH/V=14 ✓
+
+### accept_s55.py
+- Two-pass accept: 129→0 tracked insertions
+- Pre-accept backup: monolith_project_summary_v25_accepted_pre_accept_s55_backup.docx (184,565 bytes)
+- Post-accept size: 183,620 bytes; insideH=14, insideV=14
+- Spot-checks PASS: S55 ✓ · S54 ✓ · S53 ✓ · S51 ✓ · RFP codes ✓ · P3-VND-CHK-10 ✓ · SLA drift ✓
+- Programme status: Phase 1 COMPLETE · Phase 2 COMPLETE · S54 PDD LOCKED · S55 RFP LOCKED
+
+### thai_phase3_kickoff_brief.html
+- Created: A4 Thai Phase 3 Kickoff Brief for S54
+- Content: P3-CHK-01–12 checklist table (gate per milestone M1–M4), GAP Workplan
+  WS-A/B/C with SLA targets, milestone timeline P3-M1–M4, budget strip THB 7.0M,
+  SC Action Items for kickoff
+- Size: 25,433 bytes; Sarabun font; navy/gold/green theme
+
+### master_index.html
+- Updated: 131→137 entries (n:132 thai_phase3_kickoff_brief.html, n:133 inject_s55.py,
+  n:134 accept_s55.py, n:135 pre-S55 backup, n:136 pre-accept-S55 backup, n:137 sop_github_mapping.md)
+- DOCX entry updated: S1–S54 → S1–S55; 178,044 → 183,620 bytes; status S55 RFP LOCKED
+- hdr-total: 131 → 137
+
+
+---
+
+## S56 — Phase 3 Vendor Onboarding & Integration Protocol (2026-09-04)
+
+### inject_s56.py
+- **Tracked insertions:** 71 (IDs 2700–2770)
+- **Sections injected:** 56.1 Overview & Scope · 56.2 Onboarding Checklist P3-ONB-CHK-01–12 · 56.3 Integration Protocol WS-A/B/C · 56.4 SLA Acceptance Testing Matrix · 56.5 90-Day Hypercare & Escalation · 56.6 Phase Gate P3-M2 Completion Criteria
+- **Key content:** P3-ONB-CHK-01–12 table; WS-A (GAP-01/02) REST API + MQTT; WS-B (GAP-03/04) RTSP + nightly ETL; WS-C (GAP-13/14/15) webhook + Kafka + ESG batch; SLA matrix 7 GAPs; Hypercare 4-phase (intensive→active→transition→BAU); escalation L1–L4 + Guardian + Ledger; P3-M2 gate 7-point criteria
+- **Spot-checks PASS:** insideH/V=17; S56+S55+S54+S53+S51 present; P3-ONB-CHK-12 ✓; GAP-15 drift ✓; 190,030 bytes
+- **Backup:** `monolith_project_summary_v25_accepted_pre_s56_backup.docx` (183,620 bytes)
+
+### accept_s56.py
+- **Two-pass XML strip:** 71→0 tracked changes
+- **Spot-checks PASS:** 0 w:ins remaining; insideH/V=17 intact; S56+S55+S54+S53+S51 verified; P3-ONB-CHK-12 ✓; P3-VND-CHK-10 ✓; GAP-15 drift ✓
+- **File size post-accept:** 189,546 bytes
+- **Backup:** `monolith_project_summary_v25_accepted_pre_accept_s56_backup.docx` (190,030 bytes)
+
+### thai_phase3_vendor_brief.html (NEW)
+- **Size:** 20,124 bytes
+- **Content:** A4 Thai brief for S55 Phase 3 RFP — RFP-P3-WSA/B/C-001 cards (budget/GAPs/owner), 5-stage vendor evaluation strip, scoring matrix 40/25/20/15 grid, SLA targets table 7 GAPs with WS-A/B/C badges, P3-VND-CHK-01–10 checklist table (gate dates), SC action items box
+- **Theme:** Sarabun font, navy #1f2d5a / gold #c9a84c / green #2d7a4f
+
+### master_index.html — updated 141→142 entries
+- hdr-total updated: 141→142
+- DOCX entry updated: S1–S56 CLEAN FINAL (56 sections), 189,546 bytes, S56 ONBOARDING LOCKED
+- n:138–142 added: inject_s56.py, accept_s56.py, pre-S56 backup, pre-accept-S56 backup, thai_phase3_vendor_brief.html
+
+### Package state
+- Production DOCX: S1–S56 CLEAN FINAL, 0 tracked changes, 189,546 bytes
+- Thai briefs: 6 total (thai_procurement, thai_vendor_onboarding, thai_golive, thai_phase2_summary, thai_phase3_kickoff, thai_phase3_vendor)
+- Total inject/accept pairs: S51–S56 (12 scripts)
+- Next injection IDs: 2771+
+
+---
+
+## [S57] Phase 3 Go-Live Operations Plan — 2026-09-04
+
+### Document reference
+- MONOLITH-S57-P3GOLIVE-001 v1.0
+- Section 57.1–57.5
+- IDs: 2771–2829 (59 tracked insertions)
+
+### Content added
+**57.1 Overview & Scope**
+- Document purpose: final operational plan for Phase 3 production go-live
+- Scope: all 28 agents across WS-A (GAP-01/02), WS-B (GAP-03/04), WS-C (GAP-13/14/15)
+- Target: ≥92% BAU AI coverage; programme total THB 18.2M (Phase 1: 5.2M + Phase 2: 6.0M + Phase 3: 7.0M)
+- Trigger: P3-GL-CHK-08 Go/No-Go SC meeting; authorisation: P3-GL-CHK-10 SC Chair final approval
+
+**57.2 Cutover Schedule (14-row table T-5 to T+72h)**
+- T-5 days: Production freeze — no schema/config changes
+- T-3 days: Parallel running begins — shadow mode vs. legacy
+- T-2 days: Rollback rehearsal — RTO target ≤4 hours
+- T-1 day: Go/No-Go gate — P3-GL-CHK-08 SC meeting, all 10 checklist items green
+- T+0 23:00: WS-A cutover (GAP-01/02) — 8 agents
+- T+0 00:00: WS-B cutover (GAP-03/04) — 11 agents
+- T+0 00:30: WS-C cutover (GAP-13/14/15) — 9 agents
+- T+0 01:00: All-28 health check — SLA threshold confirmation
+- T+0 03:00: Live — legacy systems decommissioned
+- T+4h: First post-cutover check
+- T+24h: Day-1 stand-up — incident review, KPI dashboard
+- T+72h: SC review — 92% coverage confirmed, P3-M3 milestone closed
+
+**57.3 BAU Transition Plan (4-phase table)**
+- Stabilisation Day 1–30: ≥90% coverage
+- Optimisation Day 31–60: ≥91% coverage
+- Consolidation Day 61–90: ≥92% coverage
+- BAU Day 91+: maintain ≥92%; governance charter active
+
+**57.4 Phase 3 Readiness Gate P3-GL-CHK-01–10 (10-row table)**
+- CHK-01: WS-A all GAP-01/02 agents in production
+- CHK-02: WS-B all GAP-03/04 agents in production
+- CHK-03: WS-C all GAP-13/14/15 agents in production
+- CHK-04: SLA acceptance matrix signed (all 7 GAPs)
+- CHK-05: Rollback procedure rehearsed, RTO ≤4h confirmed
+- CHK-06: Monitoring dashboards live (KPI-001–024)
+- CHK-07: Support team trained — 24/7 L1/L2/L3 rota active
+- CHK-08: Go/No-Go SC meeting held — HARD GATE
+- CHK-09: Data migration validation complete — 100% reconciled
+- CHK-10: SC Chair final approval issued — HARD GATE (mirrors GL-CHK-10 from S53)
+
+**57.5 Post-Go-Live Monitoring & P3-M4 Milestone**
+- KPI monitoring: all 24 KPIs tracked; alert threshold ≤1h drift (GAP-15)
+- Incident management: L1 30-min SLA, L2 2h, L3 4h, L4 (SC escalation) 24h
+- P3-M4 = final programme delivery milestone — triggers BAU governance charter activation
+- Coverage trajectory locked: 56% (baseline) → 68% (Phase 1) → 80% (Phase 2) → 92% (Phase 3)
+
+### Files created/modified
+- `inject_s57.py` — injection script; IDs 2771–2829; 59 tracked insertions
+- `accept_s57.py` — acceptance script; 59→0 tracked changes; two-pass XML strip
+- `monolith_project_summary_v25_accepted_pre_s57_backup.docx` — pre-injection backup; 189,546 bytes
+- `monolith_project_summary_v25_accepted_pre_accept_s57_backup.docx` — pre-accept backup; 196,116 bytes
+- `thai_phase3_onboarding_brief.html` — S56 Thai brief; P3-ONB-CHK-01–12, WS-A/B/C protocols, SLA matrix, 90-day hypercare; 23,851 bytes
+- `master_index.html` — updated 142→147 entries; DOCX entry updated to S1–S57 195,663 bytes
+- `changelog_v25.md` — this block appended
+- `sop_github_mapping.md` — 56→57 sections; S57 entry added
+
+### Injection verification
+- w:ins tracked insertions: 59
+- Max ID used: 2829
+- w:insideH intact: 20
+- w:insideV intact: 20
+
+### Accept verification
+- w:ins remaining: 0
+- w:insideH intact: 20
+- w:insideV intact: 20
+- S57 content present: True
+- S56 content intact: True
+- S55 content intact: True
+- S54 content intact: True
+- P3-GL-CHK-10 present: True
+- 92% coverage: True
+- Cutover schedule: True
+- BAU transition: True
+- P3-M4 milestone: True
+
+### Package state
+- Production DOCX: S1–S57 CLEAN FINAL, 0 tracked changes, 195,663 bytes
+- Thai briefs: 7 total (thai_procurement, thai_vendor_onboarding, thai_golive, thai_phase2_summary, thai_phase3_kickoff, thai_phase3_vendor, thai_phase3_onboarding)
+- Total inject/accept pairs: S51–S57 (14 scripts)
+- Programme complete: Phase 1 (THB 5.2M, 68%) + Phase 2 (THB 6.0M, 80%) + Phase 3 (THB 7.0M, 92%) = THB 18.2M
+
+---
+
+## [Thai Brief S57] thai_phase3_golive_brief.html — 2026-09-04
+
+### File
+- `thai_phase3_golive_brief.html` — 27,882 bytes
+- A4 single-page Thai brief สำหรับ S57 Phase 3 Go-Live Operations Plan
+- Font: Sarabun (Google Fonts CDN); Theme: navy #1f2d5a / gold #c9a84c / green #2d7a4f
+
+### Content sections
+1. **Coverage Trajectory** — 56% (baseline) → 68% (Phase 1) → 80% (Phase 2) → 92% (Phase 3); THB สะสม
+2. **Programme Total Box** — THB 18.2M; แสดง Phase 1/2/3 แยกส่วน
+3. **Cutover Schedule** — ตาราง 12 แถว T-5→T+72h; T-1 Go/No-Go gate (แดง); T+0 03:00 LIVE (เขียว); T+72h SC Review
+4. **BAU Transition** — 4-phase table Day 1–30/31–60/61–90/91+ พร้อม progress bars ≥90%/91%/92%/92%
+5. **Monitoring Stats** — 4 cards: 24 KPIs / 28 Agents / ≤1h Drift / 92% Coverage
+6. **Readiness Gate P3-GL-CHK-01–10** — 2-column grid; CHK-08 + CHK-10 highlighted เป็น hard gate (สีส้ม)
+7. **Milestones P3-M1–M4** — strip: M1 DONE / M2 DONE / M3 ACTIVE / M4 TARGET
+8. **Escalation Path L1–L4** — SLA 30min / 2h / 4h / 24h
+
+### Package state
+- master_index.html: 147 → 148 entries
+- Thai briefs: 8 total (procurement, vendor_onboarding, golive, phase2_summary, phase3_kickoff, phase3_vendor, phase3_onboarding, phase3_golive)
+
+---
+
+## [S58] BAU Governance Charter — 2026-09-04
+
+### DOCX Changes
+- **inject_s58.py** run: 45 tracked insertions (IDs 2830–2874) into `monolith_project_summary_v25_accepted.docx`
+- **accept_s58.py** run: 45→0 tracked changes; file 200,150 bytes; S1–S58 CLEAN FINAL
+- Pre-S58 backup: `monolith_project_summary_v25_accepted_pre_s58_backup.docx` (195,663 bytes)
+- Pre-accept backup: `monolith_project_summary_v25_accepted_pre_accept_s58_backup.docx` (200,444 bytes)
+
+### S58 Sections Added
+
+#### 58.1 Overview & Purpose
+- Document ref: MONOLITH-S58-BAUGOV-001 v1.0
+- Scope: 28 agents; permanent validity post P3-M4
+- Programme total: THB 18.2M; coverage delta +36pp (56%→92%)
+- Charter activated by P3-GL-CHK-10 + P3-M4
+
+#### 58.2 Governance Committee Structure
+- 4-committee table (navy header 1f2d5a):
+  1. Steering Committee (SC) — SC Chair, quarterly, quorum 3/5
+  2. Programme Governance Board (PGB) — Programme Director, monthly, quorum 4/6
+  3. Technology Advisory Group (TAG) — Technical Lead, bi-monthly, quorum 3/5
+  4. Agent Operations Committee (AOC) — Ops Manager, weekly, quorum 2/3
+
+#### 58.3 KPI Review Cadence
+- 5-cycle table:
+  1. Weekly SLA Review — AOC — SLA breach threshold ≤5%
+  2. Monthly KPI Dashboard — PGB — dashboard KPI-001–024
+  3. Quarterly SC Review — SC Chair — strategic performance vs. baseline
+  4. Semi-Annual Benchmark — TAG — model recalibration trigger ±5%
+  5. Annual Full Audit — External Auditor + TAG — full SLA/accuracy re-certification
+
+#### 58.4 Programme Closure Certificate
+- Cert ref: MONOLITH-S58-CLOSECERT-001 v1.0
+- Phase 1 CLOSED: 68% coverage, THB 5.2M, GAP-01/02/03/04/07/08
+- Phase 2 CLOSED: 80% coverage, THB 6.0M, GAP-05/06/09/10/11/12
+- Phase 3 CLOSED: 92% coverage, THB 7.0M, GAP-01/02/03/04/13/14/15
+- 28/28 agents confirmed; milestones P1-M4 + P2-M4 + P3-M4 all CLOSED
+- S1–S58 (58 sections) complete
+
+#### 58.5 Post-Programme Audit Plan
+- 5-row table (green header 2d7a4f):
+  1. T+30 days — TAG + Project Manager — system stability baseline
+  2. T+60 days — TAG + Operations Team — operational efficiency review
+  3. T+90 days — External Auditor + TAG + PGB — independent compliance audit
+  4. Year 1 — External Firm + TAG — full programme value realisation
+  5. Annual Ongoing — External + PGB + TAG — continuous improvement cycle
+
+### Thai Brief Created
+- **thai_programme_completion_brief.html** — 23,569 bytes
+  - S57+S58 executive summary for SC Chair
+  - 6-stat hero header: 92% coverage / 28 agents / THB 18.2M / 58 sections / +36pp / 3 phases
+  - Phase delivery strip: 56%→68%→80%→92%
+  - Programme Closure Certificate block: MONOLITH-S58-CLOSECERT-001
+  - Committee structure table: SC/PGB/TAG/AOC
+  - Audit schedule table: T+30/60/90d + Year-1 + Annual Ongoing
+  - KPI review cadence: 5 cycles
+  - BAU Governance Charter activation box
+  - SC Chair P3-GL-CHK-10 sign-off block
+  - Sarabun font; navy #1f2d5a / gold #c9a84c / green #2d7a4f
+
+### Package State
+- master_index.html: 148 → 153 entries (n:149–153)
+- DOCX: S1–S58 CLEAN FINAL, 200,150 bytes, 0 tracked changes
+- Thai briefs: 9 total (procurement, vendor_onboarding, golive, phase2_summary, phase3_kickoff, phase3_vendor, phase3_onboarding, phase3_golive, programme_completion)
+- ZIP: rebuild pending
+
+---
+
+## [ROADMAP] thai_programme_roadmap.html — 2026-09-04
+
+### File Created
+- **thai_programme_roadmap.html** — 27,427 bytes
+- Full programme roadmap S1–S58 สำหรับ MONOLITH DAPH
+
+### Content
+- **Hero stats:** 58 sections / 92% coverage / 28 agents / THB 18.2M / +36pp / 4 BAU committees
+- **Coverage journey:** 56% → 68% → 80% → 92% → BAU (visual nodes)
+- **Phase timeline:** Phase 1 (S1–S49, 5.2M, 68%) → Phase 2 (S50–S53, 6.0M, 80%) → Phase 3 (S54–S57, 7.0M, 92%) → BAU (S58, CLOSECERT-001)
+- **Section map:** chip grid แยก Phase 1/2/3/BAU ครบทุก section
+- **Milestones:** P1-M4 / P2-M4 / P3-M4 CLOSED · BAU-M1 ACTIVE
+- **BAU committees:** SC / PGB / TAG / AOC cards
+- **Forward roadmap table:** 9 แถว (BAU Day 1–30, T+30/60/90d, monthly, quarterly, semi-annual, Year-1, annual)
+- Sarabun font; navy #1f2d5a / gold #c9a84c / green #2d7a4f
+
+### Package State
+- master_index.html: 153 → 154 entries (n:154)
+- ZIP: rebuild pending
