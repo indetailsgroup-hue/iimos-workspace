@@ -16,7 +16,11 @@ SELECT has_column('public', 'capture_artifact', 'org_id',
   'T-0192-01: capture_artifact has org_id column');
 SELECT col_not_null('public', 'capture_artifact', 'org_id',
   'T-0192-02: capture_artifact.org_id is NOT NULL');
-SELECT has_row_level_security('public', 'capture_artifact', 'T-0192-03: capture_artifact has RLS enabled');
+SELECT ok(
+  (SELECT c.relrowsecurity FROM pg_class c
+   JOIN pg_namespace n ON c.relnamespace = n.oid
+   WHERE c.relname = 'capture_artifact' AND n.nspname = 'public'),
+  'T-0192-03: capture_artifact has RLS enabled');
 SELECT policy_exists('public', 'capture_artifact', 'capture_artifact_tenant_isolation',
   'T-0192-04: capture_artifact_tenant_isolation policy exists');
 
@@ -25,7 +29,11 @@ SELECT has_column('public', 'capture_audit_log', 'org_id',
   'T-0192-05: capture_audit_log has org_id column');
 SELECT col_not_null('public', 'capture_audit_log', 'org_id',
   'T-0192-06: capture_audit_log.org_id is NOT NULL');
-SELECT has_row_level_security('public', 'capture_audit_log', 'T-0192-07: capture_audit_log has RLS enabled');
+SELECT ok(
+  (SELECT c.relrowsecurity FROM pg_class c
+   JOIN pg_namespace n ON c.relnamespace = n.oid
+   WHERE c.relname = 'capture_audit_log' AND n.nspname = 'public'),
+  'T-0192-07: capture_audit_log has RLS enabled');
 SELECT policy_exists('public', 'capture_audit_log', 'capture_audit_log_tenant_isolation',
   'T-0192-08: capture_audit_log_tenant_isolation policy exists');
 
@@ -34,7 +42,11 @@ SELECT has_column('public', 'capture_type_config', 'org_id',
   'T-0192-09: capture_type_config has org_id column');
 SELECT col_not_null('public', 'capture_type_config', 'org_id',
   'T-0192-10: capture_type_config.org_id is NOT NULL');
-SELECT has_row_level_security('public', 'capture_type_config', 'T-0192-11: capture_type_config has RLS enabled');
+SELECT ok(
+  (SELECT c.relrowsecurity FROM pg_class c
+   JOIN pg_namespace n ON c.relnamespace = n.oid
+   WHERE c.relname = 'capture_type_config' AND n.nspname = 'public'),
+  'T-0192-11: capture_type_config has RLS enabled');
 SELECT policy_exists('public', 'capture_type_config', 'capture_type_config_tenant_isolation',
   'T-0192-12: capture_type_config_tenant_isolation policy exists');
 
@@ -43,7 +55,11 @@ SELECT has_column('public', 'contract_documents', 'org_id',
   'T-0192-13: contract_documents has org_id column');
 SELECT col_not_null('public', 'contract_documents', 'org_id',
   'T-0192-14: contract_documents.org_id is NOT NULL');
-SELECT has_row_level_security('public', 'contract_documents', 'T-0192-15: contract_documents has RLS enabled');
+SELECT ok(
+  (SELECT c.relrowsecurity FROM pg_class c
+   JOIN pg_namespace n ON c.relnamespace = n.oid
+   WHERE c.relname = 'contract_documents' AND n.nspname = 'public'),
+  'T-0192-15: contract_documents has RLS enabled');
 SELECT policy_exists('public', 'contract_documents', 'contract_documents_tenant_isolation',
   'T-0192-16: contract_documents_tenant_isolation policy exists');
 
@@ -52,7 +68,11 @@ SELECT has_column('public', 'customer_docs', 'org_id',
   'T-0192-17: customer_docs has org_id column');
 SELECT col_not_null('public', 'customer_docs', 'org_id',
   'T-0192-18: customer_docs.org_id is NOT NULL');
-SELECT has_row_level_security('public', 'customer_docs', 'T-0192-19: customer_docs has RLS enabled');
+SELECT ok(
+  (SELECT c.relrowsecurity FROM pg_class c
+   JOIN pg_namespace n ON c.relnamespace = n.oid
+   WHERE c.relname = 'customer_docs' AND n.nspname = 'public'),
+  'T-0192-19: customer_docs has RLS enabled');
 SELECT policy_exists('public', 'customer_docs', 'customer_docs_tenant_isolation',
   'T-0192-20: customer_docs_tenant_isolation policy exists');
 
@@ -61,7 +81,11 @@ SELECT has_column('public', 'document_links', 'org_id',
   'T-0192-21: document_links has org_id column');
 SELECT col_not_null('public', 'document_links', 'org_id',
   'T-0192-22: document_links.org_id is NOT NULL');
-SELECT has_row_level_security('public', 'document_links', 'T-0192-23: document_links has RLS enabled');
+SELECT ok(
+  (SELECT c.relrowsecurity FROM pg_class c
+   JOIN pg_namespace n ON c.relnamespace = n.oid
+   WHERE c.relname = 'document_links' AND n.nspname = 'public'),
+  'T-0192-23: document_links has RLS enabled');
 SELECT policy_exists('public', 'document_links', 'document_links_tenant_isolation',
   'T-0192-24: document_links_tenant_isolation policy exists');
 
@@ -70,7 +94,11 @@ SELECT has_column('public', 'form_templates', 'org_id',
   'T-0192-25: form_templates has org_id column');
 SELECT col_not_null('public', 'form_templates', 'org_id',
   'T-0192-26: form_templates.org_id is NOT NULL');
-SELECT has_row_level_security('public', 'form_templates', 'T-0192-27: form_templates has RLS enabled');
+SELECT ok(
+  (SELECT c.relrowsecurity FROM pg_class c
+   JOIN pg_namespace n ON c.relnamespace = n.oid
+   WHERE c.relname = 'form_templates' AND n.nspname = 'public'),
+  'T-0192-27: form_templates has RLS enabled');
 SELECT policy_exists('public', 'form_templates', 'form_templates_tenant_isolation',
   'T-0192-28: form_templates_tenant_isolation policy exists');
 
