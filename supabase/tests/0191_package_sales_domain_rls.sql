@@ -21,7 +21,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'package_addons' AND n.nspname = 'public'),
   'T-0191-03: package_addons has RLS enabled');
-SELECT policy_exists('public', 'package_addons', 'package_addons_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'package_addons'
+            AND policyname = 'package_addons_tenant_isolation'),
   'T-0191-04: package_addons_tenant_isolation policy exists');
 
 -- package_estimates (T-0191-05..08)
@@ -34,7 +38,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'package_estimates' AND n.nspname = 'public'),
   'T-0191-07: package_estimates has RLS enabled');
-SELECT policy_exists('public', 'package_estimates', 'package_estimates_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'package_estimates'
+            AND policyname = 'package_estimates_tenant_isolation'),
   'T-0191-08: package_estimates_tenant_isolation policy exists');
 
 -- package_materials (T-0191-09..12)
@@ -47,7 +55,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'package_materials' AND n.nspname = 'public'),
   'T-0191-11: package_materials has RLS enabled');
-SELECT policy_exists('public', 'package_materials', 'package_materials_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'package_materials'
+            AND policyname = 'package_materials_tenant_isolation'),
   'T-0191-12: package_materials_tenant_isolation policy exists');
 
 -- package_stages (T-0191-13..16)
@@ -60,7 +72,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'package_stages' AND n.nspname = 'public'),
   'T-0191-15: package_stages has RLS enabled');
-SELECT policy_exists('public', 'package_stages', 'package_stages_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'package_stages'
+            AND policyname = 'package_stages_tenant_isolation'),
   'T-0191-16: package_stages_tenant_isolation policy exists');
 
 -- price_rates (T-0191-17..20)
@@ -73,7 +89,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'price_rates' AND n.nspname = 'public'),
   'T-0191-19: price_rates has RLS enabled');
-SELECT policy_exists('public', 'price_rates', 'price_rates_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'price_rates'
+            AND policyname = 'price_rates_tenant_isolation'),
   'T-0191-20: price_rates_tenant_isolation policy exists');
 
 -- project_turnkey (T-0191-21..24)
@@ -86,7 +106,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'project_turnkey' AND n.nspname = 'public'),
   'T-0191-23: project_turnkey has RLS enabled');
-SELECT policy_exists('public', 'project_turnkey', 'project_turnkey_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'project_turnkey'
+            AND policyname = 'project_turnkey_tenant_isolation'),
   'T-0191-24: project_turnkey_tenant_isolation policy exists');
 
 -- turnkey_offers (T-0191-25..28)
@@ -99,7 +123,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'turnkey_offers' AND n.nspname = 'public'),
   'T-0191-27: turnkey_offers has RLS enabled');
-SELECT policy_exists('public', 'turnkey_offers', 'turnkey_offers_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'turnkey_offers'
+            AND policyname = 'turnkey_offers_tenant_isolation'),
   'T-0191-28: turnkey_offers_tenant_isolation policy exists');
 
 -- ---------------------------------------------------------------------------
