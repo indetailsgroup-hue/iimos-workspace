@@ -124,7 +124,7 @@ VALUES
   ('a1a1a1a1-0007-0000-0000-000000000001',
    'a1a1a1a1-0000-0000-0000-000000000001',
    'a1a1a1a1-0000-0000-0001-000000000002',
-   'SYSTEM', 'normal', 'Alpha Notification', 'Alpha body text');
+   'system', 'normal', 'Alpha Notification', 'Alpha body text');
 
 -- ── Beta customer (own-org fixture for T15–T17) ───────────────────────────
 INSERT INTO public.customers
