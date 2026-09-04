@@ -157,10 +157,10 @@ VALUES
   ('b2b2b2b2-0191-0000-0000-000000000010'::uuid, 'b2b2b2b2-0191-0000-0000-000000000002'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 1, 'machining', 'pending')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.project_turnkey (project_id, org_id, tier, price_snapshot, delivery_days)
+INSERT INTO public.project_turnkey (project_id, org_id, tier, price_snapshot, scope_snapshot, delivery_days)
 VALUES
-  ('a1a1a1a1-0191-0000-0000-000000000001'::uuid, 'a1a1a1a1-0000-0000-0000-000000000001'::uuid, 'standard', 150000, 60),
-  ('b2b2b2b2-0191-0000-0000-000000000001'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'premium', 250000, 90)
+  ('a1a1a1a1-0191-0000-0000-000000000001'::uuid, 'a1a1a1a1-0000-0000-0000-000000000001'::uuid, 'standard', 150000, '{}'::jsonb, 60),
+  ('b2b2b2b2-0191-0000-0000-000000000001'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'premium', 250000, '{}'::jsonb, 90)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.price_rates (material_grade, org_id, rate_min_per_sqm, rate_max_per_sqm)
@@ -171,6 +171,14 @@ ON CONFLICT DO NOTHING;
 INSERT INTO public.turnkey_offers (tier, org_id, name, price, delivery_days, warranty_years, is_active)
 VALUES
   ('test-0191', '00000000-0000-0000-0000-000000000000'::uuid, 'Test Offer 0191', 99000, 45, 1, true)
+ON CONFLICT DO NOTHING;
+
+-- ensure alpha user is in org_members so get_user_org_id() resolves
+INSERT INTO public.org_members (id, org_id, user_id, role, is_active)
+VALUES ('a1a1a1a1-0191-0000-0000-0000000000ff'::uuid,
+        'a1a1a1a1-0000-0000-0000-000000000001'::uuid,
+        'a1a1a1a1-0000-0000-0001-000000000002'::uuid,
+        'VIEWER', true)
 ON CONFLICT DO NOTHING;
 
 SET LOCAL row_security = on;
