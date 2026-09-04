@@ -322,10 +322,10 @@ ON CONFLICT (id) DO NOTHING;
 
 -- ── bank_feed_txn (both tenants — used for T-0190-39, T-0190-42) ──────────────
 INSERT INTO public.bank_feed_txn
-  (id, bank_txn_id, amount, imported_by, org_id) VALUES
-  ('a1a1a1a1-0190-0000-0000-000000000003', 'ALPHA-FEED-0190', 100.00,
+  (id, bank_txn_id, date, amount, imported_by, org_id) VALUES
+  ('a1a1a1a1-0190-0000-0000-000000000003', 'ALPHA-FEED-0190', '2026-01-01', 100.00,
    'test-fixture', 'a1a1a1a1-0000-0000-0000-000000000001'),
-  ('b2b2b2b2-0190-0000-0000-000000000003', 'BETA-FEED-0190',  100.00,
+  ('b2b2b2b2-0190-0000-0000-000000000003', 'BETA-FEED-0190',  '2026-01-01', 100.00,
    'test-fixture', 'b2b2b2b2-0000-0000-0000-000000000001')
 ON CONFLICT (id) DO NOTHING;
 
