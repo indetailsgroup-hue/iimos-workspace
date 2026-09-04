@@ -21,7 +21,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'design_lock_field_config' AND n.nspname = 'public'),
   'T-0194-03: design_lock_field_config has RLS enabled');
-SELECT policy_exists('public', 'design_lock_field_config', 'design_lock_field_config_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'design_lock_field_config'
+            AND policyname = 'design_lock_field_config_tenant_isolation'),
   'T-0194-04: design_lock_field_config_tenant_isolation policy exists');
 
 -- issue_routing (T-0194-05..08)
@@ -34,7 +38,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'issue_routing' AND n.nspname = 'public'),
   'T-0194-07: issue_routing has RLS enabled');
-SELECT policy_exists('public', 'issue_routing', 'issue_routing_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'issue_routing'
+            AND policyname = 'issue_routing_tenant_isolation'),
   'T-0194-08: issue_routing_tenant_isolation policy exists');
 
 -- lead_followup_config (T-0194-09..12)
@@ -47,7 +55,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'lead_followup_config' AND n.nspname = 'public'),
   'T-0194-11: lead_followup_config has RLS enabled');
-SELECT policy_exists('public', 'lead_followup_config', 'lead_followup_config_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'lead_followup_config'
+            AND policyname = 'lead_followup_config_tenant_isolation'),
   'T-0194-12: lead_followup_config_tenant_isolation policy exists');
 
 -- material_master (T-0194-13..16)
@@ -60,7 +72,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'material_master' AND n.nspname = 'public'),
   'T-0194-15: material_master has RLS enabled');
-SELECT policy_exists('public', 'material_master', 'material_master_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'material_master'
+            AND policyname = 'material_master_tenant_isolation'),
   'T-0194-16: material_master_tenant_isolation policy exists');
 
 -- material_purchase_price (T-0194-17..20)
@@ -73,7 +89,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'material_purchase_price' AND n.nspname = 'public'),
   'T-0194-19: material_purchase_price has RLS enabled');
-SELECT policy_exists('public', 'material_purchase_price', 'material_purchase_price_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'material_purchase_price'
+            AND policyname = 'material_purchase_price_tenant_isolation'),
   'T-0194-20: material_purchase_price_tenant_isolation policy exists');
 
 -- ops_contacts (T-0194-21..24)
@@ -86,7 +106,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'ops_contacts' AND n.nspname = 'public'),
   'T-0194-23: ops_contacts has RLS enabled');
-SELECT policy_exists('public', 'ops_contacts', 'ops_contacts_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'ops_contacts'
+            AND policyname = 'ops_contacts_tenant_isolation'),
   'T-0194-24: ops_contacts_tenant_isolation policy exists');
 
 -- phase_rosters (T-0194-25..28)
@@ -99,7 +123,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'phase_rosters' AND n.nspname = 'public'),
   'T-0194-27: phase_rosters has RLS enabled');
-SELECT policy_exists('public', 'phase_rosters', 'phase_rosters_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'phase_rosters'
+            AND policyname = 'phase_rosters_tenant_isolation'),
   'T-0194-28: phase_rosters_tenant_isolation policy exists');
 
 -- released_spec (T-0194-29..32)
@@ -112,7 +140,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'released_spec' AND n.nspname = 'public'),
   'T-0194-31: released_spec has RLS enabled');
-SELECT policy_exists('public', 'released_spec', 'released_spec_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'released_spec'
+            AND policyname = 'released_spec_tenant_isolation'),
   'T-0194-32: released_spec_tenant_isolation policy exists');
 
 -- revision_event (T-0194-33..36)
@@ -125,7 +157,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'revision_event' AND n.nspname = 'public'),
   'T-0194-35: revision_event has RLS enabled');
-SELECT policy_exists('public', 'revision_event', 'revision_event_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'revision_event'
+            AND policyname = 'revision_event_tenant_isolation'),
   'T-0194-36: revision_event_tenant_isolation policy exists');
 
 -- staff_bind_tokens (T-0194-37..40)
@@ -138,7 +174,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'staff_bind_tokens' AND n.nspname = 'public'),
   'T-0194-39: staff_bind_tokens has RLS enabled');
-SELECT policy_exists('public', 'staff_bind_tokens', 'staff_bind_tokens_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'staff_bind_tokens'
+            AND policyname = 'staff_bind_tokens_tenant_isolation'),
   'T-0194-40: staff_bind_tokens_tenant_isolation policy exists');
 
 -- workflow_audit_log (T-0194-41..44)
@@ -151,7 +191,11 @@ SELECT ok(
    JOIN pg_namespace n ON c.relnamespace = n.oid
    WHERE c.relname = 'workflow_audit_log' AND n.nspname = 'public'),
   'T-0194-43: workflow_audit_log has RLS enabled');
-SELECT policy_exists('public', 'workflow_audit_log', 'workflow_audit_log_tenant_isolation',
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename  = 'workflow_audit_log'
+            AND policyname = 'workflow_audit_log_tenant_isolation'),
   'T-0194-44: workflow_audit_log_tenant_isolation policy exists');
 
 -- ---------------------------------------------------------------------------
