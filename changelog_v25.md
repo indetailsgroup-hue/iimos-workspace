@@ -2273,3 +2273,96 @@ Comprehensive one-page A4 HTML executive summary covering the complete v3.0 SOP 
 - master_index.html: 163 entries (n:163 added)
 - sop_github_mapping.md: n:163 row appended
 - changelog_v25.md: this block appended
+
+---
+
+## [INSTALL-FIELDAPP] thai_installation_agent_fieldapp.html — n:164
+**Date:** 2026-09-04
+**Type:** New File
+
+### Summary
+PWA Field App สำหรับช่างติดตั้ง (Installation Agent) ใช้งานในสนาม — mobile-first interface ครบ 5 screens
+
+### Screens
+1. **GPS Check-In** — Geolocation API, ±50m accuracy badge, timestamp, MCP `job_scheduled` event preview
+2. **Defect Capture** — photo upload ×3 (base64 preview), PFMEA Severity selector (Sev 1–9), description, ส่งแจ้ง PM
+3. **Site Checklist** — 12 items (Pre-Install/During/Post-Install phases), auto % calculation, block proceed if < 80%
+4. **Customer Sign-off** — canvas signature pad, ชื่อลูกค้า input, star rating 1–5, รีวิวข้อความ, MCP `job_complete` event
+5. **Job Summary** — MCP payload JSON preview, LocalStorage sync, offline/online indicator
+
+### Technical
+- Service Worker via Blob URL (inline SW, no external file)
+- PWA manifest via `<link rel="manifest">` data-URI
+- LocalStorage for offline data persistence
+- Accent color: purple `#5b4fcf`; Sarabun font; navy/gold/green theme
+- File: 783L / 48,550B
+
+### Registry
+- master_index.html: n:164 added (165 entries)
+- agents: Install Agent
+
+---
+
+## [LINE-OA-LIFF-UPDATE] thai_line_oa_customer_journey.html — n:163 updated (n:165-mod)
+**Date:** 2026-09-04
+**Type:** File Update
+
+### Summary
+เพิ่ม LIFF TypeScript Implementation card ใน Tab 06 LIFF & Tech Setup ระหว่าง Architecture Overview card กับ Go-Live Checklist card
+
+### Added: LIFF_ID_STATUS (liff-status.ts)
+- Import: `@line/liff`, `@supabase/supabase-js`
+- LIFF init + LINE Login auto-redirect
+- getProfile() → LINE user context verification
+- Fetch initial project data from `projects` table (filtered by `line_user_id` for RLS security)
+- Real-time channel: `postgres_changes` on `projects` table, filter `id=eq.{projectId}`, event=UPDATE
+- renderStatus() → progress bar (0–100%, 5 stages), stage_label, updated_at in `th-TH` timezone
+- Pulse animation feedback on real-time update
+
+### Added: LIFF_ID_APPROVAL (liff-approval.ts)
+- Import: `@line/liff`, `@supabase/supabase-js`
+- Types: `DesignApproval`, `ApprovalStatus` union
+- submitApproval() → UPDATE `design_approvals` with status + reviewer_notes + approved_at, then `liff.closeWindow()`
+- subscribeApproval() → real-time watch for `revision_submitted` status → reload design iframe + version badge
+- init() → fetch latest pending/revision_submitted approval (RLS: own projects only), bind btn-approve + btn-change buttons, validate notes required for change_requested
+
+### Technical
+- Dependencies note: `npm install @line/liff @supabase/supabase-js`
+- Env vars: `VITE_LIFF_ID_STATUS`, `VITE_LIFF_ID_APPROVAL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+- RLS note: Row-Level Security must be enabled on `projects` + `design_approvals` tables
+- File: 1,471L / 84,040B (from 1,212L / 68,553B; +15,487B)
+
+---
+
+## [PFMEA-DASHBOARD] thai_pfmea_live_dashboard.html — n:165
+**Date:** 2026-09-04
+**Type:** New File
+
+### Summary
+Interactive PFMEA Live Dashboard แสดง pfmeaRiskRows 122 rows จาก Knowledge Base แบบ filterable + sortable + status tracker
+
+### Features
+- **Stat Cards (6):** Total=122, Critical Sev9=6, High Sev8=53, Requires Review=105, Open=122, Resolved=0
+- **Agent Strip Filter:** Sale Agent (6), Designer Agent (44), Factory Agent (50), Install Agent (22)
+- **Sev Chip Filters:** All / Sev9 / Sev8 / Sev6 / Sev3 / Sev2 / None
+- **Dropdowns:** Stage, Status, requiresHumanReview
+- **Text Search:** across processStep + failureMode + effects fields
+- **Sortable Table:** click column headers (ID/Stage/Agent/Sev/Failure Mode/Effects/Status)
+- **Expand Row:** click row → detail panel (all 15 fields from pfmeaRiskRows schema)
+- **Per-row Status Selector:** Open / In Progress / Resolved / N/A — persisted to localStorage
+- **CSV Export:** exports all currently visible rows
+
+### Data
+- 122 pfmeaRiskRows embedded inline from _knowledge-export.json
+- Agent mapping: processStep → Sale/Designer/Factory/Install Agent
+- Sev distribution: Sev9=6, Sev8=53, Sev6=8, Sev3=4, Sev2=2, None=49
+- requiresHumanReview=105
+
+### Technical
+- Sarabun font; navy/gold/green theme
+- File: 445L / 93,467B
+
+### Registry
+- master_index.html: n:165 added (165 entries total)
+- agents: Sale Agent, Designer Agent, Factory Agent, Install Agent, PM Agent
+
