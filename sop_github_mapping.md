@@ -407,3 +407,17 @@ These modules exist in the repository but have no corresponding SOP section — 
 | n:171 | vs01-vision-to-boq-vertical-slice-v1.th.md | MD | Spec | VS-01 Vision-to-BOQ Vertical Slice — 35KB; 15 sections; FR-03+FR-04; RM-030–033; 4 vision models; 4 prompt contracts; 4 confidence bands; 11 SSoT drifts resolved; 10 AC-VS01; DRAFT 2026-09-04 | docs/specs/ | Sarabun; navy/gold/green | All |
 | n:172 | vs01-vision-to-boq-vertical-slice-v1.th.html | HTML | Spec | VS-01 Vision-to-BOQ Vertical Slice HTML — 46KB; sidebar nav; confidence band cards; pipeline flow; SSoT table; AC checklist; Sarabun font; navy #1f2d5a / gold #c9a84c / green #2d7a4f | docs/specs/ | Sarabun; navy/gold/green | All |
 | n:173 | vs01-vision-to-boq-vertical-slice-v1.sha256 | SHA256 | Integrity | SHA256 checksums — th.md=8d42ee87... / th.html=b2e50e82... | docs/specs/ | — | All |
+| n:174 | fr03-drawing-analysis-prompt-v1.0.md | MD | Prompt | FR-03-DRAW v1.0 System Prompt — DXF/drawing analysis; SSoT 11 drifts; evidence draft JSON + confidence band | docs/prompts/ | — | Designer Agent |
+| n:175 | fr04-photo-analysis-prompt-v1.0.md | MD | Prompt | FR-04-PHOTO v1.0 System Prompt — site photo analysis; max 8 photos; site_evidence JSON | docs/prompts/ | — | Designer Agent |
+| n:176 | fr03-boq-extraction-prompt-v1.0.md | MD | Prompt | FR-03-BOQ v1.0 System Prompt — BOQ extraction from evidence draft; boq_draft JSON; DRAFT boundary | docs/prompts/ | — | Designer Agent / Factory Agent |
+| n:177 | fr03-conflict-resolution-prompt-v1.0.md | MD | Prompt | FR-03-CONFLICT v1.0 System Prompt — conflict resolution; priority matrix; canonical bound enforcement | docs/prompts/ | — | Designer Agent |
+| n:178 | evidence-draft.schema.json | JSON | Schema | VS-01 §7 canonical JSON Schema v1.0 — cabinets array, conflicts, confidence_band ENUM | docs/specs/schemas/ | — | Designer Agent / Factory Agent |
+| n:179 | boq-draft.schema.json | JSON | Schema | VS-01 §9 canonical JSON Schema v1.0 — line_items array, subtotal/tax/grand_total_thb, status ENUM | docs/specs/schemas/ | — | Designer Agent / Factory Agent |
+| n:180 | roles.ts | TS | Source Fix | AB-AUTH-01: added AI_REVIEWER role + canReviewVSEvidence + getRoleFeatures() case | src/core/auth/ | — | Designer Agent |
+| n:181 | index.ts (factory-api) | TS | Source Fix | AB-AUTH-01: AI_REVIEWER in FactoryCapability + VS_EVIDENCE_CAPABILITIES + actorHasSiteCode() | supabase/functions/factory-api/ | — | Designer Agent / Factory Agent |
+| n:182 | fr18-vision-boq-production-gate-v1.th.md | MD | Reference | FR-18 Gate Spec v1.0 — GATE only; 10 conditions (AC-VS01-01–10); opens when all AC pass + owner | docs/specs/ | Sarabun; navy/gold/green | All |
+| n:183 | fr18-vision-boq-production-gate-v1.sha256 | SHA256 | Integrity | FR-18 spec SHA256: 00dab15eb85694b925e8dc2ab10d174fc50428d521a8a83c297c11b561bac03e | docs/specs/ | — | All |
+
+**CI Fixes (pgtap-tests.yml — migrations patched directly)**
+| CI-FIX-01 | 0173_rls_isolation_hardening.sql | SQL | CI Fix | om.member_id → om.id (3 occurrences) — SQLSTATE 42703; commit 81ed678c67cf | supabase/migrations/ | — | — |
+| CI-FIX-02 | 20270120_ai_cost_estimation.sql | SQL | CI Fix | employees.user_id → identity_binding.auth_user_id (ADR-040 pattern) — SQLSTATE 42703; commit 12ca630884e3 | supabase/migrations/ | — | — |
