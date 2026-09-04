@@ -2200,3 +2200,23 @@ Comprehensive one-page A4 HTML executive summary covering the complete v3.0 SOP 
 - 23 total test cases across all agents
 - Sarabun font; navy #1f2d5a / gold #c9a84c / green #2d7a4f theme
 - 79,281 bytes, 1,295 lines
+
+---
+
+## [AUTOMATION-LAYER-SPEC] — 2026-09-04
+**File:** `thai_automation_layer_spec.html` (n:161, NEW)
+**Size:** 86,823 bytes / 1,417 lines
+
+### Changes
+- Created new Automation Layer Spec HTML document (5-tab interface)
+- **Tab 01 ภาพรวมระบบ:** Architecture flow MCP→FastAPI→LINE Router→LINE Group/OA; Department→LINE Channel mapping table (Sale/Designer/PM/Factory/Procurement/Install/Customer LINE OA); event flow example Sale→Designer handoff
+- **Tab 02 LINE OA Setup:** 8-step setup guide (Provider→Channel→Settings→Credentials→Webhook→Bot join groups→Group IDs→Test); LINE OA customer channel setup 4 steps; ENV variables summary table; DEPRECATION NOTICE: LINE Notify ปิดแล้ว มี.ค. 2025
+- **Tab 03 Flex Message Templates:** 7 department panels with visual preview + JSON template (Sale new inquiry, Designer brief approval, PM first_response alert, Factory HALT alert, Procurement stock alert, Install job schedule, Customer order status LINE OA); all templates use {{variable}} substitution pattern
+- **Tab 04 Python Code Scaffold:** webhook_handler.py (LINE signature verify + MCP event routing), line_notifier.py (DEPT_GROUPS dict + push_message), line_oa.py (customer push + save_customer_line_id), flex_builder.py structure, scheduler.py (APScheduler designer 24h reminder + PM 4h first_response), line_signature.py
+- **Tab 05 MCP Integration:** MCP Tool→LINE Notification mapping table (12 tools), TypeScript MCP tool implementation with back-channel example (halt_production → Factory + PM), back-channel notifications table (5 scenarios), error handling (LINE API 400/401/403/429/500) + retry with exponential backoff, PDPA note on PII in group messages
+
+### Registry
+- master_index.html: 161 entries (n:161 added)
+- changelog_v25.md: this block appended
+- sop_github_mapping.md: n:161 row appended
+
