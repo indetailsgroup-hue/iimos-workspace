@@ -126,56 +126,85 @@ SELECT col_not_null(
 -- ---------------------------------------------------------------------------
 -- BLOCK 3 — throws_ok: NULL org_id INSERT is rejected (8 tests)
 -- T-0179-NNB-17 → T-0179-NNB-24
--- Each uses a minimal INSERT with org_id = NULL; the NOT NULL constraint
--- should raise SQLSTATE 23502 (not_null_violation).
+--
+-- Each INSERT supplies every other NOT NULL column with a dummy value so that
+-- org_id is the FIRST constraint violation.  FK columns use gen_random_uuid()
+-- (FK AFTER triggers fire after NOT NULL, so a non-existent FK value is safe
+-- inside throws_ok).  The 3rd argument must match the exact PostgreSQL error
+-- message so that pgTAP's SQLSTATE+message comparison succeeds.
+--
+-- For jobs: migration 0221 adds max_jobs_per_month/max_users to organizations.
+-- The enforce_job_limit BEFORE INSERT trigger queries organizations WHERE
+-- org_id = NULL → 0 rows → v_org NULL → all IF-branches skip → RETURN NEW →
+-- then the server's own NOT NULL check fires, raising 23502.
 -- ---------------------------------------------------------------------------
 
+-- T-0179-NNB-17
 SELECT throws_ok(
-  $sql$ INSERT INTO public.customers (org_id) VALUES (NULL) $sql$,
+  $sql$ INSERT INTO public.customers (name, org_id) VALUES ('_test', NULL) $sql$,
   '23502',
-  'T-0179-NNB-17: customers rejects NULL org_id (23502)'
+  'null value in column "org_id" of relation "customers" violates not-null constraint'
 );
 
+-- T-0179-NNB-18
 SELECT throws_ok(
-  $sql$ INSERT INTO public.jobs (org_id) VALUES (NULL) $sql$,
+  $sql$ INSERT INTO public.jobs
+        (job_code, title, customer_id, created_by, org_id)
+        VALUES ('_test', '_test', gen_random_uuid(), gen_random_uuid(), NULL) $sql$,
   '23502',
-  'T-0179-NNB-18: jobs rejects NULL org_id (23502)'
+  'null value in column "org_id" of relation "jobs" violates not-null constraint'
 );
 
+-- T-0179-NNB-19
 SELECT throws_ok(
-  $sql$ INSERT INTO public.quotations (org_id) VALUES (NULL) $sql$,
+  $sql$ INSERT INTO public.quotations
+        (quotation_code, customer_id, created_by, org_id)
+        VALUES ('_test', gen_random_uuid(), gen_random_uuid(), NULL) $sql$,
   '23502',
-  'T-0179-NNB-19: quotations rejects NULL org_id (23502)'
+  'null value in column "org_id" of relation "quotations" violates not-null constraint'
 );
 
+-- T-0179-NNB-20
 SELECT throws_ok(
-  $sql$ INSERT INTO public.invoices (org_id) VALUES (NULL) $sql$,
+  $sql$ INSERT INTO public.invoices
+        (invoice_code, customer_id, due_date, created_by, org_id)
+        VALUES ('_test', gen_random_uuid(), CURRENT_DATE, gen_random_uuid(), NULL) $sql$,
   '23502',
-  'T-0179-NNB-20: invoices rejects NULL org_id (23502)'
+  'null value in column "org_id" of relation "invoices" violates not-null constraint'
 );
 
+-- T-0179-NNB-21
 SELECT throws_ok(
-  $sql$ INSERT INTO public.quotation_lines (org_id) VALUES (NULL) $sql$,
+  $sql$ INSERT INTO public.quotation_lines
+        (quotation_id, description, org_id)
+        VALUES (gen_random_uuid(), '_test', NULL) $sql$,
   '23502',
-  'T-0179-NNB-21: quotation_lines rejects NULL org_id (23502)'
+  'null value in column "org_id" of relation "quotation_lines" violates not-null constraint'
 );
 
+-- T-0179-NNB-22
 SELECT throws_ok(
-  $sql$ INSERT INTO public.job_panels (org_id) VALUES (NULL) $sql$,
+  $sql$ INSERT INTO public.job_panels
+        (job_id, name, material, width_mm, height_mm, org_id)
+        VALUES (gen_random_uuid(), '_test', '_test', 0, 0, NULL) $sql$,
   '23502',
-  'T-0179-NNB-22: job_panels rejects NULL org_id (23502)'
+  'null value in column "org_id" of relation "job_panels" violates not-null constraint'
 );
 
+-- T-0179-NNB-23
 SELECT throws_ok(
-  $sql$ INSERT INTO public.invoice_payments (org_id) VALUES (NULL) $sql$,
+  $sql$ INSERT INTO public.invoice_payments
+        (invoice_id, amount, org_id)
+        VALUES (gen_random_uuid(), 0, NULL) $sql$,
   '23502',
-  'T-0179-NNB-23: invoice_payments rejects NULL org_id (23502)'
+  'null value in column "org_id" of relation "invoice_payments" violates not-null constraint'
 );
 
+-- T-0179-NNB-24
 SELECT throws_ok(
   $sql$ INSERT INTO public.ledger_entries (org_id) VALUES (NULL) $sql$,
   '23502',
-  'T-0179-NNB-24: ledger_entries rejects NULL org_id (23502)'
+  'null value in column "org_id" of relation "ledger_entries" violates not-null constraint'
 );
 
 -- ---------------------------------------------------------------------------
@@ -265,3 +294,4 @@ SELECT is(
 
 SELECT * FROM finish();
 ROLLBACK;
+

@@ -20,6 +20,17 @@ BEGIN;
 SELECT plan(12);
 
 -- ============================================================
+-- Inline rollback DDL
+-- CI never runs supabase/rollbacks/; DDL is transactional in PostgreSQL
+-- so these ALTER TABLE statements will be rolled back at the end of the
+-- BEGIN … ROLLBACK block, leaving the schema intact for subsequent tests.
+-- ============================================================
+ALTER TABLE public.jobs           ALTER COLUMN org_id DROP NOT NULL;
+ALTER TABLE public.quotations     ALTER COLUMN org_id DROP NOT NULL;
+ALTER TABLE public.invoices       ALTER COLUMN org_id DROP NOT NULL;
+ALTER TABLE public.ledger_entries ALTER COLUMN org_id DROP NOT NULL;
+
+-- ============================================================
 -- BLOCK A: information_schema nullability checks
 -- Confirms the schema catalog reflects DROP NOT NULL
 -- ============================================================
@@ -171,3 +182,4 @@ SELECT lives_ok(
 
 SELECT * FROM finish();
 ROLLBACK;
+

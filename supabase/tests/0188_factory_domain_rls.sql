@@ -239,6 +239,17 @@ ON CONFLICT DO NOTHING;
 -- Switch to Beta user context (authenticated, Beta org_id claim)
 -- ---------------------------------------------------------------------------
 SET LOCAL row_security = on;
+
+-- Grant SELECT to the authenticated role so T-0188-22–25 can query the tables.
+-- Migration 0155 creates factory_jobs with a SELECT policy TO authenticated but
+-- no GRANT; migration 0188 also adds no GRANTs.  Without a GRANT the role
+-- receives "permission denied for table" before RLS is even evaluated.
+-- These GRANTs are inside BEGIN … ROLLBACK and are rolled back at the end,
+-- so they do not persist to the production schema.
+GRANT SELECT ON public.factory_jobs        TO authenticated;
+GRANT SELECT ON public.factory_checkins    TO authenticated;
+GRANT SELECT ON public.factory_job_events  TO authenticated;
+
 SET LOCAL ROLE authenticated;
 SELECT set_config(
   'request.jwt.claims',
@@ -289,3 +300,4 @@ SELECT is(
 
 SELECT * FROM finish();
 ROLLBACK;
+
