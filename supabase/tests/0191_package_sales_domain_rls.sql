@@ -145,10 +145,10 @@ VALUES
   ('b2b2b2b2-0191-0000-0000-000000000001'::uuid, 'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'SITE-0191-B', 'Beta 0191 Project', 'active')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.work_packages (id, project_id, site_code, code, name, status)
+INSERT INTO public.work_packages (id, project_id, site_code, code, name, status, org_id)
 VALUES
-  ('a1a1a1a1-0191-0000-0000-000000000002'::uuid, 'a1a1a1a1-0191-0000-0000-000000000001'::uuid, 'SITE-0191-A', 'WP-A-0191', 'Alpha Work Package', 'active'),
-  ('b2b2b2b2-0191-0000-0000-000000000002'::uuid, 'b2b2b2b2-0191-0000-0000-000000000001'::uuid, 'SITE-0191-B', 'WP-B-0191', 'Beta Work Package', 'active')
+  ('a1a1a1a1-0191-0000-0000-000000000002'::uuid, 'a1a1a1a1-0191-0000-0000-000000000001'::uuid, 'SITE-0191-A', 'WP-A-0191', 'Alpha Work Package', 'active', 'a1a1a1a1-0000-0000-0000-000000000001'::uuid),
+  ('b2b2b2b2-0191-0000-0000-000000000002'::uuid, 'b2b2b2b2-0191-0000-0000-000000000001'::uuid, 'SITE-0191-B', 'WP-B-0191', 'Beta Work Package', 'active', 'b2b2b2b2-0000-0000-0000-000000000001'::uuid)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.package_stages (id, package_id, org_id, seq, stage, status)
