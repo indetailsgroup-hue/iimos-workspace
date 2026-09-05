@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS public.organizations (
   plan        TEXT        NOT NULL DEFAULT 'FREE',
   slug        TEXT        NOT NULL DEFAULT 'stub-org',
   is_active   BOOLEAN     NOT NULL DEFAULT true,
-  status      TEXT        NOT NULL DEFAULT 'ACTIVE'
+  status      TEXT        NOT NULL DEFAULT 'ACTIVE',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- org_members stub — columns required by RLS policies in 0173+

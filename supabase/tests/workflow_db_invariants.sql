@@ -38,8 +38,8 @@ select ok(
 
 -- Audit immutability (Req 9.2): INSERT ได้ แต่ UPDATE/DELETE ถูก trigger ปฏิเสธ
 select lives_ok(
-  $$insert into public.workflow_audit_log(id, event_type, performed_by, detail)
-    values ('f9f9f9f9-0000-0000-0000-0000000000a1', 'pgtap_probe', 'tester', '{}'::jsonb)$$,
+  $$insert into public.workflow_audit_log(id, event_type, performed_by, detail, org_id)
+    values ('f9f9f9f9-0000-0000-0000-0000000000a1', 'pgtap_probe', 'tester', '{}'::jsonb, '00000000-0000-0000-0000-000000000000')$$,
   'audit log INSERT allowed (append)'
 );
 select throws_ok(
@@ -55,23 +55,23 @@ select throws_ok(
 
 -- Idempotency (Req 4.7/16.5): webhook_event_id unique ปฏิเสธ decision ซ้ำ
 select lives_ok(
-  $$insert into public.work_item(id, site_code, current_step, status, version)
-    values ('f9f9f9f9-0000-0000-0000-0000000000b1', 'S', 'Sale', 'awaiting_approval', 0)$$,
+  $$insert into public.work_item(id, site_code, current_step, status, version, org_id)
+    values ('f9f9f9f9-0000-0000-0000-0000000000b1', 'S', 'Sale', 'awaiting_approval', 0, '00000000-0000-0000-0000-000000000000')$$,
   'work_item insert (setup)'
 );
 select lives_ok(
-  $$insert into public.approval_request(id, work_item_id, process_step, resolved_approver, approver_kind, quorum, sla_deadline, timeout_at, status, attempt)
-    values ('f9f9f9f9-0000-0000-0000-0000000000c1', 'f9f9f9f9-0000-0000-0000-0000000000b1', 'Sale', 'lead', 'employee', 'unanimous', now(), now(), 'pending', 1)$$,
+  $$insert into public.approval_request(id, work_item_id, process_step, resolved_approver, approver_kind, quorum, sla_deadline, timeout_at, status, attempt, org_id)
+    values ('f9f9f9f9-0000-0000-0000-0000000000c1', 'f9f9f9f9-0000-0000-0000-0000000000b1', 'Sale', 'lead', 'employee', 'unanimous', now(), now(), 'pending', 1, '00000000-0000-0000-0000-000000000000')$$,
   'approval_request insert (setup)'
 );
 select lives_ok(
-  $$insert into public.approval_decision(approval_request_id, webhook_event_id, decider, decision, channel)
-    values ('f9f9f9f9-0000-0000-0000-0000000000c1', 'evt-pgtap-uniq', 'd1', 'approved', 'web')$$,
+  $$insert into public.approval_decision(approval_request_id, webhook_event_id, decider, decision, channel, org_id)
+    values ('f9f9f9f9-0000-0000-0000-0000000000c1', 'evt-pgtap-uniq', 'd1', 'approved', 'web', '00000000-0000-0000-0000-000000000000')$$,
   'first approval_decision with webhook_event_id (allowed)'
 );
 select throws_ok(
-  $$insert into public.approval_decision(approval_request_id, webhook_event_id, decider, decision, channel)
-    values ('f9f9f9f9-0000-0000-0000-0000000000c1', 'evt-pgtap-uniq', 'd2', 'rejected', 'web')$$,
+  $$insert into public.approval_decision(approval_request_id, webhook_event_id, decider, decision, channel, org_id)
+    values ('f9f9f9f9-0000-0000-0000-0000000000c1', 'evt-pgtap-uniq', 'd2', 'rejected', 'web', '00000000-0000-0000-0000-000000000000')$$,
   '23505', null,
   'idempotency: duplicate webhook_event_id rejected (unique_violation)'
 );
@@ -85,22 +85,23 @@ select throws_ok(
 
 -- setup: บ้าน 1 หลัง site BKK-HQ-01 + งวด notified (b1) + งวด paid (b2 — ทดสอบ short-circuit)
 select lives_ok(
-  $$insert into public.installation_projects(id, site_code, name)
-    values ('f4f4f4f4-0000-0000-0000-0000000000a1', 'BKK-HQ-01', 'บ้าน pgTAP การเงิน')$$,
+  $$insert into public.installation_projects(id, site_code, name, org_id)
+    values ('f4f4f4f4-0000-0000-0000-0000000000a1', 'BKK-HQ-01', 'บ้าน pgTAP การเงิน', '00000000-0000-0000-0000-000000000000')$$,
   'finance: project insert (setup)'
 );
 select lives_ok(
-  $$insert into public.payment_installments(id, project_id, site_code, seq, label, percent, amount, trigger_event, status, notified_at)
+  $$insert into public.payment_installments(id, project_id, site_code, seq, label, percent, amount, trigger_event, status, notified_at, org_id)
     values ('f4f4f4f4-0000-0000-0000-0000000000b1', 'f4f4f4f4-0000-0000-0000-0000000000a1',
             'BKK-HQ-01', 1, 'มัดจำ (เซ็นสัญญา)', 50, 100000, 'contract_signed', 'notified',
-            timezone('utc', now()) - interval '2 days')$$,
+            timezone('utc', now()) - interval '2 days', '00000000-0000-0000-0000-000000000000')$$,
   'finance: notified installment insert (setup)'
 );
 select lives_ok(
-  $$insert into public.payment_installments(id, project_id, site_code, seq, label, percent, amount, trigger_event, status, notified_at, paid_at)
+  $$insert into public.payment_installments(id, project_id, site_code, seq, label, percent, amount, trigger_event, status, notified_at, paid_at, org_id)
     values ('f4f4f4f4-0000-0000-0000-0000000000b2', 'f4f4f4f4-0000-0000-0000-0000000000a1',
             'BKK-HQ-01', 2, 'ก่อนผลิต (เซ็นแบบ final)', 30, 60000, 'g3_approved', 'paid',
-            timezone('utc', now()) - interval '2 days', timezone('utc', now()) - interval '1 day')$$,
+            timezone('utc', now()) - interval '2 days', timezone('utc', now()) - interval '1 day',
+            '00000000-0000-0000-0000-000000000000')$$,
   'finance: paid installment insert (setup)'
 );
 
@@ -212,9 +213,9 @@ select is(
   'finance: no client write policy on receipts (only SELECT)'
 );
 select ok(
-  (select qual like '%has_site_access%' from pg_policies
-   where schemaname = 'public' and tablename = 'receipts' and policyname = 'receipts_sel'),
-  'finance: receipts_sel policy is site-scoped (has_site_access)'
+  (select qual like '%get_user_org_id%' from pg_policies
+   where schemaname = 'public' and tablename = 'receipts' and policyname = 'receipts_tenant_isolation'),
+  'finance: receipts_tenant_isolation policy is tenant-scoped (get_user_org_id)'
 );
 select ok(
   (select relrowsecurity from pg_class where relname = 'payment_installments' and relnamespace = 'public'::regnamespace),

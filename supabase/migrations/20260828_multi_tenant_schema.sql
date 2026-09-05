@@ -39,6 +39,11 @@ CREATE TABLE IF NOT EXISTS public.organizations (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Guard: if the stub (00000000000063) ran first it created organizations without created_at;
+-- add the column idempotently so both migration paths converge.
+ALTER TABLE public.organizations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE public.organizations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 -- Index for slug lookup
 CREATE INDEX IF NOT EXISTS idx_organizations_slug ON public.organizations(slug);
 
