@@ -23,6 +23,16 @@ on:
       - "docs/governance/**"
       - ".github/workflows/verify-full.yml"
   pull_request:
+    paths:
+      - 'src/**'
+      - 'server/**'
+      - 'LineOS/**'
+      - 'supabase/migrations/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig*.json'
+      - 'vite.config.*'
+      - 'playwright.config.ts'
   workflow_dispatch:
 
 concurrency:
@@ -213,6 +223,9 @@ jobs:
   e2e-smoke:
     name: e2e @smoke (UI-only critical path — must never skip)
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    concurrency:
+      group: e2e-smoke-${{ github.head_ref || github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -248,6 +261,9 @@ jobs:
   e2e-integration:
     name: e2e factory-flow (non-@smoke — enforced non-vacuous; service tests gated on B1-05)
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    concurrency:
+      group: e2e-integration-${{ github.head_ref || github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -349,4 +365,6 @@ jobs:
             echo "::notice title=gate-bypass-scan::strict scan PASS — ready to flip this job to required (remove continue-on-error)"
           else
             echo "::notice title=gate-bypass-scan::strict scan reported findings — report-only, NOT blocking this run (scripts/gates/** = L5 scope; flip to required after the L5 lane merges)"
+          fi
+rt-only, NOT blocking this run (scripts/gates/** = L5 scope; flip to required after the L5 lane merges)"
           fi
