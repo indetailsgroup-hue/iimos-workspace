@@ -101,10 +101,10 @@ interface ProgressStoreOverride {
   skillGaps?: SkillGap[];
   isLoading?: boolean;
   error?: string | null;
-  resolveSkillGap?: (...args: unknown[]) => unknown;
-  fetchEmployeeReadiness?: (...args: unknown[]) => unknown;
-  fetchStageHistory?: (...args: unknown[]) => unknown;
-  fetchSkillGaps?: (...args: unknown[]) => unknown;
+  resolveSkillGap?: (...args: unknown[]) => Promise<void>;
+  fetchEmployeeReadiness?: (...args: unknown[]) => Promise<void>;
+  fetchStageHistory?: (...args: unknown[]) => Promise<void>;
+  fetchSkillGaps?: (...args: unknown[]) => Promise<void>;
   clearError?: () => void;
 }
 

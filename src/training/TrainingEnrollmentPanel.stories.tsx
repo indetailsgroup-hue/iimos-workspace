@@ -69,8 +69,8 @@ interface StoreOverride {
   enrollments?: TrainingEnrollment[];
   isEnrollmentLoading?: boolean;
   error?: string | null;
-  bulkEnroll?: (...args: unknown[]) => unknown;
-  fetchEnrollments?: (...args: unknown[]) => unknown;
+  bulkEnroll?: (...args: unknown[]) => Promise<TrainingEnrollment[]>;
+  fetchEnrollments?: (...args: unknown[]) => Promise<void>;
   clearError?: () => void;
 }
 
