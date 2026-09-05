@@ -10,6 +10,18 @@ name: MONOLITH Full Verify
 on:
   push:
     branches: [main, "fix/**", "s17/**", "governance/**"]
+    paths:
+      - "src/**"
+      - "server/**"
+      - "LineOS/**"
+      - "supabase/migrations/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig*.json"
+      - "vite.config.*"
+      - "playwright.config.ts"
+      - "docs/governance/**"
+      - ".github/workflows/verify-full.yml"
   pull_request:
   workflow_dispatch:
 

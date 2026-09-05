@@ -45,11 +45,17 @@ name: claim-guardrails
 
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
   schedule:
     # Nightly deep sweep (UTC). The deep job below gates itself on this event.
     - cron: "17 2 * * *"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
