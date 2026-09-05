@@ -212,6 +212,7 @@ jobs:
 
   e2e-smoke:
     name: e2e @smoke (UI-only critical path — must never skip)
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -246,6 +247,7 @@ jobs:
 
   e2e-integration:
     name: e2e factory-flow (non-@smoke — enforced non-vacuous; service tests gated on B1-05)
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

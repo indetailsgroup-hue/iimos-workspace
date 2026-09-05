@@ -23,6 +23,17 @@ name: Lint
 on:
   push:
     branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'server/**'
+      - '*.ts'
+      - '*.tsx'
+      - '*.js'
+      - '*.jsx'
+      - 'eslint.config.*'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig*.json'
   pull_request:
   workflow_dispatch:
 
