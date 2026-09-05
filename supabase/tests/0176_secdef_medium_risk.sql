@@ -30,7 +30,7 @@ SELECT is(
 );
 
 -- ---------------------------------------------------------------------------
--- T-M1-02  get_org_usage body contains auth.uid() IS NOT NULL guard
+-- T-M1-02  get_org_usage body contains auth.uid() IS NULL unauthenticated guard
 -- ---------------------------------------------------------------------------
 SELECT like(
   (
@@ -39,12 +39,12 @@ SELECT like(
     WHERE proname = 'get_org_usage'
       AND pronamespace = 'public'::regnamespace
   ),
-  '%auth.uid() IS NOT NULL%',
-  'T-M1-02: get_org_usage body must contain auth.uid() IS NOT NULL caller auth check'
+  '%auth.uid() IS NULL%',
+  'T-M1-02: get_org_usage body must contain auth.uid() IS NULL unauthenticated guard'
 );
 
 -- ---------------------------------------------------------------------------
--- T-M1-03  get_org_usage body contains has_org_access() membership guard
+-- T-M1-03  get_org_usage body contains org_members membership check
 -- ---------------------------------------------------------------------------
 SELECT like(
   (
@@ -53,8 +53,8 @@ SELECT like(
     WHERE proname = 'get_org_usage'
       AND pronamespace = 'public'::regnamespace
   ),
-  '%has_org_access%',
-  'T-M1-03: get_org_usage body must contain has_org_access() membership guard'
+  '%org_members%',
+  'T-M1-03: get_org_usage body must contain org_members membership check'
 );
 
 -- ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ SELECT is(
 );
 
 -- ---------------------------------------------------------------------------
--- T-M2-03  rpc_ledger_entries body contains auth.uid() IS NOT NULL check
+-- T-M2-03  rpc_ledger_entries body contains resolve_actor() caller auth check
 -- ---------------------------------------------------------------------------
 SELECT like(
   (
@@ -120,12 +120,12 @@ SELECT like(
     WHERE proname = 'rpc_ledger_entries'
       AND pronamespace = 'public'::regnamespace
   ),
-  '%auth.uid() IS NOT NULL%',
-  'T-M2-03: rpc_ledger_entries body must contain auth.uid() IS NOT NULL guard'
+  '%resolve_actor%',
+  'T-M2-03: rpc_ledger_entries body must contain resolve_actor() caller auth check'
 );
 
 -- ---------------------------------------------------------------------------
--- T-M2-04  rpc_ledger_summary body contains auth.uid() IS NOT NULL check
+-- T-M2-04  rpc_ledger_summary body contains resolve_actor() caller auth check
 -- ---------------------------------------------------------------------------
 SELECT like(
   (
@@ -134,13 +134,13 @@ SELECT like(
     WHERE proname = 'rpc_ledger_summary'
       AND pronamespace = 'public'::regnamespace
   ),
-  '%auth.uid() IS NOT NULL%',
-  'T-M2-04: rpc_ledger_summary body must contain auth.uid() IS NOT NULL guard'
+  '%resolve_actor%',
+  'T-M2-04: rpc_ledger_summary body must contain resolve_actor() caller auth check'
 );
 
 -- ---------------------------------------------------------------------------
--- T-M2-05  journal_entry table uses site_code-based RLS (has_site_access)
---          Confirms INVOKER strategy is correct — site_code RLS is present
+-- T-M2-05  journal_entry table uses org_id-based RLS (get_user_org_id)
+--          Confirms INVOKER strategy is correct — tenant-isolation RLS is present
 -- ---------------------------------------------------------------------------
 SELECT ok(
   (
@@ -148,9 +148,9 @@ SELECT ok(
     FROM pg_policies
     WHERE tablename = 'journal_entry'
       AND schemaname = 'public'
-      AND qual LIKE '%has_site_access%'
+      AND qual LIKE '%get_user_org_id%'
   ),
-  'T-M2-05: journal_entry must have at least one RLS policy using has_site_access()'
+  'T-M2-05: journal_entry must have at least one RLS policy using get_user_org_id()'
 );
 
 -- ---------------------------------------------------------------------------
