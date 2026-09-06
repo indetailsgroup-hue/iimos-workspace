@@ -35,10 +35,10 @@ SELECT plan(17);
 -- =============================================================================
 
 -- org_a: the legitimate org
-INSERT INTO public.organizations (org_id, name, created_at)
+INSERT INTO public.organizations (org_id, name, slug, created_at)
 VALUES
-  ('aaaaaaaa-0000-0000-0000-000000000001', 'Org A', now()),
-  ('bbbbbbbb-0000-0000-0000-000000000002', 'Org B', now())
+  ('aaaaaaaa-0000-0000-0000-000000000001', 'Org A', 'pgtap-0180-org-a', now()),
+  ('bbbbbbbb-0000-0000-0000-000000000002', 'Org B', 'pgtap-0180-org-b', now())
 ON CONFLICT DO NOTHING;
 
 -- user_member: active member of org_a only
@@ -46,8 +46,8 @@ INSERT INTO auth.users (id, email)
 VALUES ('cccccccc-0000-0000-0000-000000000003', 'member@org-a.test')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.org_members (user_id, org_id, role, is_active)
-VALUES ('cccccccc-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', 'ADMIN', true)
+INSERT INTO public.org_members (user_id, org_id, email, role, is_active)
+VALUES ('cccccccc-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', 'member@org-a.test', 'ADMIN', true)
 ON CONFLICT DO NOTHING;
 
 -- user_super: platform super-admin (no org_members record needed)

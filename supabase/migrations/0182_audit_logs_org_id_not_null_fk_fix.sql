@@ -306,6 +306,12 @@ COMMENT ON FUNCTION public.validate_audit_log_insert() IS
   'and validates actor_id for actor_type=user. Fires for ALL insert paths '
   '(direct service_role + rpc_write_audit_log SECURITY DEFINER).';
 
+-- Supabase grants EXECUTE on newly created public functions to API roles via
+-- default privileges. This trigger function is not an RPC and must remain
+-- callable only by the trigger mechanism.
+REVOKE ALL ON FUNCTION public.validate_audit_log_insert()
+  FROM PUBLIC, anon, authenticated, service_role;
+
 -- Re-attach trigger in case it was dropped or wasn't created yet
 DROP TRIGGER IF EXISTS trg_validate_audit_log_insert ON public.audit_logs;
 

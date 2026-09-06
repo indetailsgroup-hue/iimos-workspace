@@ -301,7 +301,7 @@ END;
 $$;
 
 -- Grant only to authenticated and service_role; revoke from anon and PUBLIC
-REVOKE ALL     ON FUNCTION public.rpc_write_audit_log(UUID,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,JSONB,INET,TEXT) FROM PUBLIC;
+REVOKE ALL     ON FUNCTION public.rpc_write_audit_log(UUID,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,JSONB,INET,TEXT) FROM PUBLIC, anon;
 GRANT  EXECUTE ON FUNCTION public.rpc_write_audit_log(UUID,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,JSONB,INET,TEXT) TO authenticated;
 GRANT  EXECUTE ON FUNCTION public.rpc_write_audit_log(UUID,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,JSONB,INET,TEXT) TO service_role;
 

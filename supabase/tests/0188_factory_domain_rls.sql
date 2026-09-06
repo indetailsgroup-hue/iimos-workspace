@@ -241,10 +241,10 @@ ON CONFLICT DO NOTHING;
 -- Without this row, get_user_org_id() returns NULL for the Beta JWT and
 -- the tenant_isolation policy (org_id = get_user_org_id()) filters out
 -- ALL rows including Beta's own — causing T-0188-25 to fail.
-INSERT INTO public.org_members (id, org_id, user_id, role, is_active) VALUES
+INSERT INTO public.org_members (member_id, org_id, user_id, email, role, is_active) VALUES
   ('b2b2b2b2-0000-0000-0188-000000000001'::uuid,
    'b2b2b2b2-0000-0000-0000-000000000001',
-   'b2b2b2b2-0000-0000-0001-000000000002',
+   'b2b2b2b2-0000-0000-0001-000000000002', 'beta-0188@example.test',
    'VIEWER', true)
 ON CONFLICT DO NOTHING;
 
@@ -313,4 +313,3 @@ SELECT is(
 
 SELECT * FROM finish();
 ROLLBACK;
-

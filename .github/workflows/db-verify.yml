@@ -10,11 +10,13 @@ on:
     paths:
       - "supabase/migrations/**"
       - "supabase/tests/**"
+      - "scripts/prepare_supabase_migrations_ci.sh"
       - ".github/workflows/db-verify.yml"
   pull_request:
     paths:
       - "supabase/migrations/**"
       - "supabase/tests/**"
+      - "scripts/prepare_supabase_migrations_ci.sh"
   workflow_dispatch:
 
 concurrency:
@@ -33,6 +35,9 @@ jobs:
         uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
         with:
           version: 2.116.0
+
+      - name: Prepare canonical fresh-DB migrations
+        run: bash scripts/prepare_supabase_migrations_ci.sh --merge-duplicates
 
       - name: Start local Supabase (applies migration chain)
         # Full stack for first validation — migrations reference auth.users (gotrue).

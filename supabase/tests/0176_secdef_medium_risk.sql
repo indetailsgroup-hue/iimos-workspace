@@ -32,28 +32,26 @@ SELECT is(
 -- ---------------------------------------------------------------------------
 -- T-M1-02  get_org_usage body contains auth.uid() IS NULL unauthenticated guard
 -- ---------------------------------------------------------------------------
-SELECT like(
+SELECT ok(
   (
     SELECT prosrc
     FROM pg_proc
     WHERE proname = 'get_org_usage'
       AND pronamespace = 'public'::regnamespace
-  ),
-  '%auth.uid() IS NULL%',
+  ) LIKE '%auth.uid() IS NULL%',
   'T-M1-02: get_org_usage body must contain auth.uid() IS NULL unauthenticated guard'
 );
 
 -- ---------------------------------------------------------------------------
 -- T-M1-03  get_org_usage body contains org_members membership check
 -- ---------------------------------------------------------------------------
-SELECT like(
+SELECT ok(
   (
     SELECT prosrc
     FROM pg_proc
     WHERE proname = 'get_org_usage'
       AND pronamespace = 'public'::regnamespace
-  ),
-  '%org_members%',
+  ) LIKE '%org_members%',
   'T-M1-03: get_org_usage body must contain org_members membership check'
 );
 
@@ -113,28 +111,26 @@ SELECT is(
 -- ---------------------------------------------------------------------------
 -- T-M2-03  rpc_ledger_entries body contains resolve_actor() caller auth check
 -- ---------------------------------------------------------------------------
-SELECT like(
+SELECT ok(
   (
     SELECT prosrc
     FROM pg_proc
     WHERE proname = 'rpc_ledger_entries'
       AND pronamespace = 'public'::regnamespace
-  ),
-  '%resolve_actor%',
+  ) LIKE '%resolve_actor%',
   'T-M2-03: rpc_ledger_entries body must contain resolve_actor() caller auth check'
 );
 
 -- ---------------------------------------------------------------------------
 -- T-M2-04  rpc_ledger_summary body contains resolve_actor() caller auth check
 -- ---------------------------------------------------------------------------
-SELECT like(
+SELECT ok(
   (
     SELECT prosrc
     FROM pg_proc
     WHERE proname = 'rpc_ledger_summary'
       AND pronamespace = 'public'::regnamespace
-  ),
-  '%resolve_actor%',
+  ) LIKE '%resolve_actor%',
   'T-M2-04: rpc_ledger_summary body must contain resolve_actor() caller auth check'
 );
 

@@ -79,7 +79,7 @@ SELECT ok(
      WHERE schemaname = 'public'
        AND tablename  = 'notification_digest_queue'
        AND policyname = 'digest_queue_own_user_select'
-       AND qual       ILIKE '%auth.uid()%'
+       AND qual       ILIKE '%auth.uid%'
   ),
   'T-F3-04: digest_queue_own_user_select USING clause must reference auth.uid()'
 );

@@ -348,11 +348,11 @@ ON CONFLICT (category) DO NOTHING;
 -- Switch to Beta user context (authenticated, Beta org_id claim)
 -- ---------------------------------------------------------------------------
 -- ensure both tenant users are in org_members so get_user_org_id() resolves
-INSERT INTO public.org_members (id, org_id, user_id, role, is_active) VALUES
+INSERT INTO public.org_members (member_id, org_id, user_id, email, role, is_active) VALUES
   ('a1a1a1a1-0190-0000-0000-0000000000ff'::uuid, 'a1a1a1a1-0000-0000-0000-000000000001'::uuid,
-   'a1a1a1a1-0000-0000-0001-000000000002'::uuid, 'VIEWER', true),
+   'a1a1a1a1-0000-0000-0001-000000000002'::uuid, 'alpha-0190@example.test', 'VIEWER', true),
   ('b2b2b2b2-0190-0000-0000-0000000000ff'::uuid, 'b2b2b2b2-0000-0000-0000-000000000001'::uuid,
-   'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'VIEWER', true)
+   'b2b2b2b2-0000-0000-0001-000000000002'::uuid, 'beta-0190@example.test', 'VIEWER', true)
 ON CONFLICT DO NOTHING;
 
 SET LOCAL row_security = on;

@@ -58,7 +58,7 @@ INSERT INTO public.organizations (org_id, name, slug) VALUES
 ON CONFLICT (org_id) DO NOTHING;
 
 -- ── org_members ───────────────────────────────────────────────────────────
-INSERT INTO public.org_members (id, org_id, user_id, email, role, is_active) VALUES
+INSERT INTO public.org_members (member_id, org_id, user_id, email, role, is_active) VALUES
   (gen_random_uuid(), 'a1a1a1a1-0000-0000-0000-000000000001',
    'a1a1a1a1-0000-0000-0001-000000000002', 'alpha@example.com', 'OWNER', true),
   (gen_random_uuid(), 'b2b2b2b2-0000-0000-0000-000000000001',

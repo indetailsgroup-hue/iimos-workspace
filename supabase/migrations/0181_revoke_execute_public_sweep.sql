@@ -126,7 +126,7 @@ GRANT  EXECUTE ON FUNCTION public.has_app_role(TEXT)                            
 --   TRIGGER FUNCTION: invoked by the PostgreSQL trigger mechanism as the table
 --   owner.  End users must NOT call this directly — REVOKE FROM PUBLIC but do
 --   NOT grant to any role.  The trigger itself handles invocation.
-REVOKE ALL     ON FUNCTION public.validate_audit_log_insert()                         FROM PUBLIC;
+REVOKE ALL     ON FUNCTION public.validate_audit_log_insert()                         FROM PUBLIC, anon, authenticated, service_role;
 -- No GRANT: trigger-only function.  Invocation managed by INSERT trigger on audit_logs.
 
 -- rpc_write_audit_log — secure audit log write RPC (SECURITY DEFINER, 0177)
@@ -134,7 +134,7 @@ REVOKE ALL     ON FUNCTION public.validate_audit_log_insert()                   
 --   (background system event logging).
 REVOKE ALL     ON FUNCTION public.rpc_write_audit_log(
   UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB, INET, TEXT
-) FROM PUBLIC;
+) FROM PUBLIC, anon;
 GRANT  EXECUTE ON FUNCTION public.rpc_write_audit_log(
   UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB, INET, TEXT
 ) TO authenticated;

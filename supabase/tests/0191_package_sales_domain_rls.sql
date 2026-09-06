@@ -174,10 +174,10 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- ensure alpha user is in org_members so get_user_org_id() resolves
-INSERT INTO public.org_members (id, org_id, user_id, role, is_active)
+INSERT INTO public.org_members (member_id, org_id, user_id, email, role, is_active)
 VALUES ('a1a1a1a1-0191-0000-0000-0000000000ff'::uuid,
         'a1a1a1a1-0000-0000-0000-000000000001'::uuid,
-        'a1a1a1a1-0000-0000-0001-000000000002'::uuid,
+        'a1a1a1a1-0000-0000-0001-000000000002'::uuid, 'alpha-0191@example.test',
         'VIEWER', true)
 ON CONFLICT DO NOTHING;
 
