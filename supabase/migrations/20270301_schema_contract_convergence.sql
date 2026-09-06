@@ -39,6 +39,72 @@ ALTER TABLE public.org_members
 CREATE UNIQUE INDEX IF NOT EXISTS org_members_member_id_key
   ON public.org_members (member_id);
 
+ALTER TABLE public.invoices
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+-- 0177 published approval routing against employee_id/role_key membership
+-- columns, while the installation schema stored auth user_id/general role.
+-- Materialize the routing contract and derive it from the canonical identity
+-- binding so approval delivery can resolve the intended employee safely.
+ALTER TABLE public.installation_memberships
+  ADD COLUMN IF NOT EXISTS employee_id UUID,
+  ADD COLUMN IF NOT EXISTS role_key TEXT;
+
+UPDATE public.installation_memberships im
+SET employee_id = ib.employee_id,
+    role_key = COALESCE(
+      ib.app_role,
+      CASE im.role
+        WHEN 'foreman' THEN 'installation_team_lead'
+        WHEN 'office' THEN 'project_manager'
+        ELSE im.role
+      END
+    )
+FROM public.identity_binding ib
+WHERE ib.auth_user_id = im.user_id
+  AND ib.is_active
+  AND (im.employee_id IS DISTINCT FROM ib.employee_id OR im.role_key IS NULL);
+
+CREATE INDEX IF NOT EXISTS installation_memberships_approval_route_idx
+  ON public.installation_memberships (project_id, role_key)
+  WHERE is_active;
+
+CREATE OR REPLACE FUNCTION public.fn_installation_membership_route_fields()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_binding public.identity_binding%ROWTYPE;
+BEGIN
+  SELECT ib.* INTO v_binding
+  FROM public.identity_binding ib
+  WHERE ib.auth_user_id = NEW.user_id AND ib.is_active
+  ORDER BY ib.created_at DESC
+  LIMIT 1;
+
+  IF FOUND THEN
+    NEW.employee_id := v_binding.employee_id;
+    NEW.role_key := COALESCE(
+      v_binding.app_role,
+      CASE NEW.role
+        WHEN 'foreman' THEN 'installation_team_lead'
+        WHEN 'office' THEN 'project_manager'
+        ELSE NEW.role
+      END
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_installation_membership_route_fields
+  ON public.installation_memberships;
+CREATE TRIGGER trg_installation_membership_route_fields
+  BEFORE INSERT OR UPDATE OF user_id, role ON public.installation_memberships
+  FOR EACH ROW EXECUTE FUNCTION public.fn_installation_membership_route_fields();
+
 -- Restore the complete eTax queue contract on the partitioned parent. These are
 -- the columns published by 0181/0182/0183 and consumed by their RPCs.
 ALTER TABLE public.etax_submissions
