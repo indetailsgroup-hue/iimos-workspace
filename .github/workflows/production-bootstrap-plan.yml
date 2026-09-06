@@ -269,6 +269,7 @@ jobs:
             bootstrap-plan/bootstrap-db-lint.txt
             bootstrap-plan/bootstrap-pgtap.tap
             bootstrap-plan/supabase/migrations/
+            bootstrap-plan/supabase/tests/
           retention-days: 30
 
       - name: Stop local Supabase
@@ -452,8 +453,10 @@ jobs:
             and .localDependencyExtensionsReady == true
             and .allMissingMigrationsApplied == true
             and .coreSchemaReadyAfter == true
+            and .pgtapTestFileCount > 0
             and .pgtapPassed == true
             and .pgtapAssertionCount > 0
+            and .databaseLintClean == true
             and .productionDataCopied == false
             and .productionWritesPerformed == false
           ' reconciliation-simulation/results/reconciliation-simulation.json \

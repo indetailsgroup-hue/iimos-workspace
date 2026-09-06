@@ -70,6 +70,7 @@ failed_file=""
 core_schema_ready_before=false
 core_schema_ready_after=false
 pgtap_exit_code=-1
+pgtap_test_file_count=0
 pgtap_assertion_count=0
 pgtap_passed=false
 database_lint_exit_code=-1
@@ -159,11 +160,21 @@ if [[ "$all_missing_migrations_applied" == "true" ]]; then
   psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
     -c 'CREATE EXTENSION IF NOT EXISTS pgtap;' >> "$pgtap_log" 2>&1
 
+  shopt -s nullglob
+  pgtap_files=("$canonical_plan_dir"/supabase/tests/*.sql)
+  shopt -u nullglob
+  pgtap_test_file_count="${#pgtap_files[@]}"
+
   set +e
-  pg_prove --dbname "$local_database_url" --verbose \
-    "$canonical_plan_dir"/supabase/tests/*.sql \
-    >> "$pgtap_log" 2>&1
-  pgtap_exit_code=$?
+  if [[ "$pgtap_test_file_count" -eq 0 ]]; then
+    echo "No pgTAP SQL files found in $canonical_plan_dir/supabase/tests" \
+      >> "$pgtap_log"
+    pgtap_exit_code=2
+  else
+    pg_prove --dbname "$local_database_url" --verbose \
+      "${pgtap_files[@]}" >> "$pgtap_log" 2>&1
+    pgtap_exit_code=$?
+  fi
 
   supabase db lint \
     --db-url "$local_database_url" \
@@ -194,6 +205,7 @@ jq -n \
   --argjson coreSchemaReadyAfter "$core_schema_ready_after" \
   --argjson allMissingMigrationsApplied "$all_missing_migrations_applied" \
   --argjson pgtapExitCode "$pgtap_exit_code" \
+  --argjson pgtapTestFileCount "$pgtap_test_file_count" \
   --argjson pgtapAssertionCount "$pgtap_assertion_count" \
   --argjson pgtapPassed "$pgtap_passed" \
   --argjson databaseLintExitCode "$database_lint_exit_code" \
@@ -226,6 +238,7 @@ jq -n \
     ),
     coreSchemaReadyAfter: $coreSchemaReadyAfter,
     pgtapExitCode: $pgtapExitCode,
+    pgtapTestFileCount: $pgtapTestFileCount,
     pgtapAssertionCount: $pgtapAssertionCount,
     pgtapPassed: $pgtapPassed,
     databaseLintExitCode: $databaseLintExitCode,
