@@ -264,6 +264,7 @@ jobs:
             bootstrap-plan/plan-summary.json
             bootstrap-plan/migration-manifest.tsv
             bootstrap-plan/duplicate-version-map.tsv
+            bootstrap-plan/semantic-version-map.tsv
             bootstrap-plan/local-bootstrap-result.json
             bootstrap-plan/bootstrap-db-lint.txt
             bootstrap-plan/bootstrap-pgtap.tap

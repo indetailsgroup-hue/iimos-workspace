@@ -60,6 +60,21 @@ if [[ -n "$duplicate_versions" ]]; then
   done <<< "$duplicate_versions"
 fi
 
+semantic_map="$output_dir/semantic-version-map.tsv"
+printf 'target_version\ttarget_file\tsource_version\tsource_file\treason\n' > "$semantic_map"
+semantic_merge_count=0
+if [[ -f "$staged_migrations/0195_etax_risk_tier_notify.sql" \
+  && -f "$staged_migrations/01952_b_etax_risk_tier_notify_pgnet.sql" ]]; then
+  printf '%s\t%s\t%s\t%s\t%s\n' \
+    '0195' \
+    '0195_etax_risk_tier_notify.sql' \
+    '01952' \
+    '01952_b_etax_risk_tier_notify_pgnet.sql' \
+    '01952 explicitly depends on 0195 but sorts before 0195 under Supabase filename ordering' \
+    >> "$semantic_map"
+  semantic_merge_count=1
+fi
+
 bash "$project_root/scripts/prepare_supabase_migrations_ci.sh" \
   --merge-duplicates "$staged_migrations"
 
@@ -101,20 +116,33 @@ total_bytes=0
 ordered_files="$({
   for file in "$staged_migrations"/*.sql; do
     filename="$(basename "$file")"
-    version="${filename%%_*}"
-    printf '%s\t%s\n' "$version" "$file"
+    printf '%s\t%s\n' "$filename" "$file"
   done
-} | sort -t $'\t' -k1,1n -k2,2)"
+} | sort -t $'\t' -k1,1)"
 
-while IFS=$'\t' read -r version file; do
+while IFS=$'\t' read -r filename file; do
   order=$((order + 1))
-  filename="$(basename "$file")"
+  version="${filename%%_*}"
   bytes="$(file_size "$file")"
   digest="$(sha256_file "$file")"
   total_bytes=$((total_bytes + bytes))
   printf '%s\t%s\t%s\t%s\t%s\n' \
     "$order" "$version" "$filename" "$bytes" "$digest" >> "$manifest"
 done <<< "$ordered_files"
+
+# fs.ReadDir, used by the pinned Supabase CLI, returns entries sorted by
+# filename.  Assert that the manifest preserves that exact execution order so
+# reconciliation never applies a migration in an order the CLI would not use.
+expected_order="$output_dir/.expected-filename-order"
+manifest_order="$output_dir/.manifest-filename-order"
+find "$staged_migrations" -maxdepth 1 -type f -name '*.sql' \
+  -exec basename {} \; | sort > "$expected_order"
+tail -n +2 "$manifest" | cut -f3 > "$manifest_order"
+if ! diff -u "$expected_order" "$manifest_order"; then
+  echo "[bootstrap-plan] manifest order differs from Supabase filename order" >&2
+  exit 1
+fi
+rm "$expected_order" "$manifest_order"
 
 commit="unknown"
 if command -v git >/dev/null 2>&1; then
@@ -128,11 +156,13 @@ cat > "$output_dir/plan-summary.json" <<JSON
   "sourceCommit": "$commit",
   "inputMigrationFiles": $input_count,
   "inputDuplicateVersions": $input_duplicate_versions,
+  "semanticVersionMerges": $semantic_merge_count,
   "renderedMigrationFiles": $order,
   "renderedDuplicateVersions": 0,
   "renderedSqlBytes": $total_bytes,
   "manifestSha256": "$manifest_sha256",
-  "normalizationPolicy": "semantic-bootstrap-split-and-duplicate-version-merge",
+  "normalizationPolicy": "semantic-bootstrap-split-dependency-order-merge-and-duplicate-version-merge",
+  "executionOrderPolicy": "supabase-filename-lexicographic",
   "productionWritesPerformed": false
 }
 JSON
