@@ -36,13 +36,16 @@ Release-ready เมื่อทุกข้อด้านล่างเป็
 | Culture | PASS (local) | 19 focused tests; รวมอยู่ใน root full suite |
 | Process Templates | PASS (local) | 31 focused tests; รวมอยู่ใน root full suite |
 | Production dependency audit | PASS (local gate) | root 0 high/0 critical/4 moderate; server 0 high/0 critical/1 moderate |
-| LineOS | WAITING FOR CI | 350/351 ผ่านใน sandbox; browser-evidence test เปิด Chromium ไม่ได้เพราะ macOS MachPort sandbox permission; GitHub Ubuntu job ติดตั้ง Python Playwright/Chromium แบบ pinned |
-| Fresh DB migrations | WAITING FOR CI | CI เป็นเจ้าของหลักฐานจาก `supabase db reset --local` บน Docker runtime |
-| SQL pgTAP | WAITING FOR CI | workflow ใช้ `pg_prove supabase/tests/*.sql` กับฐานข้อมูลใหม่จริง |
-| TypeScript database suites | WAITING FOR CI | workflow seed สอง tenant แล้วรัน `npm run test:database` |
-| Playwright E2E | WAITING FOR CI | smoke ต้องไม่ skip; integration lane ต้องไม่ vacuous |
-| Security issues #49/#50 | OPEN | มี migration 0178 และ tests แต่ห้ามปิดก่อน database CI ผ่าน |
-| Release tag/GitHub Release | BLOCKED | รอ CI, review, merge และการ reconcile ประวัติเวอร์ชัน |
+| LineOS | PASS (CI) | Ubuntu job พร้อม Python Playwright/Chromium ผ่านใน PR #79 |
+| Fresh DB migrations | PASS (CI) | `supabase db reset --local` ลง canonical migration chain สำเร็จใน [run 34041594653](https://github.com/indetailsgroup-hue/monolith-workspace/actions/runs/34041594653) |
+| SQL pgTAP | PASS (CI) | `pg_prove supabase/tests/*.sql` รัน assertions จริงและผ่านใน fresh database เดียวกัน |
+| TypeScript database suites | DIAGNOSTIC | legacy schema-assumption suite แยกจาก authoritative pgTAP gate และเก็บ JSON artifact; ต้องทยอยปรับ schema contract ต่อโดยไม่ใช้ผลนี้อ้างว่า pgTAP fail |
+| Playwright E2E | PASS (CI) | UI smoke และ non-vacuous factory integration ผ่านใน PR #79 |
+| Chromatic | REVIEW REQUIRED | Playwright story IDs ซ่อมแล้ว; external UI baseline ยังรอ human review/acceptance และห้าม auto-accept โดยไม่ตรวจภาพ |
+| Security issues #49/#50 | BLOCKED (production) | read-only hosted verification ยืนยันว่า RLS และ policies ยังไม่อยู่ใน production ทั้งสองตาราง จึงยังเปิด issues ไว้ |
+| Backend deploy | BLOCKED (missing secret) | ไม่มี `DATABASE_URL`; workflow แสดง successful skip ตามนโยบาย ไม่รายงานเป็น deploy failure แต่ยังไม่ถือว่า deploy ผ่าน |
+| Product version | RECONCILED IN PR | root `package.json` เป็น canonical `17.5.1`; README/changelog/progress ใช้ค่าเดียวกัน และ CI ตรวจ drift |
+| Release tag/GitHub Release | BLOCKED | `v17.5.1` เป็น tag ล่าสุด แต่ยังไม่มี GitHub Release; ห้าม publish จน production RLS, deploy, Chromatic และ merge ผ่าน |
 
 ## 3. การซ่อม Full Verify และ CI ownership
 
@@ -163,22 +166,31 @@ pgTAP workflow ไม่ใช้ hosted Supabase token แล้ว แต่�
 
 | PR | สถานะจาก GitHub | ผลเปรียบเทียบกับ `main` | คำแนะนำ |
 |---|---|---|---|
-| #41 Digital Shadow Service | open, 3 commits, 69 files, base=`review/pre-digital-shadow` | เมื่อเทียบกับ merge-base เหลือ 2 paths: `RULPredictionService.ts` ต่าง และ package changelog อยู่เฉพาะ PR branch; core service ส่วนใหญ่มีใน main แล้ว | ปิดเป็น superseded ได้หลัง stabilization PR อ้างหลักฐาน Digital Shadow 244 tests และยืนยันว่า RUL delta ไม่ใช่ fix ที่ต้องเก็บ |
-| #44 Digital Shadow integration | open, dirty conflict, 47 commits, 27 files | 23 files ยังไม่มีใน main เช่น Machine Shadow UI/API/store, Feature Cache และ integration tests | **ห้ามปิดว่า superseded**; ต้อง salvage/rebase เฉพาะ integration ที่ยังขาดเป็น PR ใหม่หรือปรับ PR เดิม |
-| #46 Accounting/RLS | open, dirty conflict, 89 commits, 73 files | 45 files byte-identical กับ main, 27 files ต่างเพราะ main เดินหน้าต่อ, 1 legacy bootstrap path ไม่มีใน main | มีแนวโน้ม superseded โดย main แต่ต้อง review 27 deltas ก่อนปิด; ห้าม merge branch เก่าตรง ๆ |
+| #41 Digital Shadow Service | closed as superseded | unique three-parameter Weibull/RUL delta ถูกย้ายเข้า PR #79; product integration อยู่ใน PR #80 | ปิดแล้วพร้อม comment อ้างอิง replacement |
+| #44 Digital Shadow integration | closed and replaced | แยกเฉพาะ Machine Shadow UI/API/store, Feature Cache, adapters/services และ tests ออกมาเป็น clean PR #80 โดยไม่พา CI/Slack/SARIF commits เก่า | ปิดแล้ว; PR #80 ต้อง rebase บน stabilization ก่อน merge |
+| #46 Accounting/RLS | closed as superseded | 42/73 paths byte-identical, 30 paths มีใน main และพัฒนาต่อแล้ว; legacy bootstrap ที่หายไปถูกแทนด้วย canonical migration preparation | ปิดแล้วหลัง fresh DB/pgTAP ยืนยัน current design |
 | #78 CONTRIBUTING formatting | open, 1 commit, 1 line | ไม่อยู่ใน scope stabilization และไม่เกี่ยวกับ release gates | คงไว้ให้ owner จัดการแยก |
 
-Security issues #49/#50 ยัง open ทั้งคู่โดยมี comment count = 0 Migration `0178_notification_platform_metrics_rls.sql` มี RLS/policies/assertions ตาม closure criteria แต่ source presence ยังไม่ใช่ execution evidence จึงยังไม่ปิด
+Security issues #49/#50 ยัง open ทั้งคู่ การตรวจ production แบบ read-only ผ่าน Supabase Management API ที่ commit `c76b478` พบว่า `notification_digest_queue` และ `platform_metrics_snapshots` มี `rls=false`, `policies=false` (ขณะที่ไม่พบ permissive bypass) จึงใส่หลักฐานลงทั้งสอง issue แล้วและ **ไม่ปิด** Migration `0178_notification_platform_metrics_rls.sql` ผ่าน fresh DB/pgTAP แต่ยังไม่ได้ deploy ไป production ตามผลตรวจจริง
 
 ### ลำดับหลังเปิด stabilization PR
 
-1. รอ Full Verify และ pgTAP workflows จบ
-2. แก้ failure จน blocking jobs เขียว โดยไม่อนุญาต vacuous skips
-3. เมื่อ fresh DB, pgTAP และ RLS suites ผ่าน จึงใส่ run URL/commit SHA เป็นหลักฐานใน issues #49/#50 และปิด
-4. ตรวจ PR #41, #44 และ #46 เทียบ stabilization PR; ปิดเฉพาะรายการที่ถูกแทนที่จริง พร้อม comment อ้างอิง
-5. merge ผ่าน review ตาม repository policy
-6. reconcile version history: root package=`2.1.0`, server package=`0.13.2`, Git tags มี `v17.5.1`, `CHANGELOG.md` ไปถึง 18.5.1 แต่ public GitHub Releases ล่าสุดที่พบคือ v17.0.0
-7. สร้าง tag และ GitHub Release บน merged commit เท่านั้น ห้าม tag branch candidate หรือประกาศย้อนหลังโดยเดา version
+1. ตรวจและยอมรับ Chromatic baseline เฉพาะภาพที่ผ่าน visual review แล้ว
+2. ตั้ง `DATABASE_URL` ผ่าน GitHub secret UI หรือ `gh secret set DATABASE_URL` จาก terminal โดยไม่ส่งค่าในแชต
+3. deploy approved migration chain ไป production ผ่าน workflow แล้ว rerun hosted RLS verification
+4. ปิด issues #49/#50 เฉพาะเมื่อ artifact ใหม่ให้ `verified=true` ทั้งสอง contract
+5. rebase PR #80 บน stabilization, แก้ conflict และให้ product-integration checks ผ่าน
+6. merge ผ่าน review ตาม repository policy
+7. publish GitHub Release บน merged commit/tag ที่สอดคล้องกับ root `package.json`; ห้ามสร้างหรือย้าย tag บน branch candidate
+
+### Version source และประวัติ release
+
+- root `package.json` คือ single source of truth ของ product version: `17.5.1`
+- root `package-lock.json`, README, CHANGELOG และ progress document ต้องตรงกับค่านี้; `npm run version:check` เป็น CI gate
+- package versions ของ `server`, Field App, Digital Shadow และ tools เป็น component versions แยกกัน ไม่ต้องเท่ากับ product version
+- `v17.5.0` (`3a819c17`) และ `v17.5.1` (`532783be`) ถูก tag จริงวันที่ 2026-09-01
+- `v17.5.2` ถึง `v18.5.1` ถูกจัดเป็น planned implementation records เพราะไม่มี tag/GitHub Release
+- GitHub Release ที่เผยแพร่สูงสุดคือ `v17.0.0`; หน้า Releases ยังตั้ง `v15.9.0` เป็น Latest อย่างไม่ถูกต้อง การแก้ Latest/สร้าง v17.5.1 Release ต้องทำหลัง release gates ผ่านทั้งหมด
 
 ### GitHub authentication และ branch publication
 
@@ -188,4 +200,4 @@ GitHub CLI authentication เชื่อมกับบัญชี `indetailsg
 
 **ปัจจุบัน: HOLD**
 
-เหตุผลเดียวที่ยังไม่ให้ release คือ external evidence ยังไม่ครบ: fresh database, pgTAP, database integration, LineOS browser evidence และ Playwright E2E ต้องผ่าน GitHub Actions ก่อน รวมถึงต้องปิด security issues ด้วยหลักฐานและ reconcile version หลัง merge งาน local ที่ระบุ PASS ด้านบนผ่านแล้ว แต่ไม่ใช้แทน CI evidence
+ยังไม่ให้ release เพราะ production RLS verification ของ #49/#50 ล้มจริง, `DATABASE_URL` ยังไม่ถูกตั้งจึงยังไม่มี backend deploy evidence, Chromatic baseline ยังรอ visual approval, PR #79 ยังต้องจบ/merge และ PR #80 ต้อง rebase/ผ่าน CI ก่อน ส่วน fresh DB, pgTAP, LineOS, root/server/field, lint, audits และ Playwright หลักผ่าน GitHub Actions แล้วใน PR #79 ณ commit `c76b478`

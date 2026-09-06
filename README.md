@@ -1,5 +1,7 @@
 # MONOLITH — Manufacturing OS (Multi-Tenant SaaS Platform)
 
+> **Current product version:** `v17.5.1` — the root `package.json` is the canonical version source. GitHub Release publication is tracked separately and remains subject to release gates.
+>
 > **MONOLITH** is a multi-tenant SaaS platform for custom manufacturing businesses.
 > Each customer organization (e.g., DAPH Decor, kitchen builders, joinery shops) registers as a **tenant** and gets a fully-isolated workspace with its own jobs, quotations, invoices, and factory pipeline.
 

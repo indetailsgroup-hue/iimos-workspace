@@ -1,6 +1,12 @@
 # Monolith Implementation Progress
 
-## v18.0 — Interactive OrgChart, Role Network View, QC Anomaly Detection, AI Quotation Draft, Leadership Action Tracker (🔜 Active — Q2 2027)
+> **Current product version:** `v17.5.1` — sourced from the root `package.json` and tagged on 2026-09-01. The v17.5.2+ and v18.x sections are forward implementation records, not published releases.
+>
+> **Public release status:** GitHub has a published v17.0.0 release; v17.5.0 and v17.5.1 currently exist as Git tags only. Do not publish a new release until every release-readiness gate passes.
+
+**Status last verified:** 2026-09-06
+
+## Forward implementation track — Interactive OrgChart, Role Network View, QC Anomaly Detection, AI Quotation Draft, Leadership Action Tracker (target: Q2 2027; not released)
 
 ### ✅ Completed (v18.0 — sprint 1: Interactive OrgChart schema + types + store)
 - `supabase/migrations/20270201_interactive_orgchart.sql` — `org_chart_nodes`, `org_reporting_lines`, `org_chart_hierarchy_v` (recursive CTE), `oc_is_professional_plus()`, trigger, 6 indexes, 7 RLS policies, assertion block
@@ -63,13 +69,13 @@
 - `src/leadership-actions/leadershipActionStore.ts` — `useLeadershipActionStore`; 10 ENTERPRISE-gated actions; optimistic rollback on completeAction/cancelAction; UI helpers
 - `src/ai-quotation/__tests__/aiQuotationDraftStore.test.ts` — **74 Vitest unit tests, all passing**; plan gate (10), fetchDrafts parallel (3), CRUD (9), workflow optimistic (6), line items (12), loading-state subscribe pattern
 
-**Last updated:** 2027-03-13
+**Roadmap target updated:** 2027-03-13
 
 ---
 
-## v17.5 — Training Tracker + Super Employee Tracker + AI Cost Estimation (✅ v17.5.0 Released 2027-01-15 | v17.5.1 Released 2027-01-20)
+## v17.5 — Training Tracker + Super Employee Tracker + AI Cost Estimation (v17.5.0 and v17.5.1 tagged 2026-09-01; v17.5.2+ not released)
 
-**Tag v17.5.0:** `3a819c17` | **Tag v17.5.1:** `8a7a6be8`
+**Tag v17.5.0:** `3a819c17` | **Tag v17.5.1:** `532783be`
 **PR #76:** merged (squash `3a819c17`) | **PR #77:** merged (squash `af6f329b`)
 
 ### ✅ All completed (v17.5.0 — Tasks 1–40 via PR #76 + PR #77)
@@ -130,13 +136,13 @@
 - `src/culture-metrics/CultureDashboard.stories.tsx` — 11 CSF3 Storybook stories; `withCultureStore` decorator; `activateSpy`/`closeSpy` fn() spies; play functions for ActivateSurveyAction + CloseSurveyAction
 - `src/culture-metrics/__tests__/CultureDashboard.test.tsx` — 24 Vitest tests all passing; covers plan gate, loading, error, surveys, eNPS results, org health
 
-**Last updated:** 2027-02-10
+**Roadmap target updated:** 2027-02-10
 
 ---
 
-## v17.0 — Process Templates Module (✅ Released 2026-12-01)
+## v17.0 — Process Templates Module (✅ GitHub Release published 2026-09-01)
 
-**Release tag:** v17.0.0 | **PR:** #75 (merged) | **Merge SHA:** 7d9e0467
+**Release tag:** v17.0.0 | **PR:** #75 (merged) | **Tag commit:** 6c575064
 
 ### ✅ All completed
 - `supabase/migrations/20261201_process_templates.sql` — 3 tables, 1 view, 3 fn, 12 RLS, 5 seed templates

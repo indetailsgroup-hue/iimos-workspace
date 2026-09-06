@@ -1,7 +1,7 @@
 {
   "name": "monolith-workspace",
   "private": true,
-  "version": "2.1.0",
+  "version": "17.5.1",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -38,6 +38,7 @@
     "lint:fix": "eslint . --fix",
     "lint:budget": "eslint . --max-warnings 2312",
     "lint:strict": "eslint . --max-warnings 0",
+    "version:check": "node scripts/check-version-consistency.mjs",
     "audit:production": "npm audit --omit=dev --audit-level=high",
     "format:all": "npm run format --workspaces --if-present",
     "typecheck:all": "tsc -b tsconfig.build.json",
@@ -48,8 +49,8 @@
     "e2e:smoke": "playwright test --config playwright.e2e.config.ts --grep @smoke",
     "e2e:debug": "playwright test --config playwright.e2e.config.ts --debug",
     "e2e:report": "playwright show-report",
-    "verify": "npm run lint && npm run test:run && npm run test:node && npm run typecheck:all && npm run typecheck:server && npm run e2e:smoke",
-    "verify:full": "npm run lint && npm run test:run && npm run test:node && npm run typecheck:all && npm run typecheck:server && npm run e2e",
+    "verify": "npm run version:check && npm run lint && npm run test:run && npm run test:node && npm run typecheck:all && npm run typecheck:server && npm run e2e:smoke",
+    "verify:full": "npm run version:check && npm run lint && npm run test:run && npm run test:node && npm run typecheck:all && npm run typecheck:server && npm run e2e",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "chromatic": "chromatic --project-token=$CHROMATIC_PROJECT_TOKEN",

@@ -19,6 +19,10 @@ on:
       - "supabase/migrations/**"
       - "package.json"
       - "package-lock.json"
+      - "README.md"
+      - "CHANGELOG.md"
+      - ".claude/progress.md"
+      - "scripts/check-version-consistency.mjs"
       - "tsconfig*.json"
       - "vite.config.*"
       - "vitest.database.config.ts"
@@ -35,6 +39,10 @@ on:
       - 'supabase/migrations/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - '.claude/progress.md'
+      - 'scripts/check-version-consistency.mjs'
       - 'tsconfig*.json'
       - 'vite.config.*'
       - 'vitest.database.config.ts'
@@ -52,12 +60,16 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
       - name: Install dependencies (root)
         run: npm ci
+      - name: Verify canonical product version
+        run: npm run version:check
       # server/ อยู่นอก npm workspaces — ต้องติดตั้งแยก ไม่งั้นเทสต์ที่ใช้ yazl fail
       - name: Install dependencies (server)
         run: npm ci
