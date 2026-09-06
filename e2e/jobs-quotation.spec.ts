@@ -13,7 +13,9 @@ test.describe('CreateJobWizard Flow', () => {
   test.beforeEach(async ({ page }) => {
     // Set DESIGNER role to access /jobs/new
     await page.addInitScript(() => {
-      localStorage.setItem('monolith.user.role', 'DESIGNER');
+      if (!localStorage.getItem('monolith.user.role')) {
+        localStorage.setItem('monolith.user.role', 'DESIGNER');
+      }
     });
     await page.goto('/jobs/new');
     await page.waitForSelector('[data-testid="create-job-wizard"]', { timeout: 15000 });
@@ -191,7 +193,9 @@ test.describe('CreateJobWizard Flow', () => {
 test.describe('Job Board', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
-      localStorage.setItem('monolith.user.role', 'DESIGNER');
+      if (!localStorage.getItem('monolith.user.role')) {
+        localStorage.setItem('monolith.user.role', 'DESIGNER');
+      }
     });
     await page.goto('/jobs');
     await page.waitForSelector('[data-testid="job-board"]', { timeout: 15000 });
@@ -252,7 +256,9 @@ test.describe('QuotationBuilder Approval Cycle', () => {
   test.beforeEach(async ({ page }) => {
     // FINANCE role can access quotations
     await page.addInitScript(() => {
-      localStorage.setItem('monolith.user.role', 'FINANCE');
+      if (!localStorage.getItem('monolith.user.role')) {
+        localStorage.setItem('monolith.user.role', 'FINANCE');
+      }
       localStorage.setItem('monolith-jobs-store', JSON.stringify({
         state: {
           jobs: [{

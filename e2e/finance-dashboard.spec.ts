@@ -12,7 +12,9 @@ import { test, expect } from '@playwright/test';
 test.describe('Finance Dashboard', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
-      localStorage.setItem('monolith.user.role', 'FINANCE');
+      if (!localStorage.getItem('monolith.user.role')) {
+        localStorage.setItem('monolith.user.role', 'FINANCE');
+      }
     });
     // Navigate to the Finance Dashboard page
     // The route pattern follows MONOLITH SPA routing
