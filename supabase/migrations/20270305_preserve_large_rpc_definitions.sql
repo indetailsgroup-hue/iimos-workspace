@@ -146,10 +146,17 @@ DECLARE
   v_definition TEXT;
   v_repaired TEXT;
 BEGIN
-  v_definition := pg_get_functiondef(v_oid);
+  -- Older hosted copies of this function retain CRLF in prosrc. Normalize the
+  -- definition before applying the narrowly-scoped repairs so the exact same
+  -- migration covers both historical CRLF and clean-bootstrap LF definitions.
+  v_definition := replace(pg_get_functiondef(v_oid), E'\r\n', E'\n');
   v_repaired := replace(v_definition,
     'v_sync_log_id    uuid;',
     E'v_sync_log_id    uuid;\n  v_sync_sql       text;');
+  IF v_repaired = v_definition THEN
+    RAISE EXCEPTION 'forecasting declaration repair did not change %', v_oid;
+  END IF;
+  v_definition := v_repaired;
   v_repaired := replace(v_repaired,
     $old$execute format(
     'select public.record_input_sync($1, $2::%I.%I, $3::%I.%I, $4, $5)',
@@ -164,7 +171,7 @@ BEGIN
   execute v_sync_sql
     into v_sync_log_id$new$);
   IF v_repaired = v_definition THEN
-    RAISE EXCEPTION 'forecasting late-binding repair did not change %', v_oid;
+    RAISE EXCEPTION 'forecasting call repair did not change %', v_oid;
   END IF;
   EXECUTE v_repaired;
 END;

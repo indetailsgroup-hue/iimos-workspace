@@ -464,6 +464,7 @@ jobs:
             and .pgtapTestFileCount > 0
             and .pgtapPassed == true
             and .pgtapAssertionCount > 0
+            and .legacyPgTapRoutinesIsolated == true
             and .databaseLintClean == true
             and .productionDataCopied == false
             and .productionWritesPerformed == false
