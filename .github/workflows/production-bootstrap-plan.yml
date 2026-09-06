@@ -188,6 +188,12 @@ jobs:
           jq -e '.coreSchemaReady == true and .allRenderedMigrationsApplied == true' \
             bootstrap-plan/local-bootstrap-result.json >/dev/null
 
+          supabase db lint \
+            --db-url "$DB_URL" \
+            --level error \
+            --fail-on error \
+            2>&1 | tee bootstrap-plan/bootstrap-db-lint.txt
+
           psql "$DB_URL" -v ON_ERROR_STOP=1 \
             -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
           pg_prove \
@@ -210,6 +216,7 @@ jobs:
             bootstrap-plan/plan-summary.json
             bootstrap-plan/migration-manifest.tsv
             bootstrap-plan/local-bootstrap-result.json
+            bootstrap-plan/bootstrap-db-lint.txt
             bootstrap-plan/bootstrap-pgtap.tap
             bootstrap-plan/supabase/migrations/
           retention-days: 30
