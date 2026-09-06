@@ -176,7 +176,7 @@ BEGIN
     h.time_since_prev_alert, h.resolved_at, h.was_resolved,
     h.seconds_to_resolve, h.current_lag_seconds::NUMERIC,
     h.current_freshness_status, h.current_last_refreshed_at,
-    h.current_refresh_duration_ms, h.current_row_count,
+    h.current_refresh_duration_ms::NUMERIC, h.current_row_count,
     h.current_triggered_by, h.affected_org_count,
     h.total_submissions_in_mv, h.max_failed_last_24h_in_mv
   FROM public.v_mv_alert_history h

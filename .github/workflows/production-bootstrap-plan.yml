@@ -215,6 +215,7 @@ jobs:
           set -o pipefail
           supabase db lint \
             --db-url "$DB_URL" \
+            --schema public \
             --level error \
             --fail-on error \
             2>&1 | tee bootstrap-plan/bootstrap-db-lint.txt
@@ -253,6 +254,11 @@ jobs:
           if ! grep -qE '^ok ' bootstrap-plan/bootstrap-pgtap.tap; then
             echo "::error::No pgTAP assertions ran against the rendered bundle."
             exit 1
+          fi
+
+          if [ "$DB_LINT_EXIT" -ne 0 ]; then
+            echo "::error::Database lint reported errors; production bootstrap is blocked."
+            exit "$DB_LINT_EXIT"
           fi
 
       - name: Upload exact reviewed bootstrap plan
