@@ -33,6 +33,21 @@ target="$migration_dir/0172_jobs_quotations_invoices.sql"
 legacy_stub="$migration_dir/00000000000063_organizations_org_members_stub.sql"
 section_marker='^-- 4\. ADD org_id TO EXISTING TABLES$'
 
+invalid_filenames=""
+for file in "$migration_dir"/*.sql; do
+  filename="$(basename "$file")"
+  version="${filename%%_*}"
+  if [[ ! "$version" =~ ^[0-9]+$ ]]; then
+    invalid_filenames+="${filename}"$'\n'
+  fi
+done
+
+if [[ -n "$invalid_filenames" ]]; then
+  echo "[prepare-migrations] invalid migration filenames; expected <numeric-version>_<name>.sql:" >&2
+  printf '%s' "$invalid_filenames" >&2
+  exit 1
+fi
+
 if [[ ! -f "$target" ]]; then
   echo "[prepare-migrations] canonical 0172 migration not found: $target" >&2
   exit 1

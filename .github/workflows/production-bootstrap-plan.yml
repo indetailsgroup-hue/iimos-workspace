@@ -157,9 +157,17 @@ jobs:
       - name: Verify core schema and run all pgTAP assertions
         run: |
           DB_URL="postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres"
+          RENDERED_MIGRATIONS="$(jq -r '.renderedMigrationFiles' bootstrap-plan/plan-summary.json)"
 
-          psql "$DB_URL" -tA -v ON_ERROR_STOP=1 -c "SELECT jsonb_build_object(
+          psql "$DB_URL" -tA -v ON_ERROR_STOP=1 \
+            -v rendered_migrations="$RENDERED_MIGRATIONS" \
+            -c "SELECT jsonb_build_object(
+            'renderedMigrationFiles', :'rendered_migrations'::integer,
             'migrationsApplied', (SELECT count(*) FROM supabase_migrations.schema_migrations),
+            'allRenderedMigrationsApplied', (
+              (SELECT count(*) FROM supabase_migrations.schema_migrations)
+              = :'rendered_migrations'::integer
+            ),
             'coreSchemaReady', (
               to_regclass('public.organizations') IS NOT NULL
               AND to_regclass('public.org_members') IS NOT NULL
@@ -170,7 +178,7 @@ jobs:
             'productionWritesPerformed', false
           );" | tee bootstrap-plan/local-bootstrap-result.json
 
-          jq -e '.coreSchemaReady == true and .migrationsApplied > 0' \
+          jq -e '.coreSchemaReady == true and .allRenderedMigrationsApplied == true' \
             bootstrap-plan/local-bootstrap-result.json >/dev/null
 
           psql "$DB_URL" -v ON_ERROR_STOP=1 \
