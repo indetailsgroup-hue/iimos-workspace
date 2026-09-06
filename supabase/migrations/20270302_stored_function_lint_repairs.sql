@@ -168,7 +168,17 @@ BEGIN
   END IF;
 
   RETURN QUERY
-  SELECT h.*
+  SELECT h.alert_id, h.alerted_at, h.alert_type, h.alert_rank,
+    h.lag_seconds_at_alert, h.threshold_seconds,
+    h.freshness_status_at_alert, h.mv_last_refreshed_at_at_alert,
+    h.detected_at, h.cron_job, h.triggered_by_at_alert,
+    h.refresh_duration_ms_at_alert, h.row_count_at_alert,
+    h.time_since_prev_alert, h.resolved_at, h.was_resolved,
+    h.seconds_to_resolve, h.current_lag_seconds::NUMERIC,
+    h.current_freshness_status, h.current_last_refreshed_at,
+    h.current_refresh_duration_ms, h.current_row_count,
+    h.current_triggered_by, h.affected_org_count,
+    h.total_submissions_in_mv, h.max_failed_last_24h_in_mv
   FROM public.v_mv_alert_history h
   WHERE h.alert_rank <= LEAST(GREATEST(p_limit, 1), 50)
   ORDER BY h.alert_rank;

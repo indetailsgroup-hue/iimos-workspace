@@ -49,7 +49,9 @@ BEGIN
 
   UPDATE public.invoices i
   SET remaining_amount = v_new_remaining,
-      status = CASE WHEN v_new_remaining <= 0 THEN 'PAID' ELSE 'PARTIAL' END
+      status = CASE WHEN v_new_remaining <= 0
+                    THEN 'PAID'::public.invoice_status
+                    ELSE 'PARTIAL'::public.invoice_status END
   WHERE i.invoice_id = p_invoice_id AND i.org_id = v_org_id;
 
   UPDATE public.jobs j SET updated_at = now()

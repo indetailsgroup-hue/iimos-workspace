@@ -54,12 +54,18 @@ DECLARE
   v_repaired TEXT;
 BEGIN
   v_definition := pg_get_functiondef(v_oid);
+  IF position('ib.employee_id = v_row.requester' IN v_definition) = 0 THEN
+    RAISE EXCEPTION 'force-close requester identity predicate not found in %', v_oid;
+  END IF;
   v_repaired := replace(v_definition,
     'v_previous_status text;',
     'v_previous_status public.field_purchase_status;');
   v_repaired := replace(v_repaired,
     'v_previous_status := v_row.status::text;',
     'v_previous_status := v_row.status;');
+  v_repaired := replace(v_repaired,
+    'ib.employee_id = v_row.requester',
+    'ib.employee_id::text = v_row.requester');
   IF v_repaired = v_definition THEN
     RAISE EXCEPTION 'force-close status repair did not change %', v_oid;
   END IF;
@@ -117,6 +123,12 @@ BEGIN
   v_repaired := replace(v_repaired,
     'responded_at::date',
     'submitted_at::date');
+  v_repaired := replace(v_repaired,
+    'FROM   culture_metrics',
+    'FROM   public.cmd_metric_snapshots');
+  v_repaired := replace(v_repaired,
+    'metric_date = p_snapshot_date',
+    'snapshot_date = p_snapshot_date');
   IF v_repaired = v_definition THEN
     RAISE EXCEPTION 'OHS eNPS source repair did not change %', v_oid;
   END IF;
