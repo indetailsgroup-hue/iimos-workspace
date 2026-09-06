@@ -76,6 +76,7 @@ export default [
       '**/coverage/**',
       'build/**',
       '**/build/**',
+      'storybook-static/**',
       'playwright-report/**',
       'test-results/**',
       // Config files, carried over from ignorePatterns...

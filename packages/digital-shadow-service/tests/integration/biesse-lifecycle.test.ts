@@ -10,7 +10,7 @@
  * Also tests: Job lifecycle, telemetry flow, event emission
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -19,16 +19,10 @@ import {
   OPCUAServer,
   Variant,
   DataType,
-  StatusCodes,
-  UAVariable,
-  SessionContext,
-  AddressSpace,
-  Namespace,
 } from 'node-opcua';
 import { BiesseAdapter } from '../../src/adapters/BiesseAdapter';
 import { WwUnitState, WwUnitMode, MachineVendor, AdapterProtocol } from '../../src/types/machine';
-import type { MachineEndpoint, MachineStateSnapshot } from '../../src/types/machine';
-import type { SensorDataPoint } from '../../src/types/sensor';
+import type { MachineAlarm, MachineEndpoint } from '../../src/types/machine';
 
 // ─── Mock OPC UA Server (simulates Biesse Rover A) ──────────────────────────
 
@@ -48,16 +42,26 @@ const serverState = {
   toolId: 'T0',
 };
 
+class TestBiesseAdapter extends BiesseAdapter {
+  emitTestStateChange(previousState: WwUnitState, newState: WwUnitState): void {
+    this.emitStateChange(previousState, newState);
+  }
+
+  emitTestAlarm(alarm: MachineAlarm): void {
+    this.emitAlarm(alarm);
+  }
+}
+
 let server: OPCUAServer;
 let clientPkiCounter = 0;
 
-function createTestAdapter(): BiesseAdapter {
+function createTestAdapter(): TestBiesseAdapter {
   clientPkiCounter += 1;
   const clientCertificateManager = new OPCUACertificateManager({
     rootFolder: join(TEST_PKI_ROOT, `client-pki-${clientPkiCounter}`),
     automaticallyAcceptUnknownCertificate: true,
   });
-  return new BiesseAdapter(testEndpoint, clientCertificateManager);
+  return new TestBiesseAdapter(testEndpoint, clientCertificateManager);
 }
 
 async function createMockOpcuaServer(): Promise<OPCUAServer> {
@@ -258,7 +262,7 @@ function resetServerState(): void {
 // ─── Integration Tests ───────────────────────────────────────────────────────
 
 describe('BiesseAdapter Integration — Full Lifecycle', () => {
-  let adapter: BiesseAdapter;
+  let adapter: TestBiesseAdapter;
 
   beforeAll(async () => {
     // Start mock OPC UA server
@@ -666,7 +670,7 @@ describe('BiesseAdapter Integration — Full Lifecycle', () => {
       await adapter.readState();
 
       // Now trigger the emitStateChange (simulating subscription callback)
-      (adapter as any).emitStateChange(WwUnitState.READY, WwUnitState.WORKING);
+      adapter.emitTestStateChange(WwUnitState.READY, WwUnitState.WORKING);
 
       expect(stateChanges).toHaveLength(1);
       expect(stateChanges[0]).toEqual({
@@ -681,7 +685,7 @@ describe('BiesseAdapter Integration — Full Lifecycle', () => {
       adapter.onStateChange((...args) => stateChanges.push(args));
 
       // Same state → no emission
-      (adapter as any).emitStateChange(WwUnitState.WORKING, WwUnitState.WORKING);
+      adapter.emitTestStateChange(WwUnitState.WORKING, WwUnitState.WORKING);
 
       expect(stateChanges).toHaveLength(0);
     });
@@ -690,7 +694,7 @@ describe('BiesseAdapter Integration — Full Lifecycle', () => {
       const alarms: unknown[] = [];
       adapter.onAlarm((event) => alarms.push(event));
 
-      (adapter as any).emitAlarm({
+      adapter.emitTestAlarm({
         alarmId: 'ALM-001',
         severity: 'CRITICAL',
         message: 'Spindle overload detected',
@@ -724,7 +728,7 @@ describe('BiesseAdapter Integration — Full Lifecycle', () => {
 
     it('should handle invalid state value gracefully', async () => {
       // Force an invalid state value (99)
-      (serverState as any).currentState = 99;
+      serverState.currentState = 99 as WwUnitState;
       const state = await adapter.readUnitState();
       // Should default to OFFLINE for unknown values
       expect(state).toBe(WwUnitState.OFFLINE);

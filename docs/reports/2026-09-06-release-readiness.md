@@ -26,7 +26,7 @@ Release-ready เมื่อทุกข้อด้านล่างเป็
 | Node-native controls | PASS (local) | 35/35 รวม canonical schema bundle |
 | Root TypeScript | PASS (local) | `npx tsc -b tsconfig.build.json` |
 | Root production build | PASS (local) | Vite build สำเร็จ; มี chunk-size warnings เดิม |
-| Lint | PASS (local) | 0 errors; 2,312 warnings เท่ากับ budget |
+| Lint | PASS (local) | 0 errors; 2,298 warnings เท่ากับ budget |
 | Field App | PASS (local) | build + 7 files / 24 tests |
 | Digital Shadow | PASS (local) | build + 10 files / 244 isolated unit tests |
 | Homag adapter | PASS (local) | 27 tests ภายใน Digital Shadow lane |
@@ -155,8 +155,8 @@ pgTAP workflow ไม่ใช้ hosted Supabase token แล้ว แต่�
 ## 8. Lint ratchet
 
 - แก้ error ทั้งหมดจนเหลือ 0
-- baseline ปัจจุบัน 2,312 warnings
-- `npm run lint:budget` ใช้ `--max-warnings 2312`
+- baseline ปัจจุบัน 2,298 warnings
+- `npm run lint:budget` ใช้ `--max-warnings 2298`
 - CI จะล้มทันทีเมื่อมี warning ใหม่ แม้ technical debt เดิมยังไม่ได้ลดทั้งหมด
 - เมื่อแก้ warning เดิม ต้องลดเลข budget ใน commit เดียวกัน ห้ามปล่อย budget คงเดิมโดยไม่มีเหตุผล
 

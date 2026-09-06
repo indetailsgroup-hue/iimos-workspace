@@ -16,7 +16,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 - pgTAP CI now prepares historical migrations deterministically, starts a fresh local Supabase stack without hosted secrets, applies every migration, runs all SQL pgTAP files, and then runs the TypeScript RLS/migration/integration suites against the same database.
 - Backend deployment now reports an explicit successful skip when required deployment secrets are unavailable and only deploys when every prerequisite is present.
-- Lint is a blocking zero-error gate with a 2,312-warning ratchet; new warnings fail CI.
+- Lint is a blocking zero-error gate with a 2,298-warning ratchet; new warnings fail CI.
 - Root Vitest excludes database-, service-, tool-, and E2E-owned suites so each environment-dependent suite runs only in its authoritative CI lane.
 - The canonical S17 schema test now resolves bundle membership from `schema-bundle.sha256`, keeping unrelated VS-01 schemas outside the signed ten-schema bundle.
 
