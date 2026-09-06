@@ -1,6 +1,6 @@
 -- =============================================================================
 -- Migration 0195 — pg_net Patch
--- File   : 0195b_etax_risk_tier_notify_pgnet.sql
+-- File   : 01952_b_etax_risk_tier_notify_pgnet.sql
 -- Purpose: Extends fn_check_risk_tier_changes (created in 0195) to invoke the
 --          etax-risk-notify Edge Function via pg_net HTTP POST immediately after
 --          firing pg_notify — removes dependency on poll-mode fallback for
@@ -181,7 +181,7 @@ COMMENT ON FUNCTION public.fn_check_risk_tier_changes() IS
    an HTTP POST via pg_net to the etax-risk-notify Edge Function for
    immediate LINE Notify / webhook delivery.
    pg_net failures are non-fatal (WARNING log only).
-   Patched by 0195b_etax_risk_tier_notify_pgnet.sql';
+   Patched by 01952_b_etax_risk_tier_notify_pgnet.sql';
 
 -- ─── 3. Helper: check net.http_post request status ────────────────────────────
 -- Useful for debugging failed deliveries from the pg_net queue.
@@ -240,4 +240,3 @@ BEGIN
 END $$;
 
 COMMIT;
-

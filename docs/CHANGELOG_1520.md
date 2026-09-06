@@ -15,7 +15,7 @@ Release 15.2.0 completes the **eTax risk-tier alerting pipeline** and introduces
 
 ## Added
 
-### Migration 0195b — `0195b_etax_risk_tier_notify_pgnet.sql`
+### Migration 0195b — `01952_b_etax_risk_tier_notify_pgnet.sql`
 
 Patches `fn_check_risk_tier_changes` (introduced in Migration 0195) to dispatch a real-time HTTP POST to the `etax-risk-notify` Edge Function whenever a risk-tier transition is detected.
 
@@ -201,4 +201,3 @@ None. All changes are additive. The `etax_submissions` partitioning migration pr
 ## Full Changelog
 
 - See [CHANGELOG_1400.md](./CHANGELOG_1400.md) through [CHANGELOG_1510.md](./CHANGELOG_1510.md) for prior release history.
-

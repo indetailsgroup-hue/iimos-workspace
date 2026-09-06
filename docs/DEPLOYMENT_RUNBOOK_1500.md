@@ -204,7 +204,7 @@ psql "$PGURL" -f supabase/migrations/0192_mv_etax_health_trend.sql
 psql "$PGURL" -f supabase/migrations/0193_v_etax_full_health_summary.sql
 psql "$PGURL" -f supabase/migrations/0194_v_etax_org_risk_ranking.sql
 psql "$PGURL" -f supabase/migrations/0195_etax_risk_tier_notify.sql
-psql "$PGURL" -f supabase/migrations/0195b_etax_risk_tier_notify_pgnet.sql
+psql "$PGURL" -f supabase/migrations/01952_b_etax_risk_tier_notify_pgnet.sql
 psql "$PGURL" -f supabase/migrations/0196_etax_submissions_partitioning.sql
 psql "$PGURL" -f supabase/migrations/0197_partition_archive_log.sql
 ```

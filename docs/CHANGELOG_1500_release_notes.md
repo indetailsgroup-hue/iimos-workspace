@@ -170,7 +170,7 @@ depend on this foundation.
   `risk_rank`, `health_status`, `is_priority_review`, `transitioned_at`
 - `rpc_etax_risk_tier_state(p_org_id)` RPC for authenticated read
 
-#### `0195b_etax_risk_tier_notify_pgnet.sql`
+#### `01952_b_etax_risk_tier_notify_pgnet.sql`
 - Patches `fn_check_risk_tier_changes()` to dispatch HTTP POST via `net.http_post()`
 - Reads `etax_risk_notify_url` and `etax_risk_notify_secret` from `platform_config` table at runtime
 - Creates `platform_config` table: PK `key TEXT`, columns `value TEXT`, `updated_at`
@@ -428,7 +428,7 @@ Full version history: `docs/CHANGELOG_1400.md` through `docs/CHANGELOG_1530.md`
 0193_v_etax_full_health_summary.sql
 0194_v_etax_org_risk_ranking.sql
 0195_etax_risk_tier_state.sql
-0195b_etax_risk_tier_notify_pgnet.sql   ← patch, after 0195
+01952_b_etax_risk_tier_notify_pgnet.sql ← patch, after 0195
 0196_etax_submissions_monthly_partition.sql
 0197_partition_archive_log.sql
 ```
