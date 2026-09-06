@@ -3,11 +3,13 @@
 # scripts/apply_migrations.sh
 # FPR Field-Purchase sub-system — sequential migration apply script
 #
-# Applies migrations 0176 → 0215 in numerical order against the target database.
+# Applies the hosted-security remediation followed by the FPR migrations
+# 0176 → 0215 against the target database.
 #
 # Usage:
 #   ./scripts/apply_migrations.sh                    # uses DATABASE_URL from env
 #   DATABASE_URL=postgres://... ./scripts/apply_migrations.sh
+#   ./scripts/apply_migrations.sh --check            # validate manifest only
 #
 # .env support:
 #   If DATABASE_URL is not set, the script looks for a .env file in the project
@@ -26,6 +28,16 @@
 
 set -euo pipefail
 
+CHECK_ONLY=false
+case "${1:-}" in
+  "") ;;
+  --check) CHECK_ONLY=true ;;
+  *)
+    echo "usage: $0 [--check]" >&2
+    exit 2
+    ;;
+esac
+
 # ---------------------------------------------------------------------------
 # Resolve script directory and project root
 # ---------------------------------------------------------------------------
@@ -35,7 +47,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # ---------------------------------------------------------------------------
 # Load .env if DATABASE_URL is not already set
 # ---------------------------------------------------------------------------
-if [[ -z "${DATABASE_URL:-}" ]]; then
+if [[ "$CHECK_ONLY" == false && -z "${DATABASE_URL:-}" ]]; then
   ENV_FILE="${PROJECT_ROOT}/.env"
   if [[ -f "$ENV_FILE" ]]; then
     echo "[migrate] Loading DATABASE_URL from ${ENV_FILE}"
@@ -44,16 +56,32 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
   fi
 fi
 
-if [[ -z "${DATABASE_URL:-}" ]]; then
+if [[ "$CHECK_ONLY" == false && -z "${DATABASE_URL:-}" ]]; then
   echo "[migrate] ERROR: DATABASE_URL is not set."
   echo "          Set it in your environment or add it to .env"
   exit 1
 fi
 
+if [[ "$CHECK_ONLY" == false ]]; then
+  case "${DATABASE_URL}" in
+    postgres://*|postgresql://*) ;;
+    *)
+      echo "[migrate] ERROR: DATABASE_URL must be a PostgreSQL connection URI."
+      echo "          Expected a value beginning with postgres:// or postgresql://"
+      exit 1
+      ;;
+  esac
+fi
+
 # ---------------------------------------------------------------------------
-# Migration list (0176 → 0215, in order)
+# Deployment manifest
+#
+# Raw psql deployment does not discover migrations automatically, so every
+# production migration is named explicitly and resolved from the canonical
+# supabase/migrations directory.
 # ---------------------------------------------------------------------------
 MIGRATIONS=(
+  "0178_notification_platform_metrics_rls.sql"
   "0176_field_purchase_core.sql"
   "0177_field_purchase_line_flow.sql"
   "0178_vendor_master_seed.sql"
@@ -103,10 +131,23 @@ FAILED=0
 
 HR="──────────────────────────────────────────────────────────────────"
 
+for migration in "${MIGRATIONS[@]}"; do
+  FILE="${PROJECT_ROOT}/supabase/migrations/${migration}"
+  if [[ ! -f "$FILE" ]]; then
+    echo "[migrate] ERROR: required migration not found: ${FILE}"
+    exit 1
+  fi
+done
+
+if [[ "$CHECK_ONLY" == true ]]; then
+  echo "[migrate] Deployment manifest valid: ${TOTAL} required migrations found."
+  exit 0
+fi
+
 echo ""
 echo "$HR"
 echo "  FPR Migration Apply — $(date '+%Y-%m-%d %H:%M:%S %Z')"
-echo "  Target: ${DATABASE_URL%%@*}@..."   # mask credentials in output
+echo "  Target: configured (connection value redacted)"
 echo "  Migrations: ${TOTAL}"
 echo "$HR"
 echo ""
@@ -115,13 +156,7 @@ echo ""
 # Apply each migration
 # ---------------------------------------------------------------------------
 for migration in "${MIGRATIONS[@]}"; do
-  FILE="${PROJECT_ROOT}/${migration}"
-
-  if [[ ! -f "$FILE" ]]; then
-    echo "  [SKIP] ${migration} — file not found"
-    SKIPPED=$(( SKIPPED + 1 ))
-    continue
-  fi
+  FILE="${PROJECT_ROOT}/supabase/migrations/${migration}"
 
   echo -n "  [RUN]  ${migration} ... "
 
