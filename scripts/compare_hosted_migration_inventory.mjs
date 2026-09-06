@@ -1,25 +1,25 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const [hostedPath, manifestPath, duplicateMapPath, outputJson, outputMarkdown] =
   process.argv.slice(2);
 
 if (!outputMarkdown) {
   console.error(
-    "usage: compare_hosted_migration_inventory.mjs HOSTED_JSON MANIFEST_TSV DUPLICATE_MAP_TSV OUTPUT_JSON OUTPUT_MD",
+    'usage: compare_hosted_migration_inventory.mjs HOSTED_JSON MANIFEST_TSV DUPLICATE_MAP_TSV OUTPUT_JSON OUTPUT_MD'
   );
   process.exit(2);
 }
 
-const hosted = JSON.parse(readFileSync(hostedPath, "utf8"));
+const hosted = JSON.parse(readFileSync(hostedPath, 'utf8'));
 
 const parseTsv = (path) => {
-  const [header, ...rows] = readFileSync(path, "utf8").trim().split("\n");
-  const keys = header.split("\t");
+  const [header, ...rows] = readFileSync(path, 'utf8').trim().split('\n');
+  const keys = header.split('\t');
   return rows.filter(Boolean).map((row) => {
-    const values = row.split("\t");
-    return Object.fromEntries(keys.map((key, index) => [key, values[index] ?? ""]));
+    const values = row.split('\t');
+    return Object.fromEntries(keys.map((key, index) => [key, values[index] ?? '']));
   });
 };
 
@@ -32,7 +32,7 @@ const canonical = parseTsv(manifestPath).map((row) => ({
 const duplicateGroups = parseTsv(duplicateMapPath).map((row) => ({
   version: row.version,
   sourceFileCount: Number(row.source_file_count),
-  sourceFiles: row.source_files.split(",").filter(Boolean),
+  sourceFiles: row.source_files.split(',').filter(Boolean),
 }));
 
 const hostedVersions = (hosted.migrationHistoryVersions ?? []).map(String);
@@ -40,29 +40,29 @@ const hostedSet = new Set(hostedVersions);
 const canonicalSet = new Set(canonical.map((entry) => entry.version));
 
 const duplicateHostedVersions = hostedVersions.filter(
-  (version, index) => hostedVersions.indexOf(version) !== index,
+  (version, index) => hostedVersions.indexOf(version) !== index
 );
 const missingFromHosted = canonical.filter((entry) => !hostedSet.has(entry.version));
 const hostedNotCanonical = hostedVersions.filter((version) => !canonicalSet.has(version));
 const presentCanonical = canonical.filter((entry) => hostedSet.has(entry.version));
 const highestHostedCanonicalOrder = presentCanonical.reduce(
   (highest, entry) => Math.max(highest, entry.order),
-  0,
+  0
 );
 const historicalGaps = missingFromHosted.filter(
-  (entry) => entry.order <= highestHostedCanonicalOrder,
+  (entry) => entry.order <= highestHostedCanonicalOrder
 );
 const mergedVersionsAlreadyRecorded = duplicateGroups.filter((group) =>
-  hostedSet.has(group.version),
+  hostedSet.has(group.version)
 );
 
 const coreTablesReady = Object.values(hosted.coreTables ?? {}).every(Boolean);
-const appendOnlyCandidate =
+const historyAppendOnlyCandidate =
   hostedNotCanonical.length === 0 &&
   duplicateHostedVersions.length === 0 &&
   historicalGaps.length === 0 &&
-  mergedVersionsAlreadyRecorded.length === 0 &&
-  coreTablesReady;
+  mergedVersionsAlreadyRecorded.length === 0;
+const appendOnlyCandidate = historyAppendOnlyCandidate && coreTablesReady;
 
 const report = {
   formatVersion: 1,
@@ -79,7 +79,10 @@ const report = {
   mergedVersionRiskCount: mergedVersionsAlreadyRecorded.length,
   mergedVersionsAlreadyRecorded,
   coreTablesReady,
+  historyAppendOnlyCandidate,
   appendOnlyCandidate,
+  schemaCloneSimulationRequired:
+    historyAppendOnlyCandidate && !coreTablesReady && missingFromHosted.length > 0,
   requiresReconciliation: !appendOnlyCandidate,
   productionWritesPerformed: false,
 };
@@ -87,7 +90,7 @@ const report = {
 writeFileSync(outputJson, `${JSON.stringify(report, null, 2)}\n`);
 
 const list = (entries, render) =>
-  entries.length ? entries.map((entry) => `- ${render(entry)}`).join("\n") : "- None";
+  entries.length ? entries.map((entry) => `- ${render(entry)}`).join('\n') : '- None';
 
 const markdown = `# Hosted migration reconciliation
 
@@ -96,6 +99,7 @@ This report compares read-only hosted migration history with the exact canonical
 ## Decision
 
 - Append-only candidate: **${appendOnlyCandidate}**
+- Append-only migration history: **${historyAppendOnlyCandidate}**
 - Requires reconciliation: **${!appendOnlyCandidate}**
 - Core tables ready: **${coreTablesReady}**
 - Hosted history: **${hostedVersions.length}** versions
@@ -116,14 +120,14 @@ ${list(
   (group) =>
     `\`${group.version}\` — ${group.sourceFileCount} source files: ${group.sourceFiles
       .map((file) => `\`${file}\``)
-      .join(", ")}`,
+      .join(', ')}`
 )}
 
 ## Missing canonical versions after the hosted tail
 
 ${list(
   missingFromHosted.filter((entry) => entry.order > highestHostedCanonicalOrder),
-  (entry) => `\`${entry.version}\` — ${entry.file}`,
+  (entry) => `\`${entry.version}\` — ${entry.file}`
 )}
 
 ## Hosted versions not in the canonical bundle

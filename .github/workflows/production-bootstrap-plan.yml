@@ -5,11 +5,13 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "supabase/migrations/**"
-      - "supabase/tests/**"
-      - "scripts/create_production_bootstrap_plan.sh"
-      - "scripts/prepare_supabase_migrations_ci.sh"
-      - ".github/workflows/production-bootstrap-plan.yml"
+      - 'supabase/migrations/**'
+      - 'supabase/tests/**'
+      - 'scripts/create_production_bootstrap_plan.sh'
+      - 'scripts/compare_hosted_migration_inventory.mjs'
+      - 'scripts/prepare_supabase_migrations_ci.sh'
+      - 'scripts/simulate_hosted_schema_reconciliation.sh'
+      - '.github/workflows/production-bootstrap-plan.yml'
 
 permissions:
   contents: read
@@ -27,7 +29,7 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-      PGOPTIONS: "-c default_transaction_read_only=on"
+      PGOPTIONS: '-c default_transaction_read_only=on'
 
     steps:
       - name: Validate target credentials
@@ -304,3 +306,146 @@ jobs:
             hosted-migration-reconciliation.json
             hosted-migration-reconciliation.md
           retention-days: 30
+
+  simulate-hosted-schema:
+    name: Simulate pending migrations on hosted schema clone
+    if: github.event_name == 'workflow_dispatch'
+    needs: [inspect-hosted, validate-plan, reconcile-hosted]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
+        with:
+          version: 2.116.0
+
+      - name: Install PostgreSQL and pgTAP tooling
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            postgresql-client \
+            libtap-parser-sourcehandler-pgtap-perl
+
+      - name: Download hosted inventory
+        uses: actions/download-artifact@v4
+        with:
+          name: hosted-bootstrap-inventory-${{ github.sha }}
+          path: reconciliation-input/hosted
+
+      - name: Download canonical plan
+        uses: actions/download-artifact@v4
+        with:
+          name: production-bootstrap-plan-${{ github.sha }}
+          path: reconciliation-input/canonical
+
+      - name: Download reconciliation report
+        uses: actions/download-artifact@v4
+        with:
+          name: hosted-migration-reconciliation-${{ github.sha }}
+          path: reconciliation-input/report
+
+      - name: Validate target and reconciliation history
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::DATABASE_URL and SUPABASE_PROJECT_REF are required."
+            exit 1
+          fi
+          if [[ "$DATABASE_URL" != postgres://* && "$DATABASE_URL" != postgresql://* ]]; then
+            echo "::error::DATABASE_URL must be a full PostgreSQL connection URI."
+            exit 1
+          fi
+          if [[ "$DATABASE_URL" != *"$SUPABASE_PROJECT_REF"* ]]; then
+            echo "::error::DATABASE_URL does not target SUPABASE_PROJECT_REF."
+            exit 1
+          fi
+
+          jq -e '
+            .historyAppendOnlyCandidate == true
+            and .canonicalVersionsMissing > 0
+            and .historicalGapCount == 0
+            and (.hostedVersionsNotCanonical | length) == 0
+            and (.duplicateHostedVersions | length) == 0
+            and .mergedVersionRiskCount == 0
+            and .productionWritesPerformed == false
+          ' reconciliation-input/report/hosted-migration-reconciliation.json \
+            > /dev/null
+
+      - name: Capture hosted public schema without data
+        run: |
+          mkdir -p reconciliation-simulation
+          docker run --rm \
+            -e DATABASE_URL \
+            -e PGOPTIONS="-c default_transaction_read_only=on" \
+            -v "$PWD/reconciliation-simulation:/output" \
+            postgres:17 \
+            sh -ceu 'pg_dump "$DATABASE_URL" \
+              --schema-only \
+              --schema=public \
+              --no-owner \
+              --no-privileges \
+              --file=/output/hosted-public-schema.sql'
+
+          test -s reconciliation-simulation/hosted-public-schema.sql
+
+      - name: Start an empty local Supabase matching hosted PostgreSQL
+        run: |
+          mkdir -p hosted-schema-clone/supabase/migrations
+          cp supabase/config.toml hosted-schema-clone/supabase/config.toml
+
+          HOSTED_MAJOR_VERSION="$(jq -r '.serverVersionNum / 10000 | floor' \
+            reconciliation-input/hosted/hosted-bootstrap-inventory.json)"
+          if [[ ! "$HOSTED_MAJOR_VERSION" =~ ^[0-9]+$ ]]; then
+            echo "::error::Hosted PostgreSQL major version is invalid."
+            exit 1
+          fi
+
+          sed -i -E \
+            "s/major_version[[:space:]]*=[[:space:]]*[0-9]+/major_version = $HOSTED_MAJOR_VERSION/" \
+            hosted-schema-clone/supabase/config.toml
+
+          cd hosted-schema-clone
+          supabase start
+
+      - name: Apply pending migrations to the schema-only clone
+        run: |
+          bash scripts/simulate_hosted_schema_reconciliation.sh \
+            reconciliation-simulation/hosted-public-schema.sql \
+            reconciliation-input/hosted/hosted-bootstrap-inventory.json \
+            reconciliation-input/report/hosted-migration-reconciliation.json \
+            reconciliation-input/canonical \
+            reconciliation-simulation/results \
+            postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres
+
+      - name: Upload schema-clone reconciliation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosted-schema-reconciliation-simulation-${{ github.sha }}
+          path: |
+            reconciliation-simulation/results/
+          retention-days: 30
+
+      - name: Enforce structural reconciliation gate
+        run: |
+          jq -e '
+            .schemaRestoreSucceeded == true
+            and .allMissingMigrationsApplied == true
+            and .coreSchemaReadyAfter == true
+            and .pgtapPassed == true
+            and .pgtapAssertionCount > 0
+            and .productionDataCopied == false
+            and .productionWritesPerformed == false
+          ' reconciliation-simulation/results/reconciliation-simulation.json \
+            > /dev/null
+
+      - name: Stop local Supabase
+        if: always()
+        working-directory: hosted-schema-clone
+        run: supabase stop --no-backup || true
