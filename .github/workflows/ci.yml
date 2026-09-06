@@ -52,6 +52,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate production migration manifest
+        run: bash scripts/apply_migrations.sh --check
+
       - name: Setup Deno
         uses: denoland/setup-deno@v1
         with:
@@ -211,6 +214,10 @@ jobs:
           if [ -z "$DATABASE_URL" ]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "::notice title=Database deployment skipped::DATABASE_URL is not configured; tests continue without reporting a false deployment failure."
+          elif [[ "$DATABASE_URL" != postgres://* && "$DATABASE_URL" != postgresql://* ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::error title=Invalid database deployment credential::DATABASE_URL must be a full PostgreSQL connection URI."
+            exit 1
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
