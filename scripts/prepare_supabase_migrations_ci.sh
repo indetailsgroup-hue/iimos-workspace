@@ -31,6 +31,9 @@ migration_dir="$(cd "$migration_dir" && pwd)"
 bootstrap="$migration_dir/20260828_multi_tenant_schema.sql"
 target="$migration_dir/0172_jobs_quotations_invoices.sql"
 legacy_stub="$migration_dir/00000000000063_organizations_org_members_stub.sql"
+risk_tier_base="$migration_dir/0195_etax_risk_tier_notify.sql"
+risk_tier_pgnet_patch="$migration_dir/01952_b_etax_risk_tier_notify_pgnet.sql"
+risk_tier_merge_marker='CI canonical dependency-order merge: 01952_b_etax_risk_tier_notify_pgnet.sql'
 section_marker='^-- 4\. ADD org_id TO EXISTING TABLES$'
 
 invalid_filenames=""
@@ -136,6 +139,36 @@ else
   if grep -q 'CREATE TABLE IF NOT EXISTS public.org_members' "$target"; then
     rm -f "$legacy_stub"
   fi
+fi
+
+# 01952 was intended as an "0195b" patch and explicitly depends on 0195, but
+# Supabase reads migration filenames lexicographically.  A longer numeric
+# prefix beginning with 0195 sorts before "0195_" (digits sort before the
+# underscore), so the standalone patch can never run after its prerequisite.
+# Fold it into the end of 0195 in the rendered bundle and retain an explicit
+# provenance marker.  Both versions are still preserved in the source tree.
+if [[ -f "$risk_tier_pgnet_patch" ]]; then
+  if [[ ! -f "$risk_tier_base" ]]; then
+    echo "[prepare-migrations] 01952 dependency target missing: $risk_tier_base" >&2
+    exit 1
+  fi
+  if grep -Fq "$risk_tier_merge_marker" "$risk_tier_base"; then
+    echo "[prepare-migrations] 01952 dependency patch already merged; removing duplicate source"
+  else
+    {
+      echo
+      echo '-- ============================================================'
+      echo "-- $risk_tier_merge_marker"
+      echo '-- Must remain after 0195 because the patch depends on its objects.'
+      echo '-- ============================================================'
+      cat "$risk_tier_pgnet_patch"
+    } >> "$risk_tier_base"
+    echo "[prepare-migrations] merged 01952 dependency patch after $(basename "$risk_tier_base")"
+  fi
+  rm "$risk_tier_pgnet_patch"
+elif [[ -f "$risk_tier_base" ]] \
+  && grep -Fq "$risk_tier_merge_marker" "$risk_tier_base"; then
+  echo "[prepare-migrations] 01952 dependency patch already normalized; skipping"
 fi
 
 if [[ "$mode" == "--merge-duplicates" ]]; then
