@@ -200,7 +200,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     outputs:
-      deployment_ready: ${{ steps.deployment_preflight.outputs.ready }}
+      deployment_ready: ${{ steps.schema_preflight.outputs.ready }}
 
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -241,8 +241,31 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client
 
-      - name: Apply hosted-security + FPR migrations
+      - name: Check hosted schema prerequisites
+        id: schema_preflight
         if: steps.deployment_preflight.outputs.ready == 'true'
+        run: |
+          SCHEMA_READY=$(psql "$DATABASE_URL" \
+            --no-psqlrc \
+            --tuples-only \
+            --no-align \
+            -v ON_ERROR_STOP=1 \
+            -c "SELECT
+                  to_regclass('public.organizations') IS NOT NULL
+                  AND to_regclass('public.super_admins') IS NOT NULL
+                  AND to_regclass('public.notification_digest_queue') IS NOT NULL
+                  AND to_regclass('public.platform_metrics_snapshots') IS NOT NULL
+                  AND to_regprocedure('public.is_platform_super_admin()') IS NOT NULL;")
+
+          if [ "$SCHEMA_READY" != 't' ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Database deployment skipped::The configured project is reachable but its core/security schema is not bootstrapped. Run the reviewed bootstrap process before incremental production migrations."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Apply hosted-security + FPR migrations
+        if: steps.schema_preflight.outputs.ready == 'true'
         run: |
           chmod +x scripts/apply_migrations.sh
           ./scripts/apply_migrations.sh
