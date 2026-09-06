@@ -16,6 +16,8 @@
 #   T9 — Workflow YAML: working-directory is 'server'
 #  T10 — Workflow YAML: trigger includes pull_request targeting main
 #  T11 — Workflow YAML: trigger includes push targeting main
+#  T12 — PR comment notification cannot fail the audit gate
+#  T13 — workflow requests only read contents and PR comment permissions
 #
 # Usage:
 #   bash scripts/test-npm-audit-workflow.sh
@@ -270,6 +272,29 @@ if grep -A3 "^  push:" "$WORKFLOW_FILE" | grep -q "main"; then
 else
   not_ok "T11 — workflow YAML triggers on push to main" \
          "push trigger for main not found in $WORKFLOW_FILE"
+fi
+
+# ---------------------------------------------------------------------------
+# T12 — Optional PR comment cannot turn a successful audit into a failed job
+# ---------------------------------------------------------------------------
+if grep -A3 "name: Post audit summary to PR" "$WORKFLOW_FILE" | \
+   grep -q "continue-on-error: true"; then
+  ok "T12 — PR audit summary is non-blocking"
+else
+  not_ok "T12 — PR audit summary is non-blocking" \
+         "continue-on-error: true not found on the PR summary step"
+fi
+
+# ---------------------------------------------------------------------------
+# T13 — Token permissions are explicit and limited to checkout/comment needs
+# ---------------------------------------------------------------------------
+if grep -A4 "^permissions:" "$WORKFLOW_FILE" | grep -q "contents: read" && \
+   grep -A4 "^permissions:" "$WORKFLOW_FILE" | grep -q "issues: write" && \
+   grep -A4 "^permissions:" "$WORKFLOW_FILE" | grep -q "pull-requests: write"; then
+  ok "T13 — workflow declares least-purpose content and comment permissions"
+else
+  not_ok "T13 — workflow declares least-purpose content and comment permissions" \
+         "expected contents:read plus issues/pull-requests:write"
 fi
 
 # ---------------------------------------------------------------------------

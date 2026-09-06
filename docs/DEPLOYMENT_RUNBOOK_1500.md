@@ -790,7 +790,8 @@ partition data is no longer needed and a backup exists.
 ```
 
 > ⚠️ **This operation is irreversible.** The partition table is `DROP TABLE`-ed after
-> detaching. Ensure `--backup` was run first and the backup file is verified.
+> detaching. Run `--backup` first, then confirm the file is readable and its
+> checksum matches the value recorded by the backup procedure.
 
 **Safety gates enforced by the script:**
 
