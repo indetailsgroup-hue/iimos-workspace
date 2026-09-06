@@ -160,12 +160,12 @@ BEGIN
     RAISE EXCEPTION 'forecasting declaration repair did not change %', v_oid;
   END IF;
   v_definition := v_repaired;
-  v_call_start := strpos(v_definition, 'execute format(');
+  v_call_start := strpos(lower(v_definition), 'execute format(');
   IF v_call_start = 0 THEN
     RAISE EXCEPTION 'forecasting call start marker missing in %', v_oid;
   END IF;
   v_call_tail := substring(v_definition FROM v_call_start);
-  v_call_length := strpos(v_call_tail, 'v_error_jsonb;');
+  v_call_length := strpos(lower(v_call_tail), 'v_error_jsonb;');
   IF v_call_length = 0 THEN
     RAISE EXCEPTION 'forecasting call end marker missing in %', v_oid;
   END IF;
