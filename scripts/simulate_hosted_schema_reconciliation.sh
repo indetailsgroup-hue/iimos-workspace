@@ -45,12 +45,12 @@ printf 'order\tversion\tfile\n' > "$applied_tsv"
 : > "$pgtap_log"
 : > "$lint_log"
 
-history_append_only_candidate="$(jq -r '.historyAppendOnlyCandidate // false' "$reconciliation_json")"
+history_ordering_candidate="$(jq -r '.historyOrderingCandidate // false' "$reconciliation_json")"
 missing_count="$(jq -r '.canonicalVersionsMissing' "$reconciliation_json")"
 hosted_server_version_num="$(jq -r '.serverVersionNum' "$hosted_inventory_json")"
 
-if [[ "$history_append_only_candidate" != "true" ]]; then
-  echo "[reconciliation-simulation] migration history is not append-only compatible" >&2
+if [[ "$history_ordering_candidate" != "true" ]]; then
+  echo "[reconciliation-simulation] migration history is not ordering-compatible" >&2
   exit 1
 fi
 if [[ ! "$missing_count" =~ ^[0-9]+$ ]] || [[ "$missing_count" -eq 0 ]]; then

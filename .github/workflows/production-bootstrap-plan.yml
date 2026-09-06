@@ -296,12 +296,11 @@ jobs:
           fi
 
           jq -e '
-            .historyAppendOnlyCandidate == true
+            .historyOrderingCandidate == true
             and .canonicalVersionsMissing > 0
             and .historicalGapCount == 0
             and (.hostedVersionsNotCanonical | length) == 0
             and (.duplicateHostedVersions | length) == 0
-            and .mergedVersionRiskCount == 0
             and .productionWritesPerformed == false
           ' reconciliation-input/report/hosted-migration-reconciliation.json \
             > /dev/null

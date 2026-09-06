@@ -57,11 +57,14 @@ const mergedVersionsAlreadyRecorded = duplicateGroups.filter((group) =>
 );
 
 const coreTablesReady = Object.values(hosted.coreTables ?? {}).every(Boolean);
-const historyAppendOnlyCandidate =
+const historyOrderingCandidate =
   hostedNotCanonical.length === 0 &&
   duplicateHostedVersions.length === 0 &&
-  historicalGaps.length === 0 &&
+  historicalGaps.length === 0;
+const mergedSourceProvenanceUnambiguous =
   mergedVersionsAlreadyRecorded.length === 0;
+const historyAppendOnlyCandidate =
+  historyOrderingCandidate && mergedSourceProvenanceUnambiguous;
 const appendOnlyCandidate = historyAppendOnlyCandidate && coreTablesReady;
 
 const report = {
@@ -79,10 +82,12 @@ const report = {
   mergedVersionRiskCount: mergedVersionsAlreadyRecorded.length,
   mergedVersionsAlreadyRecorded,
   coreTablesReady,
+  historyOrderingCandidate,
+  mergedSourceProvenanceUnambiguous,
   historyAppendOnlyCandidate,
   appendOnlyCandidate,
   schemaCloneSimulationRequired:
-    historyAppendOnlyCandidate && !coreTablesReady && missingFromHosted.length > 0,
+    historyOrderingCandidate && missingFromHosted.length > 0,
   requiresReconciliation: !appendOnlyCandidate,
   productionWritesPerformed: false,
 };
@@ -99,7 +104,9 @@ This report compares read-only hosted migration history with the exact canonical
 ## Decision
 
 - Append-only candidate: **${appendOnlyCandidate}**
+- Migration ordering candidate: **${historyOrderingCandidate}**
 - Append-only migration history: **${historyAppendOnlyCandidate}**
+- Merged-source provenance unambiguous: **${mergedSourceProvenanceUnambiguous}**
 - Requires reconciliation: **${!appendOnlyCandidate}**
 - Core tables ready: **${coreTablesReady}**
 - Hosted history: **${hostedVersions.length}** versions
