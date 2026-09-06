@@ -180,9 +180,9 @@ Security issues #49/#50 ยังไม่มี comment และยัง open
 6. reconcile version history: root package=`2.1.0`, server package=`0.13.2`, Git tags มี `v17.5.1`, `CHANGELOG.md` ไปถึง 18.5.1 แต่ public GitHub Releases ล่าสุดที่พบคือ v17.0.0
 7. สร้าง tag และ GitHub Release บน merged commit เท่านั้น ห้าม tag branch candidate หรือประกาศย้อนหลังโดยเดา version
 
-### GitHub authentication blocker ในเครื่องตรวจ
+### GitHub authentication และ branch publication
 
-Local commit ถูกสร้างบน branch `codex/readiness-stabilization-20260906` แล้ว แต่ push ยังไม่สำเร็จเพราะ environment ไม่มี `GH_TOKEN`/`GITHUB_TOKEN`, ไม่มี GitHub credential ใน macOS Keychain และไม่มี SSH key ที่ GitHub ยอมรับ เมื่อผู้ใช้เชื่อม GitHub credential แล้วต้อง push commit เดิม เปิด PR และดำเนินลำดับด้านบนต่อ ห้ามสร้าง tag/release จาก local-only commit
+GitHub CLI authentication เชื่อมกับบัญชี `indetailsgroup-hue` ผ่าน macOS keyring แล้ว โดย Git ใช้ HTTPS credential helper และ token มี `repo`/`workflow` scopes ที่จำเป็น Branch `codex/readiness-stabilization-20260906` ถูก push ไปยัง `origin` สำเร็จแล้ว ขั้นถัดไปคือเปิด stabilization PR และใช้ GitHub Actions เป็น external evidence ตามลำดับด้านบน ห้ามสร้าง tag/release จนกว่า PR จะผ่าน gate, review และ merge
 
 ## 10. Release decision
 
