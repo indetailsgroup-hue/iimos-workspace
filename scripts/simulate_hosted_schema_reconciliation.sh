@@ -74,6 +74,8 @@ pgtap_assertion_count=0
 pgtap_passed=false
 database_lint_exit_code=-1
 database_lint_clean=false
+local_dependency_extensions_ready=true
+failed_dependency_extension=""
 
 core_schema_query="SELECT CASE WHEN (
   to_regclass('public.organizations') IS NOT NULL
@@ -97,6 +99,27 @@ else
 fi
 
 if [[ "$schema_restore_succeeded" == "true" ]]; then
+  for dependency_extension in pg_cron pg_net; do
+    if jq -e --arg extension "$dependency_extension" \
+      '.installedExtensions | has($extension)' \
+      "$hosted_inventory_json" > /dev/null; then
+      case "$dependency_extension" in
+        pg_cron) extension_sql='CREATE EXTENSION IF NOT EXISTS pg_cron;' ;;
+        pg_net) extension_sql='CREATE EXTENSION IF NOT EXISTS pg_net;' ;;
+      esac
+
+      if ! psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
+        -c "$extension_sql" >> "$restore_log" 2>&1; then
+        local_dependency_extensions_ready=false
+        failed_dependency_extension="$dependency_extension"
+        break
+      fi
+    fi
+  done
+fi
+
+if [[ "$schema_restore_succeeded" == "true" \
+  && "$local_dependency_extensions_ready" == "true" ]]; then
   while IFS=$'\t' read -r order version file; do
     migration_path="$canonical_plan_dir/supabase/migrations/$file"
     if [[ ! -f "$migration_path" ]]; then
@@ -175,11 +198,19 @@ jq -n \
   --argjson pgtapPassed "$pgtap_passed" \
   --argjson databaseLintExitCode "$database_lint_exit_code" \
   --argjson databaseLintClean "$database_lint_clean" \
+  --argjson localDependencyExtensionsReady "$local_dependency_extensions_ready" \
+  --arg failedDependencyExtension "$failed_dependency_extension" \
   '{
     formatVersion: 1,
     simulationKind: "hosted-public-schema-only",
     hostedServerVersionNum: $hostedServerVersionNum,
     schemaRestoreSucceeded: $schemaRestoreSucceeded,
+    localDependencyExtensionsReady: $localDependencyExtensionsReady,
+    failedDependencyExtension: (
+      if $failedDependencyExtension == "" then null
+      else $failedDependencyExtension
+      end
+    ),
     coreSchemaReadyBefore: $coreSchemaReadyBefore,
     missingMigrationCount: $missingMigrationCount,
     appliedMigrationCount: $appliedMigrationCount,

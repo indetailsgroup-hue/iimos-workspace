@@ -102,6 +102,13 @@ jobs:
                         AND d.objid = c.oid
                         AND d.deptype = 'e'
                     )
+                ), installed_extensions AS (
+                  SELECT COALESCE(
+                    jsonb_object_agg(e.extname, n.nspname ORDER BY e.extname),
+                    '{}'::jsonb
+                  ) AS value
+                  FROM pg_catalog.pg_extension e
+                  JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
                 ), core_state AS (
                   SELECT jsonb_build_object(
                     'organizations', to_regclass('public.organizations') IS NOT NULL,
@@ -116,6 +123,7 @@ jobs:
                   'serverVersionNum', current_setting('server_version_num')::integer,
                   'publicUserTableCount', (SELECT count(*) FROM public_tables),
                   'publicUserTables', COALESCE((SELECT jsonb_agg(relname ORDER BY relname) FROM public_tables), '[]'::jsonb),
+                  'installedExtensions', (SELECT value FROM installed_extensions),
                   'coreTables', (SELECT value FROM core_state),
                   'authUserCount', $AUTH_USER_COUNT,
                   'storageObjectCount', $STORAGE_OBJECT_COUNT,
@@ -440,6 +448,7 @@ jobs:
         run: |
           jq -e '
             .schemaRestoreSucceeded == true
+            and .localDependencyExtensionsReady == true
             and .allMissingMigrationsApplied == true
             and .coreSchemaReadyAfter == true
             and .pgtapPassed == true
