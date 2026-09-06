@@ -74,6 +74,14 @@ jobs:
             fi
           done
 
+          if [ "$MIGRATION_HISTORY_COUNT" -gt 0 ]; then
+            psql "$DATABASE_URL" --no-psqlrc -tA -v ON_ERROR_STOP=1 \
+              -c "SELECT COALESCE(jsonb_agg(version ORDER BY version), '[]'::jsonb) FROM supabase_migrations.schema_migrations;" \
+              > hosted-migration-versions.json
+          else
+            echo '[]' > hosted-migration-versions.json
+          fi
+
           psql "$DATABASE_URL" \
             --no-psqlrc \
             --tuples-only \
@@ -119,7 +127,12 @@ jobs:
                     )
                   ),
                   'productionWritesPerformed', false
-                );" > hosted-bootstrap-inventory.json
+                );" > hosted-bootstrap-inventory-base.json
+
+          jq --slurpfile versions hosted-migration-versions.json \
+            '. + {migrationHistoryVersions: $versions[0]}' \
+            hosted-bootstrap-inventory-base.json \
+            > hosted-bootstrap-inventory.json
 
           jq . hosted-bootstrap-inventory.json
 
@@ -240,6 +253,7 @@ jobs:
           path: |
             bootstrap-plan/plan-summary.json
             bootstrap-plan/migration-manifest.tsv
+            bootstrap-plan/duplicate-version-map.tsv
             bootstrap-plan/local-bootstrap-result.json
             bootstrap-plan/bootstrap-db-lint.txt
             bootstrap-plan/bootstrap-pgtap.tap
@@ -250,3 +264,43 @@ jobs:
         if: always()
         working-directory: bootstrap-plan
         run: supabase stop --no-backup || true
+
+  reconcile-hosted:
+    name: Compare hosted and canonical migration history
+    if: github.event_name == 'workflow_dispatch'
+    needs: [inspect-hosted, validate-plan]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download hosted inventory
+        uses: actions/download-artifact@v4
+        with:
+          name: hosted-bootstrap-inventory-${{ github.sha }}
+          path: reconciliation-input/hosted
+
+      - name: Download canonical plan
+        uses: actions/download-artifact@v4
+        with:
+          name: production-bootstrap-plan-${{ github.sha }}
+          path: reconciliation-input/canonical
+
+      - name: Build reconciliation report
+        run: |
+          node scripts/compare_hosted_migration_inventory.mjs \
+            reconciliation-input/hosted/hosted-bootstrap-inventory.json \
+            reconciliation-input/canonical/migration-manifest.tsv \
+            reconciliation-input/canonical/duplicate-version-map.tsv \
+            hosted-migration-reconciliation.json \
+            hosted-migration-reconciliation.md
+
+      - name: Upload reconciliation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosted-migration-reconciliation-${{ github.sha }}
+          path: |
+            hosted-migration-reconciliation.json
+            hosted-migration-reconciliation.md
+          retention-days: 30

@@ -37,6 +37,29 @@ input_duplicate_versions="$({
   done
 } | sort | uniq -d | wc -l | tr -d ' ')"
 
+duplicate_map="$output_dir/duplicate-version-map.tsv"
+printf 'version\tsource_file_count\tsource_files\n' > "$duplicate_map"
+duplicate_versions="$({
+  for file in "$staged_migrations"/*.sql; do
+    filename="$(basename "$file")"
+    version="${filename%%_*}"
+    [[ "$version" =~ ^[0-9]+$ ]] && printf '%s\n' "$version"
+  done
+} | sort | uniq -d)"
+
+if [[ -n "$duplicate_versions" ]]; then
+  while IFS= read -r version; do
+    files=( "$staged_migrations/${version}_"*.sql )
+    joined=""
+    for file in "${files[@]}"; do
+      filename="$(basename "$file")"
+      joined="${joined:+$joined,}$filename"
+    done
+    printf '%s\t%s\t%s\n' "$version" "${#files[@]}" "$joined" \
+      >> "$duplicate_map"
+  done <<< "$duplicate_versions"
+fi
+
 bash "$project_root/scripts/prepare_supabase_migrations_ci.sh" \
   --merge-duplicates "$staged_migrations"
 
@@ -75,16 +98,23 @@ printf 'order\tversion\tfile\tbytes\tsha256\n' > "$manifest"
 
 order=0
 total_bytes=0
-for file in "$staged_migrations"/*.sql; do
+ordered_files="$({
+  for file in "$staged_migrations"/*.sql; do
+    filename="$(basename "$file")"
+    version="${filename%%_*}"
+    printf '%s\t%s\n' "$version" "$file"
+  done
+} | sort -t $'\t' -k1,1n -k2,2)"
+
+while IFS=$'\t' read -r version file; do
   order=$((order + 1))
   filename="$(basename "$file")"
-  version="${filename%%_*}"
   bytes="$(file_size "$file")"
   digest="$(sha256_file "$file")"
   total_bytes=$((total_bytes + bytes))
   printf '%s\t%s\t%s\t%s\t%s\n' \
     "$order" "$version" "$filename" "$bytes" "$digest" >> "$manifest"
-done
+done <<< "$ordered_files"
 
 commit="unknown"
 if command -v git >/dev/null 2>&1; then
