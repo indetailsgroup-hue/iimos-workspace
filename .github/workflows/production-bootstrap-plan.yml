@@ -379,7 +379,7 @@ jobs:
 
       - name: Capture hosted public schema without data
         run: |
-          mkdir -p reconciliation-simulation
+          mkdir -p reconciliation-simulation/results
           docker run --rm \
             -e DATABASE_URL \
             -e PGOPTIONS="-c default_transaction_read_only=on" \
@@ -398,6 +398,8 @@ jobs:
         run: |
           mkdir -p hosted-schema-clone/supabase/migrations
           cp supabase/config.toml hosted-schema-clone/supabase/config.toml
+          cp supabase/import_map.json hosted-schema-clone/supabase/import_map.json
+          cp -R supabase/functions hosted-schema-clone/supabase/functions
 
           HOSTED_MAJOR_VERSION="$(jq -r '.serverVersionNum / 10000 | floor' \
             reconciliation-input/hosted/hosted-bootstrap-inventory.json)"
@@ -411,7 +413,9 @@ jobs:
             hosted-schema-clone/supabase/config.toml
 
           cd hosted-schema-clone
-          supabase start
+          set -o pipefail
+          supabase start 2>&1 \
+            | tee "$GITHUB_WORKSPACE/reconciliation-simulation/results/local-supabase-start.log"
 
       - name: Apply pending migrations to the schema-only clone
         run: |
