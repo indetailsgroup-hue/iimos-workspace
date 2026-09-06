@@ -67,14 +67,18 @@ jobs:
           STORAGE_OBJECT_COUNT="$(count_rows_if_present storage.objects)"
           MIGRATION_HISTORY_COUNT="$(count_rows_if_present supabase_migrations.schema_migrations)"
 
+          for count in "$AUTH_USER_COUNT" "$STORAGE_OBJECT_COUNT" "$MIGRATION_HISTORY_COUNT"; do
+            if [[ ! "$count" =~ ^[0-9]+$ ]]; then
+              echo "::error::Hosted inventory query returned a non-numeric count."
+              exit 1
+            fi
+          done
+
           psql "$DATABASE_URL" \
             --no-psqlrc \
             --tuples-only \
             --no-align \
             -v ON_ERROR_STOP=1 \
-            -v auth_user_count="$AUTH_USER_COUNT" \
-            -v storage_object_count="$STORAGE_OBJECT_COUNT" \
-            -v migration_history_count="$MIGRATION_HISTORY_COUNT" \
             -c "WITH public_tables AS (
                   SELECT c.relname
                   FROM pg_catalog.pg_class c
@@ -103,9 +107,9 @@ jobs:
                   'publicUserTableCount', (SELECT count(*) FROM public_tables),
                   'publicUserTables', COALESCE((SELECT jsonb_agg(relname ORDER BY relname) FROM public_tables), '[]'::jsonb),
                   'coreTables', (SELECT value FROM core_state),
-                  'authUserCount', :'auth_user_count'::integer,
-                  'storageObjectCount', :'storage_object_count'::integer,
-                  'migrationHistoryCount', :'migration_history_count'::integer,
+                  'authUserCount', $AUTH_USER_COUNT,
+                  'storageObjectCount', $STORAGE_OBJECT_COUNT,
+                  'migrationHistoryCount', $MIGRATION_HISTORY_COUNT,
                   'bootstrapCandidate', (
                     (SELECT count(*) FROM public_tables) = 0
                     AND NOT (
@@ -159,14 +163,17 @@ jobs:
           DB_URL="postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres"
           RENDERED_MIGRATIONS="$(jq -r '.renderedMigrationFiles' bootstrap-plan/plan-summary.json)"
 
-          psql "$DB_URL" -tA -v ON_ERROR_STOP=1 \
-            -v rendered_migrations="$RENDERED_MIGRATIONS" \
-            -c "SELECT jsonb_build_object(
-            'renderedMigrationFiles', :'rendered_migrations'::integer,
+          if [[ ! "$RENDERED_MIGRATIONS" =~ ^[0-9]+$ ]]; then
+            echo "::error::Rendered migration count is not numeric."
+            exit 1
+          fi
+
+          psql "$DB_URL" -tA -v ON_ERROR_STOP=1 -c "SELECT jsonb_build_object(
+            'renderedMigrationFiles', $RENDERED_MIGRATIONS,
             'migrationsApplied', (SELECT count(*) FROM supabase_migrations.schema_migrations),
             'allRenderedMigrationsApplied', (
               (SELECT count(*) FROM supabase_migrations.schema_migrations)
-              = :'rendered_migrations'::integer
+              = $RENDERED_MIGRATIONS
             ),
             'coreSchemaReady', (
               to_regclass('public.organizations') IS NOT NULL
