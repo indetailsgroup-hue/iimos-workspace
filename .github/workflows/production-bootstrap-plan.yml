@@ -7,6 +7,7 @@ on:
     paths:
       - 'supabase/migrations/**'
       - 'supabase/tests/**'
+      - 'scripts/capture_hosted_bootstrap_inventory.sh'
       - 'scripts/create_production_bootstrap_plan.sh'
       - 'scripts/compare_hosted_migration_inventory.mjs'
       - 'scripts/prepare_supabase_migrations_ci.sh'
@@ -47,104 +48,16 @@ jobs:
             exit 1
           fi
 
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client
 
       - name: Capture hosted bootstrap inventory
-        run: |
-          count_rows_if_present() {
-            local relation="$1"
-            if [ "$(psql "$DATABASE_URL" --no-psqlrc -tA -v ON_ERROR_STOP=1 \
-              -c "SELECT to_regclass('$relation') IS NOT NULL;")" = "t" ]; then
-              psql "$DATABASE_URL" --no-psqlrc -tA -v ON_ERROR_STOP=1 \
-                -c "SELECT count(*) FROM $relation;"
-            else
-              echo 0
-            fi
-          }
-
-          AUTH_USER_COUNT="$(count_rows_if_present auth.users)"
-          STORAGE_OBJECT_COUNT="$(count_rows_if_present storage.objects)"
-          MIGRATION_HISTORY_COUNT="$(count_rows_if_present supabase_migrations.schema_migrations)"
-
-          for count in "$AUTH_USER_COUNT" "$STORAGE_OBJECT_COUNT" "$MIGRATION_HISTORY_COUNT"; do
-            if [[ ! "$count" =~ ^[0-9]+$ ]]; then
-              echo "::error::Hosted inventory query returned a non-numeric count."
-              exit 1
-            fi
-          done
-
-          if [ "$MIGRATION_HISTORY_COUNT" -gt 0 ]; then
-            psql "$DATABASE_URL" --no-psqlrc -tA -v ON_ERROR_STOP=1 \
-              -c "SELECT COALESCE(jsonb_agg(version ORDER BY version), '[]'::jsonb) FROM supabase_migrations.schema_migrations;" \
-              > hosted-migration-versions.json
-          else
-            echo '[]' > hosted-migration-versions.json
-          fi
-
-          psql "$DATABASE_URL" \
-            --no-psqlrc \
-            --tuples-only \
-            --no-align \
-            -v ON_ERROR_STOP=1 \
-            -c "WITH public_tables AS (
-                  SELECT c.relname
-                  FROM pg_catalog.pg_class c
-                  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-                  WHERE n.nspname = 'public'
-                    AND c.relkind IN ('r', 'p')
-                    AND NOT EXISTS (
-                      SELECT 1
-                      FROM pg_catalog.pg_depend d
-                      WHERE d.classid = 'pg_class'::regclass
-                        AND d.objid = c.oid
-                        AND d.deptype = 'e'
-                    )
-                ), installed_extensions AS (
-                  SELECT COALESCE(
-                    jsonb_object_agg(e.extname, n.nspname ORDER BY e.extname),
-                    '{}'::jsonb
-                  ) AS value
-                  FROM pg_catalog.pg_extension e
-                  JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
-                ), core_state AS (
-                  SELECT jsonb_build_object(
-                    'organizations', to_regclass('public.organizations') IS NOT NULL,
-                    'orgMembers', to_regclass('public.org_members') IS NOT NULL,
-                    'superAdmins', to_regclass('public.super_admins') IS NOT NULL,
-                    'notificationDigestQueue', to_regclass('public.notification_digest_queue') IS NOT NULL,
-                    'platformMetricsSnapshots', to_regclass('public.platform_metrics_snapshots') IS NOT NULL
-                  ) AS value
-                )
-                SELECT jsonb_build_object(
-                  'database', current_database(),
-                  'serverVersionNum', current_setting('server_version_num')::integer,
-                  'publicUserTableCount', (SELECT count(*) FROM public_tables),
-                  'publicUserTables', COALESCE((SELECT jsonb_agg(relname ORDER BY relname) FROM public_tables), '[]'::jsonb),
-                  'installedExtensions', (SELECT value FROM installed_extensions),
-                  'coreTables', (SELECT value FROM core_state),
-                  'authUserCount', $AUTH_USER_COUNT,
-                  'storageObjectCount', $STORAGE_OBJECT_COUNT,
-                  'migrationHistoryCount', $MIGRATION_HISTORY_COUNT,
-                  'bootstrapCandidate', (
-                    (SELECT count(*) FROM public_tables) = 0
-                    AND NOT (
-                      SELECT bool_or(entries.value::boolean)
-                      FROM core_state
-                      CROSS JOIN LATERAL jsonb_each_text(core_state.value) AS entries
-                    )
-                  ),
-                  'productionWritesPerformed', false
-                );" > hosted-bootstrap-inventory-base.json
-
-          jq --slurpfile versions hosted-migration-versions.json \
-            '. + {migrationHistoryVersions: $versions[0]}' \
-            hosted-bootstrap-inventory-base.json \
-            > hosted-bootstrap-inventory.json
-
-          jq . hosted-bootstrap-inventory.json
+        run: bash scripts/capture_hosted_bootstrap_inventory.sh hosted-bootstrap-inventory.json
 
       - name: Upload hosted inventory
         uses: actions/upload-artifact@v4
