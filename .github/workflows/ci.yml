@@ -18,7 +18,9 @@ on:
     # Allows manual trigger from the GitHub Actions tab (e.g. after direct pushes to main)
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # A manual read-only hosted verification must not cancel a production push
+  # that is still applying migrations or deploying Edge Functions.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -186,10 +188,10 @@ jobs:
             supabase/tests/e2e_smoke_test.ts
 
   # ───────────────────────────────────────────────────────────────────────────
-  # Job 2: Apply migrations to Supabase (runs only on push to main)
+  # Job 2: Apply hosted-security + FPR migrations (push to main only)
   # ───────────────────────────────────────────────────────────────────────────
   migrate:
-    name: Apply Migrations (0176→0215)
+    name: Apply Security + FPR Migrations
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -223,7 +225,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client
 
-      - name: Apply migrations 0176→0215
+      - name: Apply hosted-security + FPR migrations
         if: steps.deployment_preflight.outputs.ready == 'true'
         run: |
           chmod +x scripts/apply_migrations.sh

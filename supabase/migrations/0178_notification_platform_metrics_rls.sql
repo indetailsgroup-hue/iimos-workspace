@@ -105,12 +105,14 @@ COMMENT ON POLICY "digest_queue_own_user_select" ON public.notification_digest_q
 ALTER TABLE public.platform_metrics_snapshots ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: platform super-admins only
+DROP POLICY IF EXISTS "platform_metrics_super_admin_select" ON public.platform_metrics_snapshots;
 CREATE POLICY "platform_metrics_super_admin_select"
   ON public.platform_metrics_snapshots
   FOR SELECT
   USING (public.is_platform_super_admin());
 
 -- INSERT: super-admins only (belt-and-suspenders; cron bypasses via service_role)
+DROP POLICY IF EXISTS "platform_metrics_super_admin_insert" ON public.platform_metrics_snapshots;
 CREATE POLICY "platform_metrics_super_admin_insert"
   ON public.platform_metrics_snapshots
   FOR INSERT

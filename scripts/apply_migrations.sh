@@ -3,7 +3,8 @@
 # scripts/apply_migrations.sh
 # FPR Field-Purchase sub-system — sequential migration apply script
 #
-# Applies migrations 0176 → 0215 in numerical order against the target database.
+# Applies the hosted-security remediation followed by the FPR migrations
+# 0176 → 0215 against the target database.
 #
 # Usage:
 #   ./scripts/apply_migrations.sh                    # uses DATABASE_URL from env
@@ -51,9 +52,14 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Migration list (0176 → 0215, in order)
+# Deployment manifest
+#
+# Keep non-FPR migrations explicit here.  The FPR files live at the repository
+# root, while shared schema migrations live under supabase/migrations/.  Raw
+# psql deployment does not discover the latter automatically.
 # ---------------------------------------------------------------------------
 MIGRATIONS=(
+  "supabase/migrations/0178_notification_platform_metrics_rls.sql"
   "0176_field_purchase_core.sql"
   "0177_field_purchase_line_flow.sql"
   "0178_vendor_master_seed.sql"
