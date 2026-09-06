@@ -160,7 +160,10 @@ BEGIN
     RAISE EXCEPTION 'forecasting declaration repair did not change %', v_oid;
   END IF;
   v_definition := v_repaired;
-  v_call_start := strpos(lower(v_definition), 'execute format(');
+  v_call_start := regexp_instr(
+    lower(v_definition),
+    E'execute[[:space:]]+format[[:space:]]*\\('
+  );
   IF v_call_start = 0 THEN
     RAISE EXCEPTION 'forecasting call start marker missing in %', v_oid;
   END IF;
