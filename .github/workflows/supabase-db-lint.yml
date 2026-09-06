@@ -69,15 +69,33 @@ jobs:
         if: steps.preflight.outputs.ready == 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          PGOPTIONS: "-c default_transaction_read_only=on"
+          PGOPTIONS: '-c default_transaction_read_only=on'
         run: |
-          SCHEMA_READY="$(psql "$DATABASE_URL" --no-psqlrc -tA -v ON_ERROR_STOP=1 -c "SELECT
-            to_regclass('public.organizations') IS NOT NULL
-            AND to_regclass('public.super_admins') IS NOT NULL
-            AND to_regclass('public.notification_digest_queue') IS NOT NULL
-            AND to_regclass('public.platform_metrics_snapshots') IS NOT NULL;")"
+          bash scripts/capture_hosted_bootstrap_inventory.sh \
+            hosted-lint-inventory.json
+          bash scripts/create_production_bootstrap_plan.sh hosted-lint-plan
+          node scripts/compare_hosted_migration_inventory.mjs \
+            hosted-lint-inventory.json \
+            hosted-lint-plan/migration-manifest.tsv \
+            hosted-lint-plan/duplicate-version-map.tsv \
+            hosted-lint-reconciliation.json \
+            hosted-lint-reconciliation.md
 
-          if [ "$SCHEMA_READY" = "t" ]; then
+          SCHEMA_READY="$(jq -r \
+            '[.coreTables[]] | all' hosted-lint-inventory.json)"
+          HISTORY_ORDERED="$(jq -r \
+            '.historyOrderingCandidate' hosted-lint-reconciliation.json)"
+          PENDING_MIGRATIONS="$(jq -r \
+            '.canonicalVersionsMissing' hosted-lint-reconciliation.json)"
+
+          if [ "$HISTORY_ORDERED" != "true" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::error title=Supabase DB lint blocked::Hosted migration history is not ordering-compatible with the canonical bundle."
+            exit 1
+          elif [ "$PENDING_MIGRATIONS" -gt 0 ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Supabase DB lint deferred::The hosted schema has $PENDING_MIGRATIONS canonical migrations pending. The guarded production apply owns the blocking post-apply lint."
+          elif [ "$SCHEMA_READY" = "true" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
