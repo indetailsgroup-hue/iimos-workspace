@@ -179,61 +179,31 @@ if [[ "$all_missing_migrations_applied" == "true" ]]; then
   fi
 
   # Some early hosted projects contain an unpackaged pgTAP copy in `public`.
-  # Those routines are test-framework residue rather than application code and
-  # several target obsolete PostgreSQL catalogs. Compare their exact names and
-  # argument types with the locally managed pgTAP extension, then move only the
-  # matches out of the application lint scope. This happens on the disposable
-  # schema-only clone after assertions run; hosted is never modified.
+  # Adopt those objects into the extension catalog on the disposable clone so
+  # Supabase's linter can distinguish test-framework routines from application
+  # routines. This is pgTAP's supported upgrade path for pre-extension installs;
+  # hosted is never modified.
   legacy_pgtap_routine_count="$(psql "$local_database_url" \
     --no-psqlrc -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
-DROP SCHEMA IF EXISTS pgtap_legacy_lint_excluded CASCADE;
-CREATE SCHEMA pgtap_legacy_lint_excluded;
-
-DO $isolate$
-DECLARE
-  routine record;
-BEGIN
-  FOR routine IN
-    SELECT DISTINCT loose.oid
-    FROM pg_catalog.pg_proc AS loose
-    JOIN pg_catalog.pg_namespace AS loose_ns
-      ON loose_ns.oid = loose.pronamespace
-    JOIN pg_catalog.pg_proc AS managed
-      ON managed.proname = loose.proname
-     AND managed.proargtypes = loose.proargtypes
-    JOIN pg_catalog.pg_depend AS managed_dependency
-      ON managed_dependency.classid = 'pg_catalog.pg_proc'::regclass
-     AND managed_dependency.objid = managed.oid
-     AND managed_dependency.deptype = 'e'
-    JOIN pg_catalog.pg_extension AS extension
-      ON extension.oid = managed_dependency.refobjid
-     AND extension.extname = 'pgtap'
-    WHERE loose_ns.nspname = 'public'
-      AND loose.oid <> managed.oid
-      AND NOT EXISTS (
-        SELECT 1
-        FROM pg_catalog.pg_depend AS loose_dependency
-        JOIN pg_catalog.pg_extension AS loose_extension
-          ON loose_extension.oid = loose_dependency.refobjid
-        WHERE loose_dependency.classid = 'pg_catalog.pg_proc'::regclass
-          AND loose_dependency.objid = loose.oid
-          AND loose_dependency.deptype = 'e'
-          AND loose_extension.extname = 'pgtap'
-      )
-  LOOP
-    EXECUTE format(
-      'ALTER FUNCTION %s SET SCHEMA pgtap_legacy_lint_excluded',
-      routine.oid::regprocedure
-    );
-  END LOOP;
-END;
-$isolate$;
+SELECT 'CREATE EXTENSION pgtap FROM unpackaged;'
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM pg_catalog.pg_extension
+  WHERE extname = 'pgtap'
+) \gexec
 
 SELECT count(*)
 FROM pg_catalog.pg_proc AS routine
 JOIN pg_catalog.pg_namespace AS namespace
   ON namespace.oid = routine.pronamespace
-WHERE namespace.nspname = 'pgtap_legacy_lint_excluded';
+JOIN pg_catalog.pg_depend AS dependency
+  ON dependency.classid = 'pg_catalog.pg_proc'::regclass
+ AND dependency.objid = routine.oid
+ AND dependency.deptype = 'e'
+JOIN pg_catalog.pg_extension AS extension
+  ON extension.oid = dependency.refobjid
+ AND extension.extname = 'pgtap'
+WHERE namespace.nspname = 'public';
 SQL
   )"
   isolate_exit_code=$?
@@ -242,7 +212,7 @@ SQL
     legacy_pgtap_routines_isolated=true
   else
     legacy_pgtap_routine_count=0
-    echo "Failed to isolate legacy unpackaged pgTAP routines" >> "$lint_log"
+    echo "Failed to adopt legacy unpackaged pgTAP routines" >> "$lint_log"
   fi
 
   supabase db lint \
@@ -315,7 +285,7 @@ jq -n \
     pgtapPassed: $pgtapPassed,
     databaseLintExitCode: $databaseLintExitCode,
     databaseLintClean: $databaseLintClean,
-    databaseLintScope: "public application routines; exact pgTAP catalog matches isolated on disposable clone",
+    databaseLintScope: "public application routines; extension-owned pgTAP routines excluded by linter",
     legacyPgTapRoutineCount: $legacyPgTapRoutineCount,
     legacyPgTapRoutinesIsolated: $legacyPgTapRoutinesIsolated,
     productionDataCopied: false,
