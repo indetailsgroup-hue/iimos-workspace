@@ -37,9 +37,13 @@ trap cleanup EXIT
 count_rows_if_present() {
   local relation="$1"
   if [[ "$(psql "$DATABASE_URL" --no-psqlrc -X -qAt -v ON_ERROR_STOP=1 \
-    -c "SELECT to_regclass('$relation') IS NOT NULL;")" == "t" ]]; then
+    -c "BEGIN TRANSACTION READ ONLY;
+        SELECT to_regclass('$relation') IS NOT NULL;
+        COMMIT;")" == "t" ]]; then
     psql "$DATABASE_URL" --no-psqlrc -X -qAt -v ON_ERROR_STOP=1 \
-      -c "SELECT count(*) FROM $relation;"
+      -c "BEGIN TRANSACTION READ ONLY;
+          SELECT count(*) FROM $relation;
+          COMMIT;"
   else
     echo 0
   fi
@@ -58,15 +62,18 @@ done
 
 if [[ "$migration_history_count" -gt 0 ]]; then
   psql "$DATABASE_URL" --no-psqlrc -X -qAt -v ON_ERROR_STOP=1 \
-    -c "SELECT COALESCE(jsonb_agg(version ORDER BY version), '[]'::jsonb)
-        FROM supabase_migrations.schema_migrations;" \
+    -c "BEGIN TRANSACTION READ ONLY;
+        SELECT COALESCE(jsonb_agg(version ORDER BY version), '[]'::jsonb)
+        FROM supabase_migrations.schema_migrations;
+        COMMIT;" \
     > "$inventory_tmp_dir/migration-versions.json"
 else
   echo '[]' > "$inventory_tmp_dir/migration-versions.json"
 fi
 
 psql "$DATABASE_URL" --no-psqlrc -X -qAt -v ON_ERROR_STOP=1 \
-  -c "WITH public_tables AS (
+  -c "BEGIN TRANSACTION READ ONLY;
+      WITH public_tables AS (
         SELECT relation.relname
         FROM pg_catalog.pg_class AS relation
         JOIN pg_catalog.pg_namespace AS namespace
@@ -169,7 +176,8 @@ psql "$DATABASE_URL" --no-psqlrc -X -qAt -v ON_ERROR_STOP=1 \
           )
         ),
         'productionWritesPerformed', false
-      );" > "$inventory_tmp_dir/inventory-base.json"
+      );
+      COMMIT;" > "$inventory_tmp_dir/inventory-base.json"
 
 jq --slurpfile versions "$inventory_tmp_dir/migration-versions.json" \
   '. + {migrationHistoryVersions: $versions[0]}' \
