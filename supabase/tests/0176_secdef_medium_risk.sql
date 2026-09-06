@@ -153,8 +153,13 @@ SELECT ok(
 -- T-M3-01  rpc_rotate_line_token EXECUTE not granted to authenticated role
 -- ---------------------------------------------------------------------------
 SELECT ok(
-  NOT (
-    SELECT has_function_privilege('authenticated', 'public.rpc_rotate_line_token()', 'EXECUTE')
+  NOT EXISTS (
+    SELECT 1
+    FROM information_schema.routine_privileges
+    WHERE routine_schema = 'public'
+      AND routine_name = 'rpc_rotate_line_token'
+      AND grantee = 'authenticated'
+      AND privilege_type = 'EXECUTE'
   ),
   'T-M3-01: authenticated role must NOT have EXECUTE on rpc_rotate_line_token (M3 mitigation from 0154)'
 );
@@ -163,8 +168,13 @@ SELECT ok(
 -- T-M3-02  rpc_revoke_line_token EXECUTE not granted to authenticated role
 -- ---------------------------------------------------------------------------
 SELECT ok(
-  NOT (
-    SELECT has_function_privilege('authenticated', 'public.rpc_revoke_line_token()', 'EXECUTE')
+  NOT EXISTS (
+    SELECT 1
+    FROM information_schema.routine_privileges
+    WHERE routine_schema = 'public'
+      AND routine_name = 'rpc_revoke_line_token'
+      AND grantee = 'authenticated'
+      AND privilege_type = 'EXECUTE'
   ),
   'T-M3-02: authenticated role must NOT have EXECUTE on rpc_revoke_line_token (M3 mitigation from 0154)'
 );

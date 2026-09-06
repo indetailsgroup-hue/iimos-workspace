@@ -135,6 +135,19 @@ INSERT INTO public.organizations (org_id, name, slug) VALUES
   ('b2b2b2b2-0000-0000-0000-000000000001', 'Beta  Co', 'beta-co')
 ON CONFLICT (org_id) DO NOTHING;
 
+-- ── Auth users + active tenant memberships used by get_user_org_id() ─────────
+INSERT INTO auth.users (id, email) VALUES
+  ('a1a1a1a1-0000-0000-0001-000000000002', 'alpha-0176@example.test'),
+  ('b2b2b2b2-0000-0000-0001-000000000002', 'beta-0176@example.test')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.org_members (org_id, user_id, email, role, is_active) VALUES
+  ('a1a1a1a1-0000-0000-0000-000000000001',
+   'a1a1a1a1-0000-0000-0001-000000000002', 'alpha-0176@example.test', 'VIEWER', true),
+  ('b2b2b2b2-0000-0000-0000-000000000001',
+   'b2b2b2b2-0000-0000-0001-000000000002', 'beta-0176@example.test', 'VIEWER', true)
+ON CONFLICT (org_id, user_id) DO NOTHING;
+
 -- ── Alpha notification_preferences ────────────────────────────────────────
 INSERT INTO public.notification_preferences (id, user_id, org_id)
 VALUES
@@ -151,7 +164,7 @@ VALUES
 
 -- ---------------------------------------------------------------------------
 -- Switch to Beta user context
--- org_id claim required: get_user_org_id() reads auth.jwt()->>'org_id'
+-- get_user_org_id() resolves auth.uid() through the active Beta membership.
 -- ---------------------------------------------------------------------------
 SET LOCAL row_security = on;
 SET LOCAL ROLE authenticated;
@@ -191,15 +204,11 @@ SELECT throws_ok(
 -- ===========================================================================
 -- T-0176-09  UPDATE isolation — Beta UPDATE on Alpha pref affects 0 rows
 -- ===========================================================================
-SELECT is(
-  (WITH upd AS (
-    UPDATE public.notification_preferences
-       SET global_mute = true
-     WHERE id = 'a1a1a1a1-0176-0000-0000-000000000001'
-    RETURNING 1
-  )
-  SELECT COUNT(*) FROM upd),
-  0::bigint,
+SELECT is_empty(
+  $$ UPDATE public.notification_preferences
+        SET global_mute = true
+      WHERE id = 'a1a1a1a1-0176-0000-0000-000000000001'
+      RETURNING 1 $$,
   'T-0176-09: Beta UPDATE on Alpha notification_preferences row affects 0 rows'
 );
 
@@ -208,14 +217,10 @@ SELECT is(
 --
 -- DELETE uses a USING clause (silent filter) — no 42501 raised.
 -- ===========================================================================
-SELECT is(
-  (WITH del AS (
-    DELETE FROM public.notification_preferences
-     WHERE id = 'a1a1a1a1-0176-0000-0000-000000000001'
-    RETURNING 1
-  )
-  SELECT COUNT(*) FROM del),
-  0::bigint,
+SELECT is_empty(
+  $$ DELETE FROM public.notification_preferences
+      WHERE id = 'a1a1a1a1-0176-0000-0000-000000000001'
+      RETURNING 1 $$,
   'T-0176-10: Beta DELETE on Alpha notification_preferences row affects 0 rows'
 );
 
