@@ -261,9 +261,9 @@ jobs:
 
       - name: Setup Supabase CLI
         if: steps.deployment_preflight.outputs.ready == 'true'
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
         with:
-          version: latest
+          version: 2.116.0
 
       - name: Deploy field-purchase-line (LINE webhook handler)
         if: steps.deployment_preflight.outputs.ready == 'true'
@@ -307,9 +307,9 @@ jobs:
 
       # ── Supabase CLI ───────────────────────────────────────────────────────
       - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
         with:
-          version: latest
+          version: 2.116.0
 
       # ── Write e2e prereq migration stubs ──────────────────────────────────
       # These files are written to the runner's checkout only — NOT committed.
