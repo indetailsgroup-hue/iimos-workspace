@@ -29,6 +29,7 @@ on:
       - 'package-lock.json'
       - '**/*.visual.spec.ts'
       - 'playwright.config.ts'
+      - '.github/workflows/chromatic.yml'
   pull_request:
     branches:
       - main
@@ -38,6 +39,9 @@ on:
       - 'src/culture/**'
       - '.storybook/**'
       - '**/*.stories.tsx'
+      - '**/*.visual.spec.ts'
+      - 'playwright.config.ts'
+      - '.github/workflows/chromatic.yml'
 
 concurrency:
   group: chromatic-${{ github.ref }}
@@ -119,18 +123,21 @@ jobs:
   # ────────────────────────────────────────────────────────────────────────────
   # chromatic-playwright
   # Runs Playwright visual snapshots (*.visual.spec.ts) via the
-  # @chromatic-com/playwright integration.  Snapshots are uploaded to the same
-  # Chromatic project and appear alongside Storybook snapshots in the UI.
+  # @chromatic-com/playwright integration. Chromatic requires Storybook and
+  # Playwright visual suites to use separate linked projects; publishing both to
+  # one project creates consecutive builds on the same branch and disables
+  # review of the Storybook build that owns the required UI Tests check.
   #
-  # Requires chromatic-upload to succeed first so Storybook static is available
-  # on the runner (re-built in this job; chromatic-upload is a logical dep only).
+  # The test job remains useful without the second project token: Playwright and
+  # its uploaded HTML report still run, while the cloud snapshot upload reports
+  # an explicit successful skip.
   # ────────────────────────────────────────────────────────────────────────────
   chromatic-playwright:
     name: Chromatic — Playwright Visual Snapshots
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    # Run after chromatic-upload so baselines exist before playwright snapshots
-    needs: chromatic-upload
+    env:
+      HAS_CHROMATIC_PLAYWRIGHT_PROJECT: ${{ secrets.CHROMATIC_PLAYWRIGHT_PROJECT_TOKEN != '' }}
 
     steps:
       - name: Checkout repository
@@ -173,10 +180,19 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-      - name: Upload snapshots to Chromatic (playwright mode)
-        run: npx chromatic --playwright --project-token=${{ secrets.CHROMATIC_PROJECT_TOKEN }} --exit-zero-on-changes
+      - name: Upload snapshots to the dedicated Chromatic Playwright project
+        if: env.HAS_CHROMATIC_PLAYWRIGHT_PROJECT == 'true'
+        run: npx chromatic --playwright --project-token="$CHROMATIC_PLAYWRIGHT_PROJECT_TOKEN" --exit-zero-on-changes
         env:
           VITE_USE_MOCK: 'true'
+          CHROMATIC_PLAYWRIGHT_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PLAYWRIGHT_PROJECT_TOKEN }}
+
+      - name: Report skipped Playwright snapshot upload
+        if: env.HAS_CHROMATIC_PLAYWRIGHT_PROJECT != 'true'
+        run: |
+          echo "### Playwright snapshot upload skipped" >> "$GITHUB_STEP_SUMMARY"
+          echo "The Playwright visual tests passed, but CHROMATIC_PLAYWRIGHT_PROJECT_TOKEN is not configured." >> "$GITHUB_STEP_SUMMARY"
+          echo "Create a separate linked Chromatic project for Playwright and add its token as that repository secret." >> "$GITHUB_STEP_SUMMARY"
 
   # ────────────────────────────────────────────────────────────────────────────
   # chromatic-storybook-verify

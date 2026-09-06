@@ -28,8 +28,8 @@ Release-ready เมื่อทุกข้อด้านล่างเป็
 | Root production build | PASS (local) | Vite build สำเร็จ; มี chunk-size warnings เดิม |
 | Lint | PASS (local) | 0 errors; 2,298 warnings เท่ากับ budget |
 | Field App | PASS (local) | build + 7 files / 24 tests |
-| Digital Shadow | PASS (local) | build + 10 files / 244 isolated unit tests |
-| Homag adapter | PASS (local) | 27 tests ภายใน Digital Shadow lane |
+| Digital Shadow | PASS (CI) | build + 247/247 isolated unit tests + 72/72 Redis/OPC UA integration assertions ใน PR #79 |
+| Homag adapter | PASS (CI) | 27/27 tests ภายใน Digital Shadow lane |
 | Factory Server | PASS (local) | build + 58 tests |
 | Vault Builder | PASS (local) | build + 82 tests |
 | Bible Code | PASS (local) | build + 28 tests |
@@ -41,7 +41,7 @@ Release-ready เมื่อทุกข้อด้านล่างเป็
 | SQL pgTAP | PASS (CI) | `pg_prove supabase/tests/*.sql` รัน assertions จริงและผ่านใน fresh database เดียวกัน |
 | TypeScript database suites | DIAGNOSTIC | legacy schema-assumption suite แยกจาก authoritative pgTAP gate และเก็บ JSON artifact; สถานะ pgTAP release gate อ้างจาก `pg_prove` job เท่านั้น |
 | Playwright E2E | PASS (CI) | UI smoke และ non-vacuous factory integration ผ่านใน PR #79 |
-| Chromatic | REVIEW REQUIRED | Playwright story IDs ซ่อมแล้ว; external UI baseline ยังรอ human review/acceptance และห้าม auto-accept โดยไม่ตรวจภาพ |
+| Chromatic | REVIEW REQUIRED | Storybook 196 tests และ Playwright 36 tests/72 named snapshots ผ่าน execution; external UI baseline ยังรอ human review/acceptance และห้าม auto-accept โดยไม่ตรวจภาพ |
 | Security issues #49/#50 | BLOCKED (production) | read-only hosted verification ยืนยันว่า RLS และ policies ยังไม่อยู่ใน production ทั้งสองตาราง จึงยังเปิด issues ไว้ |
 | Backend deploy | BLOCKED (credential preflight) | secret inventory ให้ผล `deployment_ready=false`; workflow แสดง successful skip ตามนโยบาย และยังไม่ถือว่า deploy ผ่าน |
 | Product version | RECONCILED IN PR | root `package.json` เป็น canonical `17.5.1`; README/changelog/progress ใช้ค่าเดียวกัน และ CI ตรวจ drift |
@@ -67,6 +67,8 @@ Release-ready เมื่อทุกข้อด้านล่างเป็
 - gate-bypass-scan: ยังเป็น report-only ตาม debt เดิม ไม่ใช่ blocking release gate ในงานนี้
 
 Root Vitest ไม่รับผิดชอบ suite ที่ต้องมี Postgres, Redis, MQTT, InfluxDB, browser, หรือ tool-specific config อีกต่อไป เพื่อป้องกันทั้ง false failure และ false green แต่ละ suite ถูกส่งไป lane ที่จัด environment ให้จริง
+
+Chromatic แยก execution ownership เช่นเดียวกัน: Storybook ใช้ `CHROMATIC_PROJECT_TOKEN` เดิม ส่วน Playwright snapshot upload ใช้ `CHROMATIC_PLAYWRIGHT_PROJECT_TOKEN` ของ linked sub-project แยกตามรูปแบบที่ Chromatic รองรับ Repository secret inventory รอบนี้บันทึก Storybook token ไว้หนึ่ง project ดังนั้น job ยังคงรัน Playwright และเก็บ HTML report พร้อมรายงาน snapshot upload เป็น successful skip อย่างชัดเจน การส่ง Storybook และ Playwright เข้า project/token เดียวกันถูกยกเลิก เพราะ build ที่สองทำให้ build แรกซึ่งถือ required UI check ถูกปิดการ review
 
 ## 4. Database, migration และ pgTAP
 
@@ -167,7 +169,7 @@ pgTAP workflow ไม่ใช้ hosted Supabase token แล้ว แต่�
 | PR | สถานะจาก GitHub | ผลเปรียบเทียบกับ `main` | คำแนะนำ |
 |---|---|---|---|
 | #41 Digital Shadow Service | closed as superseded | unique three-parameter Weibull/RUL delta ถูกย้ายเข้า PR #79; product integration อยู่ใน PR #80 | ปิดแล้วพร้อม comment อ้างอิง replacement |
-| #44 Digital Shadow integration | closed and replaced | แยกเฉพาะ Machine Shadow UI/API/store, Feature Cache, adapters/services และ tests ออกมาเป็น clean PR #80 โดยไม่พา CI/Slack/SARIF commits เก่า | ปิดแล้ว; PR #80 ต้อง rebase บน stabilization ก่อน merge |
+| #44 Digital Shadow integration | closed and replaced | แยกเฉพาะ Machine Shadow UI/API/store, Feature Cache, adapters/services และ tests ออกมาเป็น clean PR #80 โดยไม่พา CI/Slack/SARIF commits เก่า | ปิดแล้ว; PR #80 stack บน stabilization และ CI ผ่านที่ `3e8fc5a` |
 | #46 Accounting/RLS | closed as superseded | 42/73 paths byte-identical, 30 paths มีใน main และพัฒนาต่อแล้ว; canonical migration preparation รับหน้าที่แทน legacy bootstrap | ปิดแล้วหลัง fresh DB/pgTAP ยืนยัน current design |
 | #78 CONTRIBUTING formatting | open, 1 commit, 1 line | ไม่อยู่ใน scope stabilization และไม่เกี่ยวกับ release gates | คงไว้ให้ owner จัดการแยก |
 
@@ -179,7 +181,7 @@ Security issues #49/#50 ยัง open ทั้งคู่ การตรว�
 2. ตั้ง `DATABASE_URL` ผ่าน GitHub secret UI หรือ `gh secret set DATABASE_URL` จาก terminal โดยไม่ส่งค่าในแชต
 3. deploy approved migration chain ไป production ผ่าน workflow แล้ว rerun hosted RLS verification
 4. ปิด issues #49/#50 เฉพาะเมื่อ artifact ใหม่ให้ `verified=true` ทั้งสอง contract
-5. rebase PR #80 บน stabilization, แก้ conflict และให้ product-integration checks ผ่าน
+5. หลัง stabilization เปลี่ยน HEAD ให้ rebase PR #80 แล้วรักษา product-integration checks ให้ผ่าน
 6. merge ผ่าน review ตาม repository policy
 7. publish GitHub Release บน merged commit/tag ที่สอดคล้องกับ root `package.json`; ห้ามสร้างหรือย้าย tag บน branch candidate
 
@@ -200,4 +202,4 @@ GitHub CLI authentication เชื่อมกับบัญชี `indetailsg
 
 **ปัจจุบัน: HOLD**
 
-ยังไม่ให้ release เพราะ production RLS verification ของ #49/#50 ล้มจริง, `DATABASE_URL` ยังไม่ถูกตั้งจึงยังไม่มี backend deploy evidence, Chromatic baseline ยังรอ visual approval, PR #79 ยังต้องจบ/merge และ PR #80 ต้อง rebase/ผ่าน CI ก่อน ส่วน fresh DB, pgTAP, LineOS, root/server/field, lint, audits และ Playwright หลักผ่าน GitHub Actions แล้วใน PR #79 ณ commit `c76b478`
+ยังไม่ให้ release เพราะ production RLS verification ของ #49/#50 ล้มจริง, credential preflight ของ `DATABASE_URL` ให้ผล `deployment_ready=false`, Chromatic baseline ยังรอ visual approval และ PR #79/#80 ยังเป็น draft ส่วน fresh DB, pgTAP, LineOS, root/server/field, lint, audits, Digital Shadow integration และ Playwright ผ่าน GitHub Actions แล้วใน PR #79/#80

@@ -5,7 +5,7 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Tests in `*.visual.spec.ts` use `@chromatic-com/playwright` to take
  * named snapshots that are uploaded to Chromatic via:
- *   npx chromatic --playwright --project-token=$CHROMATIC_PROJECT_TOKEN
+ *   npx chromatic --playwright --project-token=$CHROMATIC_PLAYWRIGHT_PROJECT_TOKEN
  *
  * Target: Storybook static build served on port 6006.
  * In CI the Storybook is pre-built by a prior step (storybook-static/).
@@ -28,7 +28,9 @@ export default defineConfig({
   retries: CI ? 1 : 0,
   forbidOnly: CI,
 
-  reporter: CI ? 'github' : 'html',
+  reporter: CI
+    ? [['github'], ['html', { open: 'never' }]]
+    : 'html',
 
   use: {
     baseURL: `http://localhost:${STORYBOOK_PORT}`,
