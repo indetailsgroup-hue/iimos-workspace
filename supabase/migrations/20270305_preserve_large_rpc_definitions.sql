@@ -150,26 +150,58 @@ BEGIN
   -- definition before applying the narrowly-scoped repairs so the exact same
   -- migration covers both historical CRLF and clean-bootstrap LF definitions.
   v_definition := replace(pg_get_functiondef(v_oid), E'\r\n', E'\n');
-  v_repaired := replace(v_definition,
-    $old$'sync_source'$old$,
-    $new$regexp_replace(
-      to_regtype('public.sync_source')::text,
-      '^.*\\.',
-      ''
-    )$new$);
-  IF v_repaired = v_definition THEN
-    RAISE EXCEPTION 'forecasting source-type repair did not change %', v_oid;
-  END IF;
-  v_definition := v_repaired;
-  v_repaired := replace(v_definition,
-    $old$'sync_status'$old$,
-    $new$regexp_replace(
-      to_regtype('public.sync_status')::text,
-      '^.*\\.',
-      ''
-    )$new$);
-  IF v_repaired = v_definition THEN
-    RAISE EXCEPTION 'forecasting status-type repair did not change %', v_oid;
+  IF strpos(v_definition, 'v_sync_log_id := public.record_input_sync(') > 0 THEN
+    -- The hosted revision predates the dynamic-call guard and invokes the
+    -- optional forecasting function directly. Replace that one call while
+    -- retaining the surrounding authorization, audit, and result logic.
+    v_repaired := replace(v_definition,
+      $old$v_sync_log_id := public.record_input_sync(
+    v_site_code,
+    'line'::public.sync_source,
+    v_status::public.sync_status,
+    v_record_count,
+    v_error_jsonb
+  );$old$,
+      $new$if to_regtype('public.sync_source') is null
+     or to_regtype('public.sync_status') is null then
+    raise exception 'line_oa: forecasting pipeline types are not installed'
+      using errcode = '55000';
+  end if;
+
+  execute format(
+    'select public.record_input_sync($1, $2::%s, $3::%s, $4, $5)',
+    to_regtype('public.sync_source')::text,
+    to_regtype('public.sync_status')::text
+  )
+    into v_sync_log_id
+    using v_site_code, 'line', v_status, v_record_count, v_error_jsonb;$new$);
+    IF v_repaired = v_definition THEN
+      RAISE EXCEPTION 'hosted forecasting call repair did not change %', v_oid;
+    END IF;
+  ELSE
+    -- The canonical revision already builds a dynamic query. Prevent static
+    -- analysis from resolving its optional enum names before the runtime guard.
+    v_repaired := replace(v_definition,
+      $old$'sync_source'$old$,
+      $new$regexp_replace(
+        to_regtype('public.sync_source')::text,
+        '^.*\\.',
+        ''
+      )$new$);
+    IF v_repaired = v_definition THEN
+      RAISE EXCEPTION 'forecasting source-type repair did not change %', v_oid;
+    END IF;
+    v_definition := v_repaired;
+    v_repaired := replace(v_definition,
+      $old$'sync_status'$old$,
+      $new$regexp_replace(
+        to_regtype('public.sync_status')::text,
+        '^.*\\.',
+        ''
+      )$new$);
+    IF v_repaired = v_definition THEN
+      RAISE EXCEPTION 'forecasting status-type repair did not change %', v_oid;
+    END IF;
   END IF;
   EXECUTE v_repaired;
 END;

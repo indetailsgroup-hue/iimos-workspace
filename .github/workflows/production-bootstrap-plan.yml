@@ -117,24 +117,6 @@ jobs:
                     'notificationDigestQueue', to_regclass('public.notification_digest_queue') IS NOT NULL,
                     'platformMetricsSnapshots', to_regclass('public.platform_metrics_snapshots') IS NOT NULL
                   ) AS value
-                ), forecast_rpc_diagnostic AS (
-                  SELECT COALESCE(
-                    (
-                      SELECT jsonb_build_object(
-                        'present', true,
-                        'recordInputSyncContext', substring(
-                          p.prosrc
-                          FROM greatest(strpos(lower(p.prosrc), 'record_input_sync') - 320, 1)
-                          FOR 1000
-                        )
-                      )
-                      FROM pg_catalog.pg_proc AS p
-                      WHERE p.oid = to_regprocedure(
-                        'public.rpc_sync_line_forecast(text,text,text)'
-                      )
-                    ),
-                    jsonb_build_object('present', false)
-                  ) AS value
                 )
                 SELECT jsonb_build_object(
                   'database', current_database(),
@@ -143,7 +125,6 @@ jobs:
                   'publicUserTables', COALESCE((SELECT jsonb_agg(relname ORDER BY relname) FROM public_tables), '[]'::jsonb),
                   'installedExtensions', (SELECT value FROM installed_extensions),
                   'coreTables', (SELECT value FROM core_state),
-                  'forecastRpcDiagnostic', (SELECT value FROM forecast_rpc_diagnostic),
                   'authUserCount', $AUTH_USER_COUNT,
                   'storageObjectCount', $STORAGE_OBJECT_COUNT,
                   'migrationHistoryCount', $MIGRATION_HISTORY_COUNT,
