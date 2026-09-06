@@ -181,7 +181,7 @@ BEGIN
               FROM public.org_members om
              WHERE om.user_id = j.created_by
                AND om.is_active = true
-             ORDER BY om.id
+             ORDER BY om.org_id
              LIMIT 1),
            v_fallback_org_id
          )
@@ -202,7 +202,7 @@ BEGIN
               FROM public.org_members om
              WHERE om.user_id = q.created_by
                AND om.is_active = true
-             ORDER BY om.id
+             ORDER BY om.org_id
              LIMIT 1),
            v_fallback_org_id
          )
@@ -240,7 +240,7 @@ BEGIN
               FROM public.org_members om
              WHERE om.user_id = i.created_by
                AND om.is_active = true
-             ORDER BY om.id
+             ORDER BY om.org_id
              LIMIT 1),
            v_fallback_org_id
          )

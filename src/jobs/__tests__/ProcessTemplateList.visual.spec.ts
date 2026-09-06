@@ -48,13 +48,13 @@ const STORY = {
   default:                 'jobs-processtemplatelist--default',
   categoryFilterCabinet:   'jobs-processtemplatelist--category-filter-cabinet',
   globalOnlyFilter:        'jobs-processtemplatelist--global-only-filter',
-  planGateWallFree:        'jobs-processtemplatelist--plan-gate-wall-free-plan',
+  planGateWallFree:        'jobs-processtemplatelist--plan-gate-wall-free',
   loadingSkeleton:         'jobs-processtemplatelist--loading-skeleton',
   emptyStateNoResults:     'jobs-processtemplatelist--empty-state-no-results',
   emptyStateFirstRun:      'jobs-processtemplatelist--empty-state-first-run',
   errorBanner:             'jobs-processtemplatelist--error-banner',
-  adminView:               'jobs-processtemplatelist--admin-view-clone-visible',
-  professionalUnlocked:    'jobs-processtemplatelist--professional-plan-all-templates-unlocked',
+  adminView:               'jobs-processtemplatelist--admin-view',
+  professionalUnlocked:    'jobs-processtemplatelist--professional-plan-unlocked',
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ import {
   MonitoringParametersOptions,
   CallMethodRequestLike,
   Variant,
+  type OPCUACertificateManager,
 } from 'node-opcua';
 import { BaseMachineAdapter } from './BaseMachineAdapter';
 import { WwUnitState, WwUnitMode } from '../types/machine';
@@ -61,7 +62,10 @@ export class BiesseAdapter extends BaseMachineAdapter {
   private subscription: ClientSubscription | null = null;
   private pollingTimer: NodeJS.Timeout | null = null;
 
-  constructor(endpoint: MachineEndpoint) {
+  constructor(
+    endpoint: MachineEndpoint,
+    private readonly clientCertificateManager?: OPCUACertificateManager,
+  ) {
     super(endpoint);
   }
 
@@ -89,6 +93,7 @@ export class BiesseAdapter extends BaseMachineAdapter {
       },
       certificateFile: opcuaConfig.certificatePath,
       privateKeyFile: opcuaConfig.privateKeyPath,
+      clientCertificateManager: this.clientCertificateManager,
     });
 
     await this.client.connect(this.endpoint.opcuaEndpoint!);

@@ -289,7 +289,9 @@ export const BulkEnrollSuccess: Story = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** bulkEnroll spy rejects → component catches and shows localError banner */
-const bulkEnrollErrorSpy = fn().mockRejectedValue(new Error('DB write failed — server error'));
+const bulkEnrollErrorSpy = fn(async () => {
+  throw new Error('DB write failed — server error');
+});
 const fetchEnrollmentsNoop = fn().mockResolvedValue(undefined);
 
 export const BulkEnrollErrorPath: Story = {

@@ -75,6 +75,11 @@ describe('RULPredictionService', () => {
       expect(service.survivalFunction(-100, 2.5, 8000)).toBe(1);
     });
 
+    it('returns 1 through the 3-parameter Weibull threshold', () => {
+      expect(service.survivalFunction(799, 2.5, 8000, 800)).toBe(1);
+      expect(service.survivalFunction(800, 2.5, 8000, 800)).toBe(1);
+    });
+
     it('returns exp(-1) ≈ 0.368 at t = scale (characteristic life)', () => {
       const survival = service.survivalFunction(8000, 1, 8000);
       expect(survival).toBeCloseTo(Math.exp(-1), 5);
@@ -109,6 +114,10 @@ describe('RULPredictionService', () => {
     it('returns 0 for t <= 0', () => {
       expect(service.hazardFunction(0, 2.5, 8000)).toBe(0);
       expect(service.hazardFunction(-10, 2.5, 8000)).toBe(0);
+    });
+
+    it('returns 0 before the 3-parameter Weibull threshold', () => {
+      expect(service.hazardFunction(799, 2.5, 8000, 800)).toBe(0);
     });
 
     it('increases with time when shape > 1 (wear-out)', () => {
@@ -162,6 +171,12 @@ describe('RULPredictionService', () => {
     it('returns scale * (ln2)^(1/β) for p = 0.5 (median)', () => {
       const median = service.quantileFunction(0.5, 2.5, 8000);
       const expected = 8000 * Math.pow(Math.log(2), 1 / 2.5);
+      expect(median).toBeCloseTo(expected, 5);
+    });
+
+    it('adds the threshold to a 3-parameter Weibull quantile', () => {
+      const median = service.quantileFunction(0.5, 2.5, 8000, 800);
+      const expected = 800 + 8000 * Math.pow(Math.log(2), 1 / 2.5);
       expect(median).toBeCloseTo(expected, 5);
     });
 
@@ -342,7 +357,7 @@ describe('RULPredictionService', () => {
       expect(rul.hazardRate).toBeGreaterThanOrEqual(0);
       expect(rul.confidence).toBeGreaterThan(0);
       expect(rul.confidence).toBeLessThanOrEqual(1);
-      expect(rul.method).toBe('weibull_proportional_hazards');
+      expect(rul.method).toBe('weibull_3p_proportional_hazards');
     });
 
     it('predicts shorter RUL for degraded component', () => {

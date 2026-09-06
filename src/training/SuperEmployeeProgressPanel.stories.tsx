@@ -30,7 +30,7 @@
 
 import type { Meta, StoryObj } from '@storybook/react';
 import type { StoryFn } from '@storybook/react';
-import { expect, fn, userEvent, within } from '@storybook/test';
+import { expect, fn, userEvent, waitFor, within } from '@storybook/test';
 import React from 'react';
 
 import { SuperEmployeeProgressPanel } from './SuperEmployeeProgressPanel';
@@ -503,6 +503,10 @@ export const AdminResolveInteraction: Story = {
     // 2. Resolve buttons rendered for admin
     const resolveButtons = canvas.getAllByTestId('resolve-gap-btn');
     await expect(resolveButtons).toHaveLength(2);
+
+    // Ignore the initial fetch triggered by the component's mount effect.
+    await waitFor(() => expect(fetchSkillGapsSpy).toHaveBeenCalledTimes(1));
+    fetchSkillGapsSpy.mockClear();
 
     // 3. Click the first resolve button (gap-001: Prompt Engineering)
     await userEvent.click(resolveButtons[0]);

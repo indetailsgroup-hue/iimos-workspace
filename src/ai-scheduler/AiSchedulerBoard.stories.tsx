@@ -92,7 +92,6 @@ type StoreOverride = Record<string, any>;
 const withSchedulerStore =
   (overrides: StoreOverride = {}): ((Story: StoryFn) => React.ReactElement) =>
   (Story) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useAiSchedulerStore.setState({
       machineConfigs:    [],
       productionRuns:    [],

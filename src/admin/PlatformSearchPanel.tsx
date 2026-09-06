@@ -77,7 +77,7 @@ function SearchResultItem({ result, isActive, index, onNavigate, onHover }: Sear
 
   useEffect(() => {
     if (isActive && ref.current) {
-      ref.current.scrollIntoView && ref.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      ref.current.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
     }
   }, [isActive]);
 
@@ -274,7 +274,7 @@ export function PlatformSearchPanel({
     return () => {
       if (autocompleteRef.current) clearTimeout(autocompleteRef.current);
     };
-  }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [query]);
 
   // ─── Handlers ─────────────────────────────────────────────────────
 

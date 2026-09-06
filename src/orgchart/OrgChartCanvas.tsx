@@ -555,7 +555,6 @@ const OrgChartCanvas: React.FC<OrgChartCanvasProps> = ({
 
   useEffect(() => {
     useOrgChartStore.getState().fetchChart(orgId, orgPlan);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, orgPlan]);
 
   // ── Plan gate ───────────────────────────────────────────────────────────────

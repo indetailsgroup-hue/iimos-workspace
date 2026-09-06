@@ -49,7 +49,7 @@ export async function searchJobs(
   limit = 20,
   offset = 0
 ): Promise<{ results: SearchResult[]; count: number }> {
-  let rpcParams: Record<string, unknown> = {
+  const rpcParams: Record<string, unknown> = {
     search_query: query,
     result_limit: limit,
     result_offset: offset,
@@ -82,7 +82,7 @@ export async function searchMembers(
   limit = 20,
   offset = 0
 ): Promise<{ results: SearchResult[]; count: number }> {
-  let rpcParams: Record<string, unknown> = {
+  const rpcParams: Record<string, unknown> = {
     search_query: query,
     result_limit: limit,
     result_offset: offset,
@@ -115,7 +115,7 @@ export async function searchInvoices(
   limit = 20,
   offset = 0
 ): Promise<{ results: SearchResult[]; count: number }> {
-  let rpcParams: Record<string, unknown> = {
+  const rpcParams: Record<string, unknown> = {
     search_query: query,
     result_limit: limit,
     result_offset: offset,

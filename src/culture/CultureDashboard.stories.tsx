@@ -634,9 +634,12 @@ The spy is reset via \`mockClear()\` before each story render.
     // Change status to ACKNOWLEDGED
     await userEvent.selectOptions(actionSelect, 'ACKNOWLEDGED');
 
-    // Assert spy was called with correct args
+    // Assert spy was called with the store action payload
     await expect(mockActionFeedbackSpy).toHaveBeenCalledOnce();
-    await expect(mockActionFeedbackSpy).toHaveBeenCalledWith('fb-001', 'ACKNOWLEDGED');
+    await expect(mockActionFeedbackSpy).toHaveBeenCalledWith({
+      feedbackId: 'fb-001',
+      actionStatus: 'ACKNOWLEDGED',
+    });
   },
 };
 
@@ -677,7 +680,10 @@ export const ActionFeedback_Resolve: Story = {
     await userEvent.selectOptions(actionSelect, 'RESOLVED');
 
     await expect(mockActionFeedbackSpy).toHaveBeenCalledOnce();
-    await expect(mockActionFeedbackSpy).toHaveBeenCalledWith('fb-002', 'RESOLVED');
+    await expect(mockActionFeedbackSpy).toHaveBeenCalledWith({
+      feedbackId: 'fb-002',
+      actionStatus: 'RESOLVED',
+    });
   },
 };
 
@@ -708,7 +714,10 @@ export const ActionFeedback_Dismiss: Story = {
     await userEvent.selectOptions(actionSelect, 'DISMISSED');
 
     await expect(mockActionFeedbackSpy).toHaveBeenCalledOnce();
-    await expect(mockActionFeedbackSpy).toHaveBeenCalledWith('fb-001', 'DISMISSED');
+    await expect(mockActionFeedbackSpy).toHaveBeenCalledWith({
+      feedbackId: 'fb-001',
+      actionStatus: 'DISMISSED',
+    });
   },
 };
 

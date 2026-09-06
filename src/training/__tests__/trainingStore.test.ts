@@ -31,28 +31,26 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // vi.mock is hoisted before imports, so mockResult / makeThenableProxy
 // must be declared at module scope before the mock factory runs.
 
-let mockResult: { data: unknown; error: unknown } = { data: null, error: null };
-
-function makeThenableProxy(): unknown {
-  const handler: ProxyHandler<Record<string, unknown>> = {
+const { mockState, mockSupabase } = vi.hoisted(() => {
+  const mockState = {
+    result: { data: null, error: null } as { data: unknown; error: unknown },
+  };
+  const makeThenableProxy = (): unknown => new Proxy({}, {
     get(_target, prop: string | symbol) {
-      // .then makes the proxy awaitable (JavaScript thenable protocol)
       if (prop === 'then') {
         return (
           onFulfilled?: (v: unknown) => unknown,
           onRejected?: (e: unknown) => unknown,
-        ) => Promise.resolve(mockResult).then(onFulfilled, onRejected);
+        ) => Promise.resolve(mockState.result).then(onFulfilled, onRejected);
       }
-      // Any other method returns a new proxy to support arbitrary chain depth
       return (..._args: unknown[]) => makeThenableProxy();
     },
+  });
+  return {
+    mockState,
+    mockSupabase: { from: vi.fn(() => makeThenableProxy()) },
   };
-  return new Proxy({} as Record<string, unknown>, handler);
-}
-
-const mockSupabase = {
-  from: vi.fn(() => makeThenableProxy()),
-};
+});
 
 vi.mock('../../core/supabase', () => ({ supabase: mockSupabase }));
 
@@ -173,7 +171,7 @@ describe('useTrainingStore — state management', () => {
   beforeEach(() => {
     useTrainingStore.getState().reset();
     vi.clearAllMocks();
-    mockResult = { data: null, error: null };
+    mockState.result = { data: null, error: null };
   });
 
   // ── setCourseFilters ────────────────────────────────────────────────────
@@ -300,7 +298,7 @@ describe('Plan gate enforcement', () => {
   beforeEach(() => {
     useTrainingStore.getState().reset();
     vi.clearAllMocks();
-    mockResult = { data: null, error: null };
+    mockState.result = { data: null, error: null };
   });
 
   // ── FREE plan ─────────────────────────────────────────────────────────
@@ -405,21 +403,21 @@ describe('Plan gate enforcement', () => {
 
   describe('PROFESSIONAL plan — gated actions do not throw', () => {
     it('createCourse resolves', async () => {
-      mockResult = { data: { id: 'c-new' }, error: null };
+      mockState.result = { data: { id: 'c-new' }, error: null };
       await expect(
         useTrainingStore.getState().createCourse(orgId, 'PROFESSIONAL', courseInput),
       ).resolves.toBeDefined();
     });
 
     it('fetchCourseStats resolves', async () => {
-      mockResult = { data: [], error: null };
+      mockState.result = { data: [], error: null };
       await expect(
         useTrainingStore.getState().fetchCourseStats(orgId, 'PROFESSIONAL'),
       ).resolves.toBeUndefined();
     });
 
     it('verifyCompletion resolves', async () => {
-      mockResult = { data: null, error: null };
+      mockState.result = { data: null, error: null };
       await expect(
         useTrainingStore.getState().verifyCompletion(orgId, 'PROFESSIONAL', verifyInput),
       ).resolves.toBeUndefined();
@@ -430,7 +428,7 @@ describe('Plan gate enforcement', () => {
 
   describe('ENTERPRISE plan — gated actions do not throw', () => {
     it('fetchEmployeeSummary resolves', async () => {
-      mockResult = { data: [], error: null };
+      mockState.result = { data: [], error: null };
       await expect(
         useTrainingStore.getState().fetchEmployeeSummary(orgId, 'ENTERPRISE'),
       ).resolves.toBeUndefined();
@@ -449,7 +447,7 @@ describe('fetchCourses', () => {
   });
 
   it('sets isLoading = true synchronously before the query resolves', async () => {
-    mockResult = { data: [], error: null };
+    mockState.result = { data: [], error: null };
     const promise = useTrainingStore.getState().fetchCourses('org-001');
     // set({ isLoading: true }) is called before the first await in fetchCourses
     expect(useTrainingStore.getState().isLoading).toBe(true);
@@ -459,7 +457,7 @@ describe('fetchCourses', () => {
 
   it('clears a previous error synchronously at start', async () => {
     useTrainingStore.setState({ error: 'previous error' });
-    mockResult = { data: [], error: null };
+    mockState.result = { data: [], error: null };
     const promise = useTrainingStore.getState().fetchCourses('org-001');
     expect(useTrainingStore.getState().error).toBeNull();
     await promise;
@@ -470,7 +468,7 @@ describe('fetchCourses', () => {
       { id: 'c-001', title: 'Safety 101', category: 'SAFETY' },
       { id: 'c-002', title: 'AI Basics', category: 'AI_LITERACY' },
     ];
-    mockResult = { data: mockData, error: null };
+    mockState.result = { data: mockData, error: null };
     await useTrainingStore.getState().fetchCourses('org-001');
     const { courses } = useTrainingStore.getState();
     expect(courses).toHaveLength(2);
@@ -479,13 +477,13 @@ describe('fetchCourses', () => {
   });
 
   it('treats null data as empty array', async () => {
-    mockResult = { data: null, error: null };
+    mockState.result = { data: null, error: null };
     await useTrainingStore.getState().fetchCourses('org-001');
     expect(useTrainingStore.getState().courses).toHaveLength(0);
   });
 
   it('sets error state and clears isLoading on Supabase Error', async () => {
-    mockResult = { data: null, error: new Error('connection refused') };
+    mockState.result = { data: null, error: new Error('connection refused') };
     await useTrainingStore.getState().fetchCourses('org-001');
     const state = useTrainingStore.getState();
     expect(state.error).toBe('connection refused');
@@ -493,7 +491,7 @@ describe('fetchCourses', () => {
   });
 
   it('sets generic error message for non-Error thrown values', async () => {
-    mockResult = { data: null, error: { code: '42501', hint: 'RLS denied' } };
+    mockState.result = { data: null, error: { code: '42501', hint: 'RLS denied' } };
     await useTrainingStore.getState().fetchCourses('org-001');
     const state = useTrainingStore.getState();
     expect(state.error).toBeTruthy();
@@ -513,7 +511,7 @@ describe('logCompletion — optimistic update', () => {
 
   it('appends new completion to state.completions', async () => {
     const newCompletion = makeCompletion('comp-001', { enrollmentId: 'enr-001' });
-    mockResult = { data: newCompletion, error: null };
+    mockState.result = { data: newCompletion, error: null };
     useTrainingStore.setState({
       completions: [],
       enrollments: [makeEnrollment('enr-001')],
@@ -533,7 +531,7 @@ describe('logCompletion — optimistic update', () => {
 
   it('syncs matching enrollment status to COMPLETED', async () => {
     const newCompletion = makeCompletion('comp-001', { enrollmentId: 'enr-001' });
-    mockResult = { data: newCompletion, error: null };
+    mockState.result = { data: newCompletion, error: null };
     useTrainingStore.setState({
       completions: [],
       enrollments: [
@@ -556,7 +554,7 @@ describe('logCompletion — optimistic update', () => {
   it('appends to existing completions without replacing them', async () => {
     const existing = makeCompletion('comp-000');
     const newCompletion = makeCompletion('comp-001', { enrollmentId: 'enr-001' });
-    mockResult = { data: newCompletion, error: null };
+    mockState.result = { data: newCompletion, error: null };
     useTrainingStore.setState({
       completions: [existing],
       enrollments: [makeEnrollment('enr-001')],
@@ -583,7 +581,7 @@ describe('cancelEnrollment — optimistic update', () => {
   beforeEach(() => {
     useTrainingStore.getState().reset();
     vi.clearAllMocks();
-    mockResult = { data: null, error: null };
+    mockState.result = { data: null, error: null };
   });
 
   it('sets the matching enrollment status to CANCELLED', async () => {
@@ -634,7 +632,7 @@ describe('deleteCourse — optimistic removal', () => {
   beforeEach(() => {
     useTrainingStore.getState().reset();
     vi.clearAllMocks();
-    mockResult = { data: null, error: null };
+    mockState.result = { data: null, error: null };
   });
 
   it('removes the deleted course from the courses array', async () => {

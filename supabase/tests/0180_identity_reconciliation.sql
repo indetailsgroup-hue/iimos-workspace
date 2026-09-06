@@ -35,10 +35,10 @@ SELECT plan(17);
 -- =============================================================================
 
 -- org_a: the legitimate org
-INSERT INTO public.organizations (org_id, name, created_at)
+INSERT INTO public.organizations (org_id, name, slug, created_at)
 VALUES
-  ('aaaaaaaa-0000-0000-0000-000000000001', 'Org A', now()),
-  ('bbbbbbbb-0000-0000-0000-000000000002', 'Org B', now())
+  ('aaaaaaaa-0000-0000-0000-000000000001', 'Org A', 'pgtap-0180-org-a', now()),
+  ('bbbbbbbb-0000-0000-0000-000000000002', 'Org B', 'pgtap-0180-org-b', now())
 ON CONFLICT DO NOTHING;
 
 -- user_member: active member of org_a only
@@ -46,12 +46,22 @@ INSERT INTO auth.users (id, email)
 VALUES ('cccccccc-0000-0000-0000-000000000003', 'member@org-a.test')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.org_members (user_id, org_id, role, is_active)
-VALUES ('cccccccc-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', 'ADMIN', true)
+INSERT INTO public.org_members (user_id, org_id, email, role, is_active)
+VALUES ('cccccccc-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', 'member@org-a.test', 'ADMIN', true)
 ON CONFLICT DO NOTHING;
 
--- user_super: platform super-admin (no org_members record needed)
+-- user_super: platform super-admin with a valid home-org membership. Identity
+-- reconciliation still requires an active JWT-org membership before the
+-- platform-super-admin bypass may authorize a different p_org_id.
 INSERT INTO auth.users (id, email)
+VALUES ('dddddddd-0000-0000-0000-000000000004', 'super@platform.test')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.org_members (user_id, org_id, email, role, is_active)
+VALUES ('dddddddd-0000-0000-0000-000000000004', 'aaaaaaaa-0000-0000-0000-000000000001', 'super@platform.test', 'ADMIN', true)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.super_admins (user_id, email)
 VALUES ('dddddddd-0000-0000-0000-000000000004', 'super@platform.test')
 ON CONFLICT DO NOTHING;
 
@@ -91,7 +101,7 @@ END $$;
 
 SELECT throws_ok(
   $$ SELECT _t0180_clear_jwt(); SELECT public.fn_verify_org_claim(); $$,
-  'insufficient_privilege',
+  '42501',
   NULL,
   'T-0180-01: fn_verify_org_claim raises for unauthenticated caller'
 );
@@ -102,12 +112,12 @@ SELECT throws_ok(
 
 SELECT throws_ok(
   $$
-    PERFORM set_config('request.jwt.claims',
+    SELECT set_config('request.jwt.claims',
       json_build_object('sub', 'cccccccc-0000-0000-0000-000000000003', 'role', 'authenticated')::text,
       true);
     SELECT public.fn_verify_org_claim();
   $$,
-  'invalid_parameter_value',
+  '22023',
   NULL,
   'T-0180-02: fn_verify_org_claim raises when JWT org_id claim is absent'
 );
@@ -118,7 +128,7 @@ SELECT throws_ok(
 
 SELECT throws_ok(
   $$
-    PERFORM set_config('request.jwt.claims',
+    SELECT set_config('request.jwt.claims',
       json_build_object(
         'sub',    'cccccccc-0000-0000-0000-000000000003',
         'role',   'authenticated',
@@ -127,7 +137,7 @@ SELECT throws_ok(
       true);
     SELECT public.fn_verify_org_claim();
   $$,
-  'invalid_parameter_value',
+  '22023',
   NULL,
   'T-0180-03: fn_verify_org_claim raises for non-UUID org_id claim'
 );
@@ -138,7 +148,7 @@ SELECT throws_ok(
 
 SELECT throws_ok(
   $$
-    PERFORM set_config('request.jwt.claims',
+    SELECT set_config('request.jwt.claims',
       json_build_object(
         'sub',    'cccccccc-0000-0000-0000-000000000003',
         'role',   'authenticated',
@@ -147,7 +157,7 @@ SELECT throws_ok(
       true);
     SELECT public.fn_verify_org_claim();
   $$,
-  'insufficient_privilege',
+  '42501',
   NULL,
   'T-0180-04: fn_verify_org_claim raises when JWT org_id does not match org_members'
 );
@@ -158,7 +168,7 @@ SELECT throws_ok(
 
 SELECT lives_ok(
   $$
-    PERFORM set_config('request.jwt.claims',
+    SELECT set_config('request.jwt.claims',
       json_build_object(
         'sub',    'cccccccc-0000-0000-0000-000000000003',
         'role',   'authenticated',
@@ -174,20 +184,14 @@ SELECT lives_ok(
 -- T-0180-06: fn_get_verified_org_id returns verified UUID for valid member
 -- =============================================================================
 
+SELECT _t0180_set_jwt(
+  'cccccccc-0000-0000-0000-000000000003',
+  'aaaaaaaa-0000-0000-0000-000000000001'
+);
+
 SELECT is(
-  (
-    SELECT (
-      SELECT set_config('request.jwt.claims',
-        json_build_object(
-          'sub',    'cccccccc-0000-0000-0000-000000000003',
-          'role',   'authenticated',
-          'org_id', 'aaaaaaaa-0000-0000-0000-000000000001'
-        )::text,
-        true)
-    ),
-    public.fn_get_verified_org_id()
-  ),
-  (NULL::TEXT, 'aaaaaaaa-0000-0000-0000-000000000001'::UUID),
+  public.fn_get_verified_org_id(),
+  'aaaaaaaa-0000-0000-0000-000000000001'::UUID,
   'T-0180-06: fn_get_verified_org_id returns correct verified UUID'
 );
 
@@ -197,7 +201,7 @@ SELECT is(
 
 SELECT throws_ok(
   $$
-    PERFORM set_config('request.jwt.claims',
+    SELECT set_config('request.jwt.claims',
       json_build_object(
         'sub',    'cccccccc-0000-0000-0000-000000000003',
         'role',   'authenticated',
@@ -206,7 +210,7 @@ SELECT throws_ok(
       true);
     SELECT public.fn_get_verified_org_id();
   $$,
-  'insufficient_privilege',
+  '42501',
   NULL,
   'T-0180-07: fn_get_verified_org_id raises for crafted foreign org_id JWT'
 );
@@ -217,7 +221,7 @@ SELECT throws_ok(
 
 SELECT throws_ok(
   $$
-    PERFORM set_config('request.jwt.claims',
+    SELECT set_config('request.jwt.claims',
       json_build_object(
         'sub',    'cccccccc-0000-0000-0000-000000000003',
         'role',   'authenticated',
@@ -228,7 +232,7 @@ SELECT throws_ok(
       gen_random_uuid(), 100.00, 'CASH', NULL, NULL
     );
   $$,
-  'insufficient_privilege',
+  '42501',
   NULL,
   'T-0180-08: rpc_record_payment raises for mismatched JWT org_id'
 );
@@ -239,16 +243,16 @@ SELECT throws_ok(
 
 SELECT throws_ok(
   $$
-    PERFORM set_config('request.jwt.claims',
+    SELECT set_config('request.jwt.claims',
       json_build_object(
         'sub',    'cccccccc-0000-0000-0000-000000000003',
         'role',   'authenticated',
         'org_id', 'bbbbbbbb-0000-0000-0000-000000000002'
       )::text,
       true);
-    SELECT public.rpc_job_board();
+    SELECT public.rpc_job_board(NULL::TEXT, 50, 0);
   $$,
-  'insufficient_privilege',
+  '42501',
   NULL,
   'T-0180-09: rpc_job_board raises for mismatched JWT org_id'
 );
@@ -259,7 +263,7 @@ SELECT throws_ok(
 
 SELECT throws_ok(
   $$
-    PERFORM set_config('request.jwt.claims',
+    SELECT set_config('request.jwt.claims',
       json_build_object(
         'sub',    'cccccccc-0000-0000-0000-000000000003',
         'role',   'authenticated',
@@ -268,7 +272,7 @@ SELECT throws_ok(
       true);
     SELECT public.rpc_approve_quotation(gen_random_uuid(), 30);
   $$,
-  'insufficient_privilege',
+  '42501',
   NULL,
   'T-0180-10: rpc_approve_quotation raises for mismatched JWT org_id'
 );
@@ -279,7 +283,7 @@ SELECT throws_ok(
 
 SELECT throws_ok(
   $$
-    PERFORM set_config('request.jwt.claims',
+    SELECT set_config('request.jwt.claims',
       json_build_object(
         'sub',    'cccccccc-0000-0000-0000-000000000003',
         'role',   'authenticated',
@@ -288,7 +292,7 @@ SELECT throws_ok(
       true);
     SELECT public.rpc_ledger_entries();
   $$,
-  'insufficient_privilege',
+  '42501',
   NULL,
   'T-0180-11: rpc_ledger_entries raises for mismatched JWT org_id'
 );
@@ -299,7 +303,7 @@ SELECT throws_ok(
 
 SELECT throws_ok(
   $$
-    PERFORM set_config('request.jwt.claims',
+    SELECT set_config('request.jwt.claims',
       json_build_object(
         'sub',    'cccccccc-0000-0000-0000-000000000003',
         'role',   'authenticated',
@@ -308,7 +312,7 @@ SELECT throws_ok(
       true);
     SELECT public.rpc_ledger_summary();
   $$,
-  'insufficient_privilege',
+  '42501',
   NULL,
   'T-0180-12: rpc_ledger_summary raises for mismatched JWT org_id'
 );
@@ -319,7 +323,7 @@ SELECT throws_ok(
 
 SELECT throws_ok(
   $$
-    PERFORM set_config('request.jwt.claims',
+    SELECT set_config('request.jwt.claims',
       json_build_object(
         'sub',    'cccccccc-0000-0000-0000-000000000003',
         'role',   'authenticated',
@@ -329,7 +333,7 @@ SELECT throws_ok(
     -- Member of org_a requesting usage for org_b — should be rejected
     SELECT public.get_org_usage('bbbbbbbb-0000-0000-0000-000000000002'::UUID);
   $$,
-  'insufficient_privilege',
+  '42501',
   NULL,
   'T-0180-13: get_org_usage raises for non-super-admin passing foreign p_org_id'
 );
@@ -341,15 +345,10 @@ SELECT throws_ok(
 
 SELECT lives_ok(
   $$
-    -- Simulate super-admin: set app_metadata.role = 'super_admin' in JWT
-    PERFORM set_config('request.jwt.claims',
-      json_build_object(
-        'sub',          'dddddddd-0000-0000-0000-000000000004',
-        'role',         'authenticated',
-        'org_id',       'aaaaaaaa-0000-0000-0000-000000000001',
-        'app_metadata', json_build_object('role', 'super_admin')
-      )::text,
-      true);
+    SELECT _t0180_set_jwt(
+      'dddddddd-0000-0000-0000-000000000004',
+      'aaaaaaaa-0000-0000-0000-000000000001'
+    );
     -- Super-admin requests usage for org_b — should be allowed
     SELECT public.get_org_usage('bbbbbbbb-0000-0000-0000-000000000002'::UUID);
   $$,
@@ -360,22 +359,14 @@ SELECT lives_ok(
 -- T-0180-15: fn_verify_org_claim and fn_get_verified_org_id exist in public schema
 -- =============================================================================
 
-SELECT has_function(
-  'public',
-  'fn_verify_org_claim',
-  ARRAY[]::TEXT[],
-  'T-0180-15a: fn_verify_org_claim exists in public schema'
-);
-
--- pgTAP's has_function does not support a second function in the same call,
--- so we use a manual existence check as a workaround.
 SELECT ok(
-  EXISTS (
-    SELECT 1 FROM information_schema.routines
+  (
+    SELECT COUNT(*) = 2
+    FROM information_schema.routines
     WHERE routine_schema = 'public'
-      AND routine_name   = 'fn_get_verified_org_id'
+      AND routine_name IN ('fn_verify_org_claim', 'fn_get_verified_org_id')
   ),
-  'T-0180-15b: fn_get_verified_org_id exists in public schema'
+  'T-0180-15: both identity-reconciliation functions exist in public schema'
 );
 
 -- =============================================================================

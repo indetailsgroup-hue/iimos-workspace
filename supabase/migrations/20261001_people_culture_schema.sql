@@ -35,7 +35,7 @@ BEGIN
   FROM public.org_members
   WHERE user_id = auth.uid()
     AND is_active = true
-  ORDER BY created_at ASC
+  ORDER BY joined_at ASC
   LIMIT 1;
   RETURN v_org_id;
 END;
@@ -888,4 +888,3 @@ CREATE POLICY "anonymous_feedback_update" ON anonymous_feedback
 
 -- No DELETE policy intentionally.
 -- Admins should use action_status = 'DISMISSED' instead of deletion.
-

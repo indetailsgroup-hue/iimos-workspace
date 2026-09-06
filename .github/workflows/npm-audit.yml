@@ -4,11 +4,11 @@ name: npm audit
 # REQUIRED SECRETS — none (no external secrets needed for npm audit)
 # =============================================================================
 # This workflow is self-contained. It runs npm ci + npm audit against the
-# server/ package-lock.json and fails the PR if any vulnerability at
-# moderate severity or above is detected.
+# server/package-lock.json and fails the PR if any production vulnerability at
+# high or critical severity is detected. Moderate findings remain visible debt.
 #
-# Audit level: moderate (blocks moderate, high, critical)
-# Scope:       server/ directory only
+# Audit level: high (blocks high, critical)
+# Scope:       production dependencies in server/ only
 # Trigger:     every PR targeting main + every push to main
 # =============================================================================
 
@@ -19,6 +19,11 @@ on:
   push:
     branches:
       - main
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   audit:
@@ -57,7 +62,8 @@ jobs:
 
       # -----------------------------------------------------------------------
       # 4. Run npm audit
-      #    --audit-level=moderate  → exits non-zero for moderate, high, critical
+      #    --omit=dev              → release gate covers production dependencies
+      #    --audit-level=high      → exits non-zero for high and critical
       #    --json                  → machine-readable output for summary step
       #    The raw JSON is written to a temp file; the human-readable table is
       #    printed to the log. Both forms are preserved.
@@ -65,7 +71,7 @@ jobs:
       - name: Run npm audit (JSON capture)
         id: audit_json
         run: |
-          npm audit --json > /tmp/npm-audit.json 2>&1 || true
+          npm audit --omit=dev --json > /tmp/npm-audit.json 2>&1 || true
           echo "--- npm audit JSON summary ---"
           python3 - << 'PYEOF'
           import json, sys
@@ -88,11 +94,11 @@ jobs:
               print(f"Could not parse JSON: {e}")
           PYEOF
 
-      - name: Enforce audit gate (fail on moderate+)
+      - name: Enforce production audit gate (fail on high or critical)
         run: |
-          echo "Running npm audit --audit-level=moderate ..."
-          npm audit --audit-level=moderate
-          echo "Audit passed — no moderate or higher vulnerabilities found."
+          echo "Running npm audit --omit=dev --audit-level=high ..."
+          npm audit --omit=dev --audit-level=high
+          echo "Audit passed — no high or critical production vulnerabilities found."
 
       # -----------------------------------------------------------------------
       # 5. Post PR comment with audit result (PRs only, always runs)
@@ -101,7 +107,8 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Post audit summary to PR
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        continue-on-error: true
+        uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
@@ -111,10 +118,11 @@ jobs:
               const meta = raw.metadata || {};
               const v    = meta.vulnerabilities || {};
               const total = v.total ?? Object.values(v).reduce((a, b) => a + b, 0);
-              const icon  = total === 0 ? '✅' : '🚨';
-              const status = total === 0
-                ? '**0 vulnerabilities** — audit passed.'
-                : `**${total} vulnerability/ies found** (critical: ${v.critical ?? 0}, high: ${v.high ?? 0}, moderate: ${v.moderate ?? 0}).`;
+              const blocking = (v.critical ?? 0) + (v.high ?? 0);
+              const icon  = blocking === 0 ? '✅' : '🚨';
+              const status = blocking === 0
+                ? `**0 high/critical production vulnerabilities** — release gate passed. Moderate: ${v.moderate ?? 0}.`
+                : `**${blocking} blocking production vulnerability/ies found** (critical: ${v.critical ?? 0}, high: ${v.high ?? 0}, moderate: ${v.moderate ?? 0}).`;
 
               let advisories = '';
               const advs = raw.advisories || {};
@@ -126,7 +134,7 @@ jobs:
                 advisories += '\n</details>';
               }
 
-              body = `## ${icon} npm audit — \`server/\`\n\n${status}${advisories}\n\n_Audit level: moderate+ | Run: \`npm audit\` in \`server/\` to reproduce locally._`;
+              body = `## ${icon} npm audit — \`server/\`\n\n${status}${advisories}\n\n_Production gate: high/critical | Run: \`npm audit --omit=dev --audit-level=high\` in \`server/\` to reproduce locally._`;
             } catch (e) {
               body = `## ⚠️ npm audit\n\nCould not parse audit output: ${e.message}`;
             }

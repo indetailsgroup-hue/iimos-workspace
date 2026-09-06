@@ -155,9 +155,10 @@ SET LOCAL ROLE authenticated;
 SET LOCAL "request.jwt.claims" = '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","org_id":"ffffffff-ffff-ffff-ffff-ffffffffffff","role":"authenticated"}';
 
 SELECT throws_ok(
-  $$INSERT INTO public.audit_logs(org_id, actor_id, action, resource_type)
+  $$INSERT INTO public.audit_logs(org_id, actor_type, actor_id, action, target_type)
       VALUES (
         'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,
+        'system',
         'pgtap-spoof-actor',
         'pgtap_0182_spoof_test',
         'test'
@@ -173,9 +174,10 @@ RESET ROLE;
 SET LOCAL ROLE service_role;
 
 SELECT lives_ok(
-  $$INSERT INTO public.audit_logs(org_id, actor_id, action, resource_type)
+  $$INSERT INTO public.audit_logs(org_id, actor_type, actor_id, action, target_type)
       VALUES (
         '00000000-0000-0000-0000-000000000000'::uuid,
+        'system',
         'pgtap-service-actor-0182',
         'pgtap_0182_ok_test',
         'test'
@@ -194,9 +196,10 @@ RESET ROLE;
 SET LOCAL ROLE anon;
 
 SELECT throws_ok(
-  $$INSERT INTO public.audit_logs(org_id, actor_id, action, resource_type)
+  $$INSERT INTO public.audit_logs(org_id, actor_type, actor_id, action, target_type)
       VALUES (
         '00000000-0000-0000-0000-000000000000'::uuid,
+        'system',
         'anon-intruder',
         'pgtap_0182_anon_test',
         'test'

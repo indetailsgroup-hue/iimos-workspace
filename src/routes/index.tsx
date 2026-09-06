@@ -21,6 +21,18 @@
  * /finance                     - Finance screen (FINANCE role)
  * /etax                        - eTax Compliance Dashboard (OWNER, ADMIN, FINANCE)
  * /accounting                  - Accounting Management UI (OWNER, ADMIN, FINANCE)
+ * /modules                     - v17.5/v18 Business Modules Hub
+ * /people                      - People Directory
+ * /people/:employeeId/ai-readiness - Super Employee Tracker
+ * /training                    - Training Tracker
+ * /culture/metrics             - Culture Metrics Dashboard
+ * /ai/costs                    - AI Cost Estimation
+ * /ai/scheduler                - AI Production Scheduler
+ * /structure/org-chart         - Interactive OrgChart
+ * /structure/role-network      - Role Network View
+ * /quality/anomalies           - QC Anomaly Detection
+ * /ai/quotation-drafts         - AI Quotation Draft
+ * /culture/leadership-actions  - Leadership Action Tracker
  * /safety                      - Redirect to /diagnostics/safety
  * /diagnostics/safety          - Safety diagnostics (local-only, not authoritative)
  *
@@ -30,6 +42,8 @@
 import { useMemo, useEffect, useState, useCallback, Suspense, lazy, type ComponentType } from 'react';
 import { createBrowserRouter, RouterProvider, Navigate, Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { isPitchMode, withSearchParams } from '../core/ui/pitch';
+import { useJobStore } from '../jobs/jobStore';
+import { useQuotationStore } from '../quotation/quotationStore';
 
 // ============================================================================
 // T018 + O3 + O4: Route-level Lazy Loading
@@ -212,6 +226,20 @@ import { useSpecStore } from '../core/store/useSpecStore';
 import { useVerifyStatusStore } from '../core/store/useVerifyStatusStore';
 import { VerifyVerdictPill } from '../components/ui/VerifyVerdictPill';
 import { RoleGateDialog } from '../components/ui/RoleGateDialog';
+import {
+  AiCostsRoute,
+  AiQuotationDraftsRoute,
+  AiSchedulerRoute,
+  BusinessModulesHome,
+  CultureMetricsRoute,
+  LeadershipActionsRoute,
+  OrgChartRoute,
+  PeopleDirectoryRoute,
+  QcAnomaliesRoute,
+  RoleNetworkRoute,
+  SuperEmployeeRoute,
+  TrainingTrackerRoute,
+} from './BusinessModuleRoutes';
 
 // ============================================================================
 // Types
@@ -856,6 +884,104 @@ function JobDetailPageWrapper() {
   );
 }
 
+function CreateJobWizardRoute() {
+  const navigate = useNavigate();
+
+  return (
+    <CreateJobWizardPage
+      onComplete={(job) => navigate(`/jobs/${job.jobId}`)}
+      onCancel={() => navigate('/jobs')}
+    />
+  );
+}
+
+function QuotationRoute() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const search = new URLSearchParams(location.search);
+  const jobId = search.get('jobId');
+  const quotationId = search.get('id');
+  const job = useJobStore((state) =>
+    jobId ? state.jobs.find((candidate) => candidate.jobId === jobId) : undefined,
+  );
+  const linkQuotation = useJobStore((state) => state.linkQuotation);
+  const linkInvoice = useJobStore((state) => state.linkInvoice);
+  const quotation = useQuotationStore((state) =>
+    quotationId ? state.quotations.find((candidate) => candidate.quotationId === quotationId) : undefined,
+  );
+  const invoice = useQuotationStore((state) =>
+    quotationId ? state.invoices.find((candidate) => candidate.quotationId === quotationId) : undefined,
+  );
+  const approveQuotation = useQuotationStore((state) => state.approveQuotation);
+
+  if (quotationId) {
+    if (!quotation) {
+      return (
+        <div data-testid="quotation-not-found" style={{ padding: '24px', color: '#f3f4f6' }}>
+          ไม่พบใบเสนอราคาที่ต้องการ
+        </div>
+      );
+    }
+
+    return (
+      <div data-testid="quotation-detail" style={{ maxWidth: '720px', margin: '0 auto', padding: '24px', color: '#f3f4f6' }}>
+        <h2>{quotation.quotationCode}</h2>
+        <p>{quotation.customerName}</p>
+        <p data-testid={`quotation-status-${quotation.status}`}>สถานะ: {quotation.status}</p>
+        <p>ยอดสุทธิ: ฿{quotation.total.toLocaleString('th-TH')}</p>
+        {quotation.status !== 'APPROVED' && (
+          <button
+            type="button"
+            data-testid="btn-approve-quotation"
+            onClick={() => {
+              const result = approveQuotation(quotation.quotationId, 'finance-user');
+              if (result.success && result.invoice && quotation.jobId) {
+                linkInvoice(quotation.jobId, result.invoice.invoiceId);
+              }
+            }}
+          >
+            อนุมัติใบเสนอราคา
+          </button>
+        )}
+        {invoice && (
+          <div data-testid="auto-invoice-created">
+            สร้างใบแจ้งหนี้ {invoice.invoiceCode} แล้ว — ยอดรวม
+            <span data-testid="invoice-total"> ฿{invoice.total.toLocaleString('th-TH')}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (!jobId) {
+    return (
+      <div style={{ padding: '24px', color: '#f3f4f6', fontFamily: 'Inter, system-ui, sans-serif' }}>
+        <h2>Quotation Management</h2>
+        <p style={{ color: '#9ca3af' }}>Select a job from the Job Board to create a quotation.</p>
+      </div>
+    );
+  }
+
+  if (!job) {
+    return (
+      <div data-testid="quotation-job-not-found" style={{ padding: '24px', color: '#f3f4f6' }}>
+        ไม่พบงานที่ต้องการสร้างใบเสนอราคา
+      </div>
+    );
+  }
+
+  return (
+    <QuotationBuilderPage
+      job={job}
+      onComplete={(quotationId) => {
+        linkQuotation(job.jobId, quotationId);
+        navigate(`/quotations?id=${quotationId}`);
+      }}
+      onCancel={() => navigate(`/jobs/${job.jobId}`)}
+    />
+  );
+}
+
 function FactoryJobDetailPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
@@ -1140,7 +1266,7 @@ export const router = createBrowserRouter([
       <RequireRole allow={['DESIGNER', 'ADMIN']}>
         <Suspense fallback={<PageLoadingFallback message="Loading Job Wizard…" />}>
           <JobsLayoutComponent>
-            <CreateJobWizardPage />
+            <CreateJobWizardRoute />
           </JobsLayoutComponent>
         </Suspense>
       </RequireRole>
@@ -1249,10 +1375,7 @@ export const router = createBrowserRouter([
     element: (
       <RequireRole allow={['FINANCE', 'ADMIN']}>
         <Suspense fallback={<PageLoadingFallback message="Loading Quotations…" />}>
-          <div style={{ padding: '24px', color: '#f3f4f6', fontFamily: 'Inter, system-ui, sans-serif' }}>
-            <h2>Quotation Management</h2>
-            <p style={{ color: '#9ca3af' }}>Select a job from the Job Board to create a quotation.</p>
-          </div>
+          <QuotationRoute />
         </Suspense>
       </RequireRole>
     ),
@@ -1312,6 +1435,19 @@ export const router = createBrowserRouter([
       </RequireRole>
     ),
   },
+  // v17.5/v18.0 business modules — tenant role + plan gates live in each route boundary.
+  { path: '/modules', element: <BusinessModulesHome /> },
+  { path: '/people', element: <PeopleDirectoryRoute /> },
+  { path: '/people/:employeeId/ai-readiness', element: <SuperEmployeeRoute /> },
+  { path: '/training', element: <TrainingTrackerRoute /> },
+  { path: '/culture/metrics', element: <CultureMetricsRoute /> },
+  { path: '/ai/costs', element: <AiCostsRoute /> },
+  { path: '/ai/scheduler', element: <AiSchedulerRoute /> },
+  { path: '/structure/org-chart', element: <OrgChartRoute /> },
+  { path: '/structure/role-network', element: <RoleNetworkRoute /> },
+  { path: '/quality/anomalies', element: <QcAnomaliesRoute /> },
+  { path: '/ai/quotation-drafts', element: <AiQuotationDraftsRoute /> },
+  { path: '/culture/leadership-actions', element: <LeadershipActionsRoute /> },
   // Legacy safety route - redirect to diagnostics
   {
     path: '/safety',

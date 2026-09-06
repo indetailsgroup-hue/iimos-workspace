@@ -45,6 +45,10 @@ const { mockCultureState, mockTenantState } = vi.hoisted(() => {
 
 vi.mock('../cultureStore', () => ({
   useCultureStore: vi.fn((selector: any) => selector(mockCultureState)),
+  selectScoresForChart: vi.fn(() => mockCultureState.selectScoresForChart()),
+  selectIsAnyLoading: vi.fn(() => mockCultureState.selectIsAnyLoading()),
+  selectPendingFeedback: vi.fn(() => mockCultureState.selectPendingFeedback()),
+  selectCurrentPeriodLabel: vi.fn(() => mockCultureState.selectCurrentPeriodLabel()),
 }));
 
 vi.mock('../../tenant/tenantStore', () => ({

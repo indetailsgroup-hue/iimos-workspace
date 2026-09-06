@@ -3,7 +3,43 @@
 All notable changes to the Monolith Workspace are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [18.5.1] — 2027-03-13 — Sprint 9: OrgHealthScoreBoard UI + OHS Store Tests + QcAnomalyDashboard Component Tests
+> **Current product version:** `v17.5.1` — sourced from the root `package.json`. Versions `v17.5.2` through `v18.5.1` below are implementation-roadmap records, not published releases. Their dates are targets, not release dates.
+
+## [Unreleased] — Release Readiness Stabilization
+
+### Added
+- Production routes and a Business Modules hub for the completed v17.5/v18.0 People, Training, Culture, AI, Structure, Quality, Quotation, and Leadership UIs.
+- A shared route registry enforcing active organization, authenticated-member identity, tenant role, and plan requirements before a module mounts or fetches data.
+- A dedicated database Vitest lane plus deterministic local Supabase fixture seeding and a test-only SQL execution helper.
+- Full Verify lanes for Digital Shadow, workspace tools, and production dependency auditing.
+
+### Changed
+- pgTAP CI now prepares historical migrations deterministically, starts a fresh local Supabase stack without hosted secrets, applies every migration, runs all SQL pgTAP files, and then runs the TypeScript RLS/migration/integration suites against the same database.
+- Backend deployment now reports an explicit successful skip when required deployment secrets are unavailable and only deploys when every prerequisite is present.
+- Lint is a blocking zero-error gate with a 2,298-warning ratchet; new warnings fail CI.
+- Root Vitest excludes database-, service-, tool-, and E2E-owned suites so each environment-dependent suite runs only in its authoritative CI lane.
+- The canonical S17 schema test now resolves bundle membership from `schema-bundle.sha256`, keeping unrelated VS-01 schemas outside the signed ten-schema bundle.
+
+### Fixed
+- Root test drift in Accounting, eTax, Culture, Process Templates, AI Cost, AI Scheduler, Training, DXF, migration-contract, and super-admin guard suites.
+- Digital Shadow unit-test configuration and adapter tests, including the Homag adapter lane.
+- The fresh-database migration sequence now removes the incomplete historical `org_members` stub when the full multi-tenant bootstrap is present and merges duplicate numeric migrations in deterministic filename order.
+- Safe post-login redirects reject protocol-relative destinations.
+
+### Security
+- Updated `pdfjs-dist` and MQTT, removed the unused vulnerable Sparkplug payload dependency, forced a patched `ws`, and moved Vault Builder to the maintained SheetJS 0.20.3 distribution.
+- Production audit gate currently reports zero high and zero critical vulnerabilities. Remaining moderate advisories stay visible in the release-readiness report.
+
+### Verification
+- Local root suite: 377 files / 7,671 tests passed, with zero failures and zero skipped tests.
+- Node-native controls: 35/35 passed; Field App: 24/24 passed; Digital Shadow: 244/244 passed; Vault Builder: 82/82 passed; Bible Code: 28/28 passed; Factory Server: 58/58 passed.
+- A release tag and GitHub Release remain blocked until the pull-request CI run, fresh-database migration, pgTAP, E2E, and security-issue evidence are all green.
+
+## Planned implementation records (not published releases)
+
+The following work is present in the repository but has not received a release tag or GitHub Release. Keeping it below level two prevents roadmap versions from being mistaken for published releases.
+
+### [18.5.1] — target 2027-03-13 — Sprint 9: OrgHealthScoreBoard UI + OHS Store Tests + QcAnomalyDashboard Component Tests
 
 ### Added
 - `src/org-health/OrgHealthScoreBoard.tsx` — full ENTERPRISE-gated UI (640 lines): plan gate wall, score gauge, grade badge, 5-dimension cards with progress bars, snapshot history table, inline weight config panel, compute button, error banner; all testids implemented
@@ -36,7 +72,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [18.0.6] — 2027-02-27 — Sprint 7: Leadership Action Board UI + Storybook Stories + LAT Tests
+### [18.0.6] — target 2027-02-27 — Sprint 7: Leadership Action Board UI + Storybook Stories + LAT Tests
 
 ### Added
 - **LeadershipActionBoard.tsx** — ENTERPRISE-gated UI: plan-gate wall, loading state, summary bar (open/in-progress/blocked/completed counts), filter bar (status/priority/category), new-action form, action list with status/priority/category badges, detail panel with complete/cancel/reassign/post-update workflow, error banner; all `lat-*` data-testids documented
@@ -53,7 +89,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [18.0.5] — 2027-02-20 — Sprint 6: AI Quotation Draft Board + Leadership Action Tracker
+### [18.0.5] — target 2027-02-20 — Sprint 6: AI Quotation Draft Board + Leadership Action Tracker
 
 ### Added
 - **AiQuotationDraftBoard.tsx** — ENTERPRISE-gated UI: draft list with status/AI badges, new-draft form, editable line items table (DRAFT status only), AddLineItemForm, totals footer (subtotal/tax/total), workflow buttons (submit/approve/reject), GenerationLogPanel with lazy Supabase fetch, SummaryBar, filter bar (status + AI toggle), error banner, plan-gate wall
@@ -66,7 +102,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v18.0.4] — QcAnomalyDashboard + qcAnomalyStore Tests + AI Quotation Draft Module — 2027-02-15
+### [v18.0.4] — target 2027-02-15 — QcAnomalyDashboard + qcAnomalyStore Tests + AI Quotation Draft Module
 
 ### Added
 
@@ -116,7 +152,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v18.0.3] — RoleNetworkCanvas Stories + roleNetworkStore Tests + QC Anomaly Detection Module — 2027-02-10
+### [v18.0.3] — target 2027-02-10 — RoleNetworkCanvas Stories + roleNetworkStore Tests + QC Anomaly Detection Module
 
 ### Added
 
@@ -157,7 +193,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v18.0.2] — OrgChartCanvas Stories + orgChartStore Tests + RoleNetworkCanvas UI — 2027-02-10
+### [v18.0.2] — target 2027-02-10 — OrgChartCanvas Stories + orgChartStore Tests + RoleNetworkCanvas UI
 
 ### Added
 
@@ -198,7 +234,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v18.0.1] — OrgChart Canvas UI + OrgChart Tests + Role Network View — 2027-02-05
+### [v18.0.1] — target 2027-02-05 — OrgChart Canvas UI + OrgChart Tests + Role Network View
 
 ### Added
 
@@ -246,7 +282,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v18.0.0] — Interactive OrgChart Module — 2027-02-01
+### [v18.0.0] — target 2027-02-01 — Interactive OrgChart Module
 
 ### Added
 
@@ -280,7 +316,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v17.5.6] — CultureDashboard Stories & Tests — 2027-01-28
+### [v17.5.6] — target 2027-01-28 — CultureDashboard Stories & Tests
 
 ### Added
 
@@ -306,7 +342,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v17.5.5] — AiSchedulerBoard Stories & Tests + CultureDashboard UI — 2027-01-27
+### [v17.5.5] — target 2027-01-27 — AiSchedulerBoard Stories & Tests + CultureDashboard UI
 
 ### Added
 
@@ -352,7 +388,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v17.5.4] — AiSchedulerBoard UI + APS Store Tests + Culture Metrics Store Tests — 2027-01-26
+### [v17.5.4] — target 2027-01-26 — AiSchedulerBoard UI + APS Store Tests + Culture Metrics Store Tests
 
 ### Added
 
@@ -382,7 +418,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v17.5.3] — AI Production Scheduler + Culture Metrics Dashboard + AiCostDashboard Tests — 2027-01-25
+### [v17.5.3] — target 2027-01-25 — AI Production Scheduler + Culture Metrics Dashboard + AiCostDashboard Tests
 
 ### Added
 
@@ -453,7 +489,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v17.5.2] — AI Cost Estimation: Tests + Dashboard + Stories — 2027-01-25
+### [v17.5.2] — target 2027-01-25 — AI Cost Estimation: Tests + Dashboard + Stories
 
 ### Added
 
@@ -501,7 +537,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v17.5.1] — SuperEmployeeProgressPanel Stories + AI Cost Estimation — 2027-01-20
+## [v17.5.1] — 2026-09-01 — Tagged product version
 
 ### Added
 
@@ -551,7 +587,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v17.5.0] — Training Tracker + Super Employee Tracker — 2027-01-15
+## [v17.5.0] — 2026-09-01 — Training Tracker + Super Employee Tracker
 
 ### Added
 
@@ -637,7 +673,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v17.0.0] — Process Templates Module — 2026-12-01
+## [v17.0.0] — Process Templates Module — 2026-09-01
 
 ### Added
 

@@ -13,7 +13,9 @@ test.describe('CreateJobWizard Flow', () => {
   test.beforeEach(async ({ page }) => {
     // Set DESIGNER role to access /jobs/new
     await page.addInitScript(() => {
-      localStorage.setItem('monolith.user.role', 'DESIGNER');
+      if (!localStorage.getItem('monolith.user.role')) {
+        localStorage.setItem('monolith.user.role', 'DESIGNER');
+      }
     });
     await page.goto('/jobs/new');
     await page.waitForSelector('[data-testid="create-job-wizard"]', { timeout: 15000 });
@@ -34,7 +36,7 @@ test.describe('CreateJobWizard Flow', () => {
     await page.evaluate(() => {
       localStorage.setItem('monolith.user.role', 'FACTORY');
     });
-    await page.goto('/jobs/new');
+    await page.reload();
 
     // Should show role gate dialog or redirect — not the wizard
     const hasWizard = await page
@@ -117,10 +119,10 @@ test.describe('CreateJobWizard Flow', () => {
     await expect(page.getByTestId('wizard-step-3')).toBeVisible();
 
     // Add a panel
+    await page.getByTestId('panel-name').fill('Melamine White Panel');
+    await page.getByTestId('input-panel-width').fill('600');
+    await page.getByTestId('input-panel-height').fill('800');
     await page.getByTestId('btn-add-panel').click();
-    await page.getByTestId('input-panel-width-0').fill('600');
-    await page.getByTestId('input-panel-height-0').fill('800');
-    await page.getByTestId('input-panel-material-0').fill('Melamine White');
 
     // Advance to Step 4 (Review)
     await page.getByTestId('btn-next-step').click();
@@ -139,10 +141,10 @@ test.describe('CreateJobWizard Flow', () => {
     await page.getByTestId('input-job-title').fill('Review Test Job');
     await page.getByTestId('select-priority').selectOption('HIGH');
     await page.getByTestId('btn-next-step').click();
+    await page.getByTestId('panel-name').fill('PVC Oak Panel');
+    await page.getByTestId('input-panel-width').fill('500');
+    await page.getByTestId('input-panel-height').fill('700');
     await page.getByTestId('btn-add-panel').click();
-    await page.getByTestId('input-panel-width-0').fill('500');
-    await page.getByTestId('input-panel-height-0').fill('700');
-    await page.getByTestId('input-panel-material-0').fill('PVC Oak');
     await page.getByTestId('btn-next-step').click();
 
     // Should see review summary
@@ -191,7 +193,9 @@ test.describe('CreateJobWizard Flow', () => {
 test.describe('Job Board', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
-      localStorage.setItem('monolith.user.role', 'DESIGNER');
+      if (!localStorage.getItem('monolith.user.role')) {
+        localStorage.setItem('monolith.user.role', 'DESIGNER');
+      }
     });
     await page.goto('/jobs');
     await page.waitForSelector('[data-testid="job-board"]', { timeout: 15000 });
@@ -252,7 +256,37 @@ test.describe('QuotationBuilder Approval Cycle', () => {
   test.beforeEach(async ({ page }) => {
     // FINANCE role can access quotations
     await page.addInitScript(() => {
-      localStorage.setItem('monolith.user.role', 'FINANCE');
+      if (!localStorage.getItem('monolith.user.role')) {
+        localStorage.setItem('monolith.user.role', 'FINANCE');
+      }
+      localStorage.setItem('monolith-jobs-store', JSON.stringify({
+        state: {
+          jobs: [{
+            jobId: 'test-job-001',
+            jobCode: 'DAPH-2026-E2E1',
+            title: 'Quotation E2E Job',
+            customer: { customerId: 'customer-e2e', name: 'E2E Customer' },
+            panels: [{
+              panelId: 'panel-e2e-1',
+              name: 'Melamine Panel',
+              material: 'Melamine 18mm White',
+              width: 600,
+              height: 800,
+              qty: 2,
+              isCurved: false,
+            }],
+            status: 'DRAFT',
+            priority: 'NORMAL',
+            materialGroup: 'Melamine 18mm White',
+            totalPanelCount: 2,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+            createdBy: 'e2e-user',
+          }],
+          selectedJobId: null,
+        },
+        version: 1,
+      }));
     });
     await page.goto('/quotations');
     await page.waitForLoadState('networkidle');
@@ -272,7 +306,7 @@ test.describe('QuotationBuilder Approval Cycle', () => {
     await page.evaluate(() => {
       localStorage.setItem('monolith.user.role', 'DESIGNER');
     });
-    await page.goto('/quotations');
+    await page.reload();
 
     // Should see role gate
     const hasGate = await page
@@ -284,61 +318,23 @@ test.describe('QuotationBuilder Approval Cycle', () => {
   });
 
   test('@smoke QuotationBuilder — create and approve quotation', async ({ page }) => {
-    // Navigate to quotation builder with a mock job context
+    // Navigate to quotation builder with a deterministic persisted job context.
     await page.goto('/quotations?jobId=test-job-001');
-    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('quotation-builder')).toBeVisible();
 
-    // Check if QuotationBuilder is rendered (may depend on job context)
-    const hasBuilder = await page
-      .waitForSelector('[data-testid="quotation-builder"]', { timeout: 5000 })
-      .then(() => true)
-      .catch(() => false);
+    await page.getByTestId('price-panel-e2e-1').fill('1000');
+    await expect(page.getByTestId('quotation-subtotal')).toContainText('2,000');
+    await expect(page.getByTestId('quotation-vat')).toContainText('140');
+    await expect(page.getByTestId('quotation-total')).toContainText('2,140');
 
-    if (!hasBuilder) {
-      // If no builder is shown, the page may just list quotations
-      test.skip();
-      return;
-    }
+    await page.getByTestId('submit-quotation').click();
+    await expect(page).toHaveURL(/\/quotations\?id=/);
+    await expect(page.getByTestId('quotation-status-DRAFT')).toBeVisible();
 
-    // Add line item
-    await page.getByTestId('btn-add-line').click();
-    await page.getByTestId('input-line-description-0').fill('Melamine Panel 600x800');
-    await page.getByTestId('input-line-qty-0').fill('10');
-    await page.getByTestId('input-line-unit-price-0').fill('850');
-
-    // Verify totals update
-    await expect(page.getByTestId('subtotal')).not.toContainText('0.00');
-
-    // Submit quotation
-    await page.getByTestId('btn-submit-quotation').click();
-
-    // Wait for quotation to be created
-    const quotationCreated = await page
-      .waitForSelector('[data-testid="quotation-status-PENDING"]', { timeout: 5000 })
-      .then(() => true)
-      .catch(() => false);
-
-    if (!quotationCreated) {
-      // Quotation creation may redirect or show inline
-      return;
-    }
-
-    // Approve the quotation
     await page.getByTestId('btn-approve-quotation').click();
-
-    // After approval, status should change and invoice should be auto-created
-    await expect(page.getByTestId('quotation-status-APPROVED')).toBeVisible({ timeout: 5000 });
-
-    // Verify invoice auto-creation
-    const hasInvoice = await page
-      .waitForSelector('[data-testid="auto-invoice-created"]', { timeout: 5000 })
-      .then(() => true)
-      .catch(() => false);
-
-    if (hasInvoice) {
-      await expect(page.getByTestId('auto-invoice-created')).toBeVisible();
-      await expect(page.getByTestId('invoice-total')).not.toContainText('0.00');
-    }
+    await expect(page.getByTestId('quotation-status-APPROVED')).toBeVisible();
+    await expect(page.getByTestId('auto-invoice-created')).toBeVisible();
+    await expect(page.getByTestId('invoice-total')).toContainText('2,140');
   });
 
   test('QuotationBuilder — VAT calculation is correct', async ({ page }) => {

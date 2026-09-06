@@ -23,11 +23,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ============================================================================
 // Mock MUST be declared before importing the store (Vitest hoists vi.mock calls).
 
-const mockSupabase = {
-  from: vi.fn(),
-};
+const { mockSupabase } = vi.hoisted(() => ({
+  mockSupabase: {
+    from: vi.fn(),
+  },
+}));
 
-vi.mock('../../core/supabaseClient', () => ({
+vi.mock('../../core/supabase', () => ({
   supabase: mockSupabase,
 }));
 
@@ -42,10 +44,12 @@ function buildQueryMock(resolveWith: { data: unknown; error: unknown }) {
   for (const m of methods) {
     chain[m] = vi.fn(() => chain);
   }
-  // Terminal call resolves the promise
+  // `single()` is terminal; list queries await the chain itself. Keeping
+  // `order()` chainable matters because fetchTemplates orders by two columns.
   (chain['single'] as ReturnType<typeof vi.fn>).mockResolvedValue(resolveWith);
-  // Non-single terminal
-  (chain['order'] as ReturnType<typeof vi.fn>).mockResolvedValue(resolveWith);
+  chain['then'] = vi.fn((resolve, reject) =>
+    Promise.resolve(resolveWith).then(resolve, reject),
+  );
   return chain;
 }
 
@@ -326,10 +330,10 @@ describe('useProcessTemplateStore — fetchTemplates', () => {
   it('sets isLoading true during fetch and false after', async () => {
     let capturedLoadingState = false;
     const mockChain = buildQueryMock({ data: [], error: null });
-    // Intercept to capture loading state mid-flight
-    (mockChain['order'] as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+    // Intercept the await boundary to capture loading state mid-flight.
+    (mockChain['then'] as ReturnType<typeof vi.fn>).mockImplementationOnce((resolve, reject) => {
       capturedLoadingState = useProcessTemplateStore.getState().isLoading;
-      return { data: [], error: null };
+      return Promise.resolve({ data: [], error: null }).then(resolve, reject);
     });
     mockSupabase.from.mockReturnValue(mockChain);
 

@@ -1,21 +1,6 @@
 name: pgTAP Tests
 
-# =============================================================================
-# REQUIRED SECRETS
-# =============================================================================
-# Secret name          | Where to get it                          | Scope
-# ---------------------|------------------------------------------|------------------
-# SUPABASE_ACCESS_TOKEN | app.supabase.com → Account → Access     | Repo secret
-#                       | Tokens → "Generate new token"           | (all environments)
-#
-# HOW TO PROVISION (one-time per repo / environment):
-#   GitHub UI:  Settings → Secrets and variables → Actions → New repository secret
-#   GitHub CLI: gh secret set SUPABASE_ACCESS_TOKEN --body "<token>"
-#
-# The Supabase CLI uses this token to pull project config when starting the
-# local stack in CI. Without it, `supabase start` will fail with auth error.
-# See docs/ci-secrets.md for full provisioning guide.
-# =============================================================================
+# This workflow is fully local and does not require hosted Supabase secrets.
 
 on:
   push:
@@ -39,6 +24,15 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install application dependencies
+        run: npm ci
 
       # -----------------------------------------------------------------------
       # 2. Lint RLS org_id coverage (delta mode — scoped to changed files)
@@ -80,9 +74,9 @@ jobs:
       # 3. Set up Supabase CLI
       # -----------------------------------------------------------------------
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
         with:
-          version: latest
+          version: 2.116.0
 
       # -----------------------------------------------------------------------
       # 4. Install pg_prove (TAP::Parser::SourceHandler::pgTAP)
@@ -97,133 +91,19 @@ jobs:
           pg_prove --version
 
       # -----------------------------------------------------------------------
-      # 5. Merge 20260828_* migrations into 0172 for correct sort order
-      #    Rationale: 20260828_* sorts after 0173_* lexicographically (2 > 0),
-      #    so multi_tenant_schema would run AFTER the 0173 guard and fail.
-      #    Rename to 0172_z0x_* is NOT viable: Supabase extracts only the
-      #    leading numeric portion as the version key, so any 0172_*.sql
-      #    gets version=0172 — colliding with 0172_jobs_quotations_invoices.sql.
-      #    Strategy (Fix U — split multi_tenant_schema at section boundary):
-      #      20260828_multi_tenant_schema.sql has two logical halves:
-      #        Part A  (lines 1-86):   CREATE TABLE organizations, org_members,
-      #                                org_invitations + their indexes.
-      #                                Must come BEFORE 0172 so the FK
-      #                                REFERENCES public.organizations in
-      #                                multi_tenant_schema section 4 resolves.
-      #        Part B  (lines 87-end): ALTER TABLE public.jobs/quotations/
-      #                                invoices/ledger_entries ADD COLUMN org_id
-      #                                + RLS policies + updated_at trigger.
-      #                                Must come AFTER 0172 because 0172 creates
-      #                                the jobs/quotations/invoices tables.
-      #      Build order: Part A → original 0172 → Part B → five remaining files
-      #      All originals are deleted. Ephemeral CI-only transformation.
+      # 5. Prepare a deterministic fresh-database migration set.
+      #    The shared script splits the historical bootstrap on its SQL section
+      #    marker (never a line number), places it around 0172, and merges files
+      #    that share a Supabase migration version.
       # -----------------------------------------------------------------------
-      - name: Merge 20260828 migrations into 0172 (split-schema strategy)
-        run: |
-          cd supabase/migrations
-
-          # Split multi_tenant_schema.sql at the section 4 boundary (line 86/87)
-          # Part A: CREATE TABLE orgs/members/invitations + indexes (lines 1-86)
-          # Part B: ALTER TABLE org_id additions + RLS + trigger  (lines 87-end)
-          head -n 86 20260828_multi_tenant_schema.sql > mts_part_a.sql
-          tail -n +87 20260828_multi_tenant_schema.sql > mts_part_b.sql
-
-          # Build merged 0172: Part A + original 0172 + Part B
-          {
-            echo "-- ============================================================"
-            echo "-- Merged from: 20260828_multi_tenant_schema.sql Part A (lines 1-86)"
-            echo "-- CREATE TABLE organizations / org_members / org_invitations"
-            echo "-- ============================================================"
-            cat mts_part_a.sql
-            echo ""
-            echo "-- ============================================================"
-            echo "-- Original: 0172_jobs_quotations_invoices.sql"
-            echo "-- ============================================================"
-            cat 0172_jobs_quotations_invoices.sql
-            echo ""
-            echo "-- ============================================================"
-            echo "-- Merged from: 20260828_multi_tenant_schema.sql Part B (lines 87-end)"
-            echo "-- ALTER TABLE org_id / RLS policies / updated_at trigger"
-            echo "-- ============================================================"
-            cat mts_part_b.sql
-          } > 0172_merged_tmp.sql
-          mv 0172_merged_tmp.sql 0172_jobs_quotations_invoices.sql
-          rm 20260828_multi_tenant_schema.sql mts_part_a.sql mts_part_b.sql
-
-          # APPEND remaining 20260828_* files in dependency order
-          for f in \
-            20260828_audit_log_usage_metering.sql \
-            20260828_notifications_super_admin.sql \
-            20260828_platform_fts.sql \
-            20260828_platform_search.sql \
-            20260828_search_bookmarks_autocomplete.sql; do
-            echo "" >> 0172_jobs_quotations_invoices.sql
-            echo "-- ============================================================" >> 0172_jobs_quotations_invoices.sql
-            echo "-- Merged from: $f" >> 0172_jobs_quotations_invoices.sql
-            echo "-- ============================================================" >> 0172_jobs_quotations_invoices.sql
-            cat "$f" >> 0172_jobs_quotations_invoices.sql
-            rm "$f"
-          done
-
-          echo "20260828_* files merged and removed. Final 0172 line count:"
-          wc -l 0172_jobs_quotations_invoices.sql
-
+      - name: Prepare canonical fresh-DB migrations
+        run: bash scripts/prepare_supabase_migrations_ci.sh --merge-duplicates
 
       # -----------------------------------------------------------------------
-      # 5b. Merge all remaining duplicate-prefix migration groups
-      #     Rationale: Supabase extracts the leading numeric portion of each
-      #     filename as the schema_migrations version key. Any two files that
-      #     share a numeric prefix (e.g. 0176_auto_journal_on_approval.sql and
-      #     0176_field_purchase_core.sql both resolve to version=0176) cause a
-      #     duplicate-key error in schema_migrations_pkey on the second file.
-      #     The 20260828_* group was already handled by step 5 above, so this
-      #     step covers all remaining groups (0176-0205, 20261001, 20270125).
-      #     Strategy: for every numeric prefix that appears on >1 .sql file,
-      #     concatenate all matching files (sorted) into the first and delete
-      #     the extras. Ephemeral CI-only transformation — not applied to prod.
-      # -----------------------------------------------------------------------
-      - name: Merge duplicate-prefix migration groups
-        run: |
-          cd supabase/migrations
-
-          PREFIXES=$(for f in *.sql; do echo "${f%%_*}"; done | sort | uniq -d)
-          if [ -z "$PREFIXES" ]; then
-            echo "No duplicate prefixes found."
-            exit 0
-          fi
-
-          for prefix in $PREFIXES; do
-            [[ "$prefix" =~ ^[0-9]+$ ]] || continue
-            target=""
-            for f in $(ls "${prefix}_"*.sql 2>/dev/null | sort); do
-              if [ -z "$target" ]; then
-                target="$f"
-                echo "Prefix $prefix -> target: $target"
-              else
-                echo "  + appending $f"
-                echo '' >> "$target"
-                echo '-- ================================================' >> "$target"
-                echo "-- Merged from: $f (CI dup-prefix fix)" >> "$target"
-                echo '-- ================================================' >> "$target"
-                cat "$f" >> "$target"
-                rm "$f"
-              fi
-            done
-          done
-
-          echo "Dup-prefix merge complete."
-          wc -l 0176_auto_journal_on_approval.sql 2>/dev/null || echo "0176 first file not found"
-
-      # -----------------------------------------------------------------------
-      # 6. Start Supabase local stack
-      #    Requires: SUPABASE_ACCESS_TOKEN repository secret
-      #    Provision: Settings → Secrets and variables → Actions
-      #    Source:    app.supabase.com → Account → Access Tokens
+      # 6. Start the repository's local Supabase stack (no hosted token needed)
       # -----------------------------------------------------------------------
       - name: Start Supabase local stack
         run: supabase start
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       # -----------------------------------------------------------------------
       # 7. Apply all migrations (db reset runs migrations from scratch)
@@ -275,7 +155,66 @@ jobs:
           PGPASSWORD: postgres
 
       # -----------------------------------------------------------------------
-      # 10. Stop Supabase local stack (cleanup — always runs)
+      # 10. Run the legacy TypeScript RLS/migration/integration suites against
+      #     the same real local stack as an explicit non-blocking diagnostic.
+      #     These tests still target pre-canonical columns such as
+      #     organizations.id and are not the pgTAP release gate. Their JSON
+      #     report remains available while each fixture is migrated to org_id.
+      # -----------------------------------------------------------------------
+      - name: Export local Supabase credentials
+        run: |
+          eval "$(supabase status --output env)"
+          echo "::add-mask::$ANON_KEY"
+          echo "::add-mask::$SERVICE_ROLE_KEY"
+          {
+            echo "SUPABASE_URL=$API_URL"
+            echo "SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+            echo "SUPABASE_SERVICE_KEY=$SERVICE_ROLE_KEY"
+            echo "SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+            echo "TEST_ORG_A_ID=aaaaaaaa-0000-0000-0000-000000000001"
+            echo "TEST_ORG_B_ID=bbbbbbbb-0000-0000-0000-000000000002"
+            echo "TEST_ORG_A_USER_EMAIL=org-a-user@monolith-test.local"
+            echo 'TEST_ORG_A_USER_PASS=TestPa$$0rg4'
+          } >> "$GITHUB_ENV"
+
+      - name: Install test-only SQL helper
+        run: |
+          psql \
+            "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres" \
+            --set ON_ERROR_STOP=1 \
+            --file scripts/setup_supabase_integration_ci.sql
+        env:
+          PGPASSWORD: postgres
+
+      - name: Seed deterministic tenant fixtures
+        run: node scripts/seed_supabase_integration_ci.mjs
+
+      - name: Run legacy TypeScript database suites (non-blocking diagnostic)
+        id: legacy_database_tests
+        continue-on-error: true
+        run: npm run test:database -- --reporter=default --reporter=json --outputFile=database-vitest-report.json
+
+      - name: Report legacy database diagnostic status
+        if: always()
+        run: |
+          if [ "${{ steps.legacy_database_tests.outcome }}" = "failure" ]; then
+            echo "::warning::Legacy TypeScript database suites are not release-blocking yet; see the uploaded JSON report for schema-drift failures."
+          else
+            echo "Legacy TypeScript database suites passed."
+          fi
+
+      - name: Upload database integration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-integration-${{ github.sha }}
+          path: database-vitest-report.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      # -----------------------------------------------------------------------
+      # 11. Stop Supabase local stack (cleanup — always runs)
       # -----------------------------------------------------------------------
       - name: Stop Supabase local stack
         if: always()

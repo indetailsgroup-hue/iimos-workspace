@@ -37,7 +37,11 @@ function Skeleton() {
 export function ComplianceSummaryCards({ health, compliance, isLoading }: ComplianceSummaryCardsProps) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div
+        className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6"
+        role="status"
+        aria-label="Loading compliance summary"
+      >
         {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} />)}
       </div>
     )

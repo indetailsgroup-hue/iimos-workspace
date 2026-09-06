@@ -32,32 +32,34 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // MOCK SUPABASE — thenable Proxy (hoisted before all imports)
 // ============================================================================
 
-let mockResult: { data: unknown; error: unknown } = { data: null, error: null };
-
-function makeThenableProxy(): unknown {
-  const handler: ProxyHandler<Record<string, unknown>> = {
+const { mockState, mockSupabase } = vi.hoisted(() => {
+  const mockState = {
+    result: { data: null, error: null } as { data: unknown; error: unknown },
+  };
+  const makeThenableProxy = (): unknown => new Proxy({}, {
     get(_target, prop: string | symbol) {
       if (prop === 'then') {
         return (
           onFulfilled?: (v: unknown) => unknown,
           onRejected?: (e: unknown) => unknown,
-        ) => Promise.resolve(mockResult).then(onFulfilled, onRejected);
+        ) => Promise.resolve(mockState.result).then(onFulfilled, onRejected);
       }
       return (..._args: unknown[]) => makeThenableProxy();
     },
+  });
+  return {
+    mockState,
+    mockSupabase: {
+      from: vi.fn(() => makeThenableProxy()),
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'user-changer-001' } },
+          error: null,
+        }),
+      },
+    },
   };
-  return new Proxy({} as Record<string, unknown>, handler);
-}
-
-const mockSupabase = {
-  from: vi.fn(() => makeThenableProxy()),
-  auth: {
-    getUser: vi.fn().mockResolvedValue({
-      data: { user: { id: 'user-changer-001' } },
-      error: null,
-    }),
-  },
-};
+});
 
 vi.mock('../../core/supabase', () => ({ supabase: mockSupabase }));
 
@@ -258,7 +260,7 @@ describe('plan gate guard — recordStageTransition', () => {
   });
 
   it('does not throw for PROFESSIONAL (resolves)', async () => {
-    mockResult = { data: makeStageHistoryRow(), error: null };
+    mockState.result = { data: makeStageHistoryRow(), error: null };
     await expect(
       useSuperEmployeeStore.getState().recordStageTransition('org-001', 'PROFESSIONAL', {
         employeeId: 'emp-001',
@@ -268,7 +270,7 @@ describe('plan gate guard — recordStageTransition', () => {
   });
 
   it('does not throw for ENTERPRISE (resolves)', async () => {
-    mockResult = { data: makeStageHistoryRow(), error: null };
+    mockState.result = { data: makeStageHistoryRow(), error: null };
     await expect(
       useSuperEmployeeStore.getState().recordStageTransition('org-001', 'ENTERPRISE', {
         employeeId: 'emp-001',
@@ -355,7 +357,7 @@ describe('recordStageTransition — success path', () => {
 
   it('looks up STAGE_SCORE_MAP for stage_score on insert', async () => {
     const row = makeStageHistoryRow({ stage: 'AI_ASSISTED', stage_score: 50 });
-    mockResult = { data: row, error: null };
+    mockState.result = { data: row, error: null };
 
     const entry = await useSuperEmployeeStore
       .getState()
@@ -370,7 +372,7 @@ describe('recordStageTransition — success path', () => {
 
   it('returns a mapped StageHistoryEntry (camelCase)', async () => {
     const row = makeStageHistoryRow({ id: 'sh-xyz', notes: 'Promoted to AI_AWARE' });
-    mockResult = { data: row, error: null };
+    mockState.result = { data: row, error: null };
 
     const entry = await useSuperEmployeeStore
       .getState()
@@ -407,7 +409,7 @@ describe('recordStageTransition — success path', () => {
       ],
     });
 
-    mockResult = { data: newRow, error: null };
+    mockState.result = { data: newRow, error: null };
 
     await useSuperEmployeeStore.getState().recordStageTransition('org-001', 'PROFESSIONAL', {
       employeeId: 'emp-001',
@@ -431,7 +433,7 @@ describe('recordStageTransition — success path', () => {
       stage_score: 50,
       scored_at: '2027-01-15T10:00:00Z',
     });
-    mockResult = { data: newRow, error: null };
+    mockState.result = { data: newRow, error: null };
 
     await useSuperEmployeeStore.getState().recordStageTransition('org-001', 'PROFESSIONAL', {
       employeeId: 'emp-001',
@@ -453,7 +455,7 @@ describe('recordStageTransition — success path', () => {
       }),
     });
 
-    mockResult = { data: makeStageHistoryRow({ stage: 'AI_AWARE', stage_score: 25 }), error: null };
+    mockState.result = { data: makeStageHistoryRow({ stage: 'AI_AWARE', stage_score: 25 }), error: null };
 
     await useSuperEmployeeStore.getState().recordStageTransition('org-001', 'PROFESSIONAL', {
       employeeId: 'emp-001', // different from store's emp-999
@@ -480,7 +482,7 @@ describe('recordStageTransition — error path', () => {
 
   it('throws on DB error and stageHistory remains unchanged', async () => {
     const dbError = new Error('insert failed');
-    mockResult = { data: null, error: dbError };
+    mockState.result = { data: null, error: dbError };
 
     useSuperEmployeeStore.setState({ stageHistory: [] });
 
@@ -507,7 +509,7 @@ describe('resolveSkillGap — success path', () => {
 
   it('marks the matching gap as resolved = true', async () => {
     useSuperEmployeeStore.setState({ skillGaps: [makeSkillGap()] });
-    mockResult = { data: null, error: null };
+    mockState.result = { data: null, error: null };
 
     await useSuperEmployeeStore.getState().resolveSkillGap('org-001', 'PROFESSIONAL', 'sg-001');
 
@@ -517,7 +519,7 @@ describe('resolveSkillGap — success path', () => {
 
   it('sets resolvedAt to a non-null ISO string on success', async () => {
     useSuperEmployeeStore.setState({ skillGaps: [makeSkillGap()] });
-    mockResult = { data: null, error: null };
+    mockState.result = { data: null, error: null };
 
     await useSuperEmployeeStore.getState().resolveSkillGap('org-001', 'PROFESSIONAL', 'sg-001');
 
@@ -532,7 +534,7 @@ describe('resolveSkillGap — success path', () => {
     const gapA = makeSkillGap({ id: 'sg-001' });
     const gapB = makeSkillGap({ id: 'sg-002', skillName: 'Data Visualization' });
     useSuperEmployeeStore.setState({ skillGaps: [gapA, gapB] });
-    mockResult = { data: null, error: null };
+    mockState.result = { data: null, error: null };
 
     await useSuperEmployeeStore.getState().resolveSkillGap('org-001', 'PROFESSIONAL', 'sg-001');
 
@@ -547,7 +549,7 @@ describe('resolveSkillGap — success path', () => {
 
   it('resolved transitions from false → true', async () => {
     useSuperEmployeeStore.setState({ skillGaps: [makeSkillGap({ resolved: false })] });
-    mockResult = { data: null, error: null };
+    mockState.result = { data: null, error: null };
 
     const before = useSuperEmployeeStore.getState().skillGaps[0].resolved;
     expect(before).toBe(false);
@@ -571,7 +573,7 @@ describe('resolveSkillGap — error path', () => {
 
   it('throws on DB error', async () => {
     useSuperEmployeeStore.setState({ skillGaps: [makeSkillGap()] });
-    mockResult = { data: null, error: new Error('update failed') };
+    mockState.result = { data: null, error: new Error('update failed') };
 
     await expect(
       useSuperEmployeeStore.getState().resolveSkillGap('org-001', 'PROFESSIONAL', 'sg-001'),
@@ -580,7 +582,7 @@ describe('resolveSkillGap — error path', () => {
 
   it('skillGaps remain unchanged when DB error occurs', async () => {
     useSuperEmployeeStore.setState({ skillGaps: [makeSkillGap()] });
-    mockResult = { data: null, error: new Error('update failed') };
+    mockState.result = { data: null, error: new Error('update failed') };
 
     try {
       await useSuperEmployeeStore.getState().resolveSkillGap('org-001', 'PROFESSIONAL', 'sg-001');
@@ -626,17 +628,15 @@ describe('fetchStageHistory', () => {
   });
 
   it('sets isLoading = true during fetch, false after', async () => {
-    let capturedLoading: boolean | undefined;
-
     // Intercept setState calls to capture mid-fetch loading flag
-    mockResult = { data: [makeStageHistoryRow()], error: null };
+    mockState.result = { data: [makeStageHistoryRow()], error: null };
 
     const fetchPromise = useSuperEmployeeStore
       .getState()
       .fetchStageHistory('org-001', 'emp-001');
 
     // isLoading should start true immediately
-    capturedLoading = useSuperEmployeeStore.getState().isLoading;
+    const capturedLoading = useSuperEmployeeStore.getState().isLoading;
     expect(capturedLoading).toBe(true);
 
     await fetchPromise;
@@ -651,7 +651,7 @@ describe('fetchStageHistory', () => {
       stage_score: 75,
       notes: 'Reached AI_PARTNER',
     });
-    mockResult = { data: [row], error: null };
+    mockState.result = { data: [row], error: null };
 
     await useSuperEmployeeStore.getState().fetchStageHistory('org-001', 'emp-001');
 
@@ -664,7 +664,7 @@ describe('fetchStageHistory', () => {
   });
 
   it('handles null data (empty array)', async () => {
-    mockResult = { data: null, error: null };
+    mockState.result = { data: null, error: null };
 
     await useSuperEmployeeStore.getState().fetchStageHistory('org-001', 'emp-001');
 
@@ -672,7 +672,7 @@ describe('fetchStageHistory', () => {
   });
 
   it('sets error on DB failure', async () => {
-    mockResult = { data: null, error: new Error('DB timeout') };
+    mockState.result = { data: null, error: new Error('DB timeout') };
 
     await useSuperEmployeeStore.getState().fetchStageHistory('org-001', 'emp-001');
 
@@ -692,7 +692,7 @@ describe('fetchSkillGaps', () => {
   });
 
   it('calls supabase.from with employee_skill_gaps table', async () => {
-    mockResult = { data: [], error: null };
+    mockState.result = { data: [], error: null };
 
     await useSuperEmployeeStore.getState().fetchSkillGaps('org-001', 'emp-001');
 
@@ -705,7 +705,7 @@ describe('fetchSkillGaps', () => {
       skill_name: 'Machine Learning Basics',
       stage_required: 'AI_PARTNER',
     });
-    mockResult = { data: [row], error: null };
+    mockState.result = { data: [row], error: null };
 
     await useSuperEmployeeStore.getState().fetchSkillGaps('org-001', 'emp-001');
 
@@ -716,7 +716,7 @@ describe('fetchSkillGaps', () => {
   });
 
   it('sets error on DB failure and isLoading = false', async () => {
-    mockResult = { data: null, error: new Error('query failed') };
+    mockState.result = { data: null, error: new Error('query failed') };
 
     await useSuperEmployeeStore.getState().fetchSkillGaps('org-001', 'emp-001');
 

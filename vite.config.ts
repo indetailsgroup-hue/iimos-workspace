@@ -28,6 +28,21 @@ export default defineConfig({
       // @daph/field-app owns its own Vitest config (jsdom + React plugin) and
       // runner; the root run must not collect its tests under the wrong config.
       'packages/field-app/**',
+      // The Digital Shadow service is a Node process with its own Vitest config.
+      // Running it here under jsdom changes module/mocking semantics and also
+      // makes infrastructure-backed tests look like frontend unit failures.
+      'packages/digital-shadow-service/**',
+      // Server and workspace tools each own their runtime/config and have
+      // dedicated verification lanes below. The browser-oriented root runner
+      // must not reinterpret Node tests under jsdom.
+      'server/**',
+      'tools/**',
+      // These suites exercise a live, freshly migrated Supabase database and
+      // require service-role credentials. They run in the database integration
+      // lane after the local stack is ready, never in root unit tests.
+      'src/__tests__/rls/**',
+      'src/__tests__/migrations/**',
+      'src/__tests__/integrations/**',
       // Node-native governance tooling tests (node:test runner). Vitest cannot
       // collect them and would report "No test suite found"; run via `npm run
       // test:node`. Keeps `test:run` honestly green (FS-B1-02).

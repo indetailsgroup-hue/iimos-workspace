@@ -133,7 +133,10 @@ export default function EtaxComplianceDashboard() {
   const { compliance, healthSummary, riskRanking, isLoading, isRefreshing, error, lastRefreshed, refetch } =
     useEtaxCompliance(true)
 
-  const criticalCount = riskRanking.filter(r => r.risk_tier === 'CRITICAL').length
+  // Be defensive at this UI boundary: an RPC row can be null during a rolling
+  // database upgrade, and one malformed row must not blank the whole dashboard.
+  const validRiskRanking = riskRanking.filter(Boolean)
+  const criticalCount = validRiskRanking.filter(r => r.risk_tier === 'CRITICAL').length
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -190,7 +193,7 @@ export default function EtaxComplianceDashboard() {
       </div>
 
       {/* Content */}
-      <div className="mx-auto max-w-7xl space-y-6 px-6 py-6">
+      <main className="mx-auto max-w-7xl space-y-6 px-6 py-6">
         {/* Error state */}
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -236,7 +239,7 @@ export default function EtaxComplianceDashboard() {
             {/* Top 5 risk orgs preview */}
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
               <h3 className="mb-3 text-sm font-semibold text-gray-900">Top 5 At-Risk Orgs</h3>
-              {riskRanking.slice(0, 5).map(org => (
+              {validRiskRanking.slice(0, 5).map(org => (
                 <div key={org.org_id} className="flex items-center justify-between py-2 text-sm">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs text-gray-400">#{org.risk_rank}</span>
@@ -252,7 +255,7 @@ export default function EtaxComplianceDashboard() {
                   </div>
                 </div>
               ))}
-              {riskRanking.length === 0 && !isLoading && (
+              {validRiskRanking.length === 0 && !isLoading && (
                 <p className="text-xs text-gray-400">No risk data available.</p>
               )}
             </div>
@@ -260,13 +263,13 @@ export default function EtaxComplianceDashboard() {
         )}
 
         {activeTab === 'Risk Ranking' && (
-          <OrgRiskRankingTable data={riskRanking} isLoading={isLoading} />
+          <OrgRiskRankingTable data={validRiskRanking} isLoading={isLoading} />
         )}
 
         {activeTab === 'Compliance Detail' && (
           <ComplianceDetailTable data={compliance} isLoading={isLoading} />
         )}
-      </div>
+      </main>
     </div>
   )
 }

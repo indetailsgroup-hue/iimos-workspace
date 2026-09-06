@@ -494,7 +494,7 @@ describe('updateItemStatus — is_overridden flag', () => {
 
     const { scheduleItems } = useAiSchedulerStore.getState();
     const updated = scheduleItems.find((i) => i.id === itemId);
-    expect(updated?.status).toBe('COMPLETED');
+    expect(updated?.status).toBe('DONE');
     expect(updated?.isOverridden).toBe(true);
     expect(updated?.overrideReason).toBe('manual finish');
   });
@@ -511,7 +511,7 @@ describe('setFilters — partial merge', () => {
     useAiSchedulerStore.getState().setFilters({ status: 'DRAFT' });
     const { filters } = useAiSchedulerStore.getState();
     expect(filters.status).toBe('DRAFT');
-    expect(filters.scheduleMode).toBe('MANUAL');
+    expect(filters.scheduleMode).toBe('MANUAL_OVERRIDE');
   });
 
   it('updates fromDate and toDate independently', () => {

@@ -400,6 +400,19 @@ INSERT INTO public.organizations (org_id, name, slug) VALUES
   ('b2b2b2b2-0000-0000-0000-000000000001', 'Beta  Co', 'beta-co')
 ON CONFLICT (org_id) DO NOTHING;
 
+-- ── Auth users + active tenant memberships used by get_user_org_id() ─────────
+INSERT INTO auth.users (id, email) VALUES
+  ('a1a1a1a1-0000-0000-0001-000000000002', 'alpha-0187@example.test'),
+  ('b2b2b2b2-0000-0000-0001-000000000002', 'beta-0187@example.test')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.org_members (org_id, user_id, email, role, is_active) VALUES
+  ('a1a1a1a1-0000-0000-0000-000000000001',
+   'a1a1a1a1-0000-0000-0001-000000000002', 'alpha-0187@example.test', 'VIEWER', true),
+  ('b2b2b2b2-0000-0000-0000-000000000001',
+   'b2b2b2b2-0000-0000-0001-000000000002', 'beta-0187@example.test', 'VIEWER', true)
+ON CONFLICT (org_id, user_id) DO NOTHING;
+
 -- ── installation_projects (root of the hierarchy) ─────────────────────────────
 INSERT INTO public.installation_projects (id, name, status, created_by, org_id)
 VALUES

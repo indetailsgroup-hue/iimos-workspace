@@ -6,19 +6,21 @@ on:
     paths:
       - 'supabase/migrations/**'
       - 'supabase/seed.sql'
+      - '.github/workflows/supabase-db-lint.yml'
     types: [opened, synchronize, reopened]
 
-# Required repository secrets:
-#   SUPABASE_ACCESS_TOKEN  — personal access token from app.supabase.com/account/tokens
-#   SUPABASE_PROJECT_REF   — project reference ID (e.g. abcdefghijklmnop)
-#                            found at: Project Settings → General → Reference ID
+# Optional repository secret (the job reports a successful skip when absent):
+#   DATABASE_URL — direct PostgreSQL connection string for the hosted project.
+#                  Store it as a GitHub Actions secret; never commit it.
 #
-# The lint job runs against the remote project schema so no Docker is required.
-# All migration files under supabase/migrations/ are applied to the linked project
-# before linting, matching the exact behaviour of your production schema.
+# The lint job reads the remote project schema through DATABASE_URL, so no Docker
+# or temporary Supabase login role is required. It never applies migrations to
+# that project. Fresh migration execution is owned by the local pgTAP/db-verify
+# workflows before any production deploy.
 
 permissions:
   pull-requests: write
+  issues: write
   contents: read
 
 jobs:
@@ -27,33 +29,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check database lint credentials
+        id: preflight
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Supabase DB lint skipped::DATABASE_URL is not configured; fresh local migration and pgTAP gates remain active."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
+        if: steps.preflight.outputs.ready == 'true'
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Supabase CLI
-        uses: supabase/setup-cli@v1
+        if: steps.preflight.outputs.ready == 'true'
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
         with:
-          version: latest
-
-      - name: Link Supabase project
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: |
-          supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+          version: 2.116.0
 
       - name: Run db lint
+        if: steps.preflight.outputs.ready == 'true'
         id: lint
         # continue-on-error so the comment step always runs, even on lint failure
         continue-on-error: true
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          supabase db lint 2>&1 | tee lint-output.txt
+          supabase db lint --db-url "$DATABASE_URL" --level error --fail-on error 2>&1 | tee lint-output.txt
           LINT_EXIT=${PIPESTATUS[0]}
           echo "exit_code=$LINT_EXIT" >> "$GITHUB_OUTPUT"
 
       - name: Parse lint output
-        if: always()
+        if: always() && steps.preflight.outputs.ready == 'true'
         run: |
           python3 << 'PYEOF'
           import re, json, pathlib
@@ -108,7 +119,7 @@ jobs:
           PYEOF
 
       - name: Upload lint artifacts
-        if: always()
+        if: always() && steps.preflight.outputs.ready == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: supabase-lint-results
@@ -118,8 +129,9 @@ jobs:
           if-no-files-found: warn
 
       - name: Post lint comment on PR
-        if: always()
-        uses: actions/github-script@v7
+        if: always() && steps.preflight.outputs.ready == 'true'
+        continue-on-error: true
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -153,8 +165,11 @@ jobs:
             } else {
               const { findings, error_count, warn_count, total, raw_tail } = data;
 
-              const statusEmoji  = error_count > 0 ? '❌' : warn_count > 0 ? '⚠️' : '✅';
-              const statusLabel  = error_count > 0
+              const runnerFailed = lintFailed && error_count === 0;
+              const statusEmoji  = runnerFailed || error_count > 0 ? '❌' : warn_count > 0 ? '⚠️' : '✅';
+              const statusLabel  = runnerFailed
+                ? `**Lint command failed with exit code \`${lintExitCode}\`** — inspect the raw output; schema cleanliness was not established`
+                : error_count > 0
                 ? `**${error_count} error(s) found** — review required`
                 : warn_count > 0
                   ? `**${warn_count} warning(s)** — no blocking errors`
@@ -248,7 +263,7 @@ jobs:
       # ── Hard-fail the job if lint reported errors ─────────────────────────────
       # This runs AFTER the comment is posted so reviewers always see the output.
       - name: Fail job on lint errors
-        if: steps.lint.outputs.exit_code != '0'
+        if: steps.preflight.outputs.ready == 'true' && steps.lint.outputs.exit_code != '0'
         run: |
-          echo "::error::supabase db lint found errors — see PR comment for details"
+          echo "::error::supabase db lint did not complete cleanly — see PR comment and raw artifact for details"
           exit 1

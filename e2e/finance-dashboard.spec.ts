@@ -11,6 +11,11 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Finance Dashboard', () => {
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      if (!localStorage.getItem('monolith.user.role')) {
+        localStorage.setItem('monolith.user.role', 'FINANCE');
+      }
+    });
     // Navigate to the Finance Dashboard page
     // The route pattern follows MONOLITH SPA routing
     await page.goto('/finance');
@@ -133,8 +138,9 @@ test.describe('Finance Dashboard', () => {
       .catch(() => false);
 
     if (!hasTable) {
-      // No data — skip gracefully
-      test.skip();
+      // An empty dataset is a valid deterministic state; assert it instead of
+      // marking a release-critical smoke test as skipped.
+      await expect(page.getByText('ยังไม่มีข้อมูลลูกหนี้')).toBeVisible();
       return;
     }
 

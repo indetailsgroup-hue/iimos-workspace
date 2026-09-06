@@ -12,6 +12,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import Redis from 'ioredis';
 import { EventEmitter } from 'events';
+import { execSync } from 'node:child_process';
 
 import { createCommandRoutes } from '../../src/api/commands';
 import { CommandDispatcher } from '../../src/services/CommandDispatcher';
@@ -37,7 +38,6 @@ export function composeUp(): void {
   //   redis-server --port 6399 --daemonize yes
   // This function is a no-op when Docker is not available.
   try {
-    const { execSync } = require('node:child_process');
     const COMPOSE_FILE = resolve(PROJECT_ROOT, 'docker-compose.e2e.yml');
     execSync(
       `docker compose -f ${COMPOSE_FILE} -p monolith-e2e up -d --wait`,
@@ -50,7 +50,6 @@ export function composeUp(): void {
 
 export function composeDown(): void {
   try {
-    const { execSync } = require('node:child_process');
     const COMPOSE_FILE = resolve(PROJECT_ROOT, 'docker-compose.e2e.yml');
     execSync(
       `docker compose -f ${COMPOSE_FILE} -p monolith-e2e down -v --remove-orphans`,

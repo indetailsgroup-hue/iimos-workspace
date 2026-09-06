@@ -14,10 +14,10 @@
 
 /// <reference types="vitest/globals" />
 import React from 'react';
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MockedFunction, Mock } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
 import withSuperAdminGuard, { SuperAdminDenied } from '../admin/withSuperAdminGuard';
 
 // ─── Supabase mock ────────────────────────────────────────────────────────────

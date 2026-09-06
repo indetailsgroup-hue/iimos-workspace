@@ -31,8 +31,12 @@ const mockAccounts = [
     id: "acct-1",
     code: "1100",
     name: "Cash and Bank",
-    account_type: "asset",
-    normal_balance: "debit",
+    book_id: "book-1",
+    type: "ASSET",
+    balance: 50000,
+    parent_id: null,
+    description: null,
+    children: [],
     is_active: true,
     org_id: "org-001",
   },
@@ -40,8 +44,12 @@ const mockAccounts = [
     id: "acct-2",
     code: "1200",
     name: "Accounts Receivable",
-    account_type: "asset",
-    normal_balance: "debit",
+    book_id: "book-1",
+    type: "ASSET",
+    balance: 21400,
+    parent_id: null,
+    description: null,
+    children: [],
     is_active: true,
     org_id: "org-001",
   },
@@ -49,8 +57,12 @@ const mockAccounts = [
     id: "acct-3",
     code: "4100",
     name: "Revenue",
-    account_type: "revenue",
-    normal_balance: "credit",
+    book_id: "book-1",
+    type: "REVENUE",
+    balance: 71400,
+    parent_id: null,
+    description: null,
+    children: [],
     is_active: true,
     org_id: "org-001",
   },
@@ -59,17 +71,19 @@ const mockAccounts = [
 const mockBooks = [
   {
     id: "book-1",
-    book_code: "MAIN",
-    book_name: "Main Book",
-    base_currency: "THB",
+    name: "Main Book",
+    currency: "THB",
+    description: null,
+    created_at: "2026-08-01T00:00:00Z",
     is_default: true,
     org_id: "org-001",
   },
   {
     id: "book-2",
-    book_code: "USD",
-    book_name: "USD Book",
-    base_currency: "USD",
+    name: "USD Book",
+    currency: "USD",
+    description: null,
+    created_at: "2026-08-01T00:00:00Z",
     is_default: false,
     org_id: "org-001",
   },
@@ -79,33 +93,43 @@ const mockLedgerEntries = [
   {
     id: "entry-1",
     book_id: "book-1",
-    account_id: "acct-1",
     entry_date: "2026-08-31",
     description: "Cash deposit",
-    debit_amount: 50000,
-    credit_amount: 0,
-    reference_no: "JE-0001",
+    reference: "JE-0001",
+    total_debit: 50000,
+    total_credit: 50000,
+    status: "posted",
+    created_at: "2026-08-31T00:00:00Z",
+    created_by: null,
+    lines: [],
     org_id: "org-001",
   },
   {
     id: "entry-2",
     book_id: "book-1",
-    account_id: "acct-2",
     entry_date: "2026-08-31",
     description: "Invoice payment",
-    debit_amount: 21400,
-    credit_amount: 0,
-    reference_no: "JE-0002",
+    reference: "JE-0002",
+    total_debit: 21400,
+    total_credit: 21400,
+    status: "posted",
+    created_at: "2026-08-31T00:00:00Z",
+    created_by: null,
+    lines: [],
     org_id: "org-001",
   },
 ];
 
 vi.mock("../../hooks/useAccounting", () => ({
-  useAccounting: vi.fn(),
+  useBooks: vi.fn(),
+  useChartOfAccounts: vi.fn(),
+  useJournalEntries: vi.fn(),
 }));
 
-import { useAccounting } from "../../hooks/useAccounting";
-const mockUseAccounting = vi.mocked(useAccounting);
+import { useBooks, useChartOfAccounts, useJournalEntries } from "../../hooks/useAccounting";
+const mockUseBooks = vi.mocked(useBooks);
+const mockUseChartOfAccounts = vi.mocked(useChartOfAccounts);
+const mockUseJournalEntries = vi.mocked(useJournalEntries);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -117,18 +141,31 @@ function renderPage() {
   );
 }
 
-function mockDefault(overrides = {}) {
-  mockUseAccounting.mockReturnValue({
-    loading: false,
-    error: null,
-    accounts: mockAccounts,
-    books: mockBooks,
-    ledgerEntries: mockLedgerEntries,
-    createAccount: vi.fn().mockResolvedValue({}),
-    updateAccount: vi.fn().mockResolvedValue({}),
-    deleteAccount: vi.fn().mockResolvedValue({}),
+function mockDefault(overrides: Record<string, any> = {}) {
+  const loading = overrides.loading ?? false;
+  const error = overrides.error ?? null;
+  const books = overrides.books ?? mockBooks;
+  const accounts = overrides.accounts ?? mockAccounts;
+  const entries = overrides.ledgerEntries ?? mockLedgerEntries;
+  mockUseBooks.mockReturnValue({
+    books, isLoading: loading, error, refetch: overrides.refetch ?? vi.fn(),
+  } as any);
+  mockUseChartOfAccounts.mockReturnValue({
+    tree: accounts,
+    accounts,
+    isLoading: loading,
+    error,
     refetch: vi.fn(),
-    ...overrides,
+    createAccount: overrides.createAccount ?? vi.fn().mockResolvedValue({}),
+    updateAccount: overrides.updateAccount ?? vi.fn().mockResolvedValue({}),
+    deactivateAccount: overrides.deleteAccount ?? vi.fn().mockResolvedValue({}),
+  } as any);
+  mockUseJournalEntries.mockReturnValue({
+    entries,
+    totalCount: entries.length,
+    isLoading: loading,
+    error,
+    refetch: vi.fn(),
   } as any);
 }
 
@@ -136,17 +173,7 @@ function mockDefault(overrides = {}) {
 
 describe("Group A – Rendering & loading states", () => {
   it("A1 – renders loading indicator while fetching", () => {
-    mockUseAccounting.mockReturnValue({
-      loading: true,
-      error: null,
-      accounts: [],
-      books: [],
-      ledgerEntries: [],
-      createAccount: vi.fn(),
-      updateAccount: vi.fn(),
-      deleteAccount: vi.fn(),
-      refetch: vi.fn(),
-    } as any);
+    mockDefault({ loading: true, accounts: [], books: [], ledgerEntries: [] });
     renderPage();
     expect(
       screen.queryByRole("status") ||
@@ -161,7 +188,7 @@ describe("Group A – Rendering & loading states", () => {
     renderPage();
     await waitFor(() => {
       expect(
-        screen.getByText(/accounting|chart of accounts|multi.?book/i)
+        screen.getByRole("heading", { name: "Accounting Management" })
       ).toBeInTheDocument();
     });
   });
@@ -182,7 +209,7 @@ describe("Group B – Chart of Accounts tab", () => {
     await waitFor(() => {
       expect(screen.getByText("Cash and Bank")).toBeInTheDocument();
       expect(screen.getByText("Accounts Receivable")).toBeInTheDocument();
-      expect(screen.getByText("Revenue")).toBeInTheDocument();
+      expect(screen.getAllByText("Revenue").length).toBeGreaterThan(0);
     });
   });
 
@@ -199,25 +226,22 @@ describe("Group B – Chart of Accounts tab", () => {
     renderPage();
     await waitFor(() => {
       expect(screen.getAllByText(/asset/i).length).toBeGreaterThan(0);
-      expect(screen.getByText(/revenue/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/revenue/i).length).toBeGreaterThan(0);
     });
   });
 
-  it("B4 – shows is_active status indicators", async () => {
+  it("B4 – exposes a deactivate action for each active account", async () => {
     renderPage();
     await waitFor(() => {
-      const activeIndicators =
-        screen.queryAllByText(/active/i) ||
-        document.querySelectorAll("[data-active='true']");
-      expect(activeIndicators.length).toBeGreaterThan(0);
+      expect(screen.getAllByRole("button", { name: "Deactivate" })).toHaveLength(3);
     });
   });
 
-  it("B5 – shows normal balance (debit/credit) columns", async () => {
+  it("B5 – shows current account balances", async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getAllByText(/debit/i).length).toBeGreaterThan(0);
-      expect(screen.getAllByText(/credit/i).length).toBeGreaterThan(0);
+      expect(screen.getByText(/50,000\.00/)).toBeInTheDocument();
+      expect(screen.getByText(/21,400\.00/)).toBeInTheDocument();
     });
   });
 });
@@ -230,27 +254,14 @@ describe("Group C – Multi-book Ledger tab", () => {
   it("C1 – shows both book options (MAIN, USD)", async () => {
     renderPage();
     await waitFor(() => {
-      // Navigate to ledger tab if it's not the default
-      const ledgerTab =
-        screen.queryByRole("tab", { name: /ledger|book/i }) ||
-        screen.queryByText(/multi.?book|ledger/i);
-      if (ledgerTab) fireEvent.click(ledgerTab);
-    });
-    await waitFor(() => {
-      expect(
-        screen.queryByText(/MAIN/) ||
-          screen.queryByText(/Main Book/) ||
-          screen.queryByText(/USD/)
-      ).toBeTruthy();
+      expect(screen.getAllByText("Main Book").length).toBeGreaterThan(0);
+      expect(screen.getByText("USD Book")).toBeInTheDocument();
     });
   });
 
   it("C2 – displays ledger entry descriptions", async () => {
     renderPage();
-    const ledgerTab =
-      screen.queryByRole("tab", { name: /ledger|book/i }) ||
-      screen.queryByText(/multi.?book|ledger/i);
-    if (ledgerTab) fireEvent.click(ledgerTab);
+    fireEvent.click(screen.getByRole("button", { name: /Journal Ledger/ }));
     await waitFor(() => {
       expect(
         screen.queryByText("Cash deposit") ||
@@ -262,13 +273,10 @@ describe("Group C – Multi-book Ledger tab", () => {
 
   it("C3 – displays debit amounts", async () => {
     renderPage();
-    const ledgerTab =
-      screen.queryByRole("tab", { name: /ledger|book/i }) ||
-      screen.queryByText(/multi.?book|ledger/i);
-    if (ledgerTab) fireEvent.click(ledgerTab);
+    fireEvent.click(screen.getByRole("button", { name: /Journal Ledger/ }));
     await waitFor(() => {
       expect(
-        screen.queryByText(/50,000|50000/) ||
+        screen.queryAllByText(/50,000|50000/)[0] ||
           screen.queryByText(/21,400|21400/)
       ).toBeTruthy();
     });
@@ -388,22 +396,12 @@ describe("Group E – Account CRUD", () => {
 
 describe("Group F – Error handling", () => {
   it("F1 – renders error banner when hook returns error", async () => {
-    mockUseAccounting.mockReturnValue({
-      loading: false,
-      error: new Error("DB error"),
-      accounts: [],
-      books: [],
-      ledgerEntries: [],
-      createAccount: vi.fn(),
-      updateAccount: vi.fn(),
-      deleteAccount: vi.fn(),
-      refetch: vi.fn(),
-    } as any);
+    mockDefault({ error: "DB error", accounts: [], books: [], ledgerEntries: [] });
     renderPage();
     await waitFor(() => {
       expect(
-        screen.queryByText(/error/i) ||
-          screen.queryByRole("alert") ||
+        screen.queryByRole("alert") ||
+          screen.queryAllByText(/error/i)[0] ||
           document.querySelector("[data-testid='error-state']")
       ).toBeTruthy();
     });

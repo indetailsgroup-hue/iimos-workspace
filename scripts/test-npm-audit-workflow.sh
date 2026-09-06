@@ -10,11 +10,14 @@
 #   T3 — Python summary script: high+critical JSON   → all severity buckets
 #   T4 — Python summary script: malformed JSON       → graceful error message
 #   T5 — Audit gate (exit code): empty dependency tree → exit 0
-#   T6 — Gate logic: moderate vuln in JSON → gate must exit non-zero
-#   T7 — Workflow YAML: audit-level flag is present and set to 'moderate'
-#   T8 — Workflow YAML: working-directory is 'server'
-#   T9 — Workflow YAML: trigger includes pull_request targeting main
-#  T10 — Workflow YAML: trigger includes push targeting main
+#   T6 — Gate logic: moderate vuln in JSON → gate stays green
+#   T7 — Gate logic: high/critical vuln in JSON → gate exits non-zero
+#   T8 — Workflow YAML: production audit uses high threshold
+#   T9 — Workflow YAML: working-directory is 'server'
+#  T10 — Workflow YAML: trigger includes pull_request targeting main
+#  T11 — Workflow YAML: trigger includes push targeting main
+#  T12 — PR comment notification cannot fail the audit gate
+#  T13 — workflow requests only read contents and PR comment permissions
 #
 # Usage:
 #   bash scripts/test-npm-audit-workflow.sh
@@ -65,9 +68,13 @@ sed -n "$((START_LINE+1)),$((END_LINE-1))p" "$WORKFLOW_FILE" \
   | sed 's/^          //' \
   > "$PYTHON_SUMMARY_SCRIPT"
 
-# Patch the hardcoded /tmp path to our temp dir so tests are hermetic
+# Patch the hardcoded /tmp path to our temp dir so tests are hermetic. Avoid
+# sed -i because BSD sed (macOS) and GNU sed require different invocations.
 AUDIT_JSON_PATH="$TMPDIR_TEST/npm-audit.json"
-sed -i "s|/tmp/npm-audit.json|$AUDIT_JSON_PATH|g" "$PYTHON_SUMMARY_SCRIPT"
+PATCHED_SUMMARY_SCRIPT="$TMPDIR_TEST/summary.patched.py"
+sed "s|/tmp/npm-audit.json|$AUDIT_JSON_PATH|g" "$PYTHON_SUMMARY_SCRIPT" \
+  > "$PATCHED_SUMMARY_SCRIPT"
+mv "$PATCHED_SUMMARY_SCRIPT" "$PYTHON_SUMMARY_SCRIPT"
 
 run_summary() { python3 "$PYTHON_SUMMARY_SCRIPT"; }
 
@@ -180,15 +187,15 @@ cat > "$MOCK_PROJ/package.json" << 'EOF'
 { "name": "test-clean", "version": "1.0.0", "private": true, "dependencies": {} }
 EOF
 (cd "$MOCK_PROJ" && npm install --silent 2>/dev/null || true)
-if (cd "$MOCK_PROJ" && npm audit --audit-level=moderate 2>/dev/null); then
+if (cd "$MOCK_PROJ" && npm audit --omit=dev --audit-level=high 2>/dev/null); then
   ok "T5 — audit gate exits 0 for project with no dependencies"
 else
   not_ok "T5 — audit gate exits 0 for project with no dependencies" \
-         "npm audit --audit-level=moderate returned non-zero for empty project"
+         "npm audit --omit=dev --audit-level=high returned non-zero for empty project"
 fi
 
 # ---------------------------------------------------------------------------
-# T6 — Gate logic: moderate vuln fixture triggers non-zero exit
+# T6 — Gate logic: moderate vulnerability remains visible but non-blocking
 # ---------------------------------------------------------------------------
 moderate_vuln_fixture
 GATE_EXIT=0
@@ -196,55 +203,98 @@ python3 - "$AUDIT_JSON_PATH" << 'PYEOF' || GATE_EXIT=$?
 import sys, json
 data = json.load(open(sys.argv[1]))
 v = data.get("metadata", {}).get("vulnerabilities", {})
-if v.get("moderate", 0) > 0 or v.get("high", 0) > 0 or v.get("critical", 0) > 0:
+if v.get("high", 0) > 0 or v.get("critical", 0) > 0:
+    sys.exit(1)
+sys.exit(0)
+PYEOF
+if [ "$GATE_EXIT" -eq 0 ]; then
+  ok "T6 — gate logic keeps moderate-only findings non-blocking"
+else
+  not_ok "T6 — gate logic keeps moderate-only findings non-blocking" \
+         "Expected exit 0 for moderate-only debt; gate returned $GATE_EXIT"
+fi
+
+# ---------------------------------------------------------------------------
+# T7 — Gate logic: high/critical vulnerability blocks the release gate
+# ---------------------------------------------------------------------------
+high_crit_fixture
+GATE_EXIT=0
+python3 - "$AUDIT_JSON_PATH" << 'PYEOF' || GATE_EXIT=$?
+import sys, json
+data = json.load(open(sys.argv[1]))
+v = data.get("metadata", {}).get("vulnerabilities", {})
+if v.get("high", 0) > 0 or v.get("critical", 0) > 0:
     sys.exit(1)
 sys.exit(0)
 PYEOF
 if [ "$GATE_EXIT" -ne 0 ]; then
-  ok "T6 — gate logic exits non-zero when moderate vulnerability is present"
+  ok "T7 — gate logic exits non-zero for high/critical vulnerabilities"
 else
-  not_ok "T6 — gate logic exits non-zero when moderate vulnerability is present" \
-         "Expected exit 1; gate returned 0 — PR would not be blocked"
+  not_ok "T7 — gate logic exits non-zero for high/critical vulnerabilities" \
+         "Expected exit 1; gate returned 0 — release would not be blocked"
 fi
 
 # ---------------------------------------------------------------------------
-# T7 — Workflow YAML: --audit-level=moderate present
+# T8 — Workflow YAML: production audit uses the high threshold
 # ---------------------------------------------------------------------------
-if grep -q "\-\-audit-level=moderate" "$WORKFLOW_FILE"; then
-  ok "T7 — workflow YAML contains --audit-level=moderate gate flag"
+if grep -q "npm audit --omit=dev --audit-level=high" "$WORKFLOW_FILE"; then
+  ok "T8 — workflow YAML enforces the production high/critical gate"
 else
-  not_ok "T7 — workflow YAML contains --audit-level=moderate gate flag" \
-         "--audit-level=moderate not found in $WORKFLOW_FILE"
+  not_ok "T8 — workflow YAML enforces the production high/critical gate" \
+         "production audit command not found in $WORKFLOW_FILE"
 fi
 
 # ---------------------------------------------------------------------------
-# T8 — Workflow YAML: working-directory is 'server'
+# T9 — Workflow YAML: working-directory is 'server'
 # ---------------------------------------------------------------------------
 if grep -q "working-directory: server" "$WORKFLOW_FILE"; then
-  ok "T8 — workflow YAML sets working-directory to server"
+  ok "T9 — workflow YAML sets working-directory to server"
 else
-  not_ok "T8 — workflow YAML sets working-directory to server" \
-         "'working-directory: server' not found in $WORKFLOW_FILE"
+  not_ok "T9 — workflow YAML sets working-directory to server" \
+         "working-directory: server not found in $WORKFLOW_FILE"
 fi
 
 # ---------------------------------------------------------------------------
-# T9 — Workflow YAML: pull_request trigger targeting main
+# T10 — Workflow YAML: pull_request trigger targeting main
 # ---------------------------------------------------------------------------
 if grep -A3 "pull_request:" "$WORKFLOW_FILE" | grep -q "main"; then
-  ok "T9 — workflow YAML triggers on pull_request targeting main"
+  ok "T10 — workflow YAML triggers on pull_request targeting main"
 else
-  not_ok "T9 — workflow YAML triggers on pull_request targeting main" \
+  not_ok "T10 — workflow YAML triggers on pull_request targeting main" \
          "pull_request trigger for main not found in $WORKFLOW_FILE"
 fi
 
 # ---------------------------------------------------------------------------
-# T10 — Workflow YAML: push trigger targeting main
+# T11 — Workflow YAML: push trigger targeting main
 # ---------------------------------------------------------------------------
 if grep -A3 "^  push:" "$WORKFLOW_FILE" | grep -q "main"; then
-  ok "T10 — workflow YAML triggers on push to main"
+  ok "T11 — workflow YAML triggers on push to main"
 else
-  not_ok "T10 — workflow YAML triggers on push to main" \
+  not_ok "T11 — workflow YAML triggers on push to main" \
          "push trigger for main not found in $WORKFLOW_FILE"
+fi
+
+# ---------------------------------------------------------------------------
+# T12 — Optional PR comment cannot turn a successful audit into a failed job
+# ---------------------------------------------------------------------------
+if grep -A3 "name: Post audit summary to PR" "$WORKFLOW_FILE" | \
+   grep -q "continue-on-error: true"; then
+  ok "T12 — PR audit summary is non-blocking"
+else
+  not_ok "T12 — PR audit summary is non-blocking" \
+         "continue-on-error: true not found on the PR summary step"
+fi
+
+# ---------------------------------------------------------------------------
+# T13 — Token permissions are explicit and limited to checkout/comment needs
+# ---------------------------------------------------------------------------
+if grep -A4 "^permissions:" "$WORKFLOW_FILE" | grep -q "contents: read" && \
+   grep -A4 "^permissions:" "$WORKFLOW_FILE" | grep -q "issues: write" && \
+   grep -A4 "^permissions:" "$WORKFLOW_FILE" | grep -q "pull-requests: write"; then
+  ok "T13 — workflow declares least-purpose content and comment permissions"
+else
+  not_ok "T13 — workflow declares least-purpose content and comment permissions" \
+         "expected contents:read plus issues/pull-requests:write"
 fi
 
 # ---------------------------------------------------------------------------

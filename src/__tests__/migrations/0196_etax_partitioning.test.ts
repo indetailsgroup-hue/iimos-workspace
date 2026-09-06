@@ -28,7 +28,7 @@ let service: SupabaseClient;
 let orgA: string;
 let orgB: string;
 let userA: string;
-let invoiceIds: string[] = [];
+const invoiceIds: string[] = [];
 
 beforeAll(async () => {
   service = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });

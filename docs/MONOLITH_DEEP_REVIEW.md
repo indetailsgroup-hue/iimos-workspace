@@ -154,7 +154,7 @@ Organization {
 - `maxUsers` / `maxJobsPerMonth` enforce plan limits ที่ DB level ได้
 
 **จุดที่ควรปรับ:**
-- `trialEndsAt` เก็บแต่ไม่มี DB-level enforcement (ดู Security Issue 7)
+- `trialEndsAt` ถูกจัดเก็บ โดย DB-level enforcement ติดตามอยู่ใน Security Issue 7
 - `settings` ควรมี JSON Schema validation
 
 ### 2.3 Role Hierarchy

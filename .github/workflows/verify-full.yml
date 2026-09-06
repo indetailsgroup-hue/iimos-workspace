@@ -14,11 +14,18 @@ on:
       - "src/**"
       - "server/**"
       - "LineOS/**"
+      - "packages/digital-shadow-service/**"
+      - "tools/**"
       - "supabase/migrations/**"
       - "package.json"
       - "package-lock.json"
+      - "README.md"
+      - "CHANGELOG.md"
+      - ".claude/progress.md"
+      - "scripts/check-version-consistency.mjs"
       - "tsconfig*.json"
       - "vite.config.*"
+      - "vitest.database.config.ts"
       - "playwright.config.ts"
       - "docs/governance/**"
       - ".github/workflows/verify-full.yml"
@@ -27,11 +34,18 @@ on:
       - 'src/**'
       - 'server/**'
       - 'LineOS/**'
+      - 'packages/digital-shadow-service/**'
+      - 'tools/**'
       - 'supabase/migrations/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - '.claude/progress.md'
+      - 'scripts/check-version-consistency.mjs'
       - 'tsconfig*.json'
       - 'vite.config.*'
+      - 'vitest.database.config.ts'
       - 'playwright.config.ts'
   workflow_dispatch:
 
@@ -46,16 +60,22 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
       - name: Install dependencies (root)
         run: npm ci
+      - name: Verify canonical product version
+        run: npm run version:check
       # server/ อยู่นอก npm workspaces — ต้องติดตั้งแยก ไม่งั้นเทสต์ที่ใช้ yazl fail
       - name: Install dependencies (server)
         run: npm ci
         working-directory: server
+      - name: Lint (zero errors + warning ratchet)
+        run: npm run lint:budget
       - name: Typecheck (full project)
         run: npx tsc -b tsconfig.build.json
       - name: Unit tests (root Vitest suite)
@@ -198,6 +218,74 @@ jobs:
       - name: Field app build
         run: npm run build -w @daph/field-app
 
+  digital-shadow:
+    name: digital shadow — build + isolated unit/integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Digital Shadow build
+        run: npm run build -w @monolith/digital-shadow-service
+      - name: Digital Shadow unit tests (Node config; no Redis/MQTT/InfluxDB)
+        run: npm run test:unit -w @monolith/digital-shadow-service
+      - name: Digital Shadow integration tests (Redis + local OPC UA simulator)
+        env:
+          REDIS_URL: redis://127.0.0.1:6379
+          XDG_CONFIG_HOME: ${{ runner.temp }}/node-opcua-config
+        run: npm run test:integration -w @monolith/digital-shadow-service
+
+  workspace-tools:
+    name: workspace tools — isolated tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Vault Builder tests
+        run: npm test -w @daph/vault-builder
+      - name: Bible Code tests
+        run: npm test -w @daph/bible-code
+
+  dependency-audit:
+    name: production dependencies — no high or critical vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install root and workspace dependencies
+        run: npm ci
+      - name: Audit root and workspaces (production only)
+        run: npm run audit:production
+      - name: Install factory server dependencies
+        run: npm ci
+        working-directory: server
+      - name: Audit factory server (production only)
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: server
+
   clean-worktree:
     name: hermetic build — clean worktree (FS-B2-04)
     runs-on: ubuntu-latest
@@ -240,7 +328,7 @@ jobs:
       - name: Run e2e @smoke (Playwright auto-starts the vite dev server)
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: smoke-report.json
-        run: npx playwright test --grep @smoke --reporter=list,json
+        run: npx playwright test --config playwright.e2e.config.ts --grep @smoke --reporter=list,json
       # FS-R2-B1-02: the @smoke tier is UI-only and deterministic, so a SKIP means a
       # critical path silently did not run. Playwright exits 0 on all-skipped, which
       # would report a green gate over a vacuous run — fail the build instead.
@@ -259,7 +347,7 @@ jobs:
           "
 
   e2e-integration:
-    name: e2e factory-flow (non-@smoke — enforced non-vacuous; service tests gated on B1-05)
+    name: e2e factory-flow contract (enforced non-vacuous)
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     concurrency:
       group: e2e-integration-${{ github.head_ref || github.ref }}
@@ -275,19 +363,14 @@ jobs:
       - run: npm ci
       - name: Install Playwright chromium + OS deps
         run: npx playwright install --with-deps chromium
-      # B0-02 reconciliation: the @smoke tier asserts the RELEASED-only export
-      # guardrail deterministically (no factory needed). The remaining, non-@smoke
-      # e2e tests exercise the real freeze → RELEASE → factory export flow. The
-      # factory service (server/) is NOT yet wired into CI — its FS-B0-02 fail-closed
-      # bearer boundary + the frontend auth needed to call it land under B1-05. Until
-      # then these tests skip (Playwright exits 0 on all-skipped). This job keeps that
-      # deferred coverage VISIBLE, stays green while they skip, and goes red on any
-      # real factory-flow failure. When the factory service is added they run for real
-      # and assert the downloaded artifact + manifest.
-      - name: Run e2e factory-flow (deterministic contract lane always runs; service tests skip until wired)
+      # B0-02 reconciliation: this lane is intentionally scoped to the deterministic,
+      # route-mocked factory verification contract. Selecting every non-@smoke spec
+      # here also pulled unrelated accounting/eTax/export suites into a job that does
+      # not provision their services and caused the release gate to time out.
+      - name: Run deterministic factory-flow contract
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: integration-report.json
-        run: npx playwright test --grep-invert @smoke --reporter=list,json
+        run: npx playwright test e2e/factory-verify-flow.spec.ts --config playwright.e2e.config.ts --reporter=list,json
       # FS 2026-07-18 (execution order #4): the factory-flow lane may never be
       # vacuous. The deterministic contract tests (factory-verify-flow.spec.ts,
       # mocked factory API) always run, so pass===0 here means the lane itself
@@ -305,7 +388,7 @@ jobs:
           console.log('factory-flow e2e: pass='+pass+' skip='+skip+' fail='+fail+' flaky='+flaky);
           if (fail>0) { console.error('::error::factory-flow has '+fail+' failing test(s)'); process.exit(1); }
           if (pass===0) { console.error('::error::factory-flow ran ZERO tests (all skipped) — a vacuous lane must not report green (FS 2026-07-18 #4). Skipped: '+skipped.join(' | ')); process.exit(1); }
-          if (skip>0) console.log('::notice::service-gated factory-flow tests still skipped pending B1-05 factory-service wiring ('+skip+'): '+skipped.join(' | '));
+          if (skip>0) { console.error('::error::factory-flow contract must not skip. Skipped: '+skipped.join(' | ')); process.exit(1); }
           console.log('OK: factory-flow lane is non-vacuous — '+pass+' test(s) ran and passed');
           "
 
@@ -365,6 +448,4 @@ jobs:
             echo "::notice title=gate-bypass-scan::strict scan PASS — ready to flip this job to required (remove continue-on-error)"
           else
             echo "::notice title=gate-bypass-scan::strict scan reported findings — report-only, NOT blocking this run (scripts/gates/** = L5 scope; flip to required after the L5 lane merges)"
-          fi
-rt-only, NOT blocking this run (scripts/gates/** = L5 scope; flip to required after the L5 lane merges)"
           fi

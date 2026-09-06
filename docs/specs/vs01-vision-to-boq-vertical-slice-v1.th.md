@@ -652,7 +652,7 @@ Reject BOQ + return to customer intake phase
 | Rule | ตรวจสอบ | Error |
 |------|---------|-------|
 | V-ED-01 | Dimension ทุกตัวอยู่ใน valid range (§8) | INVALID_DIMENSION |
-| V-ED-02 | ไม่มี dimension = 0 ที่ไม่มี annotation | ZERO_DIMENSION |
+| V-ED-02 | dimension = 0 ทุกตัวต้องมี annotation | ZERO_DIMENSION |
 | V-ED-03 | cabinet_id ไม่ซ้ำกันใน draft | DUPLICATE_CABINET_ID |
 | V-ED-04 | Cabinet count สมเหตุสมผลกับ room dimensions (count × avg_width ≤ room_perimeter × 0.8) | CABINET_OVERFLOW |
 | V-ED-05 | model + prompt_version ระบุครบ | MISSING_PROVENANCE |
@@ -662,12 +662,12 @@ Reject BOQ + return to customer intake phase
 
 | Rule | ตรวจสอบ | Error |
 |------|---------|-------|
-| V-BOQ-01 | ไม่มี CONFLICT flag ที่ยังไม่ resolve | UNRESOLVED_CONFLICT |
-| V-BOQ-02 | ไม่มี INFERRED flag ที่ reviewer ยังไม่ acknowledge | UNACKNOWLEDGED_INFERRED |
+| V-BOQ-01 | CONFLICT flag ทุกตัวต้อง resolve แล้ว | UNRESOLVED_CONFLICT |
+| V-BOQ-02 | INFERRED flag ทุกตัวต้องได้รับ reviewer acknowledgement | UNACKNOWLEDGED_INFERRED |
 | V-BOQ-03 | BOQ total panel area ≤ room wall area × 1.2 (sanity check) | AREA_OVERFLOW |
 | V-BOQ-04 | material_code valid ตาม material catalog (ถ้า set) | INVALID_MATERIAL_CODE |
 | V-BOQ-05 | reviewer_id set และ reviewed_at อยู่หลัง generated_at | MISSING_REVIEW |
-| V-BOQ-06 | ไม่มี pricing/cost fields (ไม่ใช่ scope VS-01) | SCOPE_VIOLATION |
+| V-BOQ-06 | pricing/cost fields อยู่นอก scope VS-01 และต้องถูกปฏิเสธ | SCOPE_VIOLATION |
 
 ### 11.3 สิ่งที่ Validation ทำไม่ได้
 

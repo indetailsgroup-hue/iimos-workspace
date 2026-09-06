@@ -20,7 +20,7 @@
 --   * work_item and approval_request fixture rows are planted with
 --     row_security = off + session_replication_role = replica (bypass FKs to
 --     organizations, customer, and auth.users).
---   * JWT carries org_id claim: get_user_org_id() reads auth.jwt()->>'org_id'.
+--   * get_user_org_id() resolves auth.uid() through active org_members rows.
 --   * No INSERT / UPDATE / DELETE tests: all mutations on these tables go
 --     through SECURITY DEFINER RPCs by design (0002 Req 10.3, 10.4); no
 --     client write policies exist.
@@ -180,6 +180,19 @@ INSERT INTO public.organizations (org_id, name, slug) VALUES
   ('a1a1a1a1-0000-0000-0000-000000000001', 'Alpha Co', 'alpha-co'),
   ('b2b2b2b2-0000-0000-0000-000000000001', 'Beta  Co', 'beta-co')
 ON CONFLICT (org_id) DO NOTHING;
+
+-- ── Auth users + active tenant memberships used by get_user_org_id() ─────────
+INSERT INTO auth.users (id, email) VALUES
+  ('a1a1a1a1-0000-0000-0001-000000000002', 'alpha-0186@example.test'),
+  ('b2b2b2b2-0000-0000-0001-000000000002', 'beta-0186@example.test')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.org_members (org_id, user_id, email, role, is_active) VALUES
+  ('a1a1a1a1-0000-0000-0000-000000000001',
+   'a1a1a1a1-0000-0000-0001-000000000002', 'alpha-0186@example.test', 'VIEWER', true),
+  ('b2b2b2b2-0000-0000-0000-000000000001',
+   'b2b2b2b2-0000-0000-0001-000000000002', 'beta-0186@example.test', 'VIEWER', true)
+ON CONFLICT (org_id, user_id) DO NOTHING;
 
 -- ── work_item rows (all other columns have defaults) ─────────────────────────
 INSERT INTO public.work_item (id, current_step, org_id) VALUES
