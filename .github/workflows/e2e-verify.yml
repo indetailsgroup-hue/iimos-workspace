@@ -47,7 +47,7 @@ jobs:
       - name: Run e2e @smoke (playwright auto-starts vite dev server)
         run: |
           set -o pipefail
-          npx playwright test --grep @smoke --reporter=list 2>&1 | tee e2e.out
+          npx playwright test --config playwright.e2e.config.ts --grep @smoke --reporter=list 2>&1 | tee e2e.out
 
       - name: Assemble evidence
         if: always()

@@ -301,7 +301,7 @@ jobs:
       - name: Run e2e @smoke (Playwright auto-starts the vite dev server)
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: smoke-report.json
-        run: npx playwright test --grep @smoke --reporter=list,json
+        run: npx playwright test --config playwright.e2e.config.ts --grep @smoke --reporter=list,json
       # FS-R2-B1-02: the @smoke tier is UI-only and deterministic, so a SKIP means a
       # critical path silently did not run. Playwright exits 0 on all-skipped, which
       # would report a green gate over a vacuous run — fail the build instead.
@@ -348,7 +348,7 @@ jobs:
       - name: Run e2e factory-flow (deterministic contract lane always runs; service tests skip until wired)
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: integration-report.json
-        run: npx playwright test --grep-invert @smoke --reporter=list,json
+        run: npx playwright test --config playwright.e2e.config.ts --grep-invert @smoke --reporter=list,json
       # FS 2026-07-18 (execution order #4): the factory-flow lane may never be
       # vacuous. The deterministic contract tests (factory-verify-flow.spec.ts,
       # mocked factory API) always run, so pass===0 here means the lane itself
