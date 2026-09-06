@@ -131,7 +131,7 @@ jobs:
           retention-days: 30
 
   validate-plan:
-    name: Validate exact bootstrap bundle locally
+    name: Render and assess exact bootstrap bundle locally
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -188,11 +188,36 @@ jobs:
           jq -e '.coreSchemaReady == true and .allRenderedMigrationsApplied == true' \
             bootstrap-plan/local-bootstrap-result.json >/dev/null
 
+          set +e
+          set -o pipefail
           supabase db lint \
             --db-url "$DB_URL" \
             --level error \
             --fail-on error \
             2>&1 | tee bootstrap-plan/bootstrap-db-lint.txt
+          DB_LINT_EXIT=${PIPESTATUS[0]}
+          set +o pipefail
+          set -e
+
+          jq \
+            --argjson lintExitCode "$DB_LINT_EXIT" \
+            '. + {
+              databaseLintExitCode: $lintExitCode,
+              databaseLintClean: ($lintExitCode == 0),
+              productionBootstrapReady: (
+                .coreSchemaReady
+                and .allRenderedMigrationsApplied
+                and ($lintExitCode == 0)
+              )
+            }' \
+            bootstrap-plan/local-bootstrap-result.json \
+            > bootstrap-plan/local-bootstrap-result.tmp
+          mv bootstrap-plan/local-bootstrap-result.tmp \
+            bootstrap-plan/local-bootstrap-result.json
+
+          if [ "$DB_LINT_EXIT" -ne 0 ]; then
+            echo "::warning title=Production bootstrap blocked::The exact bundle applies and will still run pgTAP, but database lint found schema drift. Review bootstrap-db-lint.txt; do not apply this plan to production."
+          fi
 
           psql "$DB_URL" -v ON_ERROR_STOP=1 \
             -c "CREATE EXTENSION IF NOT EXISTS pgtap;"

@@ -231,8 +231,10 @@ begin
       using errcode = '55000';
   end if;
 
-  execute
-    'select public.record_input_sync($1, $2::public.sync_source, $3::public.sync_status, $4, $5)'
+  execute format(
+    'select public.record_input_sync($1, $2::%I.%I, $3::%I.%I, $4, $5)',
+    'public', 'sync_source', 'public', 'sync_status'
+  )
     into v_sync_log_id
     using v_site_code, 'line', v_status, v_record_count, v_error_jsonb;
 
