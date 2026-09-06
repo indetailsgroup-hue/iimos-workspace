@@ -38,6 +38,11 @@ pgtap_log="$output_dir/reconciliation-pgtap.tap"
 lint_log="$output_dir/reconciliation-db-lint.txt"
 applied_tsv="$output_dir/applied-migrations.tsv"
 result_json="$output_dir/reconciliation-simulation.json"
+restorable_schema_sql="$(mktemp)"
+cleanup() {
+  rm -f "$restorable_schema_sql"
+}
+trap cleanup EXIT
 
 printf 'order\tversion\tfile\n' > "$applied_tsv"
 : > "$restore_log"
@@ -94,11 +99,51 @@ core_schema_query="SELECT CASE WHEN (
   AND to_regclass('public.platform_metrics_snapshots') IS NOT NULL
 ) THEN 'true' ELSE 'false' END;"
 
+# The hosted public-only dump references extension-owned operators by their
+# hosted schema (for example public.gin_trgm_ops), but pg_dump intentionally
+# omits CREATE EXTENSION. Recreate those dependencies before restoring indexes.
+# The dump's schema declaration is made idempotent because public must exist
+# first as the extension target.
+sed 's/^CREATE SCHEMA public;$/CREATE SCHEMA IF NOT EXISTS public;/' \
+  "$hosted_schema_sql" > "$restorable_schema_sql"
+
 if psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
-  -c 'DROP SCHEMA IF EXISTS public CASCADE;' \
-  >> "$restore_log" 2>&1 \
+  -c 'DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;' \
+  >> "$restore_log" 2>&1; then
+  for public_extension in pg_trgm unaccent; do
+    if jq -e --arg extension "$public_extension" \
+      '.installedExtensions[$extension] == "public"' \
+      "$hosted_inventory_json" > /dev/null; then
+      if ! psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
+        -c "CREATE EXTENSION IF NOT EXISTS $public_extension WITH SCHEMA public;" \
+        >> "$restore_log" 2>&1; then
+        local_dependency_extensions_ready=false
+        failed_dependency_extension="$public_extension"
+        break
+      fi
+
+      extension_schema="$(psql "$local_database_url" --no-psqlrc -X -qAt \
+        -v ON_ERROR_STOP=1 -v extension_name="$public_extension" \
+        -c "SELECT namespace.nspname
+            FROM pg_catalog.pg_extension AS extension
+            JOIN pg_catalog.pg_namespace AS namespace
+              ON namespace.oid = extension.extnamespace
+            WHERE extension.extname = :'extension_name';")"
+      if [[ "$extension_schema" != "public" ]] \
+        && ! psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
+          -c "ALTER EXTENSION $public_extension SET SCHEMA public;" \
+          >> "$restore_log" 2>&1; then
+        local_dependency_extensions_ready=false
+        failed_dependency_extension="$public_extension"
+        break
+      fi
+    fi
+  done
+fi
+
+if [[ "$local_dependency_extensions_ready" == "true" ]] \
   && psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
-    -f "$hosted_schema_sql" \
+    -f "$restorable_schema_sql" \
     >> "$restore_log" 2>&1; then
   schema_restore_succeeded=true
   core_schema_ready_before="$(psql "$local_database_url" --no-psqlrc -X -tA \
