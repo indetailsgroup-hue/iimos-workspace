@@ -39,13 +39,13 @@ Release-ready เมื่อทุกข้อด้านล่างเป็
 | LineOS | PASS (CI) | Ubuntu job พร้อม Python Playwright/Chromium ผ่านใน PR #79 |
 | Fresh DB migrations | PASS (CI) | `supabase db reset --local` ลง canonical migration chain สำเร็จใน [run 34041594653](https://github.com/indetailsgroup-hue/monolith-workspace/actions/runs/34041594653) |
 | SQL pgTAP | PASS (CI) | `pg_prove supabase/tests/*.sql` รัน assertions จริงและผ่านใน fresh database เดียวกัน |
-| TypeScript database suites | DIAGNOSTIC | legacy schema-assumption suite แยกจาก authoritative pgTAP gate และเก็บ JSON artifact; ต้องทยอยปรับ schema contract ต่อโดยไม่ใช้ผลนี้อ้างว่า pgTAP fail |
+| TypeScript database suites | DIAGNOSTIC | legacy schema-assumption suite แยกจาก authoritative pgTAP gate และเก็บ JSON artifact; สถานะ pgTAP release gate อ้างจาก `pg_prove` job เท่านั้น |
 | Playwright E2E | PASS (CI) | UI smoke และ non-vacuous factory integration ผ่านใน PR #79 |
 | Chromatic | REVIEW REQUIRED | Playwright story IDs ซ่อมแล้ว; external UI baseline ยังรอ human review/acceptance และห้าม auto-accept โดยไม่ตรวจภาพ |
 | Security issues #49/#50 | BLOCKED (production) | read-only hosted verification ยืนยันว่า RLS และ policies ยังไม่อยู่ใน production ทั้งสองตาราง จึงยังเปิด issues ไว้ |
-| Backend deploy | BLOCKED (missing secret) | ไม่มี `DATABASE_URL`; workflow แสดง successful skip ตามนโยบาย ไม่รายงานเป็น deploy failure แต่ยังไม่ถือว่า deploy ผ่าน |
+| Backend deploy | BLOCKED (credential preflight) | secret inventory ให้ผล `deployment_ready=false`; workflow แสดง successful skip ตามนโยบาย และยังไม่ถือว่า deploy ผ่าน |
 | Product version | RECONCILED IN PR | root `package.json` เป็น canonical `17.5.1`; README/changelog/progress ใช้ค่าเดียวกัน และ CI ตรวจ drift |
-| Release tag/GitHub Release | BLOCKED | `v17.5.1` เป็น tag ล่าสุด แต่ยังไม่มี GitHub Release; ห้าม publish จน production RLS, deploy, Chromatic และ merge ผ่าน |
+| Release tag/GitHub Release | BLOCKED | `v17.5.1` เป็น tag ล่าสุด ขณะที่ GitHub Release inventory สูงสุดคือ `v17.0.0`; ห้าม publish จน production RLS, deploy, Chromatic และ merge ผ่าน |
 
 ## 3. การซ่อม Full Verify และ CI ownership
 
@@ -168,7 +168,7 @@ pgTAP workflow ไม่ใช้ hosted Supabase token แล้ว แต่�
 |---|---|---|---|
 | #41 Digital Shadow Service | closed as superseded | unique three-parameter Weibull/RUL delta ถูกย้ายเข้า PR #79; product integration อยู่ใน PR #80 | ปิดแล้วพร้อม comment อ้างอิง replacement |
 | #44 Digital Shadow integration | closed and replaced | แยกเฉพาะ Machine Shadow UI/API/store, Feature Cache, adapters/services และ tests ออกมาเป็น clean PR #80 โดยไม่พา CI/Slack/SARIF commits เก่า | ปิดแล้ว; PR #80 ต้อง rebase บน stabilization ก่อน merge |
-| #46 Accounting/RLS | closed as superseded | 42/73 paths byte-identical, 30 paths มีใน main และพัฒนาต่อแล้ว; legacy bootstrap ที่หายไปถูกแทนด้วย canonical migration preparation | ปิดแล้วหลัง fresh DB/pgTAP ยืนยัน current design |
+| #46 Accounting/RLS | closed as superseded | 42/73 paths byte-identical, 30 paths มีใน main และพัฒนาต่อแล้ว; canonical migration preparation รับหน้าที่แทน legacy bootstrap | ปิดแล้วหลัง fresh DB/pgTAP ยืนยัน current design |
 | #78 CONTRIBUTING formatting | open, 1 commit, 1 line | ไม่อยู่ใน scope stabilization และไม่เกี่ยวกับ release gates | คงไว้ให้ owner จัดการแยก |
 
 Security issues #49/#50 ยัง open ทั้งคู่ การตรวจ production แบบ read-only ผ่าน Supabase Management API ที่ commit `c76b478` พบว่า `notification_digest_queue` และ `platform_metrics_snapshots` มี `rls=false`, `policies=false` (ขณะที่ไม่พบ permissive bypass) จึงใส่หลักฐานลงทั้งสอง issue แล้วและ **ไม่ปิด** Migration `0178_notification_platform_metrics_rls.sql` ผ่าน fresh DB/pgTAP แต่ยังไม่ได้ deploy ไป production ตามผลตรวจจริง
@@ -189,7 +189,7 @@ Security issues #49/#50 ยัง open ทั้งคู่ การตรว�
 - root `package-lock.json`, README, CHANGELOG และ progress document ต้องตรงกับค่านี้; `npm run version:check` เป็น CI gate
 - package versions ของ `server`, Field App, Digital Shadow และ tools เป็น component versions แยกกัน ไม่ต้องเท่ากับ product version
 - `v17.5.0` (`3a819c17`) และ `v17.5.1` (`532783be`) ถูก tag จริงวันที่ 2026-09-01
-- `v17.5.2` ถึง `v18.5.1` ถูกจัดเป็น planned implementation records เพราะไม่มี tag/GitHub Release
+- `v17.5.2` ถึง `v18.5.1` ถูกจัดเป็น planned implementation records ตาม tag inventory ที่สิ้นสุดที่ `v17.5.1` และ release inventory ที่สิ้นสุดที่ `v17.0.0`
 - GitHub Release ที่เผยแพร่สูงสุดคือ `v17.0.0`; หน้า Releases ยังตั้ง `v15.9.0` เป็น Latest อย่างไม่ถูกต้อง การแก้ Latest/สร้าง v17.5.1 Release ต้องทำหลัง release gates ผ่านทั้งหมด
 
 ### GitHub authentication และ branch publication
