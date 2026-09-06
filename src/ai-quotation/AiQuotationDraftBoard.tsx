@@ -717,7 +717,6 @@ export function AiQuotationDraftBoard({
 
   useEffect(() => {
     fetchDrafts(orgId, orgPlan);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, orgPlan]);
 
   // ── Plan gate ──────────────────────────────────────────────────────────────

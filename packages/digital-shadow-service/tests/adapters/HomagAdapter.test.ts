@@ -124,7 +124,7 @@ describe('HomagAdapter', () => {
 
   afterEach(async () => {
     // Clear any pending polling timers
-    try { await adapter.disconnect(); } catch {}
+    try { await adapter.disconnect(); } catch { /* already disconnected */ }
     nock.cleanAll();
   });
 

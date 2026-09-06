@@ -91,7 +91,7 @@ describe('KdtAdapter', () => {
   });
 
   afterEach(async () => {
-    try { await adapter.disconnect(); } catch {}
+    try { await adapter.disconnect(); } catch { /* already disconnected */ }
   });
 
   // ═══════════════════════════════════════════════════════════════════════════

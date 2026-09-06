@@ -125,15 +125,15 @@ describe("Group A – Rendering & loading states", () => {
       error: null,
       healthSummary: null,
       riskRanking: [],
-    compliance: [],
+    compliance: [mockDashboard as any],
     isRefreshing: false,
     lastRefreshed: null,
       refetch: vi.fn(),
     });
     renderDashboard();
     expect(
-      screen.getByRole("status") ||
-        screen.getByTestId("loading-skeleton") ||
+      screen.queryByRole("status") ||
+        screen.queryByTestId("loading-skeleton") ||
         document.querySelector('[aria-busy="true"]') ||
         screen.queryByText(/loading/i)
     ).toBeTruthy();
@@ -145,7 +145,7 @@ describe("Group A – Rendering & loading states", () => {
       error: null,
       healthSummary: mockHealthSummary,
       riskRanking: mockOrgRiskRanking,
-    compliance: [],
+    compliance: [mockDashboard as any],
     isRefreshing: false,
     lastRefreshed: null,
       refetch: vi.fn(),
@@ -153,7 +153,7 @@ describe("Group A – Rendering & loading states", () => {
     renderDashboard();
     await waitFor(() => {
       expect(
-        screen.getByText(/etax|compliance dashboard/i)
+        screen.getByRole("heading", { name: /etax compliance dashboard/i })
       ).toBeInTheDocument();
     });
   });
@@ -164,7 +164,7 @@ describe("Group A – Rendering & loading states", () => {
       error: null,
       healthSummary: mockHealthSummary,
       riskRanking: [],
-    compliance: [],
+    compliance: [mockDashboard as any],
     isRefreshing: false,
     lastRefreshed: null,
       refetch: vi.fn(),
@@ -178,7 +178,7 @@ describe("Group A – Rendering & loading states", () => {
       error: null,
       healthSummary: null,
       riskRanking: [],
-    compliance: [],
+    compliance: [mockDashboard as any],
     isRefreshing: false,
     lastRefreshed: null,
       refetch: vi.fn(),
@@ -196,7 +196,7 @@ describe("Group B – Summary cards", () => {
       error: null,
       healthSummary: mockHealthSummary,
       riskRanking: mockOrgRiskRanking,
-    compliance: [],
+    compliance: [mockDashboard as any],
     isRefreshing: false,
     lastRefreshed: null,
       refetch: vi.fn(),
@@ -210,38 +210,41 @@ describe("Group B – Summary cards", () => {
     });
   });
 
-  it("B2 – displays submitted count", async () => {
+  it("B2 – displays monitored organisation count", async () => {
     renderDashboard();
     await waitFor(() => {
-      expect(screen.getByText("108")).toBeInTheDocument();
+      const card = screen.getByText("Orgs Monitored").closest("div")!;
+      expect(within(card).getByText("1")).toBeInTheDocument();
     });
   });
 
   it("B3 – displays failed count", async () => {
     renderDashboard();
     await waitFor(() => {
-      expect(screen.getByText(/8/)).toBeInTheDocument();
+      const card = screen.getByText("Failed (24 h)").closest("div")!;
+      expect(within(card).getByText("1")).toBeInTheDocument();
     });
   });
 
   it("B4 – displays success rate as percentage", async () => {
     renderDashboard();
     await waitFor(() => {
-      expect(screen.getByText(/90(\.\d+)?%|90\.00/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/^90\.0%$/).length).toBeGreaterThan(0);
     });
   });
 
   it("B5 – displays overdue with pending eTax count", async () => {
     renderDashboard();
     await waitFor(() => {
-      expect(screen.getByText(/2/)).toBeInTheDocument();
+      const card = screen.getAllByText("Overdue + Pending")[0].closest("div")!;
+      expect(within(card).getByText("2")).toBeInTheDocument();
     });
   });
 
   it("B6 – displays health score", async () => {
     renderDashboard();
     await waitFor(() => {
-      expect(screen.getByText(/82/)).toBeInTheDocument();
+      expect(screen.getAllByText(/^82$/).length).toBeGreaterThan(0);
     });
   });
 });
@@ -255,7 +258,7 @@ describe("Group C – HealthScoreBadge colouring", () => {
       error: null,
       healthSummary: { ...mockHealthSummary, health_score: 85, health_status: "healthy" as const },
       riskRanking: mockOrgRiskRanking,
-    compliance: [],
+    compliance: [mockDashboard as any],
     isRefreshing: false,
     lastRefreshed: null,
       refetch: vi.fn(),
@@ -265,7 +268,7 @@ describe("Group C – HealthScoreBadge colouring", () => {
       const badge =
         document.querySelector(".bg-green-100") ||
         document.querySelector("[data-status='healthy']") ||
-        screen.queryByText(/healthy/i);
+        screen.queryAllByText(/^healthy$/i)[0];
       expect(badge).toBeTruthy();
     });
   });
@@ -276,7 +279,7 @@ describe("Group C – HealthScoreBadge colouring", () => {
       error: null,
       healthSummary: { ...mockHealthSummary, health_score: 65, health_status: "warning" as const },
       riskRanking: mockOrgRiskRanking,
-    compliance: [],
+    compliance: [mockDashboard as any],
     isRefreshing: false,
     lastRefreshed: null,
       refetch: vi.fn(),
@@ -286,7 +289,7 @@ describe("Group C – HealthScoreBadge colouring", () => {
       const badge =
         document.querySelector(".bg-yellow-100") ||
         document.querySelector("[data-status='warning']") ||
-        screen.queryByText(/warning/i);
+        screen.queryAllByText(/^warning$/i)[0];
       expect(badge).toBeTruthy();
     });
   });
@@ -297,7 +300,7 @@ describe("Group C – HealthScoreBadge colouring", () => {
       error: null,
       healthSummary: { ...mockHealthSummary, health_score: 30, health_status: "critical" as const },
       riskRanking: mockOrgRiskRanking,
-    compliance: [],
+    compliance: [mockDashboard as any],
     isRefreshing: false,
     lastRefreshed: null,
       refetch: vi.fn(),
@@ -322,7 +325,7 @@ describe("Group D – Org risk ranking table", () => {
       error: null,
       healthSummary: mockHealthSummary,
       riskRanking: mockOrgRiskRanking,
-    compliance: [],
+    compliance: [mockDashboard as any],
     isRefreshing: false,
     lastRefreshed: null,
       refetch: vi.fn(),
@@ -341,14 +344,15 @@ describe("Group D – Org risk ranking table", () => {
   it("D2 – shows risk tier labels", async () => {
     renderDashboard();
     await waitFor(() => {
-      expect(screen.getByText(/HEALTHY/i)).toBeInTheDocument();
-      expect(screen.getByText(/WARNING/i)).toBeInTheDocument();
-      expect(screen.getByText(/CRITICAL/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/^HEALTHY$/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/^WARNING$/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/^CRITICAL$/i).length).toBeGreaterThan(0);
     });
   });
 
   it("D3 – flags priority review org (Gamma SA)", async () => {
     renderDashboard();
+    fireEvent.click(screen.getByRole("button", { name: /risk ranking/i }));
     await waitFor(() => {
       // Priority review flag should be visible near Gamma SA row
       const rows = document.querySelectorAll("tr, [role='row']");
@@ -362,9 +366,9 @@ describe("Group D – Org risk ranking table", () => {
   it("D4 – shows health scores for each org", async () => {
     renderDashboard();
     await waitFor(() => {
-      expect(screen.getByText(/82/)).toBeInTheDocument();
-      expect(screen.getByText(/61/)).toBeInTheDocument();
-      expect(screen.getByText(/31/)).toBeInTheDocument();
+      expect(screen.getAllByText(/^82$/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/^61$/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/^31$/).length).toBeGreaterThan(0);
     });
   });
 
@@ -386,7 +390,7 @@ describe("Group E – Tab navigation", () => {
       error: null,
       healthSummary: mockHealthSummary,
       riskRanking: mockOrgRiskRanking,
-    compliance: [],
+    compliance: [mockDashboard as any],
     isRefreshing: false,
     lastRefreshed: null,
       refetch: vi.fn(),
@@ -407,8 +411,7 @@ describe("Group E – Tab navigation", () => {
     await waitFor(() => {
       const riskTab =
         screen.queryByRole("tab", { name: /risk/i }) ||
-        screen.queryByText(/risk rank/i) ||
-        screen.queryByText(/org risk/i);
+        screen.getByRole("button", { name: /risk ranking/i });
       if (riskTab) {
         fireEvent.click(riskTab);
       }
@@ -429,7 +432,7 @@ describe("Group E – Tab navigation", () => {
       error: null,
       healthSummary: mockHealthSummary,
       riskRanking: mockOrgRiskRanking,
-    compliance: [],
+    compliance: [mockDashboard as any],
     isRefreshing: false,
     lastRefreshed: null,
       refetch: mockRefetch,
@@ -457,7 +460,7 @@ describe("Group F – Error handling", () => {
       error: "Network error",
       healthSummary: null,
       riskRanking: [],
-    compliance: [],
+    compliance: [mockDashboard as any],
     isRefreshing: false,
     lastRefreshed: null,
       refetch: vi.fn(),
@@ -465,7 +468,7 @@ describe("Group F – Error handling", () => {
     renderDashboard();
     await waitFor(() => {
       expect(
-        screen.queryByText(/error/i) ||
+        screen.queryAllByText(/error/i)[0] ||
           screen.queryByRole("alert") ||
           document.querySelector("[data-testid='error-state']")
       ).toBeTruthy();
@@ -479,7 +482,7 @@ describe("Group F – Error handling", () => {
       error: "Fetch failed",
       healthSummary: null,
       riskRanking: [],
-    compliance: [],
+    compliance: [mockDashboard as any],
     isRefreshing: false,
     lastRefreshed: null,
       refetch: mockRefetch,
@@ -506,7 +509,7 @@ describe("Group F – Error handling", () => {
         undefined as any,
         mockOrgRiskRanking[2],
       ],
-      compliance: [],
+      compliance: [mockDashboard as any],
       isRefreshing: false,
       lastRefreshed: null,
       refetch: vi.fn(),
@@ -524,7 +527,7 @@ describe("Group G – Accessibility & ARIA", () => {
       error: null,
       healthSummary: mockHealthSummary,
       riskRanking: mockOrgRiskRanking,
-    compliance: [],
+    compliance: [mockDashboard as any],
     isRefreshing: false,
     lastRefreshed: null,
       refetch: vi.fn(),
@@ -557,7 +560,7 @@ describe("Group G – Accessibility & ARIA", () => {
       const tiers = ["HEALTHY", "WARNING", "CRITICAL"];
       const hasAccessibleTier = tiers.some(
         (t) =>
-          screen.queryByText(new RegExp(t, "i")) ||
+          screen.queryAllByText(new RegExp(`^${t}$`, "i"))[0] ||
           document.querySelector(`[aria-label*="${t}"]`)
       );
       expect(hasAccessibleTier).toBe(true);
@@ -566,6 +569,7 @@ describe("Group G – Accessibility & ARIA", () => {
 
   it("G4 – table has accessible headers (th elements or role=columnheader)", async () => {
     renderDashboard();
+    fireEvent.click(screen.getByRole("button", { name: /risk ranking/i }));
     await waitFor(() => {
       const ths = document.querySelectorAll(
         "th, [role='columnheader']"

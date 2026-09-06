@@ -14,11 +14,14 @@ on:
       - "src/**"
       - "server/**"
       - "LineOS/**"
+      - "packages/digital-shadow-service/**"
+      - "tools/**"
       - "supabase/migrations/**"
       - "package.json"
       - "package-lock.json"
       - "tsconfig*.json"
       - "vite.config.*"
+      - "vitest.database.config.ts"
       - "playwright.config.ts"
       - "docs/governance/**"
       - ".github/workflows/verify-full.yml"
@@ -27,11 +30,14 @@ on:
       - 'src/**'
       - 'server/**'
       - 'LineOS/**'
+      - 'packages/digital-shadow-service/**'
+      - 'tools/**'
       - 'supabase/migrations/**'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig*.json'
       - 'vite.config.*'
+      - 'vitest.database.config.ts'
       - 'playwright.config.ts'
   workflow_dispatch:
 
@@ -56,6 +62,8 @@ jobs:
       - name: Install dependencies (server)
         run: npm ci
         working-directory: server
+      - name: Lint (zero errors + warning ratchet)
+        run: npm run lint:budget
       - name: Typecheck (full project)
         run: npx tsc -b tsconfig.build.json
       - name: Unit tests (root Vitest suite)
@@ -197,6 +205,59 @@ jobs:
         run: npm run test:run -w @daph/field-app
       - name: Field app build
         run: npm run build -w @daph/field-app
+
+  digital-shadow:
+    name: digital shadow — build + isolated unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Digital Shadow build
+        run: npm run build -w @monolith/digital-shadow-service
+      - name: Digital Shadow unit tests (Node config; no Redis/MQTT/InfluxDB)
+        run: npm run test:unit -w @monolith/digital-shadow-service
+
+  workspace-tools:
+    name: workspace tools — isolated tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Vault Builder tests
+        run: npm test -w @daph/vault-builder
+      - name: Bible Code tests
+        run: npm test -w @daph/bible-code
+
+  dependency-audit:
+    name: production dependencies — no high or critical vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install root and workspace dependencies
+        run: npm ci
+      - name: Audit root and workspaces (production only)
+        run: npm run audit:production
+      - name: Install factory server dependencies
+        run: npm ci
+        working-directory: server
+      - name: Audit factory server (production only)
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: server
 
   clean-worktree:
     name: hermetic build — clean worktree (FS-B2-04)
@@ -365,6 +426,4 @@ jobs:
             echo "::notice title=gate-bypass-scan::strict scan PASS — ready to flip this job to required (remove continue-on-error)"
           else
             echo "::notice title=gate-bypass-scan::strict scan reported findings — report-only, NOT blocking this run (scripts/gates/** = L5 scope; flip to required after the L5 lane merges)"
-          fi
-rt-only, NOT blocking this run (scripts/gates/** = L5 scope; flip to required after the L5 lane merges)"
           fi

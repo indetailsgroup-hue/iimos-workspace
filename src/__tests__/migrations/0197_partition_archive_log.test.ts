@@ -66,7 +66,7 @@ const TEST_PARTITIONS = [
   },
 ]
 
-let insertedIds: number[] = []
+const insertedIds: number[] = []
 
 // ─── Setup / Teardown ─────────────────────────────────────────────────────────
 beforeAll(() => {
@@ -511,7 +511,7 @@ describe('Group D — rpc_partition_archive_log filtering', () => {
 // Group E — rpc_partition_archive_log_stats aggregates
 // ═════════════════════════════════════════════════════════════════════════════
 describe('Group E — rpc_partition_archive_log_stats aggregates', () => {
-  let statsSeedIds: number[] = []
+  const statsSeedIds: number[] = []
 
   beforeAll(async () => {
     // Insert a clean, known set of rows for stats validation

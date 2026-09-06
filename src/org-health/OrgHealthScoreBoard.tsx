@@ -216,7 +216,6 @@ function OrgHealthScoreBoardInner({ orgId, orgPlan, isAdmin }: Required<OrgHealt
     fetchLatestScore(orgId, orgPlan);
     fetchHistory(orgId, orgPlan);
     fetchScoringConfig(orgId, orgPlan);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, orgPlan]);
 
   // ── Loading ──────────────────────────────────────────────────────────────

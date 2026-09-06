@@ -234,8 +234,19 @@ export function CultureDashboard({ orgId, orgPlan, isAdmin = false }: CultureDas
     clearError,
   } = useCultureMetricsStore();
 
+  const canAccess = canAccessCultureMetrics(orgPlan);
+
+  // Hooks must run in the same order for gated and entitled users. Keep the
+  // access check inside the effect so a gated render performs no data request.
+  useEffect(() => {
+    if (!canAccess) return;
+    fetchEnpsSurveys(orgId);
+    fetchEnpsResults(orgId);
+    fetchOrgHealth(orgId);
+  }, [canAccess, orgId, fetchEnpsSurveys, fetchEnpsResults, fetchOrgHealth]);
+
   // ── Plan gate ──────────────────────────────────────────────────────────────
-  if (!canAccessCultureMetrics(orgPlan)) {
+  if (!canAccess) {
     return (
       <div
         className="flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-amber-300 bg-amber-50 p-8 text-center"
@@ -271,14 +282,6 @@ export function CultureDashboard({ orgId, orgPlan, isAdmin = false }: CultureDas
       </div>
     );
   }
-
-  // ── Data fetch on mount ────────────────────────────────────────────────────
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    fetchEnpsSurveys(orgId);
-    fetchEnpsResults(orgId);
-    fetchOrgHealth(orgId);
-  }, [orgId, fetchEnpsSurveys, fetchEnpsResults, fetchOrgHealth]);
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (isLoading || isEnpsLoading) {

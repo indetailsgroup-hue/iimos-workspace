@@ -3,6 +3,36 @@
 All notable changes to the Monolith Workspace are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] — Release Readiness Stabilization
+
+### Added
+- Production routes and a Business Modules hub for the completed v17.5/v18.0 People, Training, Culture, AI, Structure, Quality, Quotation, and Leadership UIs.
+- A shared route registry enforcing active organization, authenticated-member identity, tenant role, and plan requirements before a module mounts or fetches data.
+- A dedicated database Vitest lane plus deterministic local Supabase fixture seeding and a test-only SQL execution helper.
+- Full Verify lanes for Digital Shadow, workspace tools, and production dependency auditing.
+
+### Changed
+- pgTAP CI now prepares historical migrations deterministically, starts a fresh local Supabase stack without hosted secrets, applies every migration, runs all SQL pgTAP files, and then runs the TypeScript RLS/migration/integration suites against the same database.
+- Backend deployment now reports an explicit successful skip when required deployment secrets are unavailable and only deploys when every prerequisite is present.
+- Lint is a blocking zero-error gate with a 2,312-warning ratchet; new warnings fail CI.
+- Root Vitest excludes database-, service-, tool-, and E2E-owned suites so each environment-dependent suite runs only in its authoritative CI lane.
+- The canonical S17 schema test now resolves bundle membership from `schema-bundle.sha256`, keeping unrelated VS-01 schemas outside the signed ten-schema bundle.
+
+### Fixed
+- Root test drift in Accounting, eTax, Culture, Process Templates, AI Cost, AI Scheduler, Training, DXF, migration-contract, and super-admin guard suites.
+- Digital Shadow unit-test configuration and adapter tests, including the Homag adapter lane.
+- The fresh-database migration sequence now removes the incomplete historical `org_members` stub when the full multi-tenant bootstrap is present and merges duplicate numeric migrations in deterministic filename order.
+- Safe post-login redirects reject protocol-relative destinations.
+
+### Security
+- Updated `pdfjs-dist` and MQTT, removed the unused vulnerable Sparkplug payload dependency, forced a patched `ws`, and moved Vault Builder to the maintained SheetJS 0.20.3 distribution.
+- Production audit gate currently reports zero high and zero critical vulnerabilities. Remaining moderate advisories stay visible in the release-readiness report.
+
+### Verification
+- Local root suite: 377 files / 7,671 tests passed, with zero failures and zero skipped tests.
+- Node-native controls: 35/35 passed; Field App: 24/24 passed; Digital Shadow: 244/244 passed; Vault Builder: 82/82 passed; Bible Code: 28/28 passed; Factory Server: 58/58 passed.
+- A release tag and GitHub Release remain blocked until the pull-request CI run, fresh-database migration, pgTAP, E2E, and security-issue evidence are all green.
+
 ## [18.5.1] — 2027-03-13 — Sprint 9: OrgHealthScoreBoard UI + OHS Store Tests + QcAnomalyDashboard Component Tests
 
 ### Added

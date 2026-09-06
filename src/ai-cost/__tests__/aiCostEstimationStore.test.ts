@@ -36,32 +36,34 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // MOCK SUPABASE — thenable Proxy (hoisted before all imports)
 // ============================================================================
 
-let mockResult: { data: unknown; error: unknown } = { data: null, error: null };
-
-function makeThenableProxy(): unknown {
-  const handler: ProxyHandler<Record<string, unknown>> = {
+const { mockState, mockSupabase } = vi.hoisted(() => {
+  const mockState = {
+    result: { data: null, error: null } as { data: unknown; error: unknown },
+  };
+  const makeThenableProxy = (): unknown => new Proxy({}, {
     get(_target, prop: string | symbol) {
       if (prop === 'then') {
         return (
           onFulfilled?: (v: unknown) => unknown,
           onRejected?: (e: unknown) => unknown,
-        ) => Promise.resolve(mockResult).then(onFulfilled, onRejected);
+        ) => Promise.resolve(mockState.result).then(onFulfilled, onRejected);
       }
       return (..._args: unknown[]) => makeThenableProxy();
     },
+  });
+  return {
+    mockState,
+    mockSupabase: {
+      from: vi.fn(() => makeThenableProxy()),
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'user-ace-001' } },
+          error: null,
+        }),
+      },
+    },
   };
-  return new Proxy({} as Record<string, unknown>, handler);
-}
-
-const mockSupabase = {
-  from: vi.fn(() => makeThenableProxy()),
-  auth: {
-    getUser: vi.fn().mockResolvedValue({
-      data: { user: { id: 'user-ace-001' } },
-      error: null,
-    }),
-  },
-};
+});
 
 vi.mock('../../core/supabase', () => ({ supabase: mockSupabase }));
 
@@ -246,7 +248,7 @@ describe('plan gate guard — createCostModel', () => {
   });
 
   it('resolves for ENTERPRISE', async () => {
-    mockResult = { data: makeCostModelRow(), error: null };
+    mockState.result = { data: makeCostModelRow(), error: null };
     await expect(
       useAiCostEstimationStore.getState().createCostModel('org-001', 'ENTERPRISE', {
         tool: 'CHATGPT',
@@ -524,7 +526,7 @@ describe('fetchCostModels', () => {
   });
 
   it('sets isLoading = true during fetch, false after', async () => {
-    mockResult = { data: [makeCostModelRow()], error: null };
+    mockState.result = { data: [makeCostModelRow()], error: null };
 
     const fetchPromise = useAiCostEstimationStore.getState().fetchCostModels('org-001');
 
@@ -538,7 +540,7 @@ describe('fetchCostModels', () => {
 
   it('maps DB rows to AiCostModel (camelCase)', async () => {
     const row = makeCostModelRow({ id: 'cm-mapped', display_name: 'Claude 3.5 Sonnet' });
-    mockResult = { data: [row], error: null };
+    mockState.result = { data: [row], error: null };
 
     await useAiCostEstimationStore.getState().fetchCostModels('org-001');
 
@@ -549,7 +551,7 @@ describe('fetchCostModels', () => {
   });
 
   it('handles null data gracefully (empty array)', async () => {
-    mockResult = { data: null, error: null };
+    mockState.result = { data: null, error: null };
 
     await useAiCostEstimationStore.getState().fetchCostModels('org-001');
 
@@ -558,7 +560,7 @@ describe('fetchCostModels', () => {
   });
 
   it('sets error on DB failure and isLoading = false', async () => {
-    mockResult = { data: null, error: new Error('DB connection timeout') };
+    mockState.result = { data: null, error: new Error('DB connection timeout') };
 
     await useAiCostEstimationStore.getState().fetchCostModels('org-001');
 
@@ -567,7 +569,7 @@ describe('fetchCostModels', () => {
   });
 
   it('calls supabase.from with ace_cost_models table', async () => {
-    mockResult = { data: [], error: null };
+    mockState.result = { data: [], error: null };
 
     await useAiCostEstimationStore.getState().fetchCostModels('org-001');
 
@@ -603,7 +605,7 @@ describe('logUsage — PER_TOKEN cost computation', () => {
       computed_cost_usd: expectedUsd,
       computed_cost_thb: expectedThb,
     });
-    mockResult = { data: returnedRow, error: null };
+    mockState.result = { data: returnedRow, error: null };
 
     const log = await useAiCostEstimationStore.getState().logUsage('org-001', 'ENTERPRISE', {
       employeeId: 'emp-001',
@@ -642,7 +644,7 @@ describe('logUsage — PER_TOKEN cost computation', () => {
     });
 
     const newRow = makeUsageLogRow({ id: 'ul-new' });
-    mockResult = { data: newRow, error: null };
+    mockState.result = { data: newRow, error: null };
 
     await useAiCostEstimationStore.getState().logUsage('org-001', 'ENTERPRISE', {
       employeeId: 'emp-001',
@@ -678,7 +680,7 @@ describe('logUsage — PER_REQUEST cost computation', () => {
     const expectedUsd = 0.002 * 5; // 5 requests
     const expectedThb = expectedUsd * 35;
 
-    mockResult = {
+    mockState.result = {
       data: makeUsageLogRow({ computed_cost_usd: expectedUsd, computed_cost_thb: expectedThb }),
       error: null,
     };
@@ -703,7 +705,7 @@ describe('logUsage — PER_REQUEST cost computation', () => {
     });
     useAiCostEstimationStore.setState({ costModels: [model] });
 
-    mockResult = { data: makeUsageLogRow({ computed_cost_usd: 0.01 }), error: null };
+    mockState.result = { data: makeUsageLogRow({ computed_cost_usd: 0.01 }), error: null };
 
     const log = await useAiCostEstimationStore.getState().logUsage('org-001', 'ENTERPRISE', {
       employeeId: 'emp-001',
@@ -733,7 +735,7 @@ describe('logUsage — PER_IMAGE cost computation', () => {
     useAiCostEstimationStore.setState({ costModels: [model] });
 
     const expectedUsd = 0.04 * 3; // 3 images
-    mockResult = {
+    mockState.result = {
       data: makeUsageLogRow({ computed_cost_usd: expectedUsd }),
       error: null,
     };
@@ -766,7 +768,7 @@ describe('logUsage — PER_MINUTE cost computation', () => {
     useAiCostEstimationStore.setState({ costModels: [model] });
 
     const expectedUsd = 0.006 * 10; // 10 minutes
-    mockResult = {
+    mockState.result = {
       data: makeUsageLogRow({ computed_cost_usd: expectedUsd }),
       error: null,
     };
@@ -798,7 +800,7 @@ describe('logUsage — MONTHLY_FLAT cost computation', () => {
     });
     useAiCostEstimationStore.setState({ costModels: [model] });
 
-    mockResult = {
+    mockState.result = {
       data: makeUsageLogRow({ computed_cost_usd: 5.0, computed_cost_thb: 175 }),
       error: null,
     };
@@ -823,7 +825,7 @@ describe('logUsage — model not found', () => {
     // costModels is empty — model 'cm-unknown' not found
     useAiCostEstimationStore.setState({ costModels: [] });
 
-    mockResult = {
+    mockState.result = {
       data: makeUsageLogRow({ computed_cost_usd: 0, computed_cost_thb: 0 }),
       error: null,
     };
@@ -869,7 +871,7 @@ describe('createTaskEstimate — ROI calculation', () => {
       manual_cost_thb: 200,
       est_roi_pct: 99.825,
     });
-    mockResult = { data: row, error: null };
+    mockState.result = { data: row, error: null };
 
     const estimate = await useAiCostEstimationStore.getState().createTaskEstimate(
       'org-001',
@@ -901,7 +903,7 @@ describe('createTaskEstimate — ROI calculation', () => {
       manual_cost_thb: null,
       est_roi_pct: null,
     });
-    mockResult = { data: row, error: null };
+    mockState.result = { data: row, error: null };
 
     const estimate = await useAiCostEstimationStore.getState().createTaskEstimate(
       'org-001',
@@ -956,7 +958,7 @@ describe('createTaskEstimate — ROI calculation', () => {
       ],
     });
 
-    mockResult = { data: makeTaskEstimateRow({ id: 'te-new' }), error: null };
+    mockState.result = { data: makeTaskEstimateRow({ id: 'te-new' }), error: null };
 
     await useAiCostEstimationStore.getState().createTaskEstimate('org-001', 'ENTERPRISE', {
       taskCategory: 'DESIGN',
@@ -1015,7 +1017,7 @@ describe('updateActuals', () => {
       actual_roi_pct: 88.5,
       completed_at: '2027-01-20T12:00:00Z',
     });
-    mockResult = { data: updatedRow, error: null };
+    mockState.result = { data: updatedRow, error: null };
 
     const result = await useAiCostEstimationStore.getState().updateActuals(
       'org-001',
@@ -1068,7 +1070,7 @@ describe('updateActuals', () => {
     useAiCostEstimationStore.setState({ taskEstimates: [otherEstimate] });
 
     const updatedRow = makeTaskEstimateRow({ id: 'te-target' });
-    mockResult = { data: updatedRow, error: null };
+    mockState.result = { data: updatedRow, error: null };
 
     await useAiCostEstimationStore.getState().updateActuals('org-001', 'ENTERPRISE', {
       estimateId: 'te-target',

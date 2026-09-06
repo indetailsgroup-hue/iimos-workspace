@@ -20,7 +20,11 @@ function BookSelector({
   isLoading: boolean
 }) {
   return (
-    <div className="w-48 flex-none rounded-xl border border-gray-200 bg-white p-2 shadow-sm">
+    <div
+      className="w-48 flex-none rounded-xl border border-gray-200 bg-white p-2 shadow-sm"
+      role={isLoading ? 'status' : undefined}
+      aria-label={isLoading ? 'Loading accounting books' : undefined}
+    >
       <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Books</p>
       {isLoading
         ? Array.from({ length: 3 }).map((_, i) => (
@@ -70,7 +74,7 @@ function NoBookSelected() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AccountingManagement() {
-  const { books, isLoading: booksLoading, refetch: refetchBooks } = useBooks()
+  const { books, isLoading: booksLoading, error: booksError, refetch: refetchBooks } = useBooks()
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('Chart of Accounts')
   const [ledgerPage, setLedgerPage] = useState(0)
@@ -86,12 +90,12 @@ export default function AccountingManagement() {
   }, [books, selectedBookId])
 
   const {
-    tree, accounts: flatAccounts, isLoading: coaLoading, refetch: refetchCoa,
+    tree, accounts: flatAccounts, isLoading: coaLoading, error: coaError, refetch: refetchCoa,
     createAccount, updateAccount, deactivateAccount,
   } = useChartOfAccounts(selectedBookId)
 
   const {
-    entries, totalCount, isLoading: ledgerLoading, refetch: refetchLedger,
+    entries, totalCount, isLoading: ledgerLoading, error: ledgerError, refetch: refetchLedger,
   } = useJournalEntries(selectedBookId, ledgerPage, 50)
 
   const handleTabChange = (tab: Tab) => {
@@ -161,7 +165,12 @@ export default function AccountingManagement() {
       </div>
 
       {/* Content */}
-      <div className="mx-auto max-w-7xl px-6 py-6">
+      <main className="mx-auto max-w-7xl px-6 py-6">
+        {(booksError || coaError || ledgerError) && (
+          <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <strong>Accounting error:</strong> {booksError ?? coaError ?? ledgerError}
+          </div>
+        )}
         <div className="flex gap-5">
           {/* Book sidebar */}
           <BookSelector
@@ -200,7 +209,7 @@ export default function AccountingManagement() {
             }
           </div>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

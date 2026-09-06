@@ -572,7 +572,7 @@ export function RoleNetworkCanvas({
   useEffect(() => {
     if (isGated) return;
     fetchNetwork(orgId, orgPlan);
-  }, [orgId, orgPlan, isGated]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [orgId, orgPlan, isGated]);
 
   const positions = useMemo(() => computeNodePositions(roles), [roles]);
   const { width, height } = useMemo(

@@ -109,7 +109,6 @@ export function QcAnomalyDashboard({
   useEffect(() => {
     fetchThresholds(orgId, orgPlan);
     fetchAnomalies(orgId, orgPlan);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, orgPlan]);
 
   // ── Plan gate ────────────────────────────────────────────────

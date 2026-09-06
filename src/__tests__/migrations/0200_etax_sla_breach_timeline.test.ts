@@ -43,8 +43,8 @@ let clientA: SupabaseClient;
 let clientB: SupabaseClient;
 
 // Seed: two submissions for Org A T01, different ages (one breach, one OK)
-let seedInvIds:  string[] = [];
-let seedEtaxIds: string[] = [];
+const seedInvIds:  string[] = [];
+const seedEtaxIds: string[] = [];
 
 beforeAll(async () => {
   clientA = await signInClient(FX.ORG_A_EMAIL, FX.ORG_A_PASS);

@@ -910,7 +910,9 @@ describe('@smoke — Stage 5: DxfSheetOutput.bytes is a valid UTF-8 Uint8Array',
 
   it('bytes is a Uint8Array', () => {
     const { output } = runPipelineFull();
-    expect(output.bytes).toBeInstanceOf(Uint8Array);
+    // TextEncoder may come from jsdom's realm while this assertion executes in
+    // Node's realm, so instanceof is not a portable typed-array check.
+    expect(Object.prototype.toString.call(output.bytes)).toBe('[object Uint8Array]');
   });
 
   it('bytes is non-empty', () => {
@@ -1174,7 +1176,7 @@ describe('@smoke S-CURVE — Stage 5: DxfSheetOutput.bytes is a valid UTF-8 Uint
 
   it('bytes is a Uint8Array', () => {
     const { output } = runSCurvePipelineFull();
-    expect(output.bytes).toBeInstanceOf(Uint8Array);
+    expect(Object.prototype.toString.call(output.bytes)).toBe('[object Uint8Array]');
   });
 
   it('bytes is non-empty', () => {

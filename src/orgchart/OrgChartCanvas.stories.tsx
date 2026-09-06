@@ -160,7 +160,6 @@ const withOrgChartStore = (state: Record<string, any>) =>
       filters: { ...DEFAULT_OC_FILTERS },
       error: null,
       // ── default no-op actions (prevent Supabase calls) ──────────────────
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       fetchChart: async () => {},
       createNode: async () => {},
       updateNode: async () => {},

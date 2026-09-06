@@ -21,6 +21,18 @@
  * /finance                     - Finance screen (FINANCE role)
  * /etax                        - eTax Compliance Dashboard (OWNER, ADMIN, FINANCE)
  * /accounting                  - Accounting Management UI (OWNER, ADMIN, FINANCE)
+ * /modules                     - v17.5/v18 Business Modules Hub
+ * /people                      - People Directory
+ * /people/:employeeId/ai-readiness - Super Employee Tracker
+ * /training                    - Training Tracker
+ * /culture/metrics             - Culture Metrics Dashboard
+ * /ai/costs                    - AI Cost Estimation
+ * /ai/scheduler                - AI Production Scheduler
+ * /structure/org-chart         - Interactive OrgChart
+ * /structure/role-network      - Role Network View
+ * /quality/anomalies           - QC Anomaly Detection
+ * /ai/quotation-drafts         - AI Quotation Draft
+ * /culture/leadership-actions  - Leadership Action Tracker
  * /safety                      - Redirect to /diagnostics/safety
  * /diagnostics/safety          - Safety diagnostics (local-only, not authoritative)
  *
@@ -212,6 +224,20 @@ import { useSpecStore } from '../core/store/useSpecStore';
 import { useVerifyStatusStore } from '../core/store/useVerifyStatusStore';
 import { VerifyVerdictPill } from '../components/ui/VerifyVerdictPill';
 import { RoleGateDialog } from '../components/ui/RoleGateDialog';
+import {
+  AiCostsRoute,
+  AiQuotationDraftsRoute,
+  AiSchedulerRoute,
+  BusinessModulesHome,
+  CultureMetricsRoute,
+  LeadershipActionsRoute,
+  OrgChartRoute,
+  PeopleDirectoryRoute,
+  QcAnomaliesRoute,
+  RoleNetworkRoute,
+  SuperEmployeeRoute,
+  TrainingTrackerRoute,
+} from './BusinessModuleRoutes';
 
 // ============================================================================
 // Types
@@ -1312,6 +1338,19 @@ export const router = createBrowserRouter([
       </RequireRole>
     ),
   },
+  // v17.5/v18.0 business modules — tenant role + plan gates live in each route boundary.
+  { path: '/modules', element: <BusinessModulesHome /> },
+  { path: '/people', element: <PeopleDirectoryRoute /> },
+  { path: '/people/:employeeId/ai-readiness', element: <SuperEmployeeRoute /> },
+  { path: '/training', element: <TrainingTrackerRoute /> },
+  { path: '/culture/metrics', element: <CultureMetricsRoute /> },
+  { path: '/ai/costs', element: <AiCostsRoute /> },
+  { path: '/ai/scheduler', element: <AiSchedulerRoute /> },
+  { path: '/structure/org-chart', element: <OrgChartRoute /> },
+  { path: '/structure/role-network', element: <RoleNetworkRoute /> },
+  { path: '/quality/anomalies', element: <QcAnomaliesRoute /> },
+  { path: '/ai/quotation-drafts', element: <AiQuotationDraftsRoute /> },
+  { path: '/culture/leadership-actions', element: <LeadershipActionsRoute /> },
   // Legacy safety route - redirect to diagnostics
   {
     path: '/safety',
