@@ -50,8 +50,18 @@ INSERT INTO public.org_members (user_id, org_id, email, role, is_active)
 VALUES ('cccccccc-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', 'member@org-a.test', 'ADMIN', true)
 ON CONFLICT DO NOTHING;
 
--- user_super: platform super-admin (no org_members record needed)
+-- user_super: platform super-admin with a valid home-org membership. Identity
+-- reconciliation still requires an active JWT-org membership before the
+-- platform-super-admin bypass may authorize a different p_org_id.
 INSERT INTO auth.users (id, email)
+VALUES ('dddddddd-0000-0000-0000-000000000004', 'super@platform.test')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.org_members (user_id, org_id, email, role, is_active)
+VALUES ('dddddddd-0000-0000-0000-000000000004', 'aaaaaaaa-0000-0000-0000-000000000001', 'super@platform.test', 'ADMIN', true)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.super_admins (user_id, email)
 VALUES ('dddddddd-0000-0000-0000-000000000004', 'super@platform.test')
 ON CONFLICT DO NOTHING;
 
@@ -240,7 +250,7 @@ SELECT throws_ok(
         'org_id', 'bbbbbbbb-0000-0000-0000-000000000002'
       )::text,
       true);
-    SELECT public.rpc_job_board();
+    SELECT public.rpc_job_board(NULL::TEXT, 50, 0);
   $$,
   '42501',
   NULL,
@@ -335,15 +345,10 @@ SELECT throws_ok(
 
 SELECT lives_ok(
   $$
-    -- Simulate super-admin: set app_metadata.role = 'super_admin' in JWT
-    SELECT set_config('request.jwt.claims',
-      json_build_object(
-        'sub',          'dddddddd-0000-0000-0000-000000000004',
-        'role',         'authenticated',
-        'org_id',       'aaaaaaaa-0000-0000-0000-000000000001',
-        'app_metadata', json_build_object('role', 'super_admin')
-      )::text,
-      true);
+    SELECT _t0180_set_jwt(
+      'dddddddd-0000-0000-0000-000000000004',
+      'aaaaaaaa-0000-0000-0000-000000000001'
+    );
     -- Super-admin requests usage for org_b — should be allowed
     SELECT public.get_org_usage('bbbbbbbb-0000-0000-0000-000000000002'::UUID);
   $$,

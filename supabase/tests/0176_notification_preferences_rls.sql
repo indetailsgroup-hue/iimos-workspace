@@ -252,15 +252,12 @@ SELECT lives_ok(
 -- ===========================================================================
 -- T-0176-13  Own-org UPDATE — Beta can UPDATE its own pref (1 row affected)
 -- ===========================================================================
-SELECT is(
-  (WITH upd AS (
-    UPDATE public.notification_preferences
-       SET global_mute = true
-     WHERE id = 'b2b2b2b2-0176-0000-0000-000000000001'
-    RETURNING 1
-  )
-  SELECT COUNT(*) FROM upd),
-  1::bigint,
+SELECT results_eq(
+  $$ UPDATE public.notification_preferences
+        SET global_mute = true
+      WHERE id = 'b2b2b2b2-0176-0000-0000-000000000001'
+      RETURNING 1 $$,
+  $$ VALUES (1) $$,
   'T-0176-13: Beta UPDATE on its own notification_preferences row affects 1 row'
 );
 
