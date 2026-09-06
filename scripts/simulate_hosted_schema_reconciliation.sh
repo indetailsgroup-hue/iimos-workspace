@@ -79,6 +79,12 @@ legacy_pgtap_routine_count=0
 legacy_pgtap_routines_isolated=false
 local_dependency_extensions_ready=true
 failed_dependency_extension=""
+data_bearing_fixture_required=false
+data_bearing_fixture_seeded=false
+data_bearing_fixture_backfilled=false
+data_bearing_fixture_immutability_restored=false
+data_bearing_migration_fixture_passed=true
+fixture_event_type="schema_reconciliation_installation_audit_fixture"
 
 core_schema_query="SELECT CASE WHEN (
   to_regclass('public.organizations') IS NOT NULL
@@ -121,8 +127,36 @@ if [[ "$schema_restore_succeeded" == "true" ]]; then
   done
 fi
 
+# A schema-only clone cannot expose migrations that fail only when a table has
+# rows. When 0187 is pending, seed one disposable append-only audit row so the
+# simulation exercises its tenant-key backfill and trigger restoration. This
+# row exists only in the local clone; no production data is copied or changed.
 if [[ "$schema_restore_succeeded" == "true" \
-  && "$local_dependency_extensions_ready" == "true" ]]; then
+  && "$local_dependency_extensions_ready" == "true" ]] \
+  && jq -e '.missingFromHosted[] | select(.version == "0187")' \
+    "$reconciliation_json" > /dev/null; then
+  data_bearing_fixture_required=true
+  data_bearing_migration_fixture_passed=false
+
+  if psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
+    -v fixture_event_type="$fixture_event_type" \
+    -c "INSERT INTO public.installation_audit_log (event_type, detail)
+        VALUES (:'fixture_event_type', '{\"fixture\": true}'::jsonb);" \
+    >> "$restore_log" 2>&1; then
+    data_bearing_fixture_seeded=true
+  else
+    failed_order="$(jq -r \
+      '.missingFromHosted[] | select(.version == "0187") | .order' \
+      "$reconciliation_json")"
+    failed_version="0187"
+    failed_file="0187_installation_domain_rls.sql"
+    echo "failed to seed installation audit data-bearing fixture" >> "$apply_log"
+  fi
+fi
+
+if [[ "$schema_restore_succeeded" == "true" \
+  && "$local_dependency_extensions_ready" == "true" \
+  && -z "$failed_file" ]]; then
   while IFS=$'\t' read -r order version file; do
     migration_path="$canonical_plan_dir/supabase/migrations/$file"
     if [[ ! -f "$migration_path" ]]; then
@@ -156,6 +190,33 @@ if [[ "$schema_restore_succeeded" == "true" \
   && -z "$failed_file" \
   && "$applied_count" -eq "$missing_count" ]]; then
   all_missing_migrations_applied=true
+fi
+
+if [[ "$data_bearing_fixture_required" == "true" \
+  && "$data_bearing_fixture_seeded" == "true" \
+  && "$all_missing_migrations_applied" == "true" ]]; then
+  fixture_org_id="$(psql "$local_database_url" --no-psqlrc -X -qAt \
+    -v ON_ERROR_STOP=1 -v fixture_event_type="$fixture_event_type" \
+    -c "SELECT org_id::text
+        FROM public.installation_audit_log
+        WHERE event_type = :'fixture_event_type';")"
+  if [[ "$fixture_org_id" == "00000000-0000-0000-0000-000000000000" ]]; then
+    data_bearing_fixture_backfilled=true
+  fi
+
+  if ! psql "$local_database_url" --no-psqlrc -X -q \
+    -v ON_ERROR_STOP=1 -v fixture_event_type="$fixture_event_type" \
+    -c "UPDATE public.installation_audit_log
+        SET detail = '{\"fixture\": false}'::jsonb
+        WHERE event_type = :'fixture_event_type';" \
+    >> "$apply_log" 2>&1; then
+    data_bearing_fixture_immutability_restored=true
+  fi
+
+  if [[ "$data_bearing_fixture_backfilled" == "true" \
+    && "$data_bearing_fixture_immutability_restored" == "true" ]]; then
+    data_bearing_migration_fixture_passed=true
+  fi
 fi
 
 if [[ "$all_missing_migrations_applied" == "true" ]]; then
@@ -273,6 +334,11 @@ jq -n \
   --argjson legacyPgTapRoutinesIsolated "$legacy_pgtap_routines_isolated" \
   --argjson localDependencyExtensionsReady "$local_dependency_extensions_ready" \
   --arg failedDependencyExtension "$failed_dependency_extension" \
+  --argjson dataBearingFixtureRequired "$data_bearing_fixture_required" \
+  --argjson dataBearingFixtureSeeded "$data_bearing_fixture_seeded" \
+  --argjson dataBearingFixtureBackfilled "$data_bearing_fixture_backfilled" \
+  --argjson dataBearingFixtureImmutabilityRestored "$data_bearing_fixture_immutability_restored" \
+  --argjson dataBearingMigrationFixturePassed "$data_bearing_migration_fixture_passed" \
   '{
     formatVersion: 1,
     simulationKind: "hosted-public-schema-only",
@@ -307,6 +373,11 @@ jq -n \
     databaseLintScope: "public application routines; pgTAP extension moved to pgtap_lint_excluded after assertions",
     legacyPgTapRoutineCount: $legacyPgTapRoutineCount,
     legacyPgTapRoutinesIsolated: $legacyPgTapRoutinesIsolated,
+    dataBearingFixtureRequired: $dataBearingFixtureRequired,
+    dataBearingFixtureSeeded: $dataBearingFixtureSeeded,
+    dataBearingFixtureBackfilled: $dataBearingFixtureBackfilled,
+    dataBearingFixtureImmutabilityRestored: $dataBearingFixtureImmutabilityRestored,
+    dataBearingMigrationFixturePassed: $dataBearingMigrationFixturePassed,
     productionDataCopied: false,
     productionWritesPerformed: false
   }' > "$result_json"
