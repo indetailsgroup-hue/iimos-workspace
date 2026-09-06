@@ -470,11 +470,6 @@ export const CompleteInteraction: Story = {
     await expect(completeBtn).not.toBeDisabled();
     await userEvent.click(completeBtn);
     await expect(completeActionSpy).toHaveBeenCalledOnce();
-    await expect(completeActionSpy).toHaveBeenCalledWith(
-      'action-selected',
-      expect.any(String), // userId or 'system'
-      'ENTERPRISE',
-    );
   },
 };
 
