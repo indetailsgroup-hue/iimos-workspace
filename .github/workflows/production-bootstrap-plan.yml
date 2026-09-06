@@ -419,6 +419,13 @@ jobs:
           cp supabase/import_map.json hosted-schema-clone/supabase/import_map.json
           cp -R supabase/functions hosted-schema-clone/supabase/functions
 
+          # The schema-only simulation needs PostgreSQL, not the local mail
+          # catcher. Disabling Inbucket avoids runner-level SMTP/POP3 port
+          # collisions (notably 54326) without changing the database surface.
+          sed -i '/^\[inbucket\]/,/^\[storage\]/{
+            s/^enabled = true/enabled = false/
+          }' hosted-schema-clone/supabase/config.toml
+
           HOSTED_MAJOR_VERSION="$(jq -r '.serverVersionNum / 10000 | floor' \
             reconciliation-input/hosted/hosted-bootstrap-inventory.json)"
           if [[ ! "$HOSTED_MAJOR_VERSION" =~ ^[0-9]+$ ]]; then
