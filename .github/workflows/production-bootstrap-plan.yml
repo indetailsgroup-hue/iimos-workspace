@@ -390,6 +390,9 @@ jobs:
       - name: Capture hosted public schema without data
         run: |
           mkdir -p reconciliation-simulation/results
+          # Keep GRANT/REVOKE ACLs: pgTAP switches to authenticated/service
+          # roles, so a clone without privileges cannot exercise hosted RLS.
+          # --schema-only guarantees that no production rows are copied.
           docker run --rm \
             -e DATABASE_URL \
             -e PGOPTIONS="-c default_transaction_read_only=on" \
@@ -399,7 +402,6 @@ jobs:
               --schema-only \
               --schema=public \
               --no-owner \
-              --no-privileges \
               --file=/output/hosted-public-schema.sql'
 
           test -s reconciliation-simulation/hosted-public-schema.sql
