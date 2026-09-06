@@ -219,9 +219,19 @@ jobs:
         run: npm run build -w @daph/field-app
 
   digital-shadow:
-    name: digital shadow — build + isolated unit tests
+    name: digital shadow — build + isolated unit/integration tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -233,6 +243,11 @@ jobs:
         run: npm run build -w @monolith/digital-shadow-service
       - name: Digital Shadow unit tests (Node config; no Redis/MQTT/InfluxDB)
         run: npm run test:unit -w @monolith/digital-shadow-service
+      - name: Digital Shadow integration tests (Redis + local OPC UA simulator)
+        env:
+          REDIS_URL: redis://127.0.0.1:6379
+          XDG_CONFIG_HOME: ${{ runner.temp }}/node-opcua-config
+        run: npm run test:integration -w @monolith/digital-shadow-service
 
   workspace-tools:
     name: workspace tools — isolated tests

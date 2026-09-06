@@ -11,7 +11,11 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
+  OPCUACertificateManager,
   OPCUAServer,
   Variant,
   DataType,
@@ -30,6 +34,7 @@ import type { SensorDataPoint } from '../../src/types/sensor';
 
 const TEST_PORT = 48400 + Math.floor(Math.random() * 100);
 const TEST_ENDPOINT = `opc.tcp://localhost:${TEST_PORT}`;
+const TEST_PKI_ROOT = mkdtempSync(join(tmpdir(), 'monolith-opcua-integration-'));
 
 /** Mutable server state — changed during tests to simulate transitions */
 const serverState = {
@@ -44,11 +49,32 @@ const serverState = {
 };
 
 let server: OPCUAServer;
+let clientPkiCounter = 0;
+
+function createTestAdapter(): BiesseAdapter {
+  clientPkiCounter += 1;
+  const clientCertificateManager = new OPCUACertificateManager({
+    rootFolder: join(TEST_PKI_ROOT, `client-pki-${clientPkiCounter}`),
+    automaticallyAcceptUnknownCertificate: true,
+  });
+  return new BiesseAdapter(testEndpoint, clientCertificateManager);
+}
 
 async function createMockOpcuaServer(): Promise<OPCUAServer> {
+  const serverCertificateManager = new OPCUACertificateManager({
+    rootFolder: join(TEST_PKI_ROOT, 'server-pki'),
+    automaticallyAcceptUnknownCertificate: true,
+  });
+  const userCertificateManager = new OPCUACertificateManager({
+    rootFolder: join(TEST_PKI_ROOT, 'user-pki'),
+    automaticallyAcceptUnknownCertificate: true,
+  });
+
   server = new OPCUAServer({
     port: TEST_PORT,
     resourcePath: '/UA/BiesseTest',
+    serverCertificateManager,
+    userCertificateManager,
     buildInfo: {
       productName: 'Biesse Rover A Simulator',
       buildNumber: '1.0.0',
@@ -60,7 +86,12 @@ async function createMockOpcuaServer(): Promise<OPCUAServer> {
   await server.initialize();
 
   const addressSpace = server.engine.addressSpace!;
-  const namespace = addressSpace.getOwnNamespace();
+  // Real Biesse servers expose the OPC-40550-1 Woodworking companion model at
+  // namespace index 4. Reserve indexes 2 and 3 so the simulator exercises the
+  // same node IDs used by BiesseAdapter instead of silently returning BadNodeId.
+  addressSpace.registerNamespace('urn:monolith:test:reserved-2');
+  addressSpace.registerNamespace('urn:monolith:test:reserved-3');
+  const namespace = addressSpace.registerNamespace('http://opcfoundation.org/UA/Woodworking/');
 
   // Create Woodworking folder structure (mimics OPC-40550-1)
   const woodworkingFolder = namespace.addFolder(addressSpace.rootFolder.objects, {
@@ -96,7 +127,7 @@ async function createMockOpcuaServer(): Promise<OPCUAServer> {
   namespace.addVariable({
     componentOf: overviewFolder,
     browseName: 'CurrentState',
-    nodeId: 'ns=1;s=Woodworking.State.Machine.Overview.CurrentState',
+    nodeId: 'ns=4;s=Woodworking.State.Machine.Overview.CurrentState',
     dataType: 'Int32',
     value: {
       get: () => new Variant({ dataType: DataType.Int32, value: serverState.currentState }),
@@ -108,7 +139,7 @@ async function createMockOpcuaServer(): Promise<OPCUAServer> {
   namespace.addVariable({
     componentOf: overviewFolder,
     browseName: 'CurrentMode',
-    nodeId: 'ns=1;s=Woodworking.State.Machine.Overview.CurrentMode',
+    nodeId: 'ns=4;s=Woodworking.State.Machine.Overview.CurrentMode',
     dataType: 'Int32',
     value: {
       get: () => new Variant({ dataType: DataType.Int32, value: serverState.currentMode }),
@@ -120,7 +151,7 @@ async function createMockOpcuaServer(): Promise<OPCUAServer> {
   namespace.addVariable({
     componentOf: valuesFolder,
     browseName: 'SpindleOverride',
-    nodeId: 'ns=1;s=Woodworking.State.Machine.Values.SpindleOverride',
+    nodeId: 'ns=4;s=Woodworking.State.Machine.Values.SpindleOverride',
     dataType: 'Double',
     value: {
       get: () => new Variant({ dataType: DataType.Double, value: serverState.spindleOverride }),
@@ -132,7 +163,7 @@ async function createMockOpcuaServer(): Promise<OPCUAServer> {
   namespace.addVariable({
     componentOf: valuesFolder,
     browseName: 'FeedOverride',
-    nodeId: 'ns=1;s=Woodworking.State.Machine.Values.FeedOverride',
+    nodeId: 'ns=4;s=Woodworking.State.Machine.Values.FeedOverride',
     dataType: 'Double',
     value: {
       get: () => new Variant({ dataType: DataType.Double, value: serverState.feedOverride }),
@@ -144,7 +175,7 @@ async function createMockOpcuaServer(): Promise<OPCUAServer> {
   namespace.addVariable({
     componentOf: activeProgramFolder,
     browseName: 'PartsCounter',
-    nodeId: 'ns=1;s=Woodworking.Production.ActiveProgram.PartsCounter',
+    nodeId: 'ns=4;s=Woodworking.Production.ActiveProgram.PartsCounter',
     dataType: 'Int32',
     value: {
       get: () => new Variant({ dataType: DataType.Int32, value: serverState.partCounter }),
@@ -156,7 +187,7 @@ async function createMockOpcuaServer(): Promise<OPCUAServer> {
   namespace.addVariable({
     componentOf: activeProgramFolder,
     browseName: 'Name',
-    nodeId: 'ns=1;s=Woodworking.Production.ActiveProgram.Name',
+    nodeId: 'ns=4;s=Woodworking.Production.ActiveProgram.Name',
     dataType: 'String',
     value: {
       get: () => new Variant({ dataType: DataType.String, value: serverState.programName }),
@@ -168,7 +199,7 @@ async function createMockOpcuaServer(): Promise<OPCUAServer> {
   namespace.addVariable({
     componentOf: overviewFolder,
     browseName: 'RunTime',
-    nodeId: 'ns=1;s=Woodworking.State.Machine.Overview.RunTime',
+    nodeId: 'ns=4;s=Woodworking.State.Machine.Overview.RunTime',
     dataType: 'Double',
     value: {
       get: () => new Variant({ dataType: DataType.Double, value: serverState.runtime }),
@@ -180,7 +211,7 @@ async function createMockOpcuaServer(): Promise<OPCUAServer> {
   namespace.addVariable({
     componentOf: activeProgramFolder,
     browseName: 'CurrentToolId',
-    nodeId: 'ns=1;s=Woodworking.Production.ActiveProgram.CurrentToolId',
+    nodeId: 'ns=4;s=Woodworking.Production.ActiveProgram.CurrentToolId',
     dataType: 'String',
     value: {
       get: () => new Variant({ dataType: DataType.String, value: serverState.toolId }),
@@ -202,8 +233,8 @@ const testEndpoint: MachineEndpoint = {
   pollingIntervalMs: 500,
   publishIntervalMs: 250,
   monitoredNodes: [
-    'ns=1;s=Woodworking.State.Machine.Overview.CurrentState',
-    'ns=1;s=Woodworking.State.Machine.Overview.CurrentMode',
+    'ns=4;s=Woodworking.State.Machine.Overview.CurrentState',
+    'ns=4;s=Woodworking.State.Machine.Overview.CurrentMode',
   ],
 };
 
@@ -242,6 +273,7 @@ describe('BiesseAdapter Integration — Full Lifecycle', () => {
     if (server) {
       await server.shutdown();
     }
+    rmSync(TEST_PKI_ROOT, { recursive: true, force: true });
   }, 15000);
 
   beforeEach(() => {
@@ -252,7 +284,7 @@ describe('BiesseAdapter Integration — Full Lifecycle', () => {
 
   describe('Connection Lifecycle', () => {
     it('should connect to OPC UA server successfully', async () => {
-      adapter = new BiesseAdapter(testEndpoint);
+      adapter = createTestAdapter();
       await adapter.connect();
 
       expect(adapter.isConnected).toBe(true);
@@ -269,7 +301,7 @@ describe('BiesseAdapter Integration — Full Lifecycle', () => {
     });
 
     it('should reconnect after disconnect', async () => {
-      adapter = new BiesseAdapter(testEndpoint);
+      adapter = createTestAdapter();
       await adapter.connect();
       expect(adapter.isConnected).toBe(true);
     }, 10000);
