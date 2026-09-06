@@ -178,12 +178,12 @@ if [[ "$all_missing_migrations_applied" == "true" ]]; then
     pgtap_exit_code=$?
   fi
 
-  # Some early hosted projects contain an unpackaged pgTAP copy in `public`.
-  # Adopt those objects into the extension catalog on the disposable clone so
-  # Supabase's linter can distinguish test-framework routines from application
-  # routines. This is pgTAP's supported upgrade path for pre-extension installs;
-  # hosted is never modified.
-  legacy_pgtap_routine_count="$(psql "$local_database_url" \
+  # Keep pgTAP available in `public` while the assertions run, then move the
+  # extension into a dedicated schema on the disposable clone. Supabase's
+  # linter inspects every routine in the requested schema, including
+  # extension-owned routines, so merely attaching an unpackaged pgTAP install
+  # to the extension catalog is not sufficient. Hosted is never modified.
+  pgtap_isolation_result="$(psql "$local_database_url" \
     --no-psqlrc -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
 SELECT 'CREATE EXTENSION pgtap FROM unpackaged;'
 WHERE NOT EXISTS (
@@ -204,15 +204,34 @@ JOIN pg_catalog.pg_extension AS extension
   ON extension.oid = dependency.refobjid
  AND extension.extname = 'pgtap'
 WHERE namespace.nspname = 'public';
+
+CREATE SCHEMA IF NOT EXISTS pgtap_lint_excluded;
+ALTER EXTENSION pgtap SET SCHEMA pgtap_lint_excluded;
+
+SELECT count(*)
+FROM pg_catalog.pg_proc AS routine
+JOIN pg_catalog.pg_namespace AS namespace
+  ON namespace.oid = routine.pronamespace
+JOIN pg_catalog.pg_depend AS dependency
+  ON dependency.classid = 'pg_catalog.pg_proc'::regclass
+ AND dependency.objid = routine.oid
+ AND dependency.deptype = 'e'
+JOIN pg_catalog.pg_extension AS extension
+  ON extension.oid = dependency.refobjid
+ AND extension.extname = 'pgtap'
+WHERE namespace.nspname = 'public';
 SQL
   )"
   isolate_exit_code=$?
+  legacy_pgtap_routine_count="$(printf '%s\n' "$pgtap_isolation_result" | sed -n '1p')"
+  remaining_public_pgtap_routine_count="$(printf '%s\n' "$pgtap_isolation_result" | sed -n '2p')"
   if [[ "$isolate_exit_code" -eq 0 \
-    && "$legacy_pgtap_routine_count" =~ ^[0-9]+$ ]]; then
+    && "$legacy_pgtap_routine_count" =~ ^[0-9]+$ \
+    && "$remaining_public_pgtap_routine_count" == "0" ]]; then
     legacy_pgtap_routines_isolated=true
   else
     legacy_pgtap_routine_count=0
-    echo "Failed to adopt legacy unpackaged pgTAP routines" >> "$lint_log"
+    echo "Failed to isolate pgTAP routines from the public lint schema" >> "$lint_log"
   fi
 
   supabase db lint \
@@ -285,7 +304,7 @@ jq -n \
     pgtapPassed: $pgtapPassed,
     databaseLintExitCode: $databaseLintExitCode,
     databaseLintClean: $databaseLintClean,
-    databaseLintScope: "public application routines; extension-owned pgTAP routines excluded by linter",
+    databaseLintScope: "public application routines; pgTAP extension moved to pgtap_lint_excluded after assertions",
     legacyPgTapRoutineCount: $legacyPgTapRoutineCount,
     legacyPgTapRoutinesIsolated: $legacyPgTapRoutinesIsolated,
     productionDataCopied: false,
