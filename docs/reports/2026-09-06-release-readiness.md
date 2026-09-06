@@ -37,7 +37,7 @@ Release-ready เมื่อทุกข้อด้านล่างเป็
 | Process Templates | PASS (local) | 31 focused tests; รวมอยู่ใน root full suite |
 | Production dependency audit | PASS (local gate) | root 0 high/0 critical/4 moderate; server 0 high/0 critical/1 moderate |
 | LineOS | WAITING FOR CI | 350/351 ผ่านใน sandbox; browser-evidence test เปิด Chromium ไม่ได้เพราะ macOS MachPort sandbox permission; GitHub Ubuntu job ติดตั้ง Python Playwright/Chromium แบบ pinned |
-| Fresh DB migrations | WAITING FOR CI | เครื่องนี้ไม่มี Docker; workflow ต้องยืนยัน `supabase db reset --local` |
+| Fresh DB migrations | WAITING FOR CI | CI เป็นเจ้าของหลักฐานจาก `supabase db reset --local` บน Docker runtime |
 | SQL pgTAP | WAITING FOR CI | workflow ใช้ `pg_prove supabase/tests/*.sql` กับฐานข้อมูลใหม่จริง |
 | TypeScript database suites | WAITING FOR CI | workflow seed สอง tenant แล้วรัน `npm run test:database` |
 | Playwright E2E | WAITING FOR CI | smoke ต้องไม่ skip; integration lane ต้องไม่ vacuous |
@@ -98,7 +98,7 @@ pgTAP workflow ไม่ใช้ hosted Supabase token แล้ว แต่�
 
 ## 5. Backend deploy secret behavior
 
-- ถ้า `DATABASE_URL` ไม่มี: migration/deployment preflight จะแสดง notice และให้ job จบแบบ successful skip
+- เมื่อ `DATABASE_URL` เป็นค่าว่าง: migration/deployment preflight จะแสดง notice และให้ job จบแบบ successful skip
 - Supabase Functions deploy รันเฉพาะเมื่อ project ref และ access token มีครบ
 - output `deployment_ready` เป็นเงื่อนไข explicit ระหว่าง jobs
 - ไม่มีการเปลี่ยน missing secret ให้เป็น failure ที่ทำให้ PR ภายนอกหรือ fork ใช้งานไม่ได้ และไม่มีการแสดงค่าของ secret ใน log
@@ -163,12 +163,12 @@ pgTAP workflow ไม่ใช้ hosted Supabase token แล้ว แต่�
 
 | PR | สถานะจาก GitHub | ผลเปรียบเทียบกับ `main` | คำแนะนำ |
 |---|---|---|---|
-| #41 Digital Shadow Service | open, 3 commits, 69 files, base=`review/pre-digital-shadow` | เมื่อเทียบกับ merge-base เหลือ 2 paths: `RULPredictionService.ts` ต่าง และ package changelog ไม่มีใน main; core service ส่วนใหญ่มีใน main แล้ว | ปิดเป็น superseded ได้หลัง stabilization PR อ้างหลักฐาน Digital Shadow 244 tests และยืนยันว่า RUL delta ไม่ใช่ fix ที่ต้องเก็บ |
+| #41 Digital Shadow Service | open, 3 commits, 69 files, base=`review/pre-digital-shadow` | เมื่อเทียบกับ merge-base เหลือ 2 paths: `RULPredictionService.ts` ต่าง และ package changelog อยู่เฉพาะ PR branch; core service ส่วนใหญ่มีใน main แล้ว | ปิดเป็น superseded ได้หลัง stabilization PR อ้างหลักฐาน Digital Shadow 244 tests และยืนยันว่า RUL delta ไม่ใช่ fix ที่ต้องเก็บ |
 | #44 Digital Shadow integration | open, dirty conflict, 47 commits, 27 files | 23 files ยังไม่มีใน main เช่น Machine Shadow UI/API/store, Feature Cache และ integration tests | **ห้ามปิดว่า superseded**; ต้อง salvage/rebase เฉพาะ integration ที่ยังขาดเป็น PR ใหม่หรือปรับ PR เดิม |
 | #46 Accounting/RLS | open, dirty conflict, 89 commits, 73 files | 45 files byte-identical กับ main, 27 files ต่างเพราะ main เดินหน้าต่อ, 1 legacy bootstrap path ไม่มีใน main | มีแนวโน้ม superseded โดย main แต่ต้อง review 27 deltas ก่อนปิด; ห้าม merge branch เก่าตรง ๆ |
 | #78 CONTRIBUTING formatting | open, 1 commit, 1 line | ไม่อยู่ใน scope stabilization และไม่เกี่ยวกับ release gates | คงไว้ให้ owner จัดการแยก |
 
-Security issues #49/#50 ยังไม่มี comment และยัง open ทั้งคู่ Migration `0178_notification_platform_metrics_rls.sql` มี RLS/policies/assertions ตาม closure criteria แต่ source presence ยังไม่ใช่ execution evidence จึงยังไม่ปิด
+Security issues #49/#50 ยัง open ทั้งคู่โดยมี comment count = 0 Migration `0178_notification_platform_metrics_rls.sql` มี RLS/policies/assertions ตาม closure criteria แต่ source presence ยังไม่ใช่ execution evidence จึงยังไม่ปิด
 
 ### ลำดับหลังเปิด stabilization PR
 
