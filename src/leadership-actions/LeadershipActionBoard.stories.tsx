@@ -24,7 +24,7 @@
  *   withLeadershipActionStore decorator calls useLeadershipActionStore.setState(…)
  *   to seed state + replace async actions with spies.
  *   fetchActions always replaced with noopAsync to prevent Supabase calls.
- *   All mutating action spies use .mockResolvedValue(undefined) so that the
+ *   All mutating action spies use explicit async implementations so that the
  *   component's .catch(() => {}) chain does not throw on undefined returns.
  */
 
@@ -39,19 +39,19 @@ import { DEFAULT_LAT_FILTERS } from './leadershipActionTypes';
 
 // =============================================================================
 // Module-level spies
-// All async mutating actions use .mockResolvedValue(undefined) so component
+// All async mutating actions use explicit async implementations so component
 // .catch() chains work correctly in the Storybook browser environment.
 // =============================================================================
 
-const createActionSpy     = fn().mockResolvedValue(undefined);
-const deleteActionSpy     = fn().mockResolvedValue(undefined);
-const updateActionSpy     = fn().mockResolvedValue(undefined);
-const addAssignmentSpy    = fn().mockResolvedValue(undefined);
-const removeAssignmentSpy = fn().mockResolvedValue(undefined);
-const postUpdateSpy       = fn().mockResolvedValue(undefined);
-const completeActionSpy   = fn().mockResolvedValue(undefined);
-const cancelActionSpy     = fn().mockResolvedValue(undefined);
-const reassignOwnerSpy    = fn().mockResolvedValue(undefined);
+const createActionSpy     = fn(async () => undefined);
+const deleteActionSpy     = fn(async () => undefined);
+const updateActionSpy     = fn(async () => undefined);
+const addAssignmentSpy    = fn(async () => undefined);
+const removeAssignmentSpy = fn(async () => undefined);
+const postUpdateSpy       = fn(async () => undefined);
+const completeActionSpy   = fn(async () => undefined);
+const cancelActionSpy     = fn(async () => undefined);
+const reassignOwnerSpy    = fn(async () => undefined);
 
 // =============================================================================
 // Sample data helpers
@@ -214,7 +214,7 @@ function withLeadershipActionStore(
       clearError:   ()   => useLeadershipActionStore.setState({ error: null }),
       ...stateOverride,
     });
-    // Reset spy call history; implementation (.mockResolvedValue) is preserved
+    // Reset spy call history; async implementations are preserved
     createActionSpy.mockClear();
     deleteActionSpy.mockClear();
     completeActionSpy.mockClear();

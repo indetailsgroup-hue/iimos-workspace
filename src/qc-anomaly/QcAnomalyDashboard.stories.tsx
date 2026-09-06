@@ -270,13 +270,14 @@ export const CriticalAnomaly: Story = {
     const canvas = within(canvasElement);
     const badge = canvas.getByTestId('qca-severity-badge');
     await expect(badge).toBeInTheDocument();
-    await expect(badge).toHaveTextContent('CRITICAL');
+    await expect(badge).toHaveTextContent('วิกฤต');
   },
 };
 
 // ─── 8. Threshold Panel — active rows with toggle ────────────────────────────
 
 export const ThresholdPanel: Story = {
+  args: { isAdmin: true },
   decorators: [
     withQcAnomalyStore({
       thresholds: [THR_ACTIVE, THR_INACTIVE],

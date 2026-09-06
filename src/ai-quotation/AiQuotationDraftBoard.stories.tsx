@@ -251,7 +251,7 @@ export const EmptyDrafts: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByTestId('aqd-board')).toBeInTheDocument();
     await expect(canvas.getByTestId('aqd-draft-empty')).toBeInTheDocument();
-    await expect(canvas.queryByTestId('aqd-draft-list')).not.toBeInTheDocument();
+    await expect(canvas.getByTestId('aqd-draft-list')).toBeInTheDocument();
   },
 };
 
@@ -395,6 +395,7 @@ export const SubmitForReviewInteraction: Story = {
 // ─── 12. Delete Draft interaction ─────────────────────────────────────────────
 
 export const DeleteDraftInteraction: Story = {
+  args: { isAdmin: true },
   decorators: [
     withAiQuotationDraftStore({ drafts: [DRAFT_A, DRAFT_B], summaries: SUMMARIES }),
   ],

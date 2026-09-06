@@ -72,7 +72,7 @@ jobs:
         run: npm ci
 
       - name: Run Chromatic
-        uses: chromaui/action@v11
+        uses: chromaui/action@07791f8243f4cb2698bf4d00426baf4b2d1cb7e0 # v13
         with:
           # ── Required ────────────────────────────────────────────────────
           projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
@@ -98,12 +98,6 @@ jobs:
           # --exit-once-uploaded: don't wait for the build to finish in Chromatic
           # (useful to reduce CI job duration; remove if you need pass/fail)
           exitOnceUploaded: false
-
-          # --allow-console-errors: do not fail the build when stories emit
-          # console.error during headless render (e.g. recharts dataKey warnings
-          # from CultureDashboard's LineChart / XAxis dataKey mismatch in the
-          # component file which is outside this PR's scope).
-          allowConsoleErrors: true
 
           # ── Story-level filtering ────────────────────────────────────────
           # Uncomment to run ONLY the People/Culture stories during development.

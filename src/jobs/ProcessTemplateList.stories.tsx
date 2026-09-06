@@ -312,7 +312,7 @@ const cloneGlobalTemplateSpy = fn(async (_templateId: string, _orgId: string) =>
 /** Clone flow interaction: Admin clicks Clone on a global template */
 export const CloneFlowInteraction: Story = {
   name: 'Clone Flow — Interaction Test',
-  args: { isAdmin: true, orgId: ORG_ID },
+  args: { isAdmin: true, orgId: ORG_ID, orgPlan: 'PROFESSIONAL' },
   decorators: [
     (Story: StoryFn) => {
       // Reset call history on each story render so interaction tests are idempotent
