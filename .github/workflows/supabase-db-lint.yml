@@ -9,9 +9,10 @@ on:
       - '.github/workflows/supabase-db-lint.yml'
     types: [opened, synchronize, reopened]
 
-# Optional repository secret (the job reports a successful skip when absent):
+# Optional repository secrets (the job reports a successful skip when absent):
 #   DATABASE_URL — direct PostgreSQL connection string for the hosted project.
 #                  Store it as a GitHub Actions secret; never commit it.
+#   SUPABASE_PROJECT_REF — project reference that DATABASE_URL must target.
 #
 # The lint job reads the remote project schema through DATABASE_URL, so no Docker
 # or temporary Supabase login role is required. It never applies migrations to
@@ -33,13 +34,21 @@ jobs:
         id: preflight
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           if [ -z "$DATABASE_URL" ]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "::notice title=Supabase DB lint skipped::DATABASE_URL is not configured; fresh local migration and pgTAP gates remain active."
+          elif [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Supabase DB lint skipped::SUPABASE_PROJECT_REF is not configured, so the database target cannot be verified."
           elif [[ "$DATABASE_URL" != postgres://* && "$DATABASE_URL" != postgresql://* ]]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "::error title=Invalid database lint credential::DATABASE_URL must be a full PostgreSQL connection URI."
+            exit 1
+          elif [[ "$DATABASE_URL" != *"$SUPABASE_PROJECT_REF"* ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::error title=Database target mismatch::DATABASE_URL does not target the project configured by SUPABASE_PROJECT_REF."
             exit 1
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"

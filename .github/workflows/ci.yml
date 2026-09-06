@@ -204,19 +204,28 @@ jobs:
 
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
 
     steps:
       - name: Check database deployment credentials
         id: deployment_preflight
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           if [ -z "$DATABASE_URL" ]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "::notice title=Database deployment skipped::DATABASE_URL is not configured; tests continue without reporting a false deployment failure."
+          elif [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Database deployment skipped::SUPABASE_PROJECT_REF is not configured, so the deployment target cannot be verified."
           elif [[ "$DATABASE_URL" != postgres://* && "$DATABASE_URL" != postgresql://* ]]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "::error title=Invalid database deployment credential::DATABASE_URL must be a full PostgreSQL connection URI."
+            exit 1
+          elif [[ "$DATABASE_URL" != *"$SUPABASE_PROJECT_REF"* ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::error title=Database target mismatch::DATABASE_URL does not target the project configured by SUPABASE_PROJECT_REF."
             exit 1
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
@@ -331,6 +340,7 @@ jobs:
             SELECT
               t.issue_number,
               t.table_name,
+              (c.oid IS NOT NULL) AS table_exists,
               COALESCE(c.relrowsecurity, false) AS rls_enabled
             FROM targets t
             LEFT JOIN pg_catalog.pg_namespace n
@@ -388,10 +398,16 @@ jobs:
           SELECT
             issue_number,
             table_name,
+            table_exists,
             rls_enabled,
             required_policies_present,
             no_permissive_select_bypass,
-            (rls_enabled AND required_policies_present AND no_permissive_select_bypass) AS verified
+            (
+              table_exists
+              AND rls_enabled
+              AND required_policies_present
+              AND no_permissive_select_bypass
+            ) AS verified
           FROM policy_state
           ORDER BY issue_number;
           SQL
@@ -421,12 +437,12 @@ jobs:
             end
           ' hosted-query-response.json > hosted-security-verification.json
 
-          jq -r '.[] | "issue #\(.issue_number) \(.table_name): rls=\(.rls_enabled), policies=\(.required_policies_present), no_bypass=\(.no_permissive_select_bypass), verified=\(.verified)"' \
+          jq -r '.[] | "issue #\(.issue_number) \(.table_name): exists=\(.table_exists), rls=\(.rls_enabled), policies=\(.required_policies_present), no_bypass=\(.no_permissive_select_bypass), verified=\(.verified)"' \
             hosted-security-verification.json
 
           jq -e 'length == 2 and all(.[]; .verified == true)' \
             hosted-security-verification.json >/dev/null || {
-              echo "::error title=Hosted RLS verification failed::One or more production policy contracts are missing."
+              echo "::error title=Hosted RLS verification failed::One or more target tables are missing or their production policy contracts are incomplete."
               exit 1
             }
 
