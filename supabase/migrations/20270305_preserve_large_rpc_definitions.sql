@@ -145,45 +145,31 @@ DECLARE
     'public.rpc_sync_line_forecast(text,text,text)'::regprocedure;
   v_definition TEXT;
   v_repaired TEXT;
-  v_call_tail TEXT;
-  v_call_start INTEGER;
-  v_call_length INTEGER;
 BEGIN
   -- Older hosted copies of this function retain CRLF in prosrc. Normalize the
   -- definition before applying the narrowly-scoped repairs so the exact same
   -- migration covers both historical CRLF and clean-bootstrap LF definitions.
   v_definition := replace(pg_get_functiondef(v_oid), E'\r\n', E'\n');
   v_repaired := replace(v_definition,
-    'v_sync_log_id    uuid;',
-    E'v_sync_log_id    uuid;\n  v_sync_sql       text;');
+    $old$'sync_source'$old$,
+    $new$regexp_replace(
+      to_regtype('public.sync_source')::text,
+      '^.*\\.',
+      ''
+    )$new$);
   IF v_repaired = v_definition THEN
-    RAISE EXCEPTION 'forecasting declaration repair did not change %', v_oid;
+    RAISE EXCEPTION 'forecasting source-type repair did not change %', v_oid;
   END IF;
   v_definition := v_repaired;
-  v_call_start := regexp_instr(
-    lower(v_definition),
-    E'execute[[:space:]]+format[[:space:]]*\\('
-  );
-  IF v_call_start = 0 THEN
-    RAISE EXCEPTION 'forecasting call start marker missing in %', v_oid;
-  END IF;
-  v_call_tail := substring(v_definition FROM v_call_start);
-  v_call_length := strpos(lower(v_call_tail), 'v_error_jsonb;');
-  IF v_call_length = 0 THEN
-    RAISE EXCEPTION 'forecasting call end marker missing in %', v_oid;
-  END IF;
-  v_call_length := v_call_length + length('v_error_jsonb;') - 1;
-  v_repaired := overlay(v_definition PLACING $new$v_sync_sql := format(
-    'select public.record_input_sync($1, $2::%s, $3::%s, $4, $5)',
-    to_regtype('public.sync_source')::text,
-    to_regtype('public.sync_status')::text
-  );
-  execute v_sync_sql
-    into v_sync_log_id
-    using v_site_code, 'line', v_status, v_record_count, v_error_jsonb;$new$
-    FROM v_call_start FOR v_call_length);
+  v_repaired := replace(v_definition,
+    $old$'sync_status'$old$,
+    $new$regexp_replace(
+      to_regtype('public.sync_status')::text,
+      '^.*\\.',
+      ''
+    )$new$);
   IF v_repaired = v_definition THEN
-    RAISE EXCEPTION 'forecasting call repair did not change %', v_oid;
+    RAISE EXCEPTION 'forecasting status-type repair did not change %', v_oid;
   END IF;
   EXECUTE v_repaired;
 END;
