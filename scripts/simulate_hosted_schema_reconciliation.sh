@@ -178,6 +178,7 @@ if [[ "$all_missing_migrations_applied" == "true" ]]; then
 
   supabase db lint \
     --db-url "$local_database_url" \
+    --schema public \
     --level error \
     --fail-on error \
     > "$lint_log" 2>&1
