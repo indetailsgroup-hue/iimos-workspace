@@ -215,6 +215,7 @@ jobs:
           set -o pipefail
           supabase db lint \
             --db-url "$DB_URL" \
+            --schema public \
             --level error \
             --fail-on error \
             2>&1 | tee bootstrap-plan/bootstrap-db-lint.txt
@@ -253,6 +254,11 @@ jobs:
           if ! grep -qE '^ok ' bootstrap-plan/bootstrap-pgtap.tap; then
             echo "::error::No pgTAP assertions ran against the rendered bundle."
             exit 1
+          fi
+
+          if [ "$DB_LINT_EXIT" -ne 0 ]; then
+            echo "::error::Database lint reported errors; production bootstrap is blocked."
+            exit "$DB_LINT_EXIT"
           fi
 
       - name: Upload exact reviewed bootstrap plan
@@ -413,6 +419,13 @@ jobs:
           cp supabase/import_map.json hosted-schema-clone/supabase/import_map.json
           cp -R supabase/functions hosted-schema-clone/supabase/functions
 
+          # The schema-only simulation needs PostgreSQL, not the local mail
+          # catcher. Disabling Inbucket avoids runner-level SMTP/POP3 port
+          # collisions (notably 54326) without changing the database surface.
+          sed -i '/^\[inbucket\]/,/^\[storage\]/{
+            s/^enabled = true/enabled = false/
+          }' hosted-schema-clone/supabase/config.toml
+
           HOSTED_MAJOR_VERSION="$(jq -r '.serverVersionNum / 10000 | floor' \
             reconciliation-input/hosted/hosted-bootstrap-inventory.json)"
           if [[ ! "$HOSTED_MAJOR_VERSION" =~ ^[0-9]+$ ]]; then
@@ -458,6 +471,7 @@ jobs:
             and .pgtapTestFileCount > 0
             and .pgtapPassed == true
             and .pgtapAssertionCount > 0
+            and .legacyPgTapRoutinesIsolated == true
             and .databaseLintClean == true
             and .productionDataCopied == false
             and .productionWritesPerformed == false

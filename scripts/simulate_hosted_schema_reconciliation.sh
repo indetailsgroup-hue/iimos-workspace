@@ -75,6 +75,8 @@ pgtap_assertion_count=0
 pgtap_passed=false
 database_lint_exit_code=-1
 database_lint_clean=false
+legacy_pgtap_routine_count=0
+legacy_pgtap_routines_isolated=false
 local_dependency_extensions_ready=true
 failed_dependency_extension=""
 
@@ -176,8 +178,65 @@ if [[ "$all_missing_migrations_applied" == "true" ]]; then
     pgtap_exit_code=$?
   fi
 
+  # Keep pgTAP available in `public` while the assertions run, then move the
+  # extension into a dedicated schema on the disposable clone. Supabase's
+  # linter inspects every routine in the requested schema, including
+  # extension-owned routines, so merely attaching an unpackaged pgTAP install
+  # to the extension catalog is not sufficient. Hosted is never modified.
+  pgtap_isolation_result="$(psql "$local_database_url" \
+    --no-psqlrc -X -qAt -v ON_ERROR_STOP=1 <<'SQL'
+SELECT 'CREATE EXTENSION pgtap FROM unpackaged;'
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM pg_catalog.pg_extension
+  WHERE extname = 'pgtap'
+) \gexec
+
+SELECT count(*)
+FROM pg_catalog.pg_proc AS routine
+JOIN pg_catalog.pg_namespace AS namespace
+  ON namespace.oid = routine.pronamespace
+JOIN pg_catalog.pg_depend AS dependency
+  ON dependency.classid = 'pg_catalog.pg_proc'::regclass
+ AND dependency.objid = routine.oid
+ AND dependency.deptype = 'e'
+JOIN pg_catalog.pg_extension AS extension
+  ON extension.oid = dependency.refobjid
+ AND extension.extname = 'pgtap'
+WHERE namespace.nspname = 'public';
+
+CREATE SCHEMA IF NOT EXISTS pgtap_lint_excluded;
+ALTER EXTENSION pgtap SET SCHEMA pgtap_lint_excluded;
+
+SELECT count(*)
+FROM pg_catalog.pg_proc AS routine
+JOIN pg_catalog.pg_namespace AS namespace
+  ON namespace.oid = routine.pronamespace
+JOIN pg_catalog.pg_depend AS dependency
+  ON dependency.classid = 'pg_catalog.pg_proc'::regclass
+ AND dependency.objid = routine.oid
+ AND dependency.deptype = 'e'
+JOIN pg_catalog.pg_extension AS extension
+  ON extension.oid = dependency.refobjid
+ AND extension.extname = 'pgtap'
+WHERE namespace.nspname = 'public';
+SQL
+  )"
+  isolate_exit_code=$?
+  legacy_pgtap_routine_count="$(printf '%s\n' "$pgtap_isolation_result" | sed -n '1p')"
+  remaining_public_pgtap_routine_count="$(printf '%s\n' "$pgtap_isolation_result" | sed -n '2p')"
+  if [[ "$isolate_exit_code" -eq 0 \
+    && "$legacy_pgtap_routine_count" =~ ^[0-9]+$ \
+    && "$remaining_public_pgtap_routine_count" == "0" ]]; then
+    legacy_pgtap_routines_isolated=true
+  else
+    legacy_pgtap_routine_count=0
+    echo "Failed to isolate pgTAP routines from the public lint schema" >> "$lint_log"
+  fi
+
   supabase db lint \
     --db-url "$local_database_url" \
+    --schema public \
     --level error \
     --fail-on error \
     > "$lint_log" 2>&1
@@ -210,6 +269,8 @@ jq -n \
   --argjson pgtapPassed "$pgtap_passed" \
   --argjson databaseLintExitCode "$database_lint_exit_code" \
   --argjson databaseLintClean "$database_lint_clean" \
+  --argjson legacyPgTapRoutineCount "$legacy_pgtap_routine_count" \
+  --argjson legacyPgTapRoutinesIsolated "$legacy_pgtap_routines_isolated" \
   --argjson localDependencyExtensionsReady "$local_dependency_extensions_ready" \
   --arg failedDependencyExtension "$failed_dependency_extension" \
   '{
@@ -243,6 +304,9 @@ jq -n \
     pgtapPassed: $pgtapPassed,
     databaseLintExitCode: $databaseLintExitCode,
     databaseLintClean: $databaseLintClean,
+    databaseLintScope: "public application routines; pgTAP extension moved to pgtap_lint_excluded after assertions",
+    legacyPgTapRoutineCount: $legacyPgTapRoutineCount,
+    legacyPgTapRoutinesIsolated: $legacyPgTapRoutinesIsolated,
     productionDataCopied: false,
     productionWritesPerformed: false
   }' > "$result_json"
