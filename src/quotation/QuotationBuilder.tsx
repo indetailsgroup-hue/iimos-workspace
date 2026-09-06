@@ -54,7 +54,7 @@ export function QuotationBuilder({
     return prices;
   });
 
-  const [vatRate, setVatRate] = useState(0.07);
+  const [vatRate] = useState(0.07);
   const [includeVat, setIncludeVat] = useState(true);
   const [discount, setDiscount] = useState(0);
   const [terms, setTerms] = useState('ชำระภายใน 30 วันหลังส่งมอบงาน');
@@ -200,7 +200,7 @@ export function QuotationBuilder({
         <div style={styles.totals}>
           <div style={styles.totalRow}>
             <span>ยอดรวมก่อน VAT</span>
-            <span>฿{subtotal.toLocaleString('th-TH')}</span>
+            <span data-testid="quotation-subtotal">฿{subtotal.toLocaleString('th-TH')}</span>
           </div>
           {discount > 0 && (
             <div style={styles.totalRow}>
@@ -211,12 +211,12 @@ export function QuotationBuilder({
           {includeVat && (
             <div style={styles.totalRow}>
               <span>VAT {(vatRate * 100).toFixed(0)}%</span>
-              <span>฿{vatAmount.toLocaleString('th-TH')}</span>
+              <span data-testid="quotation-vat">฿{vatAmount.toLocaleString('th-TH')}</span>
             </div>
           )}
           <div style={{ ...styles.totalRow, borderTop: '2px solid #4ade80', paddingTop: '8px', marginTop: '8px' }}>
             <span style={{ fontSize: '16px', fontWeight: 700 }}>ยอดรวมสุทธิ</span>
-            <span style={{ fontSize: '18px', fontWeight: 700, color: '#4ade80' }}>
+            <span data-testid="quotation-total" style={{ fontSize: '18px', fontWeight: 700, color: '#4ade80' }}>
               ฿{total.toLocaleString('th-TH')}
             </span>
           </div>

@@ -156,7 +156,12 @@ export function CreateJobWizard({
       {/* Progress */}
       <div style={styles.progress}>
         {STEPS.map((s, i) => (
-          <div key={s} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div
+            key={s}
+            data-testid={`wizard-step-${i + 1}`}
+            aria-current={i === currentIndex ? 'step' : undefined}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
             <div
               style={{
                 ...styles.stepDot,
@@ -188,7 +193,7 @@ export function CreateJobWizard({
               value={customer.name}
               onChange={(e) => setCustomer((c) => ({ ...c, name: e.target.value }))}
               placeholder="บริษัท / ชื่อ-นามสกุล"
-              data-testid="customer-name"
+              data-testid="input-customer-name"
             />
           </div>
           <div style={styles.field}>
@@ -198,6 +203,7 @@ export function CreateJobWizard({
               value={customer.phone ?? ''}
               onChange={(e) => setCustomer((c) => ({ ...c, phone: e.target.value }))}
               placeholder="0xx-xxx-xxxx"
+              data-testid="input-customer-phone"
             />
           </div>
           <div style={styles.field}>
@@ -208,6 +214,7 @@ export function CreateJobWizard({
               value={customer.email ?? ''}
               onChange={(e) => setCustomer((c) => ({ ...c, email: e.target.value }))}
               placeholder="customer@email.com"
+              data-testid="input-customer-email"
             />
           </div>
           <div style={styles.field}>
@@ -233,7 +240,7 @@ export function CreateJobWizard({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="เช่น ตู้ครัว คอนโด IDEO"
-              data-testid="job-title"
+              data-testid="input-job-title"
             />
           </div>
           <div style={styles.row}>
@@ -258,6 +265,7 @@ export function CreateJobWizard({
                 style={styles.input}
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as CreateJobInput['priority'])}
+                data-testid="select-priority"
               >
                 <option value="LOW">ต่ำ</option>
                 <option value="NORMAL">ปกติ</option>
@@ -329,6 +337,7 @@ export function CreateJobWizard({
                 value={panelDraft.width ?? ''}
                 onChange={(e) => setPanelDraft((d) => ({ ...d, width: +e.target.value }))}
                 placeholder="กว้าง"
+                data-testid="input-panel-width"
               />
               <input
                 style={{ ...styles.input, flex: 1 }}
@@ -336,6 +345,7 @@ export function CreateJobWizard({
                 value={panelDraft.height ?? ''}
                 onChange={(e) => setPanelDraft((d) => ({ ...d, height: +e.target.value }))}
                 placeholder="สูง"
+                data-testid="input-panel-height"
               />
               <input
                 style={{ ...styles.input, flex: 0.5 }}
@@ -354,7 +364,7 @@ export function CreateJobWizard({
                 />
                 Curved Panel
               </label>
-              <button style={styles.addBtn} onClick={addPanel} data-testid="add-panel-btn">
+              <button style={styles.addBtn} onClick={addPanel} data-testid="btn-add-panel">
                 + เพิ่มแผ่น
               </button>
             </div>
@@ -369,11 +379,11 @@ export function CreateJobWizard({
           <div style={styles.reviewGrid}>
             <div style={styles.reviewItem}>
               <span style={styles.reviewLabel}>ลูกค้า</span>
-              <span style={styles.reviewValue}>{customer.name}</span>
+              <span style={styles.reviewValue} data-testid="review-customer-name">{customer.name}</span>
             </div>
             <div style={styles.reviewItem}>
               <span style={styles.reviewLabel}>ชื่องาน</span>
-              <span style={styles.reviewValue}>{title}</span>
+              <span style={styles.reviewValue} data-testid="review-job-title">{title}</span>
             </div>
             <div style={styles.reviewItem}>
               <span style={styles.reviewLabel}>วัสดุ</span>
@@ -381,7 +391,7 @@ export function CreateJobWizard({
             </div>
             <div style={styles.reviewItem}>
               <span style={styles.reviewLabel}>แผ่นงาน</span>
-              <span style={styles.reviewValue}>{panels.length} รายการ ({panels.reduce((s, p) => s + p.qty, 0)} ชิ้น)</span>
+              <span style={styles.reviewValue} data-testid="review-panel-count">{panels.length} รายการ ({panels.reduce((s, p) => s + p.qty, 0)} ชิ้น)</span>
             </div>
             <div style={styles.reviewItem}>
               <span style={styles.reviewLabel}>ระดับ</span>
@@ -406,16 +416,21 @@ export function CreateJobWizard({
         )}
         <div style={{ flex: 1 }} />
         {canBack && (
-          <button style={styles.backBtn} onClick={back}>
+          <button style={styles.backBtn} onClick={back} data-testid="btn-prev-step">
             ← ย้อนกลับ
           </button>
         )}
         {step !== 'review' ? (
-          <button style={styles.nextBtn} onClick={next}>
+          <button
+            style={styles.nextBtn}
+            onClick={next}
+            data-testid="btn-next-step"
+            disabled={(step === 'customer' && !customer.name.trim()) || (step === 'details' && !title.trim())}
+          >
             ถัดไป →
           </button>
         ) : (
-          <button style={styles.submitBtn} onClick={handleSubmit} data-testid="submit-job">
+          <button style={styles.submitBtn} onClick={handleSubmit} data-testid="btn-submit-job">
             ✓ สร้างงาน
           </button>
         )}

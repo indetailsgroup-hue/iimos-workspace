@@ -320,7 +320,7 @@ jobs:
           "
 
   e2e-integration:
-    name: e2e factory-flow (non-@smoke — enforced non-vacuous; service tests gated on B1-05)
+    name: e2e factory-flow contract (enforced non-vacuous)
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     concurrency:
       group: e2e-integration-${{ github.head_ref || github.ref }}
@@ -336,19 +336,14 @@ jobs:
       - run: npm ci
       - name: Install Playwright chromium + OS deps
         run: npx playwright install --with-deps chromium
-      # B0-02 reconciliation: the @smoke tier asserts the RELEASED-only export
-      # guardrail deterministically (no factory needed). The remaining, non-@smoke
-      # e2e tests exercise the real freeze → RELEASE → factory export flow. The
-      # factory service (server/) is NOT yet wired into CI — its FS-B0-02 fail-closed
-      # bearer boundary + the frontend auth needed to call it land under B1-05. Until
-      # then these tests skip (Playwright exits 0 on all-skipped). This job keeps that
-      # deferred coverage VISIBLE, stays green while they skip, and goes red on any
-      # real factory-flow failure. When the factory service is added they run for real
-      # and assert the downloaded artifact + manifest.
-      - name: Run e2e factory-flow (deterministic contract lane always runs; service tests skip until wired)
+      # B0-02 reconciliation: this lane is intentionally scoped to the deterministic,
+      # route-mocked factory verification contract. Selecting every non-@smoke spec
+      # here also pulled unrelated accounting/eTax/export suites into a job that does
+      # not provision their services and caused the release gate to time out.
+      - name: Run deterministic factory-flow contract
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: integration-report.json
-        run: npx playwright test --config playwright.e2e.config.ts --grep-invert @smoke --reporter=list,json
+        run: npx playwright test e2e/factory-verify-flow.spec.ts --config playwright.e2e.config.ts --reporter=list,json
       # FS 2026-07-18 (execution order #4): the factory-flow lane may never be
       # vacuous. The deterministic contract tests (factory-verify-flow.spec.ts,
       # mocked factory API) always run, so pass===0 here means the lane itself
@@ -366,7 +361,7 @@ jobs:
           console.log('factory-flow e2e: pass='+pass+' skip='+skip+' fail='+fail+' flaky='+flaky);
           if (fail>0) { console.error('::error::factory-flow has '+fail+' failing test(s)'); process.exit(1); }
           if (pass===0) { console.error('::error::factory-flow ran ZERO tests (all skipped) — a vacuous lane must not report green (FS 2026-07-18 #4). Skipped: '+skipped.join(' | ')); process.exit(1); }
-          if (skip>0) console.log('::notice::service-gated factory-flow tests still skipped pending B1-05 factory-service wiring ('+skip+'): '+skipped.join(' | '));
+          if (skip>0) { console.error('::error::factory-flow contract must not skip. Skipped: '+skipped.join(' | ')); process.exit(1); }
           console.log('OK: factory-flow lane is non-vacuous — '+pass+' test(s) ran and passed');
           "
 

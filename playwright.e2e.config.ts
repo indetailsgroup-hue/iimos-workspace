@@ -19,6 +19,10 @@ export default defineConfig({
   ],
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:5173',
+    // Local verification can reuse an installed browser (for example
+    // PLAYWRIGHT_CHANNEL=chrome) while CI keeps using its pinned Playwright
+    // Chromium download.
+    channel: process.env.PLAYWRIGHT_CHANNEL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
