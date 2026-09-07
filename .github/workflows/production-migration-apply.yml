@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       confirmation:
-        description: Type APPLY to authorize production database writes
+        description: Type APPLY for writes or VERIFY for read-only post-apply recovery verification
         required: true
         type: string
       expected_commit:
@@ -47,24 +47,36 @@ jobs:
           EXPECTED_MISSING_MIGRATIONS: ${{ inputs.expected_missing_migrations }}
           EXPECTED_RECORDED_MERGED_VERSIONS: ${{ inputs.expected_recorded_merged_versions }}
         run: |
-          if [ "$CONFIRMATION" != 'APPLY' ]; then
-            echo "::error::confirmation must be exactly APPLY"
+          if [ "$CONFIRMATION" != 'APPLY' ] && [ "$CONFIRMATION" != 'VERIFY' ]; then
+            echo "::error::confirmation must be exactly APPLY or VERIFY"
             exit 1
           fi
           if [ "$EXPECTED_COMMIT" != "$GITHUB_SHA" ]; then
             echo "::error::expected_commit does not match the selected main commit"
             exit 1
           fi
-          if [[ ! "$EXPECTED_MISSING_MIGRATIONS" =~ ^[1-9][0-9]*$ ]]; then
-            echo "::error::expected_missing_migrations must be a positive integer"
+          if [[ ! "$EXPECTED_MISSING_MIGRATIONS" =~ ^[0-9]+$ ]]; then
+            echo "::error::expected_missing_migrations must be a non-negative integer"
+            exit 1
+          fi
+          if [ "$CONFIRMATION" = 'APPLY' ] && [ "$EXPECTED_MISSING_MIGRATIONS" -eq 0 ]; then
+            echo "::error::APPLY requires at least one pending migration"
+            exit 1
+          fi
+          if [ "$CONFIRMATION" = 'VERIFY' ] && [ "$EXPECTED_MISSING_MIGRATIONS" -ne 0 ]; then
+            echo "::error::VERIFY requires expected_missing_migrations=0"
             exit 1
           fi
           if [[ ! "$EXPECTED_RECORDED_MERGED_VERSIONS" =~ ^[0-9]+$ ]]; then
             echo "::error::expected_recorded_merged_versions must be a non-negative integer"
             exit 1
           fi
-          if [ -z "$DATABASE_URL" ] || [ -z "$SUPABASE_PROJECT_REF" ] || [ -z "$MIGRATION_BACKUP_KEY" ]; then
-            echo "::error::DATABASE_URL, SUPABASE_PROJECT_REF, and MIGRATION_BACKUP_KEY are required"
+          if [ -z "$DATABASE_URL" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::DATABASE_URL and SUPABASE_PROJECT_REF are required"
+            exit 1
+          fi
+          if [ "$CONFIRMATION" = 'APPLY' ] && [ -z "$MIGRATION_BACKUP_KEY" ]; then
+            echo "::error::MIGRATION_BACKUP_KEY is required for APPLY"
             exit 1
           fi
           if [[ "$DATABASE_URL" != postgres://* && "$DATABASE_URL" != postgresql://* ]]; then
@@ -134,6 +146,7 @@ jobs:
           ' production-plan/plan-summary.json > /dev/null
 
       - name: Create encrypted pre-apply logical backup
+        if: inputs.confirmation == 'APPLY'
         env:
           PGOPTIONS: '-c default_transaction_read_only=on'
         run: |
@@ -157,6 +170,7 @@ jobs:
           test -s evidence/pre-apply-backup.dump.enc
 
       - name: Preview the exact pending migration set
+        if: inputs.confirmation == 'APPLY'
         working-directory: production-plan
         run: |
           set -o pipefail
@@ -166,6 +180,7 @@ jobs:
             --dry-run 2>&1 | tee ../evidence/db-push-dry-run.txt
 
       - name: Apply reviewed migrations to production
+        if: inputs.confirmation == 'APPLY'
         working-directory: production-plan
         run: |
           set -o pipefail
@@ -185,7 +200,18 @@ jobs:
             evidence/post-apply-reconciliation.json \
             evidence/post-apply-reconciliation.md
 
-          EXPECTED_POST_MERGED_VERSIONS="$(awk 'END { print NR - 1 }' \
+          # Count only duplicate-source versions that survive normalization as
+          # canonical manifest versions. For example, source version 20260828
+          # is folded into canonical 0172 and must not be expected in hosted
+          # migration history as a separate recorded version.
+          EXPECTED_POST_MERGED_VERSIONS="$(awk -F '\t' '
+            NR == FNR {
+              if (FNR > 1) canonical[$2] = 1
+              next
+            }
+            FNR > 1 && ($1 in canonical) { count++ }
+            END { print count + 0 }
+          ' production-plan/migration-manifest.tsv \
             production-plan/duplicate-version-map.tsv)"
 
           jq -e --argjson expectedMerged "$EXPECTED_POST_MERGED_VERSIONS" '
