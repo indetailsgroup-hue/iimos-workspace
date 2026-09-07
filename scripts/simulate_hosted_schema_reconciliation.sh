@@ -38,6 +38,11 @@ pgtap_log="$output_dir/reconciliation-pgtap.tap"
 lint_log="$output_dir/reconciliation-db-lint.txt"
 applied_tsv="$output_dir/applied-migrations.tsv"
 result_json="$output_dir/reconciliation-simulation.json"
+restorable_schema_sql="$(mktemp)"
+cleanup() {
+  rm -f "$restorable_schema_sql"
+}
+trap cleanup EXIT
 
 printf 'order\tversion\tfile\n' > "$applied_tsv"
 : > "$restore_log"
@@ -45,12 +50,12 @@ printf 'order\tversion\tfile\n' > "$applied_tsv"
 : > "$pgtap_log"
 : > "$lint_log"
 
-history_append_only_candidate="$(jq -r '.historyAppendOnlyCandidate // false' "$reconciliation_json")"
+history_ordering_candidate="$(jq -r '.historyOrderingCandidate // false' "$reconciliation_json")"
 missing_count="$(jq -r '.canonicalVersionsMissing' "$reconciliation_json")"
 hosted_server_version_num="$(jq -r '.serverVersionNum' "$hosted_inventory_json")"
 
-if [[ "$history_append_only_candidate" != "true" ]]; then
-  echo "[reconciliation-simulation] migration history is not append-only compatible" >&2
+if [[ "$history_ordering_candidate" != "true" ]]; then
+  echo "[reconciliation-simulation] migration history is not ordering-compatible" >&2
   exit 1
 fi
 if [[ ! "$missing_count" =~ ^[0-9]+$ ]] || [[ "$missing_count" -eq 0 ]]; then
@@ -79,6 +84,13 @@ legacy_pgtap_routine_count=0
 legacy_pgtap_routines_isolated=false
 local_dependency_extensions_ready=true
 failed_dependency_extension=""
+data_bearing_fixture_required=false
+data_bearing_fixture_seeded=false
+data_bearing_fixture_backfilled=false
+data_bearing_fixture_immutability_restored=false
+data_bearing_migration_fixture_passed=true
+canonical_static_seed_required=false
+canonical_static_seed_restored=true
 
 core_schema_query="SELECT CASE WHEN (
   to_regclass('public.organizations') IS NOT NULL
@@ -88,11 +100,51 @@ core_schema_query="SELECT CASE WHEN (
   AND to_regclass('public.platform_metrics_snapshots') IS NOT NULL
 ) THEN 'true' ELSE 'false' END;"
 
+# The hosted public-only dump references extension-owned operators by their
+# hosted schema (for example public.gin_trgm_ops), but pg_dump intentionally
+# omits CREATE EXTENSION. Recreate those dependencies before restoring indexes.
+# The dump's schema declaration is made idempotent because public must exist
+# first as the extension target.
+sed 's/^CREATE SCHEMA public;$/CREATE SCHEMA IF NOT EXISTS public;/' \
+  "$hosted_schema_sql" > "$restorable_schema_sql"
+
 if psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
-  -c 'DROP SCHEMA IF EXISTS public CASCADE;' \
-  >> "$restore_log" 2>&1 \
+  -c 'DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;' \
+  >> "$restore_log" 2>&1; then
+  for public_extension in pg_trgm unaccent; do
+    if jq -e --arg extension "$public_extension" \
+      '.installedExtensions[$extension] == "public"' \
+      "$hosted_inventory_json" > /dev/null; then
+      if ! psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
+        -c "CREATE EXTENSION IF NOT EXISTS $public_extension WITH SCHEMA public;" \
+        >> "$restore_log" 2>&1; then
+        local_dependency_extensions_ready=false
+        failed_dependency_extension="$public_extension"
+        break
+      fi
+
+      extension_schema="$(psql "$local_database_url" --no-psqlrc -X -qAt \
+        -v ON_ERROR_STOP=1 \
+        -c "SELECT namespace.nspname
+            FROM pg_catalog.pg_extension AS extension
+            JOIN pg_catalog.pg_namespace AS namespace
+              ON namespace.oid = extension.extnamespace
+            WHERE extension.extname = '$public_extension';")"
+      if [[ "$extension_schema" != "public" ]] \
+        && ! psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
+          -c "ALTER EXTENSION $public_extension SET SCHEMA public;" \
+          >> "$restore_log" 2>&1; then
+        local_dependency_extensions_ready=false
+        failed_dependency_extension="$public_extension"
+        break
+      fi
+    fi
+  done
+fi
+
+if [[ "$local_dependency_extensions_ready" == "true" ]] \
   && psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
-    -f "$hosted_schema_sql" \
+    -f "$restorable_schema_sql" \
     >> "$restore_log" 2>&1; then
   schema_restore_succeeded=true
   core_schema_ready_before="$(psql "$local_database_url" --no-psqlrc -X -tA \
@@ -121,8 +173,66 @@ if [[ "$schema_restore_succeeded" == "true" ]]; then
   done
 fi
 
+# Schema-only dumps intentionally omit rows, including deterministic system
+# rows created by already-recorded migrations. Recreate the sentinel
+# organization from 0182 in the disposable clone when that migration is part
+# of hosted history. This is canonical migration data, not production data.
 if [[ "$schema_restore_succeeded" == "true" \
-  && "$local_dependency_extensions_ready" == "true" ]]; then
+  && "$local_dependency_extensions_ready" == "true" ]] \
+  && jq -e \
+    '.migrationHistoryVersions | index("0182") != null' \
+    "$hosted_inventory_json" > /dev/null; then
+  canonical_static_seed_required=true
+  canonical_static_seed_restored=false
+
+  if psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
+    -c "INSERT INTO public.organizations (org_id, name, slug)
+        VALUES (
+          '00000000-0000-0000-0000-000000000000'::uuid,
+          '__sentinel_org__',
+          '__sentinel__'
+        )
+        ON CONFLICT (org_id) DO NOTHING;" \
+    >> "$restore_log" 2>&1; then
+    canonical_static_seed_restored=true
+  else
+    echo "failed to recreate canonical sentinel organization" >> "$apply_log"
+  fi
+fi
+
+# A schema-only clone cannot expose migrations that fail only when a table has
+# rows. When 0187 is pending, seed one disposable append-only audit row so the
+# simulation exercises its tenant-key backfill and trigger restoration. This
+# row exists only in the local clone; no production data is copied or changed.
+if [[ "$schema_restore_succeeded" == "true" \
+  && "$local_dependency_extensions_ready" == "true" ]] \
+  && jq -e '.missingFromHosted[] | select(.version == "0187")' \
+    "$reconciliation_json" > /dev/null; then
+  data_bearing_fixture_required=true
+  data_bearing_migration_fixture_passed=false
+
+  if psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
+    -c "INSERT INTO public.installation_audit_log (event_type, detail)
+        VALUES (
+          'schema_reconciliation_installation_audit_fixture',
+          '{\"fixture\": true}'::jsonb
+        );" \
+    >> "$restore_log" 2>&1; then
+    data_bearing_fixture_seeded=true
+  else
+    failed_order="$(jq -r \
+      '.missingFromHosted[] | select(.version == "0187") | .order' \
+      "$reconciliation_json")"
+    failed_version="0187"
+    failed_file="0187_installation_domain_rls.sql"
+    echo "failed to seed installation audit data-bearing fixture" >> "$apply_log"
+  fi
+fi
+
+if [[ "$schema_restore_succeeded" == "true" \
+  && "$local_dependency_extensions_ready" == "true" \
+  && "$canonical_static_seed_restored" == "true" \
+  && -z "$failed_file" ]]; then
   while IFS=$'\t' read -r order version file; do
     migration_path="$canonical_plan_dir/supabase/migrations/$file"
     if [[ ! -f "$migration_path" ]]; then
@@ -156,6 +266,35 @@ if [[ "$schema_restore_succeeded" == "true" \
   && -z "$failed_file" \
   && "$applied_count" -eq "$missing_count" ]]; then
   all_missing_migrations_applied=true
+fi
+
+if [[ "$data_bearing_fixture_required" == "true" \
+  && "$data_bearing_fixture_seeded" == "true" \
+  && "$all_missing_migrations_applied" == "true" ]]; then
+  fixture_org_id="$(psql "$local_database_url" --no-psqlrc -X -qAt \
+    -v ON_ERROR_STOP=1 \
+    -c "SELECT org_id::text
+        FROM public.installation_audit_log
+        WHERE event_type =
+          'schema_reconciliation_installation_audit_fixture';")"
+  if [[ "$fixture_org_id" == "00000000-0000-0000-0000-000000000000" ]]; then
+    data_bearing_fixture_backfilled=true
+  fi
+
+  if ! psql "$local_database_url" --no-psqlrc -X -q \
+    -v ON_ERROR_STOP=1 \
+    -c "UPDATE public.installation_audit_log
+        SET detail = '{\"fixture\": false}'::jsonb
+        WHERE event_type =
+          'schema_reconciliation_installation_audit_fixture';" \
+    >> "$apply_log" 2>&1; then
+    data_bearing_fixture_immutability_restored=true
+  fi
+
+  if [[ "$data_bearing_fixture_backfilled" == "true" \
+    && "$data_bearing_fixture_immutability_restored" == "true" ]]; then
+    data_bearing_migration_fixture_passed=true
+  fi
 fi
 
 if [[ "$all_missing_migrations_applied" == "true" ]]; then
@@ -273,6 +412,13 @@ jq -n \
   --argjson legacyPgTapRoutinesIsolated "$legacy_pgtap_routines_isolated" \
   --argjson localDependencyExtensionsReady "$local_dependency_extensions_ready" \
   --arg failedDependencyExtension "$failed_dependency_extension" \
+  --argjson dataBearingFixtureRequired "$data_bearing_fixture_required" \
+  --argjson dataBearingFixtureSeeded "$data_bearing_fixture_seeded" \
+  --argjson dataBearingFixtureBackfilled "$data_bearing_fixture_backfilled" \
+  --argjson dataBearingFixtureImmutabilityRestored "$data_bearing_fixture_immutability_restored" \
+  --argjson dataBearingMigrationFixturePassed "$data_bearing_migration_fixture_passed" \
+  --argjson canonicalStaticSeedRequired "$canonical_static_seed_required" \
+  --argjson canonicalStaticSeedRestored "$canonical_static_seed_restored" \
   '{
     formatVersion: 1,
     simulationKind: "hosted-public-schema-only",
@@ -307,6 +453,13 @@ jq -n \
     databaseLintScope: "public application routines; pgTAP extension moved to pgtap_lint_excluded after assertions",
     legacyPgTapRoutineCount: $legacyPgTapRoutineCount,
     legacyPgTapRoutinesIsolated: $legacyPgTapRoutinesIsolated,
+    dataBearingFixtureRequired: $dataBearingFixtureRequired,
+    dataBearingFixtureSeeded: $dataBearingFixtureSeeded,
+    dataBearingFixtureBackfilled: $dataBearingFixtureBackfilled,
+    dataBearingFixtureImmutabilityRestored: $dataBearingFixtureImmutabilityRestored,
+    dataBearingMigrationFixturePassed: $dataBearingMigrationFixturePassed,
+    canonicalStaticSeedRequired: $canonicalStaticSeedRequired,
+    canonicalStaticSeedRestored: $canonicalStaticSeedRestored,
     productionDataCopied: false,
     productionWritesPerformed: false
   }' > "$result_json"

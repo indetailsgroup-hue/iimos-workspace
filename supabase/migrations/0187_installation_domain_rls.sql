@@ -138,16 +138,36 @@ WHERE  org_id IS NULL;
 -- Level 2e: installation_audit_log ← installation_projects.org_id
 --   project_id is nullable (audit log may capture platform-level events)
 --   Rows with no project_id → sentinel
+--   This table is append-only for application traffic. The schema migration
+--   must temporarily suspend only its immutability trigger while it performs
+--   the one-time tenant-key backfill. ALTER TABLE takes a lock for the
+--   statement, and the exception handler restores the trigger before
+--   propagating any failure.
 -- ---------------------------------------------------------------------------
-UPDATE public.installation_audit_log al
-SET    org_id = ip.org_id
-FROM   public.installation_projects ip
-WHERE  al.project_id = ip.id
-  AND  al.org_id IS NULL;
+DO $installation_audit_org_backfill$
+BEGIN
+  EXECUTE 'ALTER TABLE public.installation_audit_log '
+       || 'DISABLE TRIGGER trg_installation_audit_immutable';
 
-UPDATE public.installation_audit_log
-SET    org_id = '00000000-0000-0000-0000-000000000000'
-WHERE  org_id IS NULL;
+  UPDATE public.installation_audit_log al
+  SET    org_id = ip.org_id
+  FROM   public.installation_projects ip
+  WHERE  al.project_id = ip.id
+    AND  al.org_id IS NULL;
+
+  UPDATE public.installation_audit_log
+  SET    org_id = '00000000-0000-0000-0000-000000000000'
+  WHERE  org_id IS NULL;
+
+  EXECUTE 'ALTER TABLE public.installation_audit_log '
+       || 'ENABLE TRIGGER trg_installation_audit_immutable';
+EXCEPTION
+  WHEN OTHERS THEN
+    EXECUTE 'ALTER TABLE public.installation_audit_log '
+         || 'ENABLE TRIGGER trg_installation_audit_immutable';
+    RAISE;
+END
+$installation_audit_org_backfill$;
 
 -- ---------------------------------------------------------------------------
 -- Level 2f: installation_memberships ← installation_projects.org_id

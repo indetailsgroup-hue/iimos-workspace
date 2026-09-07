@@ -92,7 +92,13 @@ jobs:
 
       - name: Apply rendered bundle to a fresh local Supabase database
         working-directory: bootstrap-plan
-        run: supabase start
+        run: |
+          # The bootstrap gate only needs PostgreSQL. Disable the local mail
+          # catcher to avoid runner-level SMTP/UI port collisions.
+          sed -i '/^\[inbucket\]/,/^\[storage\]/{
+            s/^enabled = true/enabled = false/
+          }' supabase/config.toml
+          supabase start
 
       - name: Verify core schema and run all pgTAP assertions
         run: |
@@ -296,12 +302,11 @@ jobs:
           fi
 
           jq -e '
-            .historyAppendOnlyCandidate == true
+            .historyOrderingCandidate == true
             and .canonicalVersionsMissing > 0
             and .historicalGapCount == 0
             and (.hostedVersionsNotCanonical | length) == 0
             and (.duplicateHostedVersions | length) == 0
-            and .mergedVersionRiskCount == 0
             and .productionWritesPerformed == false
           ' reconciliation-input/report/hosted-migration-reconciliation.json \
             > /dev/null
@@ -385,6 +390,8 @@ jobs:
             and .pgtapPassed == true
             and .pgtapAssertionCount > 0
             and .legacyPgTapRoutinesIsolated == true
+            and .dataBearingMigrationFixturePassed == true
+            and .canonicalStaticSeedRestored == true
             and .databaseLintClean == true
             and .productionDataCopied == false
             and .productionWritesPerformed == false

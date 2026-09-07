@@ -15,6 +15,10 @@ on:
         description: Exact pending migration count from the reviewed no-write plan
         required: true
         type: string
+      expected_recorded_merged_versions:
+        description: Exact recorded merged-source version count from the reviewed no-write plan
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -41,6 +45,7 @@ jobs:
           CONFIRMATION: ${{ inputs.confirmation }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
           EXPECTED_MISSING_MIGRATIONS: ${{ inputs.expected_missing_migrations }}
+          EXPECTED_RECORDED_MERGED_VERSIONS: ${{ inputs.expected_recorded_merged_versions }}
         run: |
           if [ "$CONFIRMATION" != 'APPLY' ]; then
             echo "::error::confirmation must be exactly APPLY"
@@ -52,6 +57,10 @@ jobs:
           fi
           if [[ ! "$EXPECTED_MISSING_MIGRATIONS" =~ ^[1-9][0-9]*$ ]]; then
             echo "::error::expected_missing_migrations must be a positive integer"
+            exit 1
+          fi
+          if [[ ! "$EXPECTED_RECORDED_MERGED_VERSIONS" =~ ^[0-9]+$ ]]; then
+            echo "::error::expected_recorded_merged_versions must be a non-negative integer"
             exit 1
           fi
           if [ -z "$DATABASE_URL" ] || [ -z "$SUPABASE_PROJECT_REF" ] || [ -z "$MIGRATION_BACKUP_KEY" ]; then
@@ -93,6 +102,7 @@ jobs:
       - name: Reconcile hosted history immediately before apply
         env:
           EXPECTED_MISSING_MIGRATIONS: ${{ inputs.expected_missing_migrations }}
+          EXPECTED_RECORDED_MERGED_VERSIONS: ${{ inputs.expected_recorded_merged_versions }}
         run: |
           node scripts/compare_hosted_migration_inventory.mjs \
             evidence/pre-apply-inventory.json \
@@ -101,13 +111,15 @@ jobs:
             evidence/pre-apply-reconciliation.json \
             evidence/pre-apply-reconciliation.md
 
-          jq -e --argjson expected "$EXPECTED_MISSING_MIGRATIONS" '
-            .historyAppendOnlyCandidate == true
-            and .canonicalVersionsMissing == $expected
+          jq -e \
+            --argjson expectedMissing "$EXPECTED_MISSING_MIGRATIONS" \
+            --argjson expectedMerged "$EXPECTED_RECORDED_MERGED_VERSIONS" '
+            .historyOrderingCandidate == true
+            and .canonicalVersionsMissing == $expectedMissing
             and .historicalGapCount == 0
             and (.hostedVersionsNotCanonical | length) == 0
             and (.duplicateHostedVersions | length) == 0
-            and .mergedVersionRiskCount == 0
+            and .mergedVersionRiskCount == $expectedMerged
             and .productionWritesPerformed == false
           ' evidence/pre-apply-reconciliation.json > /dev/null
 
@@ -173,12 +185,16 @@ jobs:
             evidence/post-apply-reconciliation.json \
             evidence/post-apply-reconciliation.md
 
-          jq -e '
-            .canonicalVersionsMissing == 0
+          EXPECTED_POST_MERGED_VERSIONS="$(awk 'END { print NR - 1 }' \
+            production-plan/duplicate-version-map.tsv)"
+
+          jq -e --argjson expectedMerged "$EXPECTED_POST_MERGED_VERSIONS" '
+            .historyOrderingCandidate == true
+            and .canonicalVersionsMissing == 0
             and .historicalGapCount == 0
             and (.hostedVersionsNotCanonical | length) == 0
             and (.duplicateHostedVersions | length) == 0
-            and .mergedVersionRiskCount == 0
+            and .mergedVersionRiskCount == $expectedMerged
           ' evidence/post-apply-reconciliation.json > /dev/null
 
           jq -e '
