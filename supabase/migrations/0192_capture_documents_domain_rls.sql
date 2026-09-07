@@ -40,18 +40,37 @@ drop policy if exists capture_audit_log_sel on public.capture_audit_log;
 alter table public.capture_audit_log
   add column if not exists org_id uuid;
 
-update public.capture_audit_log cal
-set org_id = (
-  select ip.org_id
-  from public.capture_artifact ca
-  join public.installation_projects ip on ip.site_code = ca.site_code
-  where ca.id = cal.capture_artifact_id
-  limit 1
-)
-where capture_artifact_id is not null;
-update public.capture_audit_log
-  set org_id = '00000000-0000-0000-0000-000000000000'::uuid
-  where org_id is null;
+-- Temporarily suspend only the append-only trigger for this one-time schema
+-- backfill. The table lock prevents concurrent application writes, and the
+-- exception path restores immutability before propagating any failure.
+do $capture_audit_org_backfill$
+begin
+  execute 'alter table public.capture_audit_log '
+       || 'disable trigger trg_capture_audit_immutable';
+
+  update public.capture_audit_log cal
+  set org_id = (
+    select ip.org_id
+    from public.capture_artifact ca
+    join public.installation_projects ip on ip.site_code = ca.site_code
+    where ca.id = cal.capture_artifact_id
+    limit 1
+  )
+  where capture_artifact_id is not null;
+
+  update public.capture_audit_log
+    set org_id = '00000000-0000-0000-0000-000000000000'::uuid
+    where org_id is null;
+
+  execute 'alter table public.capture_audit_log '
+       || 'enable trigger trg_capture_audit_immutable';
+exception
+  when others then
+    execute 'alter table public.capture_audit_log '
+         || 'enable trigger trg_capture_audit_immutable';
+    raise;
+end
+$capture_audit_org_backfill$;
 alter table public.capture_audit_log alter column org_id set not null;
 
 create policy capture_audit_log_tenant_isolation on public.capture_audit_log
@@ -150,11 +169,27 @@ drop policy if exists form_templates_sel on public.form_templates;
 alter table public.form_templates
   add column if not exists org_id uuid;
 
-alter table public.form_templates disable trigger all;
-update public.form_templates
-  set org_id = '00000000-0000-0000-0000-000000000000'::uuid
-  where org_id is null;
-alter table public.form_templates enable trigger all;
+-- Published templates are immutable for application traffic. Suspend only
+-- that business trigger for the tenant-key backfill; keep constraint and
+-- unrelated triggers active, and restore immutability on every exit path.
+do $form_templates_org_backfill$
+begin
+  execute 'alter table public.form_templates '
+       || 'disable trigger trg_form_templates_immutable';
+
+  update public.form_templates
+    set org_id = '00000000-0000-0000-0000-000000000000'::uuid
+    where org_id is null;
+
+  execute 'alter table public.form_templates '
+       || 'enable trigger trg_form_templates_immutable';
+exception
+  when others then
+    execute 'alter table public.form_templates '
+         || 'enable trigger trg_form_templates_immutable';
+    raise;
+end
+$form_templates_org_backfill$;
 alter table public.form_templates alter column org_id set not null;
 
 create policy form_templates_tenant_isolation on public.form_templates
