@@ -89,6 +89,26 @@ data_bearing_fixture_seeded=false
 data_bearing_fixture_backfilled=false
 data_bearing_fixture_immutability_restored=false
 data_bearing_migration_fixture_passed=true
+installation_audit_fixture_required=false
+installation_audit_fixture_seeded=false
+installation_audit_fixture_backfilled=false
+installation_audit_fixture_immutability_restored=false
+line_oa_audit_fixture_required=false
+line_oa_audit_fixture_seeded=false
+line_oa_audit_fixture_backfilled=false
+line_oa_audit_fixture_immutability_restored=false
+capture_audit_fixture_required=false
+capture_audit_fixture_seeded=false
+capture_audit_fixture_backfilled=false
+capture_audit_fixture_immutability_restored=false
+form_template_fixture_required=false
+form_template_fixture_seeded=false
+form_template_fixture_backfilled=false
+form_template_fixture_immutability_restored=false
+workflow_audit_fixture_required=false
+workflow_audit_fixture_seeded=false
+workflow_audit_fixture_backfilled=false
+workflow_audit_fixture_immutability_restored=false
 canonical_static_seed_required=false
 canonical_static_seed_restored=true
 
@@ -210,6 +230,7 @@ if [[ "$schema_restore_succeeded" == "true" \
     "$reconciliation_json" > /dev/null; then
   data_bearing_fixture_required=true
   data_bearing_migration_fixture_passed=false
+  installation_audit_fixture_required=true
 
   if psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
     -c "INSERT INTO public.installation_audit_log (event_type, detail)
@@ -218,7 +239,7 @@ if [[ "$schema_restore_succeeded" == "true" \
           '{\"fixture\": true}'::jsonb
         );" \
     >> "$restore_log" 2>&1; then
-    data_bearing_fixture_seeded=true
+    installation_audit_fixture_seeded=true
   else
     failed_order="$(jq -r \
       '.missingFromHosted[] | select(.version == "0187") | .order' \
@@ -226,6 +247,141 @@ if [[ "$schema_restore_succeeded" == "true" \
     failed_version="0187"
     failed_file="0187_installation_domain_rls.sql"
     echo "failed to seed installation audit data-bearing fixture" >> "$apply_log"
+  fi
+fi
+
+# The LINE OA tenant backfill in 0189 also touches an append-only audit table.
+# Seed a disposable row whenever that canonical version is pending so the
+# simulation proves both the one-time backfill and trigger restoration.
+if [[ "$schema_restore_succeeded" == "true" \
+  && "$local_dependency_extensions_ready" == "true" ]] \
+  && jq -e '.missingFromHosted[] | select(.version == "0189")' \
+    "$reconciliation_json" > /dev/null; then
+  data_bearing_fixture_required=true
+  data_bearing_migration_fixture_passed=false
+  line_oa_audit_fixture_required=true
+
+  if psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
+    -c "INSERT INTO public.line_oa_audit_log (
+          event_type,
+          vertical_context,
+          entity_ref,
+          performed_by
+        ) VALUES (
+          'schema_reconciliation_line_oa_audit_fixture',
+          'system',
+          'schema-reconciliation-fixture',
+          'schema-reconciliation'
+        );" \
+    >> "$restore_log" 2>&1; then
+    line_oa_audit_fixture_seeded=true
+  else
+    failed_order="$(jq -r \
+      '.missingFromHosted[] | select(.version == "0189") | .order' \
+      "$reconciliation_json")"
+    failed_version="0189"
+    failed_file="0189_line_oa_domain_rls.sql"
+    echo "failed to seed LINE OA audit data-bearing fixture" >> "$apply_log"
+  fi
+fi
+
+# The capture-domain tenant backfill in 0192 updates its append-only audit log.
+# A disposable row makes that data-bearing behavior visible on the schema-only
+# clone without copying or changing production data.
+if [[ "$schema_restore_succeeded" == "true" \
+  && "$local_dependency_extensions_ready" == "true" ]] \
+  && jq -e '.missingFromHosted[] | select(.version == "0192")' \
+    "$reconciliation_json" > /dev/null; then
+  data_bearing_fixture_required=true
+  data_bearing_migration_fixture_passed=false
+  capture_audit_fixture_required=true
+
+  if psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
+    -c "INSERT INTO public.capture_audit_log (event_type, actor, detail)
+        VALUES (
+          'schema_reconciliation_capture_audit_fixture',
+          'schema-reconciliation',
+          '{\"fixture\": true}'::jsonb
+        );" \
+    >> "$restore_log" 2>&1; then
+    capture_audit_fixture_seeded=true
+  else
+    failed_order="$(jq -r \
+      '.missingFromHosted[] | select(.version == "0192") | .order' \
+      "$reconciliation_json")"
+    failed_version="0192"
+    failed_file="0192_capture_documents_domain_rls.sql"
+    echo "failed to seed capture audit data-bearing fixture" >> "$apply_log"
+  fi
+fi
+
+# Published form templates reject ordinary content updates. Seed one published
+# template before 0192 so the clone proves the org_id backfill bypasses only
+# that trigger and restores it afterward.
+if [[ "$schema_restore_succeeded" == "true" \
+  && "$local_dependency_extensions_ready" == "true" ]] \
+  && jq -e '.missingFromHosted[] | select(.version == "0192")' \
+    "$reconciliation_json" > /dev/null; then
+  data_bearing_fixture_required=true
+  data_bearing_migration_fixture_passed=false
+  form_template_fixture_required=true
+
+  if psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
+    -c "INSERT INTO public.form_templates (
+          template_key,
+          title,
+          items,
+          status,
+          published_at,
+          created_by
+        ) VALUES (
+          'schema_reconciliation_form_template_fixture',
+          'Schema reconciliation fixture',
+          '[]'::jsonb,
+          'published',
+          timezone('utc', now()),
+          'schema-reconciliation'
+        );" \
+    >> "$restore_log" 2>&1; then
+    form_template_fixture_seeded=true
+  else
+    failed_order="$(jq -r \
+      '.missingFromHosted[] | select(.version == "0192") | .order' \
+      "$reconciliation_json")"
+    failed_version="0192"
+    failed_file="0192_capture_documents_domain_rls.sql"
+    echo "failed to seed published form-template data-bearing fixture" \
+      >> "$apply_log"
+  fi
+fi
+
+# Migration 0194 already attempted to bypass workflow audit immutability, but
+# it disabled every trigger. Exercise the safer single-trigger recovery block
+# and prove the audit table remains immutable afterward.
+if [[ "$schema_restore_succeeded" == "true" \
+  && "$local_dependency_extensions_ready" == "true" ]] \
+  && jq -e '.missingFromHosted[] | select(.version == "0194")' \
+    "$reconciliation_json" > /dev/null; then
+  data_bearing_fixture_required=true
+  data_bearing_migration_fixture_passed=false
+  workflow_audit_fixture_required=true
+
+  if psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
+    -c "INSERT INTO public.workflow_audit_log (event_type, performed_by, detail)
+        VALUES (
+          'schema_reconciliation_workflow_audit_fixture',
+          'schema-reconciliation',
+          '{\"fixture\": true}'::jsonb
+        );" \
+    >> "$restore_log" 2>&1; then
+    workflow_audit_fixture_seeded=true
+  else
+    failed_order="$(jq -r \
+      '.missingFromHosted[] | select(.version == "0194") | .order' \
+      "$reconciliation_json")"
+    failed_version="0194"
+    failed_file="0194_operational_misc_domain_rls.sql"
+    echo "failed to seed workflow audit data-bearing fixture" >> "$apply_log"
   fi
 fi
 
@@ -268,8 +424,8 @@ if [[ "$schema_restore_succeeded" == "true" \
   all_missing_migrations_applied=true
 fi
 
-if [[ "$data_bearing_fixture_required" == "true" \
-  && "$data_bearing_fixture_seeded" == "true" \
+if [[ "$installation_audit_fixture_required" == "true" \
+  && "$installation_audit_fixture_seeded" == "true" \
   && "$all_missing_migrations_applied" == "true" ]]; then
   fixture_org_id="$(psql "$local_database_url" --no-psqlrc -X -qAt \
     -v ON_ERROR_STOP=1 \
@@ -278,7 +434,7 @@ if [[ "$data_bearing_fixture_required" == "true" \
         WHERE event_type =
           'schema_reconciliation_installation_audit_fixture';")"
   if [[ "$fixture_org_id" == "00000000-0000-0000-0000-000000000000" ]]; then
-    data_bearing_fixture_backfilled=true
+    installation_audit_fixture_backfilled=true
   fi
 
   if ! psql "$local_database_url" --no-psqlrc -X -q \
@@ -288,11 +444,130 @@ if [[ "$data_bearing_fixture_required" == "true" \
         WHERE event_type =
           'schema_reconciliation_installation_audit_fixture';" \
     >> "$apply_log" 2>&1; then
-    data_bearing_fixture_immutability_restored=true
+    installation_audit_fixture_immutability_restored=true
+  fi
+fi
+
+if [[ "$line_oa_audit_fixture_required" == "true" \
+  && "$line_oa_audit_fixture_seeded" == "true" \
+  && "$all_missing_migrations_applied" == "true" ]]; then
+  line_oa_fixture_org_id="$(psql "$local_database_url" --no-psqlrc -X -qAt \
+    -v ON_ERROR_STOP=1 \
+    -c "SELECT org_id::text
+        FROM public.line_oa_audit_log
+        WHERE event_type =
+          'schema_reconciliation_line_oa_audit_fixture';")"
+  if [[ "$line_oa_fixture_org_id" == "00000000-0000-0000-0000-000000000000" ]]; then
+    line_oa_audit_fixture_backfilled=true
   fi
 
-  if [[ "$data_bearing_fixture_backfilled" == "true" \
-    && "$data_bearing_fixture_immutability_restored" == "true" ]]; then
+  if ! psql "$local_database_url" --no-psqlrc -X -q \
+    -v ON_ERROR_STOP=1 \
+    -c "UPDATE public.line_oa_audit_log
+        SET entity_ref = 'schema-reconciliation-fixture-modified'
+        WHERE event_type =
+          'schema_reconciliation_line_oa_audit_fixture';" \
+    >> "$apply_log" 2>&1; then
+    line_oa_audit_fixture_immutability_restored=true
+  fi
+fi
+
+if [[ "$capture_audit_fixture_required" == "true" \
+  && "$capture_audit_fixture_seeded" == "true" \
+  && "$all_missing_migrations_applied" == "true" ]]; then
+  capture_fixture_org_id="$(psql "$local_database_url" --no-psqlrc -X -qAt \
+    -v ON_ERROR_STOP=1 \
+    -c "SELECT org_id::text
+        FROM public.capture_audit_log
+        WHERE event_type =
+          'schema_reconciliation_capture_audit_fixture';")"
+  if [[ "$capture_fixture_org_id" == "00000000-0000-0000-0000-000000000000" ]]; then
+    capture_audit_fixture_backfilled=true
+  fi
+
+  if ! psql "$local_database_url" --no-psqlrc -X -q \
+    -v ON_ERROR_STOP=1 \
+    -c "UPDATE public.capture_audit_log
+        SET detail = '{\"fixture\": false}'::jsonb
+        WHERE event_type =
+          'schema_reconciliation_capture_audit_fixture';" \
+    >> "$apply_log" 2>&1; then
+    capture_audit_fixture_immutability_restored=true
+  fi
+fi
+
+if [[ "$form_template_fixture_required" == "true" \
+  && "$form_template_fixture_seeded" == "true" \
+  && "$all_missing_migrations_applied" == "true" ]]; then
+  form_template_fixture_org_id="$(psql "$local_database_url" \
+    --no-psqlrc -X -qAt -v ON_ERROR_STOP=1 \
+    -c "SELECT org_id::text
+        FROM public.form_templates
+        WHERE template_key =
+          'schema_reconciliation_form_template_fixture';")"
+  if [[ "$form_template_fixture_org_id" == "00000000-0000-0000-0000-000000000000" ]]; then
+    form_template_fixture_backfilled=true
+  fi
+
+  if ! psql "$local_database_url" --no-psqlrc -X -q \
+    -v ON_ERROR_STOP=1 \
+    -c "UPDATE public.form_templates
+        SET title = 'Modified schema reconciliation fixture'
+        WHERE template_key =
+          'schema_reconciliation_form_template_fixture';" \
+    >> "$apply_log" 2>&1; then
+    form_template_fixture_immutability_restored=true
+  fi
+fi
+
+if [[ "$workflow_audit_fixture_required" == "true" \
+  && "$workflow_audit_fixture_seeded" == "true" \
+  && "$all_missing_migrations_applied" == "true" ]]; then
+  workflow_fixture_org_id="$(psql "$local_database_url" --no-psqlrc -X -qAt \
+    -v ON_ERROR_STOP=1 \
+    -c "SELECT org_id::text
+        FROM public.workflow_audit_log
+        WHERE event_type =
+          'schema_reconciliation_workflow_audit_fixture';")"
+  if [[ "$workflow_fixture_org_id" == "00000000-0000-0000-0000-000000000000" ]]; then
+    workflow_audit_fixture_backfilled=true
+  fi
+
+  if ! psql "$local_database_url" --no-psqlrc -X -q \
+    -v ON_ERROR_STOP=1 \
+    -c "UPDATE public.workflow_audit_log
+        SET detail = '{\"fixture\": false}'::jsonb
+        WHERE event_type =
+          'schema_reconciliation_workflow_audit_fixture';" \
+    >> "$apply_log" 2>&1; then
+    workflow_audit_fixture_immutability_restored=true
+  fi
+fi
+
+if [[ "$data_bearing_fixture_required" == "true" ]]; then
+  if [[ "$installation_audit_fixture_required" == "false" \
+      || ( "$installation_audit_fixture_seeded" == "true" \
+        && "$installation_audit_fixture_backfilled" == "true" \
+        && "$installation_audit_fixture_immutability_restored" == "true" ) ]] \
+    && [[ "$line_oa_audit_fixture_required" == "false" \
+      || ( "$line_oa_audit_fixture_seeded" == "true" \
+        && "$line_oa_audit_fixture_backfilled" == "true" \
+        && "$line_oa_audit_fixture_immutability_restored" == "true" ) ]] \
+    && [[ "$capture_audit_fixture_required" == "false" \
+      || ( "$capture_audit_fixture_seeded" == "true" \
+        && "$capture_audit_fixture_backfilled" == "true" \
+        && "$capture_audit_fixture_immutability_restored" == "true" ) ]] \
+    && [[ "$form_template_fixture_required" == "false" \
+      || ( "$form_template_fixture_seeded" == "true" \
+        && "$form_template_fixture_backfilled" == "true" \
+        && "$form_template_fixture_immutability_restored" == "true" ) ]] \
+    && [[ "$workflow_audit_fixture_required" == "false" \
+      || ( "$workflow_audit_fixture_seeded" == "true" \
+        && "$workflow_audit_fixture_backfilled" == "true" \
+        && "$workflow_audit_fixture_immutability_restored" == "true" ) ]]; then
+    data_bearing_fixture_seeded=true
+    data_bearing_fixture_backfilled=true
+    data_bearing_fixture_immutability_restored=true
     data_bearing_migration_fixture_passed=true
   fi
 fi
@@ -417,6 +692,26 @@ jq -n \
   --argjson dataBearingFixtureBackfilled "$data_bearing_fixture_backfilled" \
   --argjson dataBearingFixtureImmutabilityRestored "$data_bearing_fixture_immutability_restored" \
   --argjson dataBearingMigrationFixturePassed "$data_bearing_migration_fixture_passed" \
+  --argjson installationAuditFixtureRequired "$installation_audit_fixture_required" \
+  --argjson installationAuditFixtureSeeded "$installation_audit_fixture_seeded" \
+  --argjson installationAuditFixtureBackfilled "$installation_audit_fixture_backfilled" \
+  --argjson installationAuditFixtureImmutabilityRestored "$installation_audit_fixture_immutability_restored" \
+  --argjson lineOaAuditFixtureRequired "$line_oa_audit_fixture_required" \
+  --argjson lineOaAuditFixtureSeeded "$line_oa_audit_fixture_seeded" \
+  --argjson lineOaAuditFixtureBackfilled "$line_oa_audit_fixture_backfilled" \
+  --argjson lineOaAuditFixtureImmutabilityRestored "$line_oa_audit_fixture_immutability_restored" \
+  --argjson captureAuditFixtureRequired "$capture_audit_fixture_required" \
+  --argjson captureAuditFixtureSeeded "$capture_audit_fixture_seeded" \
+  --argjson captureAuditFixtureBackfilled "$capture_audit_fixture_backfilled" \
+  --argjson captureAuditFixtureImmutabilityRestored "$capture_audit_fixture_immutability_restored" \
+  --argjson formTemplateFixtureRequired "$form_template_fixture_required" \
+  --argjson formTemplateFixtureSeeded "$form_template_fixture_seeded" \
+  --argjson formTemplateFixtureBackfilled "$form_template_fixture_backfilled" \
+  --argjson formTemplateFixtureImmutabilityRestored "$form_template_fixture_immutability_restored" \
+  --argjson workflowAuditFixtureRequired "$workflow_audit_fixture_required" \
+  --argjson workflowAuditFixtureSeeded "$workflow_audit_fixture_seeded" \
+  --argjson workflowAuditFixtureBackfilled "$workflow_audit_fixture_backfilled" \
+  --argjson workflowAuditFixtureImmutabilityRestored "$workflow_audit_fixture_immutability_restored" \
   --argjson canonicalStaticSeedRequired "$canonical_static_seed_required" \
   --argjson canonicalStaticSeedRestored "$canonical_static_seed_restored" \
   '{
@@ -458,6 +753,38 @@ jq -n \
     dataBearingFixtureBackfilled: $dataBearingFixtureBackfilled,
     dataBearingFixtureImmutabilityRestored: $dataBearingFixtureImmutabilityRestored,
     dataBearingMigrationFixturePassed: $dataBearingMigrationFixturePassed,
+    dataBearingFixtures: {
+      installationAudit: {
+        required: $installationAuditFixtureRequired,
+        seeded: $installationAuditFixtureSeeded,
+        backfilled: $installationAuditFixtureBackfilled,
+        immutabilityRestored: $installationAuditFixtureImmutabilityRestored
+      },
+      lineOaAudit: {
+        required: $lineOaAuditFixtureRequired,
+        seeded: $lineOaAuditFixtureSeeded,
+        backfilled: $lineOaAuditFixtureBackfilled,
+        immutabilityRestored: $lineOaAuditFixtureImmutabilityRestored
+      },
+      captureAudit: {
+        required: $captureAuditFixtureRequired,
+        seeded: $captureAuditFixtureSeeded,
+        backfilled: $captureAuditFixtureBackfilled,
+        immutabilityRestored: $captureAuditFixtureImmutabilityRestored
+      },
+      publishedFormTemplate: {
+        required: $formTemplateFixtureRequired,
+        seeded: $formTemplateFixtureSeeded,
+        backfilled: $formTemplateFixtureBackfilled,
+        immutabilityRestored: $formTemplateFixtureImmutabilityRestored
+      },
+      workflowAudit: {
+        required: $workflowAuditFixtureRequired,
+        seeded: $workflowAuditFixtureSeeded,
+        backfilled: $workflowAuditFixtureBackfilled,
+        immutabilityRestored: $workflowAuditFixtureImmutabilityRestored
+      }
+    },
     canonicalStaticSeedRequired: $canonicalStaticSeedRequired,
     canonicalStaticSeedRestored: $canonicalStaticSeedRestored,
     productionDataCopied: false,

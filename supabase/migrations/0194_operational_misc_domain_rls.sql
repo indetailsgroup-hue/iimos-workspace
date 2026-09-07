@@ -213,20 +213,37 @@ drop policy if exists workflow_audit_log_sel on public.workflow_audit_log;
 alter table public.workflow_audit_log
   add column if not exists org_id uuid;
 
--- Bypass append-only trigger during org_id backfill (CI idempotency only)
-alter table public.workflow_audit_log disable trigger all;
-update public.workflow_audit_log wal
-set org_id = (
-  select ip.org_id
-  from public.installation_projects ip
-  where ip.site_code = wal.site_code
-  limit 1
-)
-where site_code is not null;
-update public.workflow_audit_log
-  set org_id = '00000000-0000-0000-0000-000000000000'::uuid
-  where org_id is null;
-alter table public.workflow_audit_log enable trigger all;
+-- Temporarily suspend only the append-only trigger for this one-time schema
+-- backfill. Do not disable foreign-key or unrelated business triggers. The
+-- table lock prevents concurrent writes, and the exception path restores
+-- immutability before propagating any failure.
+do $workflow_audit_org_backfill$
+begin
+  execute 'alter table public.workflow_audit_log '
+       || 'disable trigger trg_workflow_audit_log_immutable';
+
+  update public.workflow_audit_log wal
+  set org_id = (
+    select ip.org_id
+    from public.installation_projects ip
+    where ip.site_code = wal.site_code
+    limit 1
+  )
+  where site_code is not null;
+
+  update public.workflow_audit_log
+    set org_id = '00000000-0000-0000-0000-000000000000'::uuid
+    where org_id is null;
+
+  execute 'alter table public.workflow_audit_log '
+       || 'enable trigger trg_workflow_audit_log_immutable';
+exception
+  when others then
+    execute 'alter table public.workflow_audit_log '
+         || 'enable trigger trg_workflow_audit_log_immutable';
+    raise;
+end
+$workflow_audit_org_backfill$;
 alter table public.workflow_audit_log alter column org_id set not null;
 
 create policy workflow_audit_log_tenant_isolation on public.workflow_audit_log
