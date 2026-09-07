@@ -205,10 +205,30 @@ WHERE  org_id IS NULL;
 -- ---------------------------------------------------------------------------
 -- Sentinel — line_oa_audit_log
 --   site_code nullable; event-capture table with no org-keyed parent.
+--   This table is append-only for application traffic. The schema migration
+--   must temporarily suspend only its immutability trigger while it performs
+--   the one-time tenant-key backfill. ALTER TABLE takes a lock for the
+--   statement, and the exception handler restores the trigger before
+--   propagating any failure.
 -- ---------------------------------------------------------------------------
-UPDATE public.line_oa_audit_log
-SET    org_id = '00000000-0000-0000-0000-000000000000'
-WHERE  org_id IS NULL;
+DO $line_oa_audit_org_backfill$
+BEGIN
+  EXECUTE 'ALTER TABLE public.line_oa_audit_log '
+       || 'DISABLE TRIGGER trg_line_oa_audit_log_immutable';
+
+  UPDATE public.line_oa_audit_log
+  SET    org_id = '00000000-0000-0000-0000-000000000000'
+  WHERE  org_id IS NULL;
+
+  EXECUTE 'ALTER TABLE public.line_oa_audit_log '
+       || 'ENABLE TRIGGER trg_line_oa_audit_log_immutable';
+EXCEPTION
+  WHEN OTHERS THEN
+    EXECUTE 'ALTER TABLE public.line_oa_audit_log '
+         || 'ENABLE TRIGGER trg_line_oa_audit_log_immutable';
+    RAISE;
+END
+$line_oa_audit_org_backfill$;
 
 -- =============================================================================
 -- (3) ENFORCE NOT NULL — all 11 tables
