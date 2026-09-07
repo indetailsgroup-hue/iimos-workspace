@@ -1,6 +1,6 @@
 # MONOLITH — Manufacturing OS (Multi-Tenant SaaS Platform)
 
-> **Current product version:** `v17.5.1` — the root `package.json` is the canonical version source. GitHub Release publication is tracked separately and remains subject to release gates.
+> **Current product version:** `v17.5.2` — the root `package.json` is the canonical version source. The matching tag and GitHub Release are published only after every production release gate passes.
 >
 > **MONOLITH** is a multi-tenant SaaS platform for custom manufacturing businesses.
 > Each customer organization (e.g., DAPH Decor, kitchen builders, joinery shops) registers as a **tenant** and gets a fully-isolated workspace with its own jobs, quotations, invoices, and factory pipeline.
@@ -212,6 +212,10 @@ Each customer gets their own isolated workspace with custom branding, locale set
 
 | Version | Milestone |
 |---------|-----------|
+| v17.5.2 | Release-readiness stabilization, routed business modules, production RLS verification, and Digital Shadow integration |
+| v17.5.1 | Super Employee Tracker and AI Cost Estimation foundation |
+| v17.5.0 | Training Tracker and Super Employee Tracker |
+| v17.0.0 | Process Templates module |
 | v16.0.0 | Multi-tenant architecture, org onboarding, RLS isolation |
 | v15.5.0 | Analytics dashboard, DnD Kanban, Supabase Realtime |
 | v15.4.0 | Toast layout, batch status update, print E2E |

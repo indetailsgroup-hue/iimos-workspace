@@ -1,10 +1,10 @@
 # Monolith Implementation Progress
 
-> **Current product version:** `v17.5.1` — sourced from the root `package.json` and tagged on 2026-09-01. The v17.5.2+ and v18.x sections are forward implementation records, not published releases.
+> **Current product version:** `v17.5.2` — sourced from the root `package.json`. This release candidate contains the completed v17.5.2 work and the 2026-09-07 release-readiness stabilization; v17.5.3+ and v18.x remain forward implementation records until separately released.
 >
-> **Public release status:** GitHub has a published v17.0.0 release; v17.5.0 and v17.5.1 currently exist as Git tags only. Do not publish a new release until every release-readiness gate passes.
+> **Public release status:** All production gates for v17.5.2 passed on 2026-09-07, including both Edge Functions deployments. Publication proceeds from the exact release-PR merge commit after its final CI run passes.
 
-**Status last verified:** 2026-09-06
+**Status last verified:** 2026-09-07
 
 ## Forward implementation track — Interactive OrgChart, Role Network View, QC Anomaly Detection, AI Quotation Draft, Leadership Action Tracker (target: Q2 2027; not released)
 
@@ -73,7 +73,7 @@
 
 ---
 
-## v17.5 — Training Tracker + Super Employee Tracker + AI Cost Estimation (v17.5.0 and v17.5.1 tagged 2026-09-01; v17.5.2+ not released)
+## v17.5 — Training Tracker + Super Employee Tracker + AI Cost Estimation (v17.5.0 and v17.5.1 tagged 2026-09-01; v17.5.2 release candidate; v17.5.3+ not released)
 
 **Tag v17.5.0:** `3a819c17` | **Tag v17.5.1:** `532783be`
 **PR #76:** merged (squash `3a819c17`) | **PR #77:** merged (squash `af6f329b`)
