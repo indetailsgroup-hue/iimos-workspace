@@ -3,15 +3,16 @@
 All notable changes to the Monolith Workspace are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-> **Current product version:** `v17.5.1` — sourced from the root `package.json`. Versions `v17.5.2` through `v18.5.1` below are implementation-roadmap records, not published releases. Their dates are targets, not release dates.
+> **Current product version:** `v17.5.2` — sourced from the root `package.json`. Versions `v17.5.3` through `v18.5.1` below are implementation-roadmap records, not published releases. Their dates are targets, not release dates.
 
-## [Unreleased] — Release Readiness Stabilization
+## [v17.5.2] — 2026-09-07 — Release Readiness Stabilization
 
 ### Added
 - Production routes and a Business Modules hub for the completed v17.5/v18.0 People, Training, Culture, AI, Structure, Quality, Quotation, and Leadership UIs.
 - A shared route registry enforcing active organization, authenticated-member identity, tenant role, and plan requirements before a module mounts or fetches data.
 - A dedicated database Vitest lane plus deterministic local Supabase fixture seeding and a test-only SQL execution helper.
 - Full Verify lanes for Digital Shadow, workspace tools, and production dependency auditing.
+- Machine Shadow UI, API client, state management, component health/RUL views, and an authenticated Factory route backed by the Digital Shadow service.
 
 ### Changed
 - pgTAP CI now prepares historical migrations deterministically, starts a fresh local Supabase stack without hosted secrets, applies every migration, runs all SQL pgTAP files, and then runs the TypeScript RLS/migration/integration suites against the same database.
@@ -25,15 +26,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Digital Shadow unit-test configuration and adapter tests, including the Homag adapter lane.
 - The fresh-database migration sequence now removes the incomplete historical `org_members` stub when the full multi-tenant bootstrap is present and merges duplicate numeric migrations in deterministic filename order.
 - Safe post-login redirects reject protocol-relative destinations.
+- Hosted migration verification now compares the canonical source inventory with all 247 production migration records without mutating production.
 
 ### Security
 - Updated `pdfjs-dist` and MQTT, removed the unused vulnerable Sparkplug payload dependency, forced a patched `ws`, and moved Vault Builder to the maintained SheetJS 0.20.3 distribution.
 - Production audit gate currently reports zero high and zero critical vulnerabilities. Remaining moderate advisories stay visible in the release-readiness report.
+- Production verification confirmed RLS, policies, prerequisites, and absence of permissive bypasses for `notification_digest_queue` and `platform_metrics_snapshots`; issues #49 and #50 are closed with hosted evidence.
 
 ### Verification
-- Local root suite: 377 files / 7,671 tests passed, with zero failures and zero skipped tests.
-- Node-native controls: 35/35 passed; Field App: 24/24 passed; Digital Shadow: 244/244 passed; Vault Builder: 82/82 passed; Bible Code: 28/28 passed; Factory Server: 58/58 passed.
-- A release tag and GitHub Release remain blocked until the pull-request CI run, fresh-database migration, pgTAP, E2E, and security-issue evidence are all green.
+- PR #80 Full Verify: 382 root files / 7,697 tests passed; lint, typecheck, build, Field App, Factory Server, LineOS, smoke E2E, workspace tools, and dependency audit all passed.
+- Digital Shadow: 13 files / 256 isolated tests plus 5 files / 77 Redis and local OPC UA integration assertions passed; Homag adapter coverage is included.
+- Fresh Supabase verification: 22 pgTAP files / 574 assertions passed after a clean migration reset.
+- A release tag and GitHub Release remain blocked only until the production Edge Functions deploy succeeds with a sufficiently privileged Supabase access token.
 
 ## Planned implementation records (not published releases)
 
@@ -489,7 +493,7 @@ The following work is present in the repository but has not received a release t
 
 ---
 
-### [v17.5.2] — target 2027-01-25 — AI Cost Estimation: Tests + Dashboard + Stories
+### AI Cost Estimation: Tests + Dashboard + Stories (included in v17.5.2)
 
 ### Added
 
@@ -583,7 +587,7 @@ The following work is present in the repository but has not received a release t
 
 ### Merged
 - **PR #77** — `feature/v17-5-super-employee-panel` → `main` (squash merge `af6f329b`)
-- **Tag:** `v17.5.1` → `8a7a6be8`
+- **Tag:** `v17.5.1` → `532783be`
 
 ---
 

@@ -22,30 +22,30 @@ Release-ready เมื่อทุกข้อด้านล่างเป็
 
 | Gate | สถานะ | หลักฐาน/หมายเหตุ |
 |---|---|---|
-| Root Vitest | PASS (local) | 377 files, 7,671 tests, 0 failed, 0 skipped |
-| Node-native controls | PASS (local) | 35/35 รวม canonical schema bundle |
-| Root TypeScript | PASS (local) | `npx tsc -b tsconfig.build.json` |
-| Root production build | PASS (local) | Vite build สำเร็จ; มี chunk-size warnings เดิม |
-| Lint | PASS (local) | 0 errors; 2,298 warnings เท่ากับ budget |
-| Field App | PASS (local) | build + 7 files / 24 tests |
-| Digital Shadow | PASS (CI) | build + 247/247 isolated unit tests + 72/72 Redis/OPC UA integration assertions ใน PR #79 |
+| Root Vitest | PASS (CI) | 382 files / 7,697 tests ใน [Full Verify run 34074999400](https://github.com/indetailsgroup-hue/monolith-workspace/actions/runs/34074999400) |
+| Node-native controls | PASS (CI) | canonical schema/governance controls ผ่านใน Full Verify run 34074999400 |
+| Root TypeScript | PASS (CI) | full-project typecheck ผ่านใน Full Verify run 34074999400 |
+| Root production build | PASS (CI) | hermetic และ root Vite builds ผ่าน; มี chunk-size warning ที่ไม่บล็อก |
+| Lint | PASS (CI) | 0 errors; 2,298-warning blocking ratchet ผ่านใน PR #80 |
+| Field App | PASS (CI) | build + tests ผ่านใน Full Verify run 34074999400 |
+| Digital Shadow | PASS (CI) | build + 13 files / 256 isolated tests + 5 files / 77 Redis/OPC UA integration assertions ใน PR #80 |
 | Homag adapter | PASS (CI) | 27/27 tests ภายใน Digital Shadow lane |
-| Factory Server | PASS (local) | build + 58 tests |
+| Factory Server | PASS (CI) | build + tests ผ่านใน Full Verify run 34074999400 |
 | Vault Builder | PASS (local) | build + 82 tests |
 | Bible Code | PASS (local) | build + 28 tests |
 | Culture | PASS (local) | 19 focused tests; รวมอยู่ใน root full suite |
 | Process Templates | PASS (local) | 31 focused tests; รวมอยู่ใน root full suite |
 | Production dependency audit | PASS (local gate) | root 0 high/0 critical/4 moderate; server 0 high/0 critical/1 moderate |
 | LineOS | PASS (CI) | Ubuntu job พร้อม Python Playwright/Chromium ผ่านใน PR #79 |
-| Fresh DB migrations | PASS (CI) | `supabase db reset --local` ลง canonical migration chain สำเร็จใน [run 34041594653](https://github.com/indetailsgroup-hue/monolith-workspace/actions/runs/34041594653) |
-| SQL pgTAP | PASS (CI) | `pg_prove supabase/tests/*.sql` รัน assertions จริงและผ่านใน fresh database เดียวกัน |
+| Fresh DB migrations | PASS (CI) | `supabase db reset --local` ลง canonical migration chain สำเร็จใน [run 34074999345](https://github.com/indetailsgroup-hue/monolith-workspace/actions/runs/34074999345) |
+| SQL pgTAP | PASS (CI) | 22 files / 574 assertions ผ่านจริงด้วย `pg_prove` ใน fresh database เดียวกัน |
 | TypeScript database suites | DIAGNOSTIC | legacy schema-assumption suite แยกจาก authoritative pgTAP gate และเก็บ JSON artifact; สถานะ pgTAP release gate อ้างจาก `pg_prove` job เท่านั้น |
-| Playwright E2E | PASS (CI) | UI smoke และ non-vacuous factory integration ผ่านใน PR #79 |
-| Chromatic | REVIEW REQUIRED | Storybook 196 tests และ Playwright 36 tests/72 named snapshots ผ่าน execution; external UI baseline ยังรอ human review/acceptance และห้าม auto-accept โดยไม่ตรวจภาพ |
-| Security issues #49/#50 | BLOCKED (production) | read-only hosted verification ยืนยันว่า RLS และ policies ยังไม่อยู่ใน production ทั้งสองตาราง จึงยังเปิด issues ไว้ |
-| Backend deploy | BLOCKED (credential preflight) | secret inventory ให้ผล `deployment_ready=false`; workflow แสดง successful skip ตามนโยบาย และยังไม่ถือว่า deploy ผ่าน |
-| Product version | RECONCILED IN PR | root `package.json` เป็น canonical `17.5.1`; README/changelog/progress ใช้ค่าเดียวกัน และ CI ตรวจ drift |
-| Release tag/GitHub Release | BLOCKED | `v17.5.1` เป็น tag ล่าสุด ขณะที่ GitHub Release inventory สูงสุดคือ `v17.0.0`; ห้าม publish จน production RLS, deploy, Chromatic และ merge ผ่าน |
+| Playwright E2E | PASS (CI) | UI smoke และ non-vacuous factory integration ผ่านใน PR #80 |
+| Chromatic | PASS (human-approved) | ผู้ใช้ยืนยัน baseline ว่า “ผ่านแล้ว”; automated Storybook/Playwright execution ผ่านก่อนการอนุมัติ |
+| Security issues #49/#50 | PASS (production) | [FPR run 34074049002](https://github.com/indetailsgroup-hue/monolith-workspace/actions/runs/34074049002) ยืนยัน `rls=true`, `policies=true`, prerequisites ครบ และ `no_bypass=true`; ปิดทั้งสอง issue แล้ว |
+| Backend deploy | BLOCKED (token privilege) | schema reconciliation ผ่าน แต่ Edge deploy run 34074532603 ได้ 403 เพราะ account ของ `SUPABASE_ACCESS_TOKEN` ไม่มีสิทธิ์ list/deploy Functions ใน project |
+| Product version | RELEASE CANDIDATE | root `package.json` เป็น canonical `17.5.2`; package lock, README, changelog และ progress ใช้ค่าเดียวกัน |
+| Release tag/GitHub Release | BLOCKED | จะสร้าง tag/release `v17.5.2` บน exact merged commit หลัง Edge Functions deploy ผ่าน; ไม่ย้าย tag `v17.5.1` เดิม |
 
 ## 3. การซ่อม Full Verify และ CI ownership
 
@@ -104,7 +104,9 @@ pgTAP workflow ไม่ใช้ hosted Supabase token แล้ว แต่�
 ## 5. Backend deploy secret behavior
 
 - เมื่อ `DATABASE_URL` เป็นค่าว่าง: migration/deployment preflight จะแสดง notice และให้ job จบแบบ successful skip
-- Supabase Functions deploy รันเฉพาะเมื่อ project ref และ access token มีครบ
+- `DATABASE_URL`, `SUPABASE_PROJECT_REF` และ `SUPABASE_ACCESS_TOKEN` มีชื่อ secret ครบแล้ว; manual dispatch ต้องตั้ง `run_production_deploy=true` จึงจะเปิด production lane
+- production schema reconciliation ผ่านใน run 34074532603 หลังตรวจ 247/247 canonical migrations, 0 missing, 0 gaps และ 0 duplicate hosted versions
+- Edge Functions deploy ถูกบล็อกที่ Supabase Management API 403 เพราะ token เดิมไม่มี project privilege ที่จำเป็น ต้องแทนด้วย personal access token ของบัญชี Owner/Developer ที่เข้าถึง project นี้
 - output `deployment_ready` เป็นเงื่อนไข explicit ระหว่าง jobs
 - ไม่มีการเปลี่ยน missing secret ให้เป็น failure ที่ทำให้ PR ภายนอกหรือ fork ใช้งานไม่ได้ และไม่มีการแสดงค่าของ secret ใน log
 
@@ -169,37 +171,34 @@ pgTAP workflow ไม่ใช้ hosted Supabase token แล้ว แต่�
 | PR | สถานะจาก GitHub | ผลเปรียบเทียบกับ `main` | คำแนะนำ |
 |---|---|---|---|
 | #41 Digital Shadow Service | closed as superseded | unique three-parameter Weibull/RUL delta ถูกย้ายเข้า PR #79; product integration อยู่ใน PR #80 | ปิดแล้วพร้อม comment อ้างอิง replacement |
-| #44 Digital Shadow integration | closed and replaced | แยกเฉพาะ Machine Shadow UI/API/store, Feature Cache, adapters/services และ tests ออกมาเป็น clean PR #80 โดยไม่พา CI/Slack/SARIF commits เก่า | ปิดแล้ว; PR #80 stack บน stabilization และ CI ผ่านที่ `3e8fc5a` |
+| #44 Digital Shadow integration | closed and replaced | แยกเฉพาะ Machine Shadow UI/API/store, Feature Cache, adapters/services และ tests ออกมาเป็น clean PR #80 โดยไม่พา CI/Slack/SARIF commits เก่า | ปิดแล้ว; PR #80 merge เข้า `main` ที่ `1df31e0b` หลังทุก check ผ่าน |
 | #46 Accounting/RLS | closed as superseded | 42/73 paths byte-identical, 30 paths มีใน main และพัฒนาต่อแล้ว; canonical migration preparation รับหน้าที่แทน legacy bootstrap | ปิดแล้วหลัง fresh DB/pgTAP ยืนยัน current design |
 | #78 CONTRIBUTING formatting | open, 1 commit, 1 line | ไม่อยู่ใน scope stabilization และไม่เกี่ยวกับ release gates | คงไว้ให้ owner จัดการแยก |
 
-Security issues #49/#50 ยัง open ทั้งคู่ การตรวจ production แบบ read-only ผ่าน Supabase Management API ที่ commit `c76b478` พบว่า `notification_digest_queue` และ `platform_metrics_snapshots` มี `rls=false`, `policies=false` (ขณะที่ไม่พบ permissive bypass) จึงใส่หลักฐานลงทั้งสอง issue แล้วและ **ไม่ปิด** Migration `0178_notification_platform_metrics_rls.sql` ผ่าน fresh DB/pgTAP แต่ยังไม่ได้ deploy ไป production ตามผลตรวจจริง
+Security issues #49/#50 ปิดแล้วหลัง production migration apply สำเร็จและ read-only verification ยืนยันทั้ง `notification_digest_queue` และ `platform_metrics_snapshots` ว่า prerequisites ครบ, `rls=true`, `policies=true` และ `no_bypass=true` ใน [run 34074049002](https://github.com/indetailsgroup-hue/monolith-workspace/actions/runs/34074049002) Production migration inventory หลัง apply มี canonical 247/247, missing 0, gaps 0 และ duplicate hosted versions 0 ใน [run 34074047097](https://github.com/indetailsgroup-hue/monolith-workspace/actions/runs/34074047097)
 
-### ลำดับหลังเปิด stabilization PR
+### ลำดับที่เหลือก่อน release
 
-1. ตรวจและยอมรับ Chromatic baseline เฉพาะภาพที่ผ่าน visual review แล้ว
-2. ตั้ง `DATABASE_URL` ผ่าน GitHub secret UI หรือ `gh secret set DATABASE_URL` จาก terminal โดยไม่ส่งค่าในแชต
-3. deploy approved migration chain ไป production ผ่าน workflow แล้ว rerun hosted RLS verification
-4. ปิด issues #49/#50 เฉพาะเมื่อ artifact ใหม่ให้ `verified=true` ทั้งสอง contract
-5. หลัง stabilization เปลี่ยน HEAD ให้ rebase PR #80 แล้วรักษา product-integration checks ให้ผ่าน
-6. merge ผ่าน review ตาม repository policy
-7. publish GitHub Release บน merged commit/tag ที่สอดคล้องกับ root `package.json`; ห้ามสร้างหรือย้าย tag บน branch candidate
+1. แทน `SUPABASE_ACCESS_TOKEN` ด้วย token ของบัญชี Supabase Owner/Developer ที่เข้าถึง project
+2. rerun manual workflow ด้วย `run_production_deploy=true` และยืนยันว่า Edge Functions ทั้งสอง deploy สำเร็จ
+3. merge release-candidate PR หลัง checks ผ่าน
+4. สร้าง tag และ GitHub Release `v17.5.2` บน exact merged commit แล้วตั้งเป็น Latest; ห้ามย้าย tag เก่า
 
 ### Version source และประวัติ release
 
-- root `package.json` คือ single source of truth ของ product version: `17.5.1`
+- root `package.json` คือ single source of truth ของ product version: `17.5.2`
 - root `package-lock.json`, README, CHANGELOG และ progress document ต้องตรงกับค่านี้; `npm run version:check` เป็น CI gate
 - package versions ของ `server`, Field App, Digital Shadow และ tools เป็น component versions แยกกัน ไม่ต้องเท่ากับ product version
 - `v17.5.0` (`3a819c17`) และ `v17.5.1` (`532783be`) ถูก tag จริงวันที่ 2026-09-01
-- `v17.5.2` ถึง `v18.5.1` ถูกจัดเป็น planned implementation records ตาม tag inventory ที่สิ้นสุดที่ `v17.5.1` และ release inventory ที่สิ้นสุดที่ `v17.0.0`
-- GitHub Release ที่เผยแพร่สูงสุดคือ `v17.0.0`; หน้า Releases ยังตั้ง `v15.9.0` เป็น Latest อย่างไม่ถูกต้อง การแก้ Latest/สร้าง v17.5.1 Release ต้องทำหลัง release gates ผ่านทั้งหมด
+- `v17.5.2` เป็น release candidate สำหรับ stabilization และ AI Cost Estimation dashboard/tests; `v17.5.3` ถึง `v18.5.1` ยังเป็น planned implementation records
+- GitHub Release inventory ยังไม่มี `v17.5.x` และหน้า Releases ตั้ง `v15.9.0` เป็น Latest อย่างไม่ถูกต้อง; release `v17.5.2` จะแก้ทั้ง version continuity และ Latest pointer หลัง production deploy ผ่าน
 
 ### GitHub authentication และ branch publication
 
-GitHub CLI authentication เชื่อมกับบัญชี `indetailsgroup-hue` ผ่าน macOS keyring แล้ว โดย Git ใช้ HTTPS credential helper และ token มี `repo`/`workflow` scopes ที่จำเป็น Branch `codex/readiness-stabilization-20260906` ถูก push ไปยัง `origin` สำเร็จแล้ว ขั้นถัดไปคือเปิด stabilization PR และใช้ GitHub Actions เป็น external evidence ตามลำดับด้านบน ห้ามสร้าง tag/release จนกว่า PR จะผ่าน gate, review และ merge
+GitHub CLI authentication เชื่อมกับบัญชี `indetailsgroup-hue` ผ่าน macOS keyring แล้ว โดย Git ใช้ HTTPS credential helper และ token มี `repo`/`workflow` scopes ที่จำเป็น Stabilization PR #79 และ Digital Shadow PR #80 merge แล้ว; release candidate ใช้ branch แยกและต้องผ่าน GitHub Actions ก่อน merge ห้ามสร้าง tag/release บน branch candidate
 
 ## 10. Release decision
 
 **ปัจจุบัน: HOLD**
 
-ยังไม่ให้ release เพราะ production RLS verification ของ #49/#50 ล้มจริง, credential preflight ของ `DATABASE_URL` ให้ผล `deployment_ready=false`, Chromatic baseline ยังรอ visual approval และ PR #79/#80 ยังเป็น draft ส่วน fresh DB, pgTAP, LineOS, root/server/field, lint, audits, Digital Shadow integration และ Playwright ผ่าน GitHub Actions แล้วใน PR #79/#80
+เหลือ blocker เดียวคือ production Edge Functions deploy: schema reconciliation, production migration inventory, hosted RLS verification, #49/#50, Chromatic approval, Full Verify, fresh DB, pgTAP, root/server/field, lint, audits, Digital Shadow integration และ Playwright ผ่านแล้วทั้งหมด แต่ Supabase token เดิมได้ 403 เพราะบัญชีไม่มี project privilege ที่จำเป็น จึงยังไม่สร้าง tag หรือ GitHub Release จนกว่าจะเปลี่ยน token และ deploy ผ่าน
