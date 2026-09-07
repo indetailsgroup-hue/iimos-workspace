@@ -1,6 +1,6 @@
 # MONOLITH Release Readiness — 2026-09-06
 
-สถานะเอกสาร: **Release candidate — ยังไม่อนุญาตให้ประกาศ release**
+สถานะเอกสาร: **READY — production gates ผ่านครบ; รอ merge release PR และ publish จาก exact merge commit**
 
 เอกสารนี้บันทึกงาน stabilization, หลักฐานที่รันได้ในเครื่อง, gate ที่ต้องยืนยันบน GitHub Actions และเงื่อนไขตัดสิน release ตามเกณฑ์เดียวกัน ห้ามตีความการมี source, migration หรือ test file ว่า production-ready จนกว่า external CI evidence จะผ่านจริง
 
@@ -43,9 +43,9 @@ Release-ready เมื่อทุกข้อด้านล่างเป็
 | Playwright E2E | PASS (CI) | UI smoke และ non-vacuous factory integration ผ่านใน PR #80 |
 | Chromatic | PASS (human-approved) | ผู้ใช้ยืนยัน baseline ว่า “ผ่านแล้ว”; automated Storybook/Playwright execution ผ่านก่อนการอนุมัติ |
 | Security issues #49/#50 | PASS (production) | [FPR run 34074049002](https://github.com/indetailsgroup-hue/monolith-workspace/actions/runs/34074049002) ยืนยัน `rls=true`, `policies=true`, prerequisites ครบ และ `no_bypass=true`; ปิดทั้งสอง issue แล้ว |
-| Backend deploy | BLOCKED (token privilege) | schema reconciliation ผ่าน แต่ Edge deploy run 34074532603 ได้ 403 เพราะ account ของ `SUPABASE_ACCESS_TOKEN` ไม่มีสิทธิ์ list/deploy Functions ใน project |
+| Backend deploy | PASS (production) | [run 34076761544](https://github.com/indetailsgroup-hue/monolith-workspace/actions/runs/34076761544) ผ่านครบ และ deploy `field-purchase-line` กับ `line-oa-dispatch-worker` สำเร็จ |
 | Product version | RELEASE CANDIDATE | root `package.json` เป็น canonical `17.5.2`; package lock, README, changelog และ progress ใช้ค่าเดียวกัน |
-| Release tag/GitHub Release | BLOCKED | จะสร้าง tag/release `v17.5.2` บน exact merged commit หลัง Edge Functions deploy ผ่าน; ไม่ย้าย tag `v17.5.1` เดิม |
+| Release tag/GitHub Release | READY AFTER MERGE | PR #100 ผ่านทุก check ที่ commit `684549d6`; หลังอัปเดตหลักฐาน deploy และ rerun CI จะ merge แล้วสร้าง `v17.5.2` บน exact merge commit โดยไม่ย้าย tag เก่า |
 
 ## 3. การซ่อม Full Verify และ CI ownership
 
@@ -105,8 +105,9 @@ pgTAP workflow ไม่ใช้ hosted Supabase token แล้ว แต่�
 
 - เมื่อ `DATABASE_URL` เป็นค่าว่าง: migration/deployment preflight จะแสดง notice และให้ job จบแบบ successful skip
 - `DATABASE_URL`, `SUPABASE_PROJECT_REF` และ `SUPABASE_ACCESS_TOKEN` มีชื่อ secret ครบแล้ว; manual dispatch ต้องตั้ง `run_production_deploy=true` จึงจะเปิด production lane
-- production schema reconciliation ผ่านใน run 34074532603 หลังตรวจ 247/247 canonical migrations, 0 missing, 0 gaps และ 0 duplicate hosted versions
-- Edge Functions deploy ถูกบล็อกที่ Supabase Management API 403 เพราะ token เดิมไม่มี project privilege ที่จำเป็น ต้องแทนด้วย personal access token ของบัญชี Owner/Developer ที่เข้าถึง project นี้
+- production schema reconciliation ผ่านใน run 34076761544 หลังตรวจ 247/247 canonical migrations, 0 missing, 0 gaps และ 0 duplicate hosted versions
+- token ใหม่จำกัดขอบเขตไว้ที่ project `daph-iimos-prod`, capability `Edge Functions: Read-write`, อายุ 90 วัน และเก็บเป็น GitHub Actions secret โดยไม่แสดงค่าใน log
+- run 34076761544 deploy `field-purchase-line` และ `line-oa-dispatch-worker` สำเร็จ พร้อม Deno, hosted RLS และ local-Supabase E2E ที่ผ่านใน workflow เดียวกัน
 - output `deployment_ready` เป็นเงื่อนไข explicit ระหว่าง jobs
 - ไม่มีการเปลี่ยน missing secret ให้เป็น failure ที่ทำให้ PR ภายนอกหรือ fork ใช้งานไม่ได้ และไม่มีการแสดงค่าของ secret ใน log
 
@@ -179,10 +180,8 @@ Security issues #49/#50 ปิดแล้วหลัง production migration a
 
 ### ลำดับที่เหลือก่อน release
 
-1. แทน `SUPABASE_ACCESS_TOKEN` ด้วย token ของบัญชี Supabase Owner/Developer ที่เข้าถึง project
-2. rerun manual workflow ด้วย `run_production_deploy=true` และยืนยันว่า Edge Functions ทั้งสอง deploy สำเร็จ
-3. merge release-candidate PR หลัง checks ผ่าน
-4. สร้าง tag และ GitHub Release `v17.5.2` บน exact merged commit แล้วตั้งเป็น Latest; ห้ามย้าย tag เก่า
+1. merge release-candidate PR หลัง final checks ผ่าน
+2. สร้าง tag และ GitHub Release `v17.5.2` บน exact merged commit แล้วตั้งเป็น Latest; ห้ามย้าย tag เก่า
 
 ### Version source และประวัติ release
 
@@ -199,6 +198,6 @@ GitHub CLI authentication เชื่อมกับบัญชี `indetailsg
 
 ## 10. Release decision
 
-**ปัจจุบัน: HOLD**
+**ปัจจุบัน: READY**
 
-Production Edge Functions deploy อยู่ในสถานะ BLOCKED เพราะ Supabase token เดิมได้ 403 จาก account ที่ไม่มี project privilege ที่จำเป็น Gate ที่ผ่านแล้วประกอบด้วย schema reconciliation, production migration inventory, hosted RLS verification, #49/#50, Chromatic approval, Full Verify, fresh DB, pgTAP, root/server/field, lint, audits, Digital Shadow integration และ Playwright การสร้าง tag และ GitHub Release จึงรอ token ทดแทนและผล deploy ที่สำเร็จ
+Release gates ผ่านครบ: schema reconciliation, production migration inventory, hosted RLS verification, #49/#50, Chromatic approval, Full Verify, fresh DB, pgTAP, root/server/field, lint, audits, Digital Shadow integration, Playwright และ production Edge Functions deploy ขั้นตอนที่เหลือเป็น release publication lifecycle คือ final CI ของ PR #100, merge, แล้วสร้าง tag/GitHub Release `v17.5.2` บน exact merge commit

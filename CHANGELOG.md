@@ -37,7 +37,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - PR #80 Full Verify: 382 root files / 7,697 tests passed; lint, typecheck, build, Field App, Factory Server, LineOS, smoke E2E, workspace tools, and dependency audit all passed.
 - Digital Shadow: 13 files / 256 isolated tests plus 5 files / 77 Redis and local OPC UA integration assertions passed; Homag adapter coverage is included.
 - Fresh Supabase verification: 22 pgTAP files / 574 assertions passed after a clean migration reset.
-- A release tag and GitHub Release remain blocked only until the production Edge Functions deploy succeeds with a sufficiently privileged Supabase access token.
+- Production workflow run 34076761544 passed Deno, hosted RLS, local-Supabase E2E, schema reconciliation, and deployed both `field-purchase-line` and `line-oa-dispatch-worker` successfully.
+- The `v17.5.2` tag and GitHub Release are created from the exact release-PR merge commit after its final CI run passes.
 
 ## Planned implementation records (not published releases)
 

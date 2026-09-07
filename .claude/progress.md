@@ -2,7 +2,7 @@
 
 > **Current product version:** `v17.5.2` — sourced from the root `package.json`. This release candidate contains the completed v17.5.2 work and the 2026-09-07 release-readiness stabilization; v17.5.3+ and v18.x remain forward implementation records until separately released.
 >
-> **Public release status:** GitHub has a published v17.0.0 release; v17.5.0 and v17.5.1 currently exist as Git tags only. Publish v17.5.2 only after the remaining production Edge Functions deployment gate passes.
+> **Public release status:** All production gates for v17.5.2 passed on 2026-09-07, including both Edge Functions deployments. Publication proceeds from the exact release-PR merge commit after its final CI run passes.
 
 **Status last verified:** 2026-09-07
 
