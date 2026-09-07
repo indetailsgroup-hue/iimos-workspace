@@ -89,6 +89,8 @@ data_bearing_fixture_seeded=false
 data_bearing_fixture_backfilled=false
 data_bearing_fixture_immutability_restored=false
 data_bearing_migration_fixture_passed=true
+canonical_static_seed_required=false
+canonical_static_seed_restored=true
 
 core_schema_query="SELECT CASE WHEN (
   to_regclass('public.organizations') IS NOT NULL
@@ -171,6 +173,33 @@ if [[ "$schema_restore_succeeded" == "true" ]]; then
   done
 fi
 
+# Schema-only dumps intentionally omit rows, including deterministic system
+# rows created by already-recorded migrations. Recreate the sentinel
+# organization from 0182 in the disposable clone when that migration is part
+# of hosted history. This is canonical migration data, not production data.
+if [[ "$schema_restore_succeeded" == "true" \
+  && "$local_dependency_extensions_ready" == "true" ]] \
+  && jq -e \
+    '.migrationHistoryVersions | index("0182") != null' \
+    "$hosted_inventory_json" > /dev/null; then
+  canonical_static_seed_required=true
+  canonical_static_seed_restored=false
+
+  if psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
+    -c "INSERT INTO public.organizations (org_id, name, slug)
+        VALUES (
+          '00000000-0000-0000-0000-000000000000'::uuid,
+          '__sentinel_org__',
+          '__sentinel__'
+        )
+        ON CONFLICT (org_id) DO NOTHING;" \
+    >> "$restore_log" 2>&1; then
+    canonical_static_seed_restored=true
+  else
+    echo "failed to recreate canonical sentinel organization" >> "$apply_log"
+  fi
+fi
+
 # A schema-only clone cannot expose migrations that fail only when a table has
 # rows. When 0187 is pending, seed one disposable append-only audit row so the
 # simulation exercises its tenant-key backfill and trigger restoration. This
@@ -202,6 +231,7 @@ fi
 
 if [[ "$schema_restore_succeeded" == "true" \
   && "$local_dependency_extensions_ready" == "true" \
+  && "$canonical_static_seed_restored" == "true" \
   && -z "$failed_file" ]]; then
   while IFS=$'\t' read -r order version file; do
     migration_path="$canonical_plan_dir/supabase/migrations/$file"
@@ -387,6 +417,8 @@ jq -n \
   --argjson dataBearingFixtureBackfilled "$data_bearing_fixture_backfilled" \
   --argjson dataBearingFixtureImmutabilityRestored "$data_bearing_fixture_immutability_restored" \
   --argjson dataBearingMigrationFixturePassed "$data_bearing_migration_fixture_passed" \
+  --argjson canonicalStaticSeedRequired "$canonical_static_seed_required" \
+  --argjson canonicalStaticSeedRestored "$canonical_static_seed_restored" \
   '{
     formatVersion: 1,
     simulationKind: "hosted-public-schema-only",
@@ -426,6 +458,8 @@ jq -n \
     dataBearingFixtureBackfilled: $dataBearingFixtureBackfilled,
     dataBearingFixtureImmutabilityRestored: $dataBearingFixtureImmutabilityRestored,
     dataBearingMigrationFixturePassed: $dataBearingMigrationFixturePassed,
+    canonicalStaticSeedRequired: $canonicalStaticSeedRequired,
+    canonicalStaticSeedRestored: $canonicalStaticSeedRestored,
     productionDataCopied: false,
     productionWritesPerformed: false
   }' > "$result_json"

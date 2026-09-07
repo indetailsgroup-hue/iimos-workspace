@@ -385,6 +385,7 @@ jobs:
             and .pgtapAssertionCount > 0
             and .legacyPgTapRoutinesIsolated == true
             and .dataBearingMigrationFixturePassed == true
+            and .canonicalStaticSeedRestored == true
             and .databaseLintClean == true
             and .productionDataCopied == false
             and .productionWritesPerformed == false
