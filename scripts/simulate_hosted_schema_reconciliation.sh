@@ -89,7 +89,6 @@ data_bearing_fixture_seeded=false
 data_bearing_fixture_backfilled=false
 data_bearing_fixture_immutability_restored=false
 data_bearing_migration_fixture_passed=true
-fixture_event_type="schema_reconciliation_installation_audit_fixture"
 
 core_schema_query="SELECT CASE WHEN (
   to_regclass('public.organizations') IS NOT NULL
@@ -123,12 +122,12 @@ if psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
       fi
 
       extension_schema="$(psql "$local_database_url" --no-psqlrc -X -qAt \
-        -v ON_ERROR_STOP=1 -v extension_name="$public_extension" \
+        -v ON_ERROR_STOP=1 \
         -c "SELECT namespace.nspname
             FROM pg_catalog.pg_extension AS extension
             JOIN pg_catalog.pg_namespace AS namespace
               ON namespace.oid = extension.extnamespace
-            WHERE extension.extname = :'extension_name';")"
+            WHERE extension.extname = '$public_extension';")"
       if [[ "$extension_schema" != "public" ]] \
         && ! psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
           -c "ALTER EXTENSION $public_extension SET SCHEMA public;" \
@@ -184,9 +183,11 @@ if [[ "$schema_restore_succeeded" == "true" \
   data_bearing_migration_fixture_passed=false
 
   if psql "$local_database_url" --no-psqlrc -X -v ON_ERROR_STOP=1 \
-    -v fixture_event_type="$fixture_event_type" \
     -c "INSERT INTO public.installation_audit_log (event_type, detail)
-        VALUES (:'fixture_event_type', '{\"fixture\": true}'::jsonb);" \
+        VALUES (
+          'schema_reconciliation_installation_audit_fixture',
+          '{\"fixture\": true}'::jsonb
+        );" \
     >> "$restore_log" 2>&1; then
     data_bearing_fixture_seeded=true
   else
@@ -241,19 +242,21 @@ if [[ "$data_bearing_fixture_required" == "true" \
   && "$data_bearing_fixture_seeded" == "true" \
   && "$all_missing_migrations_applied" == "true" ]]; then
   fixture_org_id="$(psql "$local_database_url" --no-psqlrc -X -qAt \
-    -v ON_ERROR_STOP=1 -v fixture_event_type="$fixture_event_type" \
+    -v ON_ERROR_STOP=1 \
     -c "SELECT org_id::text
         FROM public.installation_audit_log
-        WHERE event_type = :'fixture_event_type';")"
+        WHERE event_type =
+          'schema_reconciliation_installation_audit_fixture';")"
   if [[ "$fixture_org_id" == "00000000-0000-0000-0000-000000000000" ]]; then
     data_bearing_fixture_backfilled=true
   fi
 
   if ! psql "$local_database_url" --no-psqlrc -X -q \
-    -v ON_ERROR_STOP=1 -v fixture_event_type="$fixture_event_type" \
+    -v ON_ERROR_STOP=1 \
     -c "UPDATE public.installation_audit_log
         SET detail = '{\"fixture\": false}'::jsonb
-        WHERE event_type = :'fixture_event_type';" \
+        WHERE event_type =
+          'schema_reconciliation_installation_audit_fixture';" \
     >> "$apply_log" 2>&1; then
     data_bearing_fixture_immutability_restored=true
   fi
