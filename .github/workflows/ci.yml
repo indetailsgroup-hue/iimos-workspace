@@ -17,7 +17,14 @@ on:
       - "scripts/apply_migrations.sh"
       - ".github/workflows/ci.yml"
   workflow_dispatch:
-    # Allows manual trigger from the GitHub Actions tab (e.g. after direct pushes to main)
+    # Manual runs always perform the hosted security verification. Production
+    # deployment remains opt-in and must still pass the read-only reconciliation.
+    inputs:
+      run_production_deploy:
+        description: Reconcile production and deploy Edge Functions
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   # A manual read-only hosted verification must not cancel a production push
@@ -193,7 +200,7 @@ jobs:
             supabase/tests/e2e_smoke_test.ts
 
   # ───────────────────────────────────────────────────────────────────────────
-  # Job 2: Reconcile production schema (push to main only)
+  # Job 2: Reconcile production schema (push to main or explicit manual deploy)
   #
   # Production writes are intentionally owned by production-migration-apply.yml,
   # which requires an exact commit, reviewed pending count, encrypted backup,
@@ -206,7 +213,12 @@ jobs:
     name: Production Schema Reconciliation (read-only)
     runs-on: ubuntu-latest
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (
+        github.event_name == 'push' ||
+        (github.event_name == 'workflow_dispatch' && inputs.run_production_deploy == true)
+      )
 
     outputs:
       deployment_ready: ${{ steps.migration_preflight.outputs.ready }}
@@ -332,15 +344,18 @@ jobs:
           fi
 
   # ───────────────────────────────────────────────────────────────────────────
-  # Job 3: Deploy Supabase Edge Functions (runs only on push to main)
+  # Job 3: Deploy Supabase Edge Functions (push or explicit manual deploy)
   # ───────────────────────────────────────────────────────────────────────────
   deploy-functions:
     name: Deploy Edge Functions
     runs-on: ubuntu-latest
     needs: migrate
     if: >-
-      github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
+      (
+        github.event_name == 'push' ||
+        (github.event_name == 'workflow_dispatch' && inputs.run_production_deploy == true)
+      ) &&
       needs.migrate.outputs.deployment_ready == 'true'
 
     steps:
