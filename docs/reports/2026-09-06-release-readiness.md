@@ -191,7 +191,7 @@ Security issues #49/#50 ปิดแล้วหลัง production migration a
 - package versions ของ `server`, Field App, Digital Shadow และ tools เป็น component versions แยกกัน ไม่ต้องเท่ากับ product version
 - `v17.5.0` (`3a819c17`) และ `v17.5.1` (`532783be`) ถูก tag จริงวันที่ 2026-09-01
 - `v17.5.2` เป็น release candidate สำหรับ stabilization และ AI Cost Estimation dashboard/tests; `v17.5.3` ถึง `v18.5.1` ยังเป็น planned implementation records
-- GitHub Release inventory ยังไม่มี `v17.5.x` และหน้า Releases ตั้ง `v15.9.0` เป็น Latest อย่างไม่ถูกต้อง; release `v17.5.2` จะแก้ทั้ง version continuity และ Latest pointer หลัง production deploy ผ่าน
+- ผล `gh release list` วันที่ 2026-09-07 แสดง `v17.0.0` เป็น release version สูงสุด และแสดง `v15.9.0` เป็น Latest; release `v17.5.2` จะแก้ทั้ง version continuity และ Latest pointer หลัง production deploy ผ่าน
 
 ### GitHub authentication และ branch publication
 
@@ -201,4 +201,4 @@ GitHub CLI authentication เชื่อมกับบัญชี `indetailsg
 
 **ปัจจุบัน: HOLD**
 
-เหลือ blocker เดียวคือ production Edge Functions deploy: schema reconciliation, production migration inventory, hosted RLS verification, #49/#50, Chromatic approval, Full Verify, fresh DB, pgTAP, root/server/field, lint, audits, Digital Shadow integration และ Playwright ผ่านแล้วทั้งหมด แต่ Supabase token เดิมได้ 403 เพราะบัญชีไม่มี project privilege ที่จำเป็น จึงยังไม่สร้าง tag หรือ GitHub Release จนกว่าจะเปลี่ยน token และ deploy ผ่าน
+Production Edge Functions deploy อยู่ในสถานะ BLOCKED เพราะ Supabase token เดิมได้ 403 จาก account ที่ไม่มี project privilege ที่จำเป็น Gate ที่ผ่านแล้วประกอบด้วย schema reconciliation, production migration inventory, hosted RLS verification, #49/#50, Chromatic approval, Full Verify, fresh DB, pgTAP, root/server/field, lint, audits, Digital Shadow integration และ Playwright การสร้าง tag และ GitHub Release จึงรอ token ทดแทนและผล deploy ที่สำเร็จ
