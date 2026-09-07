@@ -24,7 +24,6 @@ export interface CachedFeatures {
   ewmaDeviation: number;
   timestamp: number; // ms epoch
 }
-
 // ─── Fixed health thresholds ──────────────────────────────────────────────────
 
 const T = {
@@ -305,4 +304,3 @@ export class FeatureCacheService {
     try { await this.redis.quit(); } catch { /* ignore */ }
   }
 }
-

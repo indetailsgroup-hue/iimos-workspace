@@ -19,7 +19,6 @@ export enum WwUnitState {
   WORKING = 3,
   ERROR = 4,
 }
-
 export const WW_STATE_LABEL: Record<WwUnitState, string> = {
   [WwUnitState.OFFLINE]: 'OFFLINE',
   [WwUnitState.STANDBY]: 'STANDBY',
@@ -183,4 +182,3 @@ export async function fetchMachineMaintenance(
 export function openMachineEventStream(machineId: string): EventSource {
   return new EventSource(`${SHADOW_BASE}/machines/${machineId}/events`);
 }
-

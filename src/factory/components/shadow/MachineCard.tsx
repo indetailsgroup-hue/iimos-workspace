@@ -15,7 +15,6 @@ interface MachineCardProps {
   /** Live Redis-aggregated overall health; undefined while not yet loaded. */
   overallHealth?: HealthStatus;
 }
-
 const CONNECTION_COLOR: Record<string, string> = {
   CONNECTED: '#22c55e',
   DEGRADED: '#f59e0b',
@@ -157,4 +156,3 @@ function TelemetryItem({
     </div>
   );
 }
-

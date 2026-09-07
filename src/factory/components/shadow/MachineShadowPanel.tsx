@@ -29,7 +29,6 @@ function formatCacheAge(ms: number): string {
   if (ms < 3_600_000)   return `${Math.round(ms / 60_000)} min ago`;
   return `${Math.round(ms / 3_600_000)} h ago`;
 }
-
 export function MachineShadowPanel(): React.ReactElement {
   const {
     machines,
@@ -322,7 +321,6 @@ export function MachineShadowPanel(): React.ReactElement {
     </div>
   );
 }
-
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function ServiceStatusPill({ status }: { status: string }) {
@@ -424,5 +422,3 @@ function EmptyDetail() {
     </div>
   );
 }
-
-
