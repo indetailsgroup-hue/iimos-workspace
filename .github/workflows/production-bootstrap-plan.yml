@@ -92,7 +92,13 @@ jobs:
 
       - name: Apply rendered bundle to a fresh local Supabase database
         working-directory: bootstrap-plan
-        run: supabase start
+        run: |
+          # The bootstrap gate only needs PostgreSQL. Disable the local mail
+          # catcher to avoid runner-level SMTP/UI port collisions.
+          sed -i '/^\[inbucket\]/,/^\[storage\]/{
+            s/^enabled = true/enabled = false/
+          }' supabase/config.toml
+          supabase start
 
       - name: Verify core schema and run all pgTAP assertions
         run: |
